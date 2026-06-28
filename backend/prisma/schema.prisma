@@ -1,0 +1,327 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int             @id @default(autoincrement())
+  name           String
+  username       String          @unique
+  passwordHash   String
+  pin            String          @default("123456")
+  role           String          // Admin, Kasir, Dapur, Waiter
+  permissions    String          // JSON stringified
+  status         String          @default("Aktif")
+  
+  orders         Order[]
+  cashFlows      CashFlow[]
+  attendances    Attendance[]
+  shifts         Shift[]
+  purchaseOrders PurchaseOrder[]
+  
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String
+  products Product[]
+}
+
+model Product {
+  id         Int                 @id @default(autoincrement())
+  barcode    String?             @unique
+  name       String
+  category   Category            @relation(fields: [categoryId], references: [id])
+  categoryId Int
+  buyPrice   Float               @default(0)
+  sellPrice  Float
+  stock      Int                 @default(0)
+  minStock   Int                 @default(1)
+  imageUrl   String?
+  status     String              @default("Aktif")
+  
+  orderItems OrderItem[]
+  recipes    RecipeItem[]        // Komposisi bahan baku (Advanced Mode)
+  poItems    PurchaseOrderItem[] // Referensi PO (Simple Mode)
+  
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+}
+
+model Table {
+  id           Int           @id @default(autoincrement())
+  tableNo      String        @unique
+  name         String?       // Keterangan Lokasi
+  capacity     Int           @default(2)
+  status       String        @default("Aktif") // Aktif, Perbaikan
+  qrUrl        String?
+  
+  orders       Order[]
+  reservations Reservation[]
+}
+
+model Reservation {
+  id           Int      @id @default(autoincrement())
+  customerName String
+  phone        String
+  date         String   // YYYY-MM-DD
+  time         String   // HH:mm
+  table        Table    @relation(fields: [tableId], references: [id])
+  tableId      Int
+  guests       Int
+  dpAmount     Float    @default(0)
+  status       String   @default("Booking") // Booking, DP Dibayar, Lunas
+  notes        String?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Customer {
+  id           Int        @id @default(autoincrement())
+  name         String
+  phone        String     @unique
+  email        String?    @unique
+  birthday     String?
+  points       Int        @default(0)
+  tier         String     @default("Bronze") // Bronze, Silver, Gold
+  totalSpent   Float      @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  orders       Order[]
+  pointLogs    PointLog[]
+}
+
+model PointLog {
+  id          Int      @id @default(autoincrement())
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId  Int
+  points      Int      // Positif untuk Earn/Refund, Negatif untuk Redeem/Void
+  type        String   // 'Earn', 'Redeem', 'Refund', 'Manual'
+  description String?
+  createdAt   DateTime @default(now())
+}
+
+model Order {
+  id            Int         @id @default(autoincrement())
+  orderNumber   String      @unique
+  customerName  String
+  customerPhone String?
+  
+  customer      Customer?   @relation(fields: [customerId], references: [id])
+  customerId    Int?
+  
+  table         Table?      @relation(fields: [tableId], references: [id])
+  tableId       Int?
+  
+  user          User        @relation(fields: [userId], references: [id])
+  userId        Int
+  
+  subtotal      Float
+  discount      Float       @default(0)
+  tax           Float
+  serviceCharge Float
+  total         Float
+  paymentMethod String?
+  status        String      @default("Pending") // Pending, Paid, Void
+  kdsStatus     String      @default("Pending") // Pending, Cooking, Ready, Served
+  servedAt      DateTime?
+  paidAt        DateTime?   // Waktu transaksi pembayaran diselesaikan (untuk rekonsiliasi shift akurat)
+  
+  items         OrderItem[]
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   Int
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+  qty       Int
+  price     Float
+  buyPrice  Float   @default(0)
+  subtotal  Float
+  notes     String?
+}
+
+model CashFlow {
+  id          Int      @id @default(autoincrement())
+  type        String   // Pemasukan, Pengeluaran
+  category    String
+  amount      Float
+  description String
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  date        DateTime @default(now())
+}
+
+model Attendance {
+  id       Int      @id @default(autoincrement())
+  user     User     @relation(fields: [userId], references: [id])
+  userId   Int
+  clockIn  DateTime @default(now())
+  clockOut DateTime?
+  date     String   // YYYY-MM-DD
+  status   String   @default("Hadir") // Hadir, Terlambat
+}
+
+model Settings {
+  id                      Int      @id @default(autoincrement())
+  storeName               String   @default("DEMO CAFE")
+  phone                   String   @default("")
+  address                 String   @default("")
+  logoUrl                 String   @default("")
+  receiptHeader           String   @default("")
+  receiptFooter           String   @default("")
+  taxRate                 Float    @default(0)
+  serviceCharge           Float    @default(0)
+  includeTax              Boolean  @default(false)
+  bankName                String   @default("")
+  accountNumber           String   @default("")
+  accountName             String   @default("")
+  qrisUrl                 String   @default("")
+  qrCodeBaseUrl           String   @default("")
+  enableDrinkCustomization Boolean @default(false)
+  
+  loyaltyEnabled             Boolean  @default(true)
+  loyaltyEarnPerAmount       Float    @default(10000)
+  loyaltyPointValue          Float    @default(100)
+  loyaltySilverThreshold     Float    @default(1000000)
+  loyaltyGoldThreshold       Float    @default(3000000)
+  loyaltySilverMultiplier    Float    @default(1.2)
+  loyaltyGoldMultiplier      Float    @default(1.5)
+
+  // Mode Inventaris: false = Simple (HPP manual), true = Advanced (HPP dari resep bahan baku)
+  ingredientTrackingEnabled  Boolean  @default(false)
+
+  // Konfigurasi Printer Termal 80mm
+  printerIp          String   @default("")    // IP Address printer di jaringan
+  printerPort        Int      @default(9100)  // Port ESC/POS (default 9100)
+  autoPrintKDS       Boolean  @default(false) // Auto-print tiket dapur saat order masuk
+  autoPrintReceipt   Boolean  @default(false) // Auto-print struk saat pembayaran selesai
+}
+
+model Shift {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  user           User      @relation(fields: [userId], references: [id])
+  waktuBuka      DateTime  @default(now())
+  waktuTutup     DateTime?
+  saldoAwal      Float
+  saldoSistem    Float?
+  saldoElektronik Float?
+  saldoFisikLaci Float?
+  selisih        Float?
+  status         String    @default("Open") // Open, Closed
+}
+
+// ─── Inventaris & Pembelian ────────────────────────────────────────────
+
+model Supplier {
+  id             Int             @id @default(autoincrement())
+  name           String
+  contact        String?         // Nama PIC
+  phone          String?
+  email          String?
+  address        String?
+  notes          String?
+
+  ingredients    Ingredient[]
+  purchaseOrders PurchaseOrder[]
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Ingredient {
+  id           Int               @id @default(autoincrement())
+  name         String
+  unit         String            // gram, ml, buah, liter, kg
+  stock        Float             @default(0)
+  minStock     Float             @default(0)  // Batas minimum → alert stok menipis
+  buyPrice     Float             @default(0)  // Harga beli per unit (untuk HPP otomatis)
+  supplier     Supplier?         @relation(fields: [supplierId], references: [id])
+  supplierId   Int?
+
+  recipes      RecipeItem[]
+  stockLogs    IngredientLog[]
+  poItems      PurchaseOrderItem[]
+
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model RecipeItem {
+  id            Int        @id @default(autoincrement())
+  product       Product    @relation(fields: [productId], references: [id])
+  productId     Int
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId  Int
+  qtyPerServing Float      // Qty bahan baku per 1 sajian
+
+  @@unique([productId, ingredientId])
+}
+
+model IngredientLog {
+  id           Int        @id @default(autoincrement())
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId Int
+  change       Float      // (+) restock/refund, (-) produksi/rusak
+  type         String     // 'Produksi', 'Restock', 'Penyesuaian', 'Rusak', 'PO', 'Void'
+  description  String?
+  referenceId  String?    // Order number / PO number
+  createdAt    DateTime   @default(now())
+}
+
+model PurchaseOrder {
+  id          Int                 @id @default(autoincrement())
+  poNumber    String              @unique // PO-20240628-001
+  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  supplierId  Int
+  user        User                @relation(fields: [userId], references: [id])
+  userId      Int
+  status      String              @default("Draft") // Draft, Dikirim, Diterima, Diterima Sebagian, Dibatalkan
+  notes       String?
+  totalAmount Float               @default(0)
+
+  items       PurchaseOrderItem[]
+
+  orderedAt   DateTime            @default(now())
+  receivedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model PurchaseOrderItem {
+  id           Int            @id @default(autoincrement())
+  po           PurchaseOrder  @relation(fields: [poId], references: [id], onDelete: Cascade)
+  poId         Int
+
+  // Simple Mode: tautkan ke produk jadi
+  product      Product?       @relation(fields: [productId], references: [id])
+  productId    Int?
+
+  // Advanced Mode: tautkan ke bahan baku
+  ingredient   Ingredient?    @relation(fields: [ingredientId], references: [id])
+  ingredientId Int?
+
+  itemName     String         // Snapshot nama saat PO dibuat
+  unit         String
+  qtyOrdered   Float
+  qtyReceived  Float          @default(0)
+  unitPrice    Float
+  subtotal     Float
+}
