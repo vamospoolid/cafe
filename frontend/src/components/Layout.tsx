@@ -310,7 +310,20 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <h1 className="page-title">{pageTitle}</h1>
           </div>
           
-          <div className="topbar-actions">
+          <div className="topbar-actions flex items-center gap-3">
+            {/* Indikator Status Koneksi */}
+            {posContext?.isOnline ? (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full select-none shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Online</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-full select-none shadow-sm animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span>Mode Offline</span>
+              </span>
+            )}
+            
             <NotificationBell />
             
             <div className="user-profile relative group cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-colors">

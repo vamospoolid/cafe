@@ -266,6 +266,168 @@ router.post('/dinein', async (req: Request, res: Response) => {
   }
 });
 
+// POST Sync Offline Orders
+router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { orders } = req.body;
+    if (!orders || !Array.isArray(orders)) {
+      return res.status(400).json({ error: 'Data orders tidak valid' });
+    }
+
+    const userId = (req as any).user.id;
+    const syncedOrders = [];
+
+    for (const orderData of orders) {
+      const { 
+        offlineId,
+        customerName, 
+        customerPhone, 
+        tableId, 
+        items, 
+        subtotal, 
+        tax, 
+        serviceCharge, 
+        total,
+        discount,
+        customerId,
+        pointsUsed,
+        paymentMethod,
+        isPaid,
+        createdAt,
+        paidAt
+      } = orderData;
+
+      if (!offlineId) continue;
+
+      // 1. Cek apakah sudah disinkronisasikan sebelumnya
+      const existing = await prisma.order.findUnique({
+        where: { offlineId },
+        include: { items: true }
+      });
+
+      if (existing) {
+        syncedOrders.push(existing);
+        continue;
+      }
+
+      if (!items || items.length === 0) continue;
+
+      const orderNumber = await generateOrderNumber();
+
+      const result = await prisma.$transaction(async (tx) => {
+        // Ambil buyPrice untuk semua produk
+        const productIds = items.map((item: any) => Number(item.productId));
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds } }
+        });
+        const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
+
+        let finalCustomerId = customerId ? Number(customerId) : null;
+        if (!finalCustomerId && customerPhone) {
+          let cust = await tx.customer.findUnique({ where: { phone: customerPhone } });
+          if (!cust && customerName) {
+            cust = await tx.customer.create({
+              data: {
+                name: customerName,
+                phone: customerPhone,
+                points: 0,
+                tier: 'Bronze',
+                totalSpent: 0
+              }
+            });
+          }
+          if (cust) {
+            finalCustomerId = cust.id;
+          }
+        }
+
+        const dateCreated = createdAt ? new Date(createdAt) : new Date();
+        const datePaid = paidAt ? new Date(paidAt) : (isPaid ? new Date() : null);
+
+        // Buat Order Induk
+        const createdOrder = await tx.order.create({
+          data: {
+            orderNumber,
+            offlineId,
+            customerName: customerName || 'Pelanggan',
+            customerPhone,
+            customerId: finalCustomerId,
+            tableId: tableId ? Number(tableId) : null,
+            userId,
+            subtotal: Number(subtotal),
+            discount: Number(discount) || 0,
+            tax: Number(tax),
+            serviceCharge: Number(serviceCharge),
+            total: Number(total),
+            paymentMethod: isPaid ? paymentMethod : null,
+            status: isPaid ? 'Paid' : 'Pending',
+            kdsStatus: 'Pending',
+            createdAt: dateCreated,
+            paidAt: datePaid,
+            
+            items: {
+              create: items.map((item: any) => ({
+                productId: Number(item.productId),
+                qty: Number(item.qty),
+                price: Number(item.price),
+                buyPrice: buyPriceMap.get(Number(item.productId)) || 0,
+                subtotal: Number(item.price * item.qty),
+                notes: item.notes
+              }))
+            }
+          },
+          include: { items: true, table: true }
+        });
+
+        // Kurangi Stok Produk
+        for (const item of items) {
+          await tx.product.update({
+            where: { id: Number(item.productId) },
+            data: {
+              stock: { decrement: Number(item.qty) }
+            }
+          });
+        }
+
+        // Poin Loyalitas
+        if (finalCustomerId && isPaid) {
+          if (pointsUsed && pointsUsed > 0) {
+            await processLoyaltyRedemption(tx, finalCustomerId, Number(pointsUsed), orderNumber);
+          }
+          await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber);
+        }
+
+        return createdOrder;
+      });
+
+      // Emit event socket untuk KDS/real-time updates
+      io.emit('order:new', result);
+      
+      // Auto-Print KDS & Receipt
+      try {
+        const settings = await prisma.settings.findFirst();
+        if (settings) {
+          if (settings.autoPrintKDS && settings.printerIp) {
+            PrinterService.printKDS(result.id, settings.printerIp, settings.printerPort || 9100).catch(console.error);
+          }
+          if (isPaid && settings.autoPrintReceipt && settings.printerIp) {
+            PrinterService.printReceipt(result.id, settings.printerIp, settings.printerPort || 9100).catch(console.error);
+          }
+        }
+      } catch (err) {
+        console.error('Auto-print error during sync:', err);
+      }
+
+      syncedOrders.push(result);
+    }
+
+    res.json({ message: 'Sinkronisasi berhasil', orders: syncedOrders });
+  } catch (error) {
+    console.error('Sync Orders Error:', error);
+    res.status(500).json({ error: 'Gagal menyinkronisasikan transaksi offline' });
+  }
+});
+
 // POST Create Order (POS Checkout)
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {

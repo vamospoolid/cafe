@@ -2,6 +2,7 @@ import React, { useState, useContext, useEffect } from 'react';
 import { X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, Printer } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
+import { offlineDB } from '../utils/offlineDb';
 import CustomerModal from './CustomerModal';
 
 interface CheckoutModalProps {
@@ -87,6 +88,46 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       : paymentMethod === 'qris' ? 'QRIS'
       : paymentMethod === 'split' ? `Split (Tunai Rp${fmt(splitCash)} + Non-Tunai Rp${fmt(nonCash)})`
       : 'Card';
+    // Handler Mode Offline
+    if (!navigator.onLine || !posContext?.isOnline) {
+      try {
+        const offlineId = 'off-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        const offlineOrder = {
+          offlineId,
+          customerName: currentCustomer?.name || 'Pelanggan Umum',
+          customerPhone: currentCustomer?.phone || '',
+          customerId: currentCustomer?.id || null,
+          tableId: customer?.tableId || null,
+          items: cart.map((item: any) => ({
+            productId: item.product.id,
+            qty: item.qty,
+            price: item.product.sellPrice,
+            notes: item.notes || ''
+          })),
+          subtotal,
+          discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
+          pointsUsed: currentCustomer?.pointsUsed || 0,
+          tax,
+          serviceCharge,
+          total: finalTotal,
+          paymentMethod: pmString,
+          isPaid: true,
+          createdAt: new Date().toISOString(),
+          paidAt: new Date().toISOString()
+        };
+
+        await offlineDB.addOfflineOrder(offlineOrder);
+        setCreatedOrderId(null);
+        setIsSuccess(true);
+        toast('Transaksi berhasil disimpan secara offline!', 'warning');
+      } catch (err: any) {
+        toast(err.message || 'Gagal menyimpan transaksi offline', 'error');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       let res: Response;
       if (orderId) {

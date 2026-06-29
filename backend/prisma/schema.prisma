@@ -119,6 +119,7 @@ model PointLog {
 model Order {
   id            Int         @id @default(autoincrement())
   orderNumber   String      @unique
+  offlineId     String?     @unique
   customerName  String
   customerPhone String?
   

@@ -7,6 +7,7 @@ import type { DrinkCustomization } from './DrinkCustomizationModal';
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
+import { offlineDB } from '../utils/offlineDb';
 
 export interface CartItem {
   product: any;
@@ -55,27 +56,48 @@ export const POSView = () => {
   };
 
   const fetchCategories = async () => {
-    try {
-      const res = await fetch('/api/categories', {
-        headers: { Authorization: `Bearer ${posContext?.token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCategories(data);
+    if (navigator.onLine) {
+      try {
+        const res = await fetch('/api/categories', {
+          headers: { Authorization: `Bearer ${posContext?.token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setCategories(data);
+          await offlineDB.saveCategories(data);
+        }
+      } catch (err) {
+        console.error('Fetch categories failed, loading from cache:', err);
+        const cached = await offlineDB.getCategories();
+        setCategories(cached);
       }
-    } catch (err) {}
+    } else {
+      const cached = await offlineDB.getCategories();
+      setCategories(cached);
+    }
   };
 
   const fetchProducts = async () => {
-    try {
-      const res = await fetch('/api/products', {
-        headers: { Authorization: `Bearer ${posContext?.token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setProducts(data.filter((p: any) => p.status === 'Aktif'));
+    if (navigator.onLine) {
+      try {
+        const res = await fetch('/api/products', {
+          headers: { Authorization: `Bearer ${posContext?.token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const activeProducts = data.filter((p: any) => p.status === 'Aktif');
+          setProducts(activeProducts);
+          await offlineDB.saveProducts(activeProducts);
+        }
+      } catch (err) {
+        console.error('Fetch products failed, loading from cache:', err);
+        const cached = await offlineDB.getProducts();
+        setProducts(cached);
       }
-    } catch (err) {}
+    } else {
+      const cached = await offlineDB.getProducts();
+      setProducts(cached);
+    }
   };
 
   const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
