@@ -1,7 +1,8 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { POSContext } from '../context/POSContext';
 import NotificationBell from './NotificationBell';
+import useSocket from '../hooks/useSocket';
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -32,6 +33,45 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
   const posContext = useContext(POSContext);
+  const [kdsCount, setKdsCount] = useState(0);
+  const socket = useSocket();
+
+  const fetchKdsCount = async () => {
+    if (!posContext?.token) return;
+    try {
+      const res = await fetch('/api/kds/active', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setKdsCount(data.length);
+      }
+    } catch (err) {
+      console.error('Failed to fetch KDS count:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (posContext?.token) {
+      fetchKdsCount();
+    }
+  }, [posContext?.token]);
+
+  useEffect(() => {
+    if (!posContext?.token) return;
+
+    socket.on('order:new', fetchKdsCount);
+    socket.on('order:void', fetchKdsCount);
+    socket.on('kds:statusChanged', fetchKdsCount);
+    socket.on('order:paid', fetchKdsCount);
+
+    return () => {
+      socket.off('order:new', fetchKdsCount);
+      socket.off('order:void', fetchKdsCount);
+      socket.off('kds:statusChanged', fetchKdsCount);
+      socket.off('order:paid', fetchKdsCount);
+    };
+  }, [socket, posContext?.token]);
   const titleMap: Record<string, string> = {
     '/pos': 'POS - Point of Sale',
     '/kds': 'Dapur (KDS)',
@@ -137,6 +177,25 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <NavLink to="/kds" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
               <ChefHat size={20} />
               <span>Dapur (KDS)</span>
+              {kdsCount > 0 && (
+                <span style={{ 
+                  backgroundColor: '#ef4444', 
+                  color: 'white', 
+                  fontSize: '0.7rem', 
+                  fontWeight: 800, 
+                  padding: '2px 6px', 
+                  borderRadius: '9999px',
+                  marginLeft: 'auto',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '18px',
+                  height: '18px',
+                  lineHeight: 1
+                }}>
+                  {kdsCount}
+                </span>
+              )}
             </NavLink>
           )}
           {checkAccess(['Admin']) && (
