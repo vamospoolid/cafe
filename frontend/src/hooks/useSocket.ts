@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 
 const SOCKET_URL = '';
 
-// Singleton socket instance â€” satu koneksi untuk seluruh aplikasi
+// Singleton socket instance — satu koneksi untuk seluruh aplikasi
 let socket: Socket | null = null;
 
 const getSocket = (): Socket => {

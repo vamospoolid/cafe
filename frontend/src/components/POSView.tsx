@@ -82,7 +82,7 @@ export const POSView = () => {
 
   const addToCart = (product: any, customization?: DrinkCustomization) => {
     const notesStr = customization
-      ? [customization.temperature, customization.sugar, customization.ice, customization.notes].filter(Boolean).join(' Â· ')
+      ? [customization.temperature, customization.sugar, customization.ice, customization.notes].filter(Boolean).join(' • ')
       : '';
     setCart(prev => {
       // If same product and same notes -> stack qty

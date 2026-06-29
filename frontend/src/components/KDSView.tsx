@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { ChefHat, Clock, CheckCircle, Bell, ArrowRight, Flame, CheckCircle2, User, Undo2, RotateCcw, Volume2 } from 'lucide-react';
+import { ChefHat, Clock, CheckCircle, Bell, ArrowRight, Flame, CheckCircle2, User, Undo2, RotateCcw, Volume2, X } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import useSocket from '../hooks/useSocket';
 
@@ -407,7 +407,7 @@ const KDSView = () => {
                           <div className="font-semibold text-slate-800 text-[13px] leading-tight">{item.product.name}</div>
                           {item.notes && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
-                              {item.notes.split(' Â· ').map((tag: string, i: number) => (
+                              {item.notes.split(' • ').map((tag: string, i: number) => (
                                 <span 
                                   key={i} 
                                   className="inline-block bg-amber-100 text-amber-900 font-bold text-[9px] px-2 py-0.5 rounded border border-amber-200/70"
@@ -501,7 +501,7 @@ const KDSView = () => {
                 onClick={() => setIsHistoryOpen(false)}
                 className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 border border-slate-150 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-all shadow-sm"
               >
-                âœ•
+                <X size={16} />
               </button>
             </div>
 

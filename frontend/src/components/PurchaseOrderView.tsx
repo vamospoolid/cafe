@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { ClipboardList, Plus, Eye, Send, PackageCheck, XCircle, Search, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { ClipboardList, Plus, Eye, Send, PackageCheck, XCircle, Search, ChevronDown, ChevronUp, Trash2, Sliders, Package, FilePlus, Check } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 
@@ -131,7 +131,10 @@ const PurchaseOrderView: React.FC = () => {
             <ClipboardList color="var(--primary)" size={24} /> Purchase Order
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '.85rem', margin: '.25rem 0 0' }}>
-            Mode: <strong style={{ color: isAdvanced ? '#7c3aed' : '#0369a1' }}>{isAdvanced ? 'ðŸ”¬ Advanced (Bahan Baku)' : 'ðŸ“¦ Simple (Produk Jadi)'}</strong>
+            Mode: <strong style={{ color: isAdvanced ? '#7c3aed' : '#0369a1', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+              {isAdvanced ? <Sliders size={14} /> : <Package size={14} />}
+              <span>{isAdvanced ? 'Advanced (Bahan Baku)' : 'Simple (Produk Jadi)'}</span>
+            </strong>
           </p>
         </div>
         <button onClick={() => { setShowCreate(true); setNewPO({ supplierId: '', notes: '', items: [] }); }} style={{ display: 'flex', alignItems: 'center', gap: '.5rem', padding: '.75rem 1.25rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '.875rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 14px rgba(124,58,237,.3)' }}>
@@ -209,12 +212,15 @@ const PurchaseOrderView: React.FC = () => {
       {showCreate && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '2rem 1rem' }}>
           <div style={{ background: 'white', borderRadius: '1.25rem', padding: '2rem', width: '100%', maxWidth: 700, boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
-            <h3 style={{ margin: '0 0 1.5rem', fontWeight: 800, fontSize: '1.15rem' }}>ðŸ“‹ Buat Purchase Order Baru</h3>
+            <h3 style={{ margin: '0 0 1.5rem', fontWeight: 800, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <FilePlus size={20} color="var(--primary)" />
+              <span>Buat Purchase Order Baru</span>
+            </h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.875rem', marginBottom: '1rem' }}>
               <div>
                 <label style={{ fontSize: '.8rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '.35rem' }}>Supplier *</label>
                 <select value={newPO.supplierId} onChange={e => setNewPO(p => ({ ...p, supplierId: e.target.value }))} style={{ width: '100%', padding: '.625rem .875rem', border: '1.5px solid #e2e8f0', borderRadius: '.625rem', fontSize: '.875rem' }}>
-                  <option value="">â€” Pilih Supplier â€”</option>
+                   <option value="">— Pilih Supplier —</option>
                   {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
@@ -233,12 +239,12 @@ const PurchaseOrderView: React.FC = () => {
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '.5rem', marginBottom: '.5rem', alignItems: 'center' }}>
                   {isAdvanced ? (
                     <select value={it.ingredientId || ''} onChange={e => updateItem(i, 'ingredientId', e.target.value)} style={{ padding: '.5rem', border: '1.5px solid #e2e8f0', borderRadius: '.5rem', fontSize: '.8rem' }}>
-                      <option value="">â€” Pilih Bahan Baku â€”</option>
+                      <option value="">— Pilih Bahan Baku —</option>
                       {ingredients.map((x: any) => <option key={x.id} value={x.id}>{x.name} ({x.unit})</option>)}
                     </select>
                   ) : (
                     <select value={it.productId || ''} onChange={e => updateItem(i, 'productId', e.target.value)} style={{ padding: '.5rem', border: '1.5px solid #e2e8f0', borderRadius: '.5rem', fontSize: '.8rem' }}>
-                      <option value="">â€” Pilih Produk â€”</option>
+                      <option value="">— Pilih Produk —</option>
                       {products.map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}
                     </select>
                   )}
@@ -266,8 +272,11 @@ const PurchaseOrderView: React.FC = () => {
       {receiveModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ background: 'white', borderRadius: '1.25rem', padding: '2rem', width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,.25)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ margin: '0 0 .5rem', fontWeight: 800, fontSize: '1.1rem' }}>ðŸ“¦ Terima Barang</h3>
-            <p style={{ color: '#64748b', fontSize: '.85rem', margin: '0 0 1.25rem' }}>{receiveModal.poNumber} â€” {receiveModal.supplier.name}</p>
+            <h3 style={{ margin: '0 0 .5rem', fontWeight: 800, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <PackageCheck size={20} color="var(--primary)" />
+              <span>Terima Barang</span>
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '.85rem', margin: '0 0 1.25rem' }}>{receiveModal.poNumber} — {receiveModal.supplier.name}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '.625rem' }}>
               {(receiveModal.items || []).map((it: any) => {
                 const remaining = it.qtyOrdered - it.qtyReceived;
@@ -289,7 +298,10 @@ const PurchaseOrderView: React.FC = () => {
             </div>
             <div style={{ display: 'flex', gap: '.75rem', marginTop: '1.5rem' }}>
               <button onClick={() => setReceiveModal(null)} style={{ flex: 1, padding: '.75rem', border: '1.5px solid #e2e8f0', borderRadius: '.75rem', background: 'white', cursor: 'pointer', fontWeight: 600 }}>Batal</button>
-              <button onClick={handleReceive} style={{ flex: 2, padding: '.75rem', border: 'none', borderRadius: '.75rem', background: '#166534', color: 'white', cursor: 'pointer', fontWeight: 700 }}>âœ… Konfirmasi Penerimaan</button>
+              <button onClick={handleReceive} style={{ flex: 2, padding: '.75rem', border: 'none', borderRadius: '.75rem', background: '#166534', color: 'white', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                <Check size={18} />
+                <span>Konfirmasi Penerimaan</span>
+              </button>
             </div>
           </div>
         </div>

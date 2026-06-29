@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { Calendar, DollarSign, TrendingUp, ShoppingBag, Layers, PieChart as PieChartIcon, Printer, User, Award, ListFilter, AlertTriangle, ArrowUpRight, ArrowDownRight, BookOpen, CreditCard, ChevronRight, RefreshCw, Download } from 'lucide-react';
+import { Calendar, DollarSign, TrendingUp, ShoppingBag, Layers, PieChart as PieChartIcon, Printer, User, Award, ListFilter, AlertTriangle, ArrowUpRight, ArrowDownRight, BookOpen, CreditCard, ChevronRight, RefreshCw, Download, Check } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -669,8 +669,9 @@ const ReportView = () => {
                       </td>
                       <td style={{ padding: '1rem 1.25rem' }}>
                         {!hasDiscrepancy ? (
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'rgba(16,185,129,0.08)', color: '#10b981', padding: '0.25rem 0.5rem', borderRadius: '0.375rem' }}>
-                            âœ“ Cocok (OK)
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'rgba(16,185,129,0.08)', color: '#10b981', padding: '0.25rem 0.5rem', borderRadius: '0.375rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Check size={12} />
+                            <span>Cocok (OK)</span>
                           </span>
                         ) : (
                           <span style={{ fontSize: '0.7rem', fontWeight: 800, background: isNegative ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', color: isNegative ? '#ef4444' : '#f59e0b', padding: '0.25rem 0.5rem', borderRadius: '0.375rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -938,9 +939,9 @@ const ReportView = () => {
         </div>
       )}
 
-      {/* â”€â”€â”€ Footer â”€â”€â”€ */}
+      {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', color: '#64748b', fontSize: '0.78rem', borderTop: '1px solid #e2e8f0', marginTop: 'auto' }}>
-        <span>{posContext?.settings?.storeName || 'SOL Cafe'} POS System â€” Modul Laporan Akuntansi Versi 1.3</span>
+        <span>{posContext?.settings?.storeName || 'SOL Cafe'} POS System — Modul Laporan Akuntansi Versi 1.3</span>
         <span>Filter Aktif: {startDate} s/d {endDate}</span>
       </div>
 

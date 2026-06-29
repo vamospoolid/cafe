@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Plus, Edit, Trash2, Map, List, Armchair, Clock, Users, Coffee, Lock, Play, Scissors } from 'lucide-react';
+import { Plus, Edit, Trash2, Map, List, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard } from 'lucide-react';
 import TableModal from './TableModal';
 import CheckoutModal from './CheckoutModal';
 import OpenShiftModal from './OpenShiftModal';
@@ -489,9 +489,15 @@ const TableView = () => {
                           <div className="flex items-center justify-between mt-1.5">
                             <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1"><Clock size={10} /> {getWaitTime(activeOrder.createdAt)} yang lalu</div>
                             {activeOrder.status === 'Paid' ? (
-                              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#ecfdf5', color: '#047857', padding: '0.1rem 0.4rem', borderRadius: '0.35rem' }}>âœ“ DIBAYAR</span>
+                              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#ecfdf5', color: '#047857', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
+                                <Check size={10} />
+                                <span>DIBAYAR</span>
+                              </span>
                             ) : isServed ? (
-                              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#dbeafe', color: '#1d4ed8', padding: '0.1rem 0.4rem', borderRadius: '0.35rem' }}>âœ“ DISAJIKAN</span>
+                              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#dbeafe', color: '#1d4ed8', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
+                                <Check size={10} />
+                                <span>DISAJIKAN</span>
+                              </span>
                             ) : null}
                           </div>
                         </div>
@@ -523,7 +529,7 @@ const TableView = () => {
                                 className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
                                 onClick={() => handleReleaseTable(activeOrder.id)}
                               >
-                                âœ“ Kosongkan
+                                <Check size={14} /> Kosongkan
                               </button>
                             ) : (
                               <button
@@ -532,7 +538,17 @@ const TableView = () => {
                                 }`}
                                 onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}
                               >
-                                {isServed ? 'ðŸ’³ Bayar' : 'Lunasi (Pay)'}
+                                {isServed ? (
+                                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
+                                    <CreditCard size={14} />
+                                    <span>Bayar</span>
+                                  </span>
+                                ) : (
+                                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
+                                    <Check size={14} />
+                                    <span>Lunasi (Pay)</span>
+                                  </span>
+                                )}
                               </button>
                             )}
                           </>

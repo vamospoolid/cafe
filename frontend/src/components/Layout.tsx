@@ -24,7 +24,8 @@ import {
   Settings,
   Award,
   ClipboardList,
-  PackageSearch
+  PackageSearch,
+  Delete
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -348,8 +349,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 disabled={pinLoading}
                 onClick={handleBackspace}
                 className="h-12 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 text-sm font-semibold transition-all active:scale-95 flex items-center justify-center"
+                title="Backspace"
               >
-                âŒ«
+                <Delete size={18} />
               </button>
             </div>
 

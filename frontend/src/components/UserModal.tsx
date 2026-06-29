@@ -142,7 +142,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 </label>
                 <div className="relative">
                   <Key size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="password" name="password" className="form-control pl-9" style={{ paddingLeft: '2.5rem' }} placeholder="â€¢â€¢â€¢â€¢â€¢â€¢" value={formData.password} onChange={handleChange} required={!initialData} />
+                  <input type="password" name="password" className="form-control pl-9" style={{ paddingLeft: '2.5rem' }} placeholder="••••••" value={formData.password} onChange={handleChange} required={!initialData} />
                 </div>
               </div>
               <div>

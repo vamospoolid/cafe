@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Calendar, Plus, Edit, Trash2, Clock, Phone, CheckCircle, Users, MapPin, ChevronLeft, ChevronRight, Search, BookOpen } from 'lucide-react';
+import { Calendar, Plus, Edit, Trash2, Clock, Phone, CheckCircle, Users, MapPin, ChevronLeft, ChevronRight, Search, BookOpen, Banknote } from 'lucide-react';
 import ReservationModal from './ReservationModal';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -78,7 +78,7 @@ const ReservationView = () => {
 
   const statusConfig: Record<string, { bg: string; text: string; border: string; label: string; icon: React.ReactNode }> = {
     Lunas:      { bg: '#dcfce7', text: '#166534', border: '#bbf7d0', label: 'Selesai', icon: <CheckCircle size={12} /> },
-    'DP Dibayar': { bg: '#dbeafe', text: '#1d4ed8', border: '#bfdbfe', label: 'DP Dibayar', icon: <span>ðŸ’µ</span> },
+    'DP Dibayar': { bg: '#dbeafe', text: '#1d4ed8', border: '#bfdbfe', label: 'DP Dibayar', icon: <Banknote size={12} /> },
     Booking:    { bg: '#fef9c3', text: '#854d0e', border: '#fef08a', label: 'Booking', icon: <BookOpen size={12} /> },
   };
 
@@ -254,8 +254,9 @@ const ReservationView = () => {
 
         {/* Footer */}
         <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500 }}>
-            ðŸ—ƒï¸ Menampilkan {filtered.length} dari {reservations.length} reservasi
+          <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <Calendar size={14} />
+            <span>Menampilkan {filtered.length} dari {reservations.length} reservasi</span>
           </span>
           <button onClick={() => setDateFilter(new Date().toISOString().split('T')[0])}
             style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', background: 'var(--secondary)', border: 'none', padding: '0.3rem 0.75rem', borderRadius: '0.4rem', cursor: 'pointer' }}>

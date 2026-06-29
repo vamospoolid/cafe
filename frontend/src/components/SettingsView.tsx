@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -492,9 +492,10 @@ const SettingsView = () => {
                         }} />
                       </div>
                     </div>
-                    <div>
+                     <div>
                       <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                        â˜• Kustomisasi Minuman (Sugar, Ice, Temperature)
+                        <Coffee size={16} className="text-indigo-650" />
+                        <span>Kustomisasi Minuman (Sugar, Ice, Temperature)</span>
                       </div>
                       <div className="text-xs text-slate-400 mt-1 leading-relaxed">
                         Tampilkan pilihan **level gula, jumlah es, dan pilihan suhu (panas/dingin)** saat kasir memasukkan item minuman ke keranjang belanja POS. 
@@ -502,10 +503,10 @@ const SettingsView = () => {
                       </div>
                       <div className="mt-3">
                         <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full ${ formData.enableDrinkCustomization ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {formData.enableDrinkCustomization ? 'âœ“ KUSTOMISASI AKTIF' : 'KUSTOMISASI NONAKTIF'}
+                          {formData.enableDrinkCustomization ? '✓ KUSTOMISASI AKTIF' : 'KUSTOMISASI NONAKTIF'}
                         </span>
                       </div>
-                    </div>
+                    </div>  </div>
                   </label>
                 </div>
               </div>
@@ -527,7 +528,8 @@ const SettingsView = () => {
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div className="space-y-5">
                   <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    ðŸ’³ Detail Rekening Bank Penerima
+                    <CreditCard size={14} className="text-slate-400" />
+                    <span>Detail Rekening Bank Penerima</span>
                   </h4>
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
                     <div>
@@ -568,7 +570,8 @@ const SettingsView = () => {
 
                 <div className="space-y-4">
                   <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    ðŸ“± Kode QRIS Statis Toko
+                    <Smartphone size={14} className="text-slate-400" />
+                    <span>Kode QRIS Statis Toko</span>
                   </h4>
                   <div className="border-2 border-dashed border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/10 rounded-3xl bg-slate-50 p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 group min-h-[220px]">
                     <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600 group-hover:scale-110 transition-all mb-3">
@@ -622,19 +625,20 @@ const SettingsView = () => {
                           transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                         }} />
                       </div>
-                    </div>
-                    <div>
+                             <div>
                       <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                        ðŸ† Aktifkan Program Loyalitas Poin Belanja
+                        <Award size={16} className="text-indigo-650" />
+                        <span>Aktifkan Program Loyalitas Poin Belanja</span>
                       </div>
                       <div className="text-xs text-slate-400 mt-1 leading-relaxed">
                         Jika dinonaktifkan, seluruh pencatatan/penghitungan poin belanja baru dan fitur penukaran poin cashback (redeem) di kasir POS akan disembunyikan dan diabaikan secara otomatis.
                       </div>
                       <div className="mt-3">
                         <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full ${ formData.loyaltyEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {formData.loyaltyEnabled ? 'âœ“ PROGRAM AKTIF' : 'PROGRAM NONAKTIF'}
+                          {formData.loyaltyEnabled ? '✓ PROGRAM AKTIF' : 'PROGRAM NONAKTIF'}
                         </span>
                       </div>
+                    </div>
                     </div>
                   </label>
                 </div>
@@ -645,7 +649,8 @@ const SettingsView = () => {
                     {/* Nilai Perolehan & Penukaran */}
                     <div className="space-y-5 bg-slate-50/50 border border-slate-100 rounded-3xl p-5">
                       <h4 className="font-bold text-xs text-indigo-600 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                        â­ Konversi Poin & Nilai Belanja
+                        <Sparkles size={14} />
+                        <span>Konversi Poin & Nilai Belanja</span>
                       </h4>
                       <div>
                         <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Kelipatan Belanja Per 1 Poin</label>
@@ -683,7 +688,8 @@ const SettingsView = () => {
                     {/* Leveling / Tiering Thresholds & Multipliers */}
                     <div className="space-y-5 bg-slate-50/50 border border-slate-100 rounded-3xl p-5">
                       <h4 className="font-bold text-xs text-indigo-600 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-                        ðŸ“ˆ Pengaturan Tingkat Keanggotaan (Tier)
+                        <Layers size={14} />
+                        <span>Pengaturan Tingkat Keanggotaan (Tier)</span>
                       </h4>
                       
                       <div className="grid grid-cols-2 gap-3">
@@ -756,28 +762,34 @@ const SettingsView = () => {
                 <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: false }))} className="cursor-pointer"
                   style={{ border: !formData.ingredientTrackingEnabled ? '2.5px solid #4f46e5' : '2px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', background: !formData.ingredientTrackingEnabled ? '#f5f3ff' : 'white', transition: 'all .2s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '.75rem' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1rem' }}>ðŸ“¦ Simple Mode</div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Package size={18} className="text-indigo-600" />
+                      <span>Simple Mode</span>
+                    </div>
                     {!formData.ingredientTrackingEnabled && <span style={{ background: '#4f46e5', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
                   </div>
                   <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
                     <li>HPP diinput manual per produk</li>
                     <li>Stok dilacak per produk jadi</li>
-                    <li>PO â†’ naikkan stok produk langsung</li>
-                    <li>âœ… Cocok untuk kafe baru / operasi sederhana</li>
+                    <li>PO → naikkan stok produk langsung</li>
+                    <li>✓ Cocok untuk kafe baru / operasi sederhana</li>
                   </ul>
                 </div>
                 <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: true }))} className="cursor-pointer"
                   style={{ border: formData.ingredientTrackingEnabled ? '2.5px solid #7c3aed' : '2px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', background: formData.ingredientTrackingEnabled ? '#faf5ff' : 'white', transition: 'all .2s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '.75rem' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1rem' }}>ðŸ”¬ Advanced Mode</div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Sliders size={18} className="text-indigo-600" />
+                      <span>Advanced Mode</span>
+                    </div>
                     {formData.ingredientTrackingEnabled && <span style={{ background: '#7c3aed', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
                   </div>
                   <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
                     <li>HPP otomatis dari resep bahan baku</li>
                     <li>Stok dilacak per bahan baku (gram, ml)</li>
-                    <li>Order â†’ kurangi stok bahan baku otomatis</li>
-                    <li>PO â†’ naikkan stok bahan baku</li>
-                    <li>âœ… Cocok untuk kafe dengan kontrol biaya ketat</li>
+                    <li>Order → kurangi stok bahan baku otomatis</li>
+                    <li>PO → naikkan stok bahan baku</li>
+                    <li>✓ Cocok untuk kafe dengan kontrol biaya ketat</li>
                   </ul>
                 </div>
               </div>

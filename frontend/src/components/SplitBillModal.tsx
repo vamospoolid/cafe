@@ -148,7 +148,7 @@ const SplitBillModal: React.FC<SplitBillModalProps> = ({ isOpen, onClose, tableI
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-800">
-                Pecah Tagihan (Split Bill) â€” {tableName}
+                Pecah Tagihan (Split Bill) — {tableName}
               </h2>
               <span className="text-[11px] text-slate-400 font-medium uppercase tracking-wider block mt-0.5">
                 Pisahkan beberapa pesanan ke bill baru untuk dibayar terpisah

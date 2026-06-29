@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag } from 'lucide-react';
+import { X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import CustomerModal from './CustomerModal';
@@ -128,7 +128,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       }}>
         {/* Header */}
         <div style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-main)' }}>ðŸ’³ Proses Pembayaran</h2>
+          <h2 style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <CreditCard size={20} color="var(--primary)" />
+            <span>Proses Pembayaran</span>
+          </h2>
           <button className="icon-btn" onClick={onClose} disabled={loading}><X size={20} /></button>
         </div>
 
@@ -192,9 +195,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
                 {currentCustomer?.name && currentCustomer?.name !== 'Pelanggan Umum' ? (
                   <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#166534', textAlign: 'left' }}>ðŸ‘¤ {currentCustomer.name}</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#166534', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <User size={14} />
+                        <span>{currentCustomer.name}</span>
+                      </div>
                       <div style={{ fontSize: '0.75rem', color: '#15803d', textAlign: 'left' }}>
-                        {currentCustomer.phone} {currentCustomer.points !== undefined ? `Â· ${currentCustomer.points} pts` : ''}
+                        {currentCustomer.phone} {currentCustomer.points !== undefined ? `• ${currentCustomer.points} pts` : ''}
                       </div>
                       {currentCustomer.discountAmount > 0 && (
                         <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c', marginTop: '0.1rem', textAlign: 'left' }}>
@@ -214,7 +220,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
                     onClick={() => setIsCustomerModalOpen(true)}
                     style={{ width: '100%', padding: '0.75rem', background: 'white', border: '1px dashed var(--border-color)', borderRadius: '0.75rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer' }}
                   >
-                    ðŸ‘¤ Hubungkan Member & Poin
+                    <UserPlus size={16} />
+                    <span>Hubungkan Member & Poin</span>
                   </button>
                 )}
               </div>
@@ -301,7 +308,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
               {paymentMethod === 'split' && (
                 <>
                   <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
-                    <p style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: 600 }}>âœ‚ï¸ Pembayaran dipisah antara Tunai dan Non-Tunai</p>
+                    <p style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Scissors size={14} />
+                      <span>Pembayaran dipisah antara Tunai dan Non-Tunai</span>
+                    </p>
                   </div>
                   <p style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Berapa yang dibayar Tunai?</p>
                   <input
@@ -326,7 +336,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
               disabled={!isPayable || loading}
               onClick={handleCheckout}
             >
-              {loading ? 'Memproses...' : 'âœ“ Konfirmasi Pembayaran'}
+              {loading ? 'Memproses...' : (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                  <Check size={18} />
+                  <span>Konfirmasi Pembayaran</span>
+                </span>
+              )}
             </button>
           </div>
         </div>

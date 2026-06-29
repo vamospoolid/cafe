@@ -16,7 +16,9 @@ import {
   Sparkles,
   ChevronRight,
   Plus,
-  Minus
+  Minus,
+  Cake,
+  AlertTriangle
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -340,7 +342,8 @@ const CRMView = () => {
                       <div className="font-bold text-gray-800">{c.name}</div>
                       {c.birthday && (
                         <div className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
-                          ðŸŽ‚ Ultah: {c.birthday}
+                          <Cake size={11} className="text-pink-500" />
+                          <span>Ultah: {c.birthday}</span>
                         </div>
                       )}
                     </td>
@@ -575,7 +578,8 @@ const CRMView = () => {
                 {modalCustomer && posContext?.user?.role === 'Admin' && (
                   <div className="p-3 border border-amber-200 bg-amber-50/50 rounded-lg flex flex-col gap-3">
                     <div className="text-xs font-bold text-amber-800 flex items-center gap-1">
-                      âš ï¸ Penyesuaian Saldo Poin (Khusus Admin)
+                      <AlertTriangle size={14} />
+                      <span>Penyesuaian Saldo Poin (Khusus Admin)</span>
                     </div>
                     <div className="text-xs text-amber-700">Poin aktif saat ini: <strong>{modalCustomer.points} pts</strong></div>
                     <div className="flex gap-2">

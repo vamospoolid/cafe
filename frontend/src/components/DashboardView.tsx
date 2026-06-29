@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { TrendingUp, DollarSign, Activity, ShoppingBag, PieChart as PieChartIcon, Clock, AlertTriangle, ChevronRight, Layers, Users, RefreshCw } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity, ShoppingBag, PieChart as PieChartIcon, Clock, AlertTriangle, ChevronRight, Layers, Users, RefreshCw, Lightbulb } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { POSContext } from '../context/POSContext';
 
@@ -349,8 +349,9 @@ const DashboardView = () => {
             </div>
           </div>
 
-          <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.4, borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem' }}>
-            ðŸ’¡ Dihitung otomatis dari waktu order dibuat hingga barista/koki menandai "Served" di KDS.
+          <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.4, borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <Lightbulb size={12} className="text-amber-500" style={{ flexShrink: 0 }} />
+            <span>Dihitung otomatis dari waktu order dibuat hingga barista/koki menandai "Served" di KDS.</span>
           </div>
         </div>
 

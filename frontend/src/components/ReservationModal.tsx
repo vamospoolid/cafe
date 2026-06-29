@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { X, Calendar, Clock, User, Phone, Users, CreditCard, FileText, MapPin, ChevronDown } from 'lucide-react';
+import { X, Calendar, Clock, User, Phone, Users, CreditCard, FileText, MapPin, ChevronDown, Check } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 interface ReservationModalProps {
@@ -194,7 +194,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
                 <div style={{ position: 'relative' }}>
                   <select name="tableId" required value={formData.tableId} onChange={handleChange}
                     style={{ ...inputStyle, appearance: 'none', paddingRight: '2.25rem' }}>
-                    <option value="">â€” Pilih Meja â€”</option>
+                    <option value="">— Pilih Meja —</option>
                     {tables.map(t => (
                       <option key={t.id} value={t.id}>Meja {t.tableNo} (Kap. {t.capacity})</option>
                     ))}
@@ -225,16 +225,16 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
                 </div>
               </div>
 
-              {/* Status â€” only edit mode */}
+              {/* Status — only edit mode */}
               {initialData && (
                 <div>
                   <label style={labelStyle}>Status Reservasi</label>
                   <div style={{ position: 'relative' }}>
                     <select name="status" value={formData.status} onChange={handleChange}
                       style={{ ...inputStyle, appearance: 'none', paddingRight: '2.25rem', fontWeight: 700 }}>
-                      <option value="Booking">ðŸ“‹ Booking Baru</option>
-                      <option value="DP Dibayar">ðŸ’µ DP Dibayar</option>
-                      <option value="Lunas">âœ… Selesai (Lunas)</option>
+                      <option value="Booking">📋 Booking Baru</option>
+                      <option value="DP Dibayar">💵 DP Dibayar</option>
+                      <option value="Lunas">✅ Selesai (Lunas)</option>
                     </select>
                     <ChevronDown size={15} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
                   </div>
@@ -252,7 +252,12 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
                   fontSize: '0.9rem', cursor: loading ? 'not-allowed' : 'pointer',
                   boxShadow: '0 4px 14px rgba(124,58,237,0.3)', opacity: loading ? 0.7 : 1,
                 }}>
-                  {loading ? 'Menyimpan...' : (initialData ? 'âœ“ Simpan Perubahan' : 'âœ“ Buat Reservasi')}
+                  {loading ? 'Menyimpan...' : (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                      <Check size={18} />
+                      <span>{initialData ? 'Simpan Perubahan' : 'Buat Reservasi'}</span>
+                    </span>
+                  )}
                 </button>
                 <button type="button" onClick={onClose} disabled={loading} style={{
                   padding: '0.75rem', borderRadius: '0.875rem',

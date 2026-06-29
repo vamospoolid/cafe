@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Package, Plus, Edit2, Trash2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw, TrendingDown, TrendingUp, Search } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, AlertTriangle, ChevronDown, ChevronUp, RefreshCw, TrendingDown, TrendingUp, Search, History } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 
@@ -171,7 +171,12 @@ const IngredientView: React.FC = () => {
                           {isLow && <AlertTriangle size={14} color="#dc2626" />}
                           <span style={{ fontWeight: 700, color: isLow ? '#dc2626' : 'var(--text-main)', fontSize: '.875rem' }}>{ing.name}</span>
                         </div>
-                        {isLow && <div style={{ fontSize: '.65rem', color: '#dc2626', fontWeight: 600, marginTop: '.15rem' }}>âš ï¸ Stok Menipis!</div>}
+                        {isLow && (
+                          <div style={{ fontSize: '.65rem', color: '#dc2626', fontWeight: 600, marginTop: '.15rem', display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+                            <AlertTriangle size={10} />
+                            <span>Stok Menipis!</span>
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '.875rem 1rem', fontSize: '.82rem', color: '#64748b' }}>{ing.unit}</td>
                       <td style={{ padding: '.875rem 1rem' }}>
@@ -179,7 +184,7 @@ const IngredientView: React.FC = () => {
                       </td>
                       <td style={{ padding: '.875rem 1rem', fontSize: '.82rem', color: '#64748b' }}>{ing.minStock.toLocaleString('id-ID')}</td>
                       <td style={{ padding: '.875rem 1rem', fontSize: '.82rem', color: '#1d4ed8', fontWeight: 600 }}>{fmt(ing.buyPrice)}</td>
-                      <td style={{ padding: '.875rem 1rem', fontSize: '.75rem', color: '#64748b' }}>{ing.supplier?.name || 'â€”'}</td>
+                      <td style={{ padding: '.875rem 1rem', fontSize: '.75rem', color: '#64748b' }}>{ing.supplier?.name || '—'}</td>
                       <td style={{ padding: '.875rem 1rem' }}>
                         <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}>
                           <button title="Edit" onClick={() => openEdit(ing)} style={{ width: 30, height: 30, border: '1.5px solid #bfdbfe', background: '#eff6ff', borderRadius: '.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
@@ -201,7 +206,10 @@ const IngredientView: React.FC = () => {
                     {expandedLog === ing.id && (
                       <tr>
                         <td colSpan={7} style={{ background: '#f8fafc', padding: '0 1rem 1rem' }}>
-                          <div style={{ fontSize: '.75rem', fontWeight: 700, color: '#64748b', marginBottom: '.5rem', paddingTop: '.75rem' }}>ðŸ“‹ Riwayat Mutasi Stok (50 Terakhir)</div>
+                          <div style={{ fontSize: '.75rem', fontWeight: 700, color: '#64748b', marginBottom: '.5rem', paddingTop: '.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <History size={14} />
+                            <span>Riwayat Mutasi Stok (50 Terakhir)</span>
+                          </div>
                           {(logs[ing.id] || []).length === 0 ? (
                             <div style={{ color: '#94a3b8', fontSize: '.8rem' }}>Belum ada riwayat mutasi</div>
                           ) : (
@@ -257,7 +265,7 @@ const IngredientView: React.FC = () => {
               <div>
                 <label style={{ fontSize: '.8rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '.35rem' }}>Supplier</label>
                 <select value={form.supplierId} onChange={e => setForm(p => ({ ...p, supplierId: e.target.value }))} style={{ width: '100%', padding: '.625rem .875rem', border: '1.5px solid #e2e8f0', borderRadius: '.625rem', fontSize: '.875rem', outline: 'none' }}>
-                  <option value="">â€” Tanpa Supplier â€”</option>
+                  <option value="">— Tanpa Supplier —</option>
                   {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
@@ -275,7 +283,7 @@ const IngredientView: React.FC = () => {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'white', borderRadius: '1.25rem', padding: '2rem', width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
             <h3 style={{ margin: '0 0 .5rem', fontWeight: 800, fontSize: '1.1rem' }}>Sesuaikan Stok</h3>
-            <p style={{ margin: '0 0 1.25rem', color: '#64748b', fontSize: '.85rem' }}>{adjustModal.ingredient.name} â€” Stok saat ini: <strong>{adjustModal.ingredient.stock} {adjustModal.ingredient.unit}</strong></p>
+            <p style={{ margin: '0 0 1.25rem', color: '#64748b', fontSize: '.85rem' }}>{adjustModal.ingredient.name} — Stok saat ini: <strong>{adjustModal.ingredient.stock} {adjustModal.ingredient.unit}</strong></p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem' }}>
               <div>
                 <label style={{ fontSize: '.8rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '.35rem' }}>Jenis Penyesuaian</label>
@@ -287,7 +295,7 @@ const IngredientView: React.FC = () => {
               </div>
               <div>
                 <label style={{ fontSize: '.8rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '.35rem' }}>
-                  Jumlah ({adjustModal.ingredient.unit}) â€” Positif untuk tambah, Negatif untuk kurang
+                  Jumlah ({adjustModal.ingredient.unit}) — Positif untuk tambah, Negatif untuk kurang
                 </label>
                 <input type="number" value={adjustForm.change} onChange={e => setAdjustForm(p => ({ ...p, change: e.target.value }))}
                   placeholder="cth: 500 atau -50" style={{ width: '100%', padding: '.625rem .875rem', border: '1.5px solid #e2e8f0', borderRadius: '.625rem', fontSize: '.875rem', outline: 'none', boxSizing: 'border-box' }} />

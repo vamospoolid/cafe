@@ -14,7 +14,9 @@ import {
   User,
   Phone,
   MessageSquare,
-  CheckCircle
+  CheckCircle,
+  MapPin,
+  Check
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -230,7 +232,10 @@ const DineInView = () => {
             </div>
             <div>
               <h1 className="text-base font-black text-slate-900 leading-tight">SOL CAFE</h1>
-              <p className="text-xs text-slate-500 font-medium">ðŸ“ Dine-In &bull; <strong className="text-indigo-600">Meja {tableRef}</strong></p>
+              <p className="text-xs text-slate-500 font-medium flex items-center gap-1">
+                <MapPin size={12} className="text-slate-400" />
+                <span>Dine-In &bull; <strong className="text-indigo-600">Meja {tableRef}</strong></span>
+              </p>
             </div>
           </div>
           <button 
@@ -484,9 +489,10 @@ const DineInView = () => {
               {/* Action Button */}
               <button 
                 type="submit"
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-600/10 transition-transform active:scale-[0.98]"
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-lg shadow-indigo-600/10 transition-transform active:scale-[0.98] flex items-center justify-center gap-1.5"
               >
-                âœ“ Kirim Pesanan ke Dapur
+                <Check size={18} />
+                <span>Kirim Pesanan ke Dapur</span>
               </button>
             </form>
           </div>

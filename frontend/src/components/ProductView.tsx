@@ -314,7 +314,10 @@ const ProductView = () => {
         </div>
         
         <div className="p-4 border-t border-gray-200 bg-white text-xs font-semibold text-gray-400 flex justify-between items-center">
-          <span>ðŸ—ƒï¸ Menampilkan total {products.length} produk di sistem.</span>
+          <span className="flex items-center gap-1.5">
+            <Package size={14} className="text-gray-400" />
+            <span>Menampilkan total {products.length} produk di sistem.</span>
+          </span>
           <span>{posContext?.settings?.storeName || 'SOL Cafe'} Inventory System</span>
         </div>
       </div>
