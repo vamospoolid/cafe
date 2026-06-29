@@ -310,7 +310,7 @@ export const POSView = () => {
                   {item.notes && (
                     <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem', lineHeight: 1.3 }}>{item.notes}</div>
                   )}
-                  <div className="cart-item-price">{formatCurrency(item.product.sellPrice)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>Ã— {item.qty}</span></div>
+                  <div className="cart-item-price">{formatCurrency(item.product.sellPrice)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
                   
                   <div className="cart-item-controls mt-2">
                     <button className="qty-btn" onClick={() => decreaseQty(item.product.id)}><Minus size={14} /></button>
