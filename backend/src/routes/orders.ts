@@ -407,11 +407,17 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
       try {
         const settings = await prisma.settings.findFirst();
         if (settings) {
-          if (settings.autoPrintKDS && settings.printerIp) {
-            PrinterService.printKDS(result.id, settings.printerIp, settings.printerPort || 9100).catch(console.error);
-          }
-          if (isPaid && settings.autoPrintReceipt && settings.printerIp) {
-            PrinterService.printReceipt(result.id, settings.printerIp, settings.printerPort || 9100).catch(console.error);
+          const fullOrder = await prisma.order.findUnique({
+            where: { id: result.id },
+            include: { items: { include: { product: true } } }
+          });
+          if (fullOrder) {
+            if (settings.autoPrintKDS && settings.printerIp) {
+              PrinterService.printKitchenTicket(fullOrder, settings).catch(console.error);
+            }
+            if (isPaid && settings.autoPrintReceipt && settings.printerIp) {
+              PrinterService.printReceipt(fullOrder, settings).catch(console.error);
+            }
           }
         }
       } catch (err) {
