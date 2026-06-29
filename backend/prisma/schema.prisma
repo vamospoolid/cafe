@@ -65,6 +65,10 @@ model Table {
   status       String        @default("Aktif") // Aktif, Perbaikan
   qrUrl        String?
   
+  posX         Float?        @default(10)     // Posisi X dalam persentase canvas (0-100)
+  posY         Float?        @default(10)     // Posisi Y dalam persentase canvas (0-100)
+  shape        String        @default("square") // Bentuk: 'square' atau 'circle'
+  
   orders       Order[]
   reservations Reservation[]
 }

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Plus, Edit, Trash2, Map, List, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard } from 'lucide-react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
+import { Plus, Edit, Trash2, Map, List, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard, X, Info } from 'lucide-react';
 import TableModal from './TableModal';
 import CheckoutModal from './CheckoutModal';
 import OpenShiftModal from './OpenShiftModal';
@@ -29,6 +29,106 @@ const TableView = () => {
 
   const posContext = useContext(POSContext);
   const socket = useSocket();
+
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [tempPositions, setTempPositions] = useState<any[]>([]);
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [actionTable, setActionTable] = useState<any>(null);
+  
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const dragStart = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
+
+  const startEditMode = () => {
+    setIsEditMode(true);
+    setTempPositions(tables.map(t => ({ id: t.id, posX: t.posX || 10, posY: t.posY || 10 })));
+  };
+
+  const handleCancelLayout = () => {
+    setIsEditMode(false);
+    setTempPositions([]);
+  };
+
+  const handleSaveLayout = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/tables/layout', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ layouts: tempPositions })
+      });
+      if (res.ok) {
+        toast('Tata letak meja berhasil disimpan!', 'success');
+        setIsEditMode(false);
+        fetchData();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal menyimpan tata letak', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, tableId: number) => {
+    if (!isEditMode) return;
+    e.preventDefault();
+    const tablePos = tempPositions.find(p => p.id === tableId);
+    if (!tablePos) return;
+
+    setDraggedId(tableId);
+    dragStart.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      posX: tablePos.posX,
+      posY: tablePos.posY
+    };
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (draggedId === null || !canvasRef.current) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const deltaX = e.clientX - dragStart.current.mouseX;
+    const deltaY = e.clientY - dragStart.current.mouseY;
+
+    const pctDeltaX = (deltaX / rect.width) * 100;
+    const pctDeltaY = (deltaY / rect.height) * 100;
+
+    let newPosX = Math.max(1, Math.min(88, dragStart.current.posX + pctDeltaX));
+    let newPosY = Math.max(1, Math.min(88, dragStart.current.posY + pctDeltaY));
+
+    // Snap to 2% grid
+    newPosX = Math.round(newPosX / 2) * 2;
+    newPosY = Math.round(newPosY / 2) * 2;
+
+    setTempPositions(prev => prev.map(p => p.id === draggedId ? { ...p, posX: newPosX, posY: newPosY } : p));
+  };
+
+  const handleMouseUp = () => {
+    setDraggedId(null);
+  };
+
+  useEffect(() => {
+    if (draggedId !== null) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggedId]);
+
+  const handleTableClick = (table: any) => {
+    if (isEditMode) return;
+    setActionTable(table);
+  };
 
   const fetchData = async () => {
     try {
@@ -269,8 +369,20 @@ const TableView = () => {
       </div>
 
       <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm">
-        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 p-4 border-b border-gray-200 bg-white">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+        {isEditMode ? (
+          <div className="flex items-center gap-3 bg-amber-50 border-b border-amber-200 p-4 w-full justify-between">
+            <span className="text-xs font-bold text-amber-800 flex items-center gap-2">
+              <Info size={16} className="text-amber-600 shrink-0" />
+              <span>Mode Edit Tata Letak: Silakan geser (drag) meja untuk mengatur posisinya sesuai tata letak kafe Anda.</span>
+            </span>
+            <div className="flex gap-2">
+              <button type="button" className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all" onClick={handleCancelLayout}>Batal</button>
+              <button type="button" className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all" onClick={handleSaveLayout}>Simpan Posisi</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 p-4 border-b border-gray-200 bg-white">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
             {/* Area Classification Tabs */}
             <div className="flex flex-wrap gap-1.5">
               {areas.map(area => {
@@ -303,20 +415,31 @@ const TableView = () => {
             </div>
           </div>
           
-          {/* View Toggles */}
-          <div className="flex gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/60 self-start md:self-auto">
-            <button
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'map' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setViewMode('map')}
-            >
-              <Map size={16} /> Visual Grid
-            </button>
-            <button
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-              onClick={() => setViewMode('list')}
-            >
-              <List size={16} /> Tabel Data
-            </button>
+          {/* View Toggles & Layout Editor Button */}
+          <div className="flex items-center gap-3 self-start md:self-auto">
+            {viewMode === 'map' && (
+              <button
+                type="button"
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
+                onClick={startEditMode}
+              >
+                <Map size={14} className="text-indigo-600" /> Atur Posisi Meja
+              </button>
+            )}
+            <div className="flex gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/60">
+              <button
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'map' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setViewMode('map')}
+              >
+                <Map size={16} /> Denah Visual
+              </button>
+              <button
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setViewMode('list')}
+              >
+                <List size={16} /> Tabel Data
+              </button>
+            </div>
           </div>
         </div>
 
@@ -420,147 +543,82 @@ const TableView = () => {
             </table>
           </div>
         ) : (
-          <div className="p-8 bg-slate-100 flex-1 overflow-y-auto">
+          <div className="p-6 bg-slate-100 flex-1 overflow-y-auto min-h-[600px] relative">
             {filteredTables.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-400 w-full">
-                <Armchair size={48} className="text-slate-350 mb-3" />
+                <Armchair size={48} className="text-slate-355 mb-3" />
                 <p className="font-semibold text-sm">Tidak ada meja di area "{selectedArea}"</p>
                 <p className="text-xs text-slate-400 mt-1">Anda bisa menambahkan meja baru ke area ini dengan tombol di atas.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+              <div 
+                ref={canvasRef}
+                className="relative w-full h-[580px] bg-slate-150 rounded-2xl overflow-hidden border border-slate-300 shadow-inner"
+                style={{
+                  backgroundImage: 'radial-gradient(#cbd5e1 1.5px, transparent 1.5px)',
+                  backgroundSize: '24px 24px',
+                  backgroundPosition: '-12px -12px',
+                  backgroundColor: '#f1f5f9'
+                }}
+              >
                 {filteredTables.map(table => {
                   const activeOrder = getTableActiveOrder(table.id);
                   const tableStatus = getTableStatus(table.id);
                   const isOccupied = tableStatus !== 'empty';
-                  const isServed = tableStatus === 'served';
+
+                  const tempPos = tempPositions.find(p => p.id === table.id);
+                  const posX = isEditMode && tempPos ? tempPos.posX : (table.posX || 10);
+                  const posY = isEditMode && tempPos ? tempPos.posY : (table.posY || 10);
 
                   const cardStyle = {
-                    empty:   'bg-white border-transparent hover:border-emerald-200 hover:shadow-md',
-                    cooking: 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300 shadow-amber-100/50',
-                    served:  'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-400 shadow-blue-100/50',
+                    empty:   'bg-white border-slate-200 text-slate-800 hover:border-indigo-400',
+                    cooking: 'bg-amber-500 border-amber-600 text-white shadow-md shadow-amber-500/20',
+                    served:  'bg-blue-600 border-blue-700 text-white shadow-md shadow-blue-600/20',
                   }[tableStatus];
 
-                  const dotStyle = {
-                    empty:   'bg-emerald-400',
-                    cooking: 'bg-amber-500 animate-pulse',
-                    served:  'bg-blue-500 animate-pulse',
-                  }[tableStatus];
-
-                  const numStyle = {
-                    empty:   'text-slate-700',
-                    cooking: 'text-amber-600',
-                    served:  'text-blue-600',
-                  }[tableStatus];
-
-                  const infoBorderStyle = {
-                    empty:   '',
-                    cooking: 'border border-amber-200/50',
-                    served:  'border border-blue-200/60',
-                  }[tableStatus];
+                  const isCircle = table.shape === 'circle';
 
                   return (
                     <div
                       key={table.id}
-                      className={`relative flex flex-col justify-between p-5 rounded-2xl border-2 transition-all duration-300 shadow-sm ${cardStyle}`}
+                      onMouseDown={(e) => handleMouseDown(e, table.id)}
+                      onClick={() => handleTableClick(table)}
+                      style={{
+                        position: 'absolute',
+                        left: `${posX}%`,
+                        top: `${posY}%`,
+                        width: isCircle ? '110px' : '110px',
+                        height: isCircle ? '110px' : '110px',
+                        cursor: isEditMode ? 'move' : 'pointer',
+                        zIndex: draggedId === table.id ? 50 : 10,
+                        transition: draggedId === table.id ? 'none' : 'left 0.1s ease-out, top 0.1s ease-out',
+                        userSelect: 'none'
+                      }}
+                      className={`flex flex-col items-center justify-center p-3 border-2 text-center select-none shadow-sm ${
+                        isCircle ? 'rounded-full' : 'rounded-2xl'
+                      } ${cardStyle} ${isEditMode ? 'hover:scale-105 border-indigo-500 ring-4 ring-indigo-200' : 'hover:scale-[1.02] hover:shadow-md'}`}
                     >
-                      {/* Header: Status Indicator & Kapasitas */}
-                      <div className="flex justify-between items-start mb-4">
-                        <div className={`w-3 h-3 rounded-full shadow-sm ${dotStyle}`}></div>
-                        <div className="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
-                          <Users size={12} /> {table.capacity}
-                        </div>
+                      <div className="font-black text-2xl tracking-tight leading-none mb-1">{table.tableNo}</div>
+                      <div className="text-[9px] font-bold opacity-80 mb-2 truncate max-w-[80px]">
+                        {table.name || 'Umum'}
                       </div>
-
-                      {/* Tengah: Nomor Meja */}
-                      <div className="text-center mb-6">
-                        <h3 className={`text-5xl font-black mb-1 ${numStyle}`}>{table.tableNo}</h3>
-                        <p className="text-xs font-semibold text-slate-400">{table.name || 'Area Umum'}</p>
-                      </div>
-
-                      {/* Info Aktif / Tombol Aksi */}
+                      
                       {isOccupied ? (
-                        <div className={`bg-white/60 p-3 rounded-xl mb-4 ${infoBorderStyle}`}>
-                          <div className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                            <Coffee size={12} className={isServed ? 'text-blue-500' : 'text-amber-500'} />
-                            {activeOrder.customerName}
+                        <div className="flex flex-col items-center">
+                          <div className="text-[10px] font-black tracking-wide bg-white/20 px-2 py-0.5 rounded-full">
+                            {formatCurrency(activeOrder.total)}
                           </div>
-                          <div className="text-sm font-black text-primary">{formatCurrency(activeOrder.total)}</div>
-                          <div className="flex items-center justify-between mt-1.5">
-                            <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1"><Clock size={10} /> {getWaitTime(activeOrder.createdAt)} yang lalu</div>
-                            {activeOrder.status === 'Paid' ? (
-                              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#ecfdf5', color: '#047857', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                <Check size={10} />
-                                <span>DIBAYAR</span>
-                              </span>
-                            ) : isServed ? (
-                              <span style={{ fontSize: '0.6rem', fontWeight: 800, background: '#dbeafe', color: '#1d4ed8', padding: '0.1rem 0.4rem', borderRadius: '0.35rem', display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                <Check size={10} />
-                                <span>DISAJIKAN</span>
-                              </span>
-                            ) : null}
+                          <div className="text-[8px] font-semibold mt-1 opacity-90 flex items-center gap-0.5">
+                            <Clock size={8} /> {getWaitTime(activeOrder.createdAt)}
                           </div>
                         </div>
                       ) : (
-                        <div className="flex-1 flex items-center justify-center mb-4">
-                          <span className="text-sm font-bold text-emerald-500 opacity-50">SIAP DIGUNAKAN</span>
+                        <div className="text-[9px] font-black tracking-widest text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          KOSONG
                         </div>
                       )}
-
-                      {/* Footer: Tombol */}
-                      <div className="flex gap-2 mt-auto">
-                        {isOccupied ? (
-                          <>
-                            <button
-                              className="px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100 flex items-center justify-center gap-1"
-                              title="Pecah Tagihan (Split Bill)"
-                              onClick={() => {
-                                const tableOrders = activeOrders.filter(o => o.tableId === table.id);
-                                setSplitTableId(table.id);
-                                setSplitTableName(`Meja ${table.tableNo}`);
-                                setSplitActiveOrders(tableOrders);
-                                setIsSplitOpen(true);
-                              }}
-                            >
-                              <Scissors size={14} /> Split
-                            </button>
-                            {activeOrder.status === 'Paid' ? (
-                              <button
-                                className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
-                                onClick={() => handleReleaseTable(activeOrder.id)}
-                              >
-                                <Check size={14} /> Kosongkan
-                              </button>
-                            ) : (
-                              <button
-                                className={`flex-1 py-2 text-xs font-bold text-white rounded-lg transition-colors shadow-sm ${
-                                  isServed ? 'bg-blue-600 hover:bg-blue-700' : 'bg-primary hover:bg-primary/90'
-                                }`}
-                                onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}
-                              >
-                                {isServed ? (
-                                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-                                    <CreditCard size={14} />
-                                    <span>Bayar</span>
-                                  </span>
-                                ) : (
-                                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-                                    <Check size={14} />
-                                    <span>Lunasi (Pay)</span>
-                                  </span>
-                                )}
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <button className="flex-1 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors" onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}>Edit</button>
-                            <button className="flex-1 py-2 text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-colors" onClick={() => handleDelete(table.id)}>Hapus</button>
-                          </>
-                        )}
-                      </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             )}
@@ -620,6 +678,145 @@ const TableView = () => {
             setIsCheckoutOpen(true);
           }}
         />
+      )}
+
+      {/* Modal Detail & Aksi Meja (Action Sheet) */}
+      {actionTable && (
+        <div className="modal-overlay backdrop-blur-sm bg-slate-900/30">
+          <div className="modal-content !rounded-3xl border border-slate-100 shadow-2xl p-0 overflow-hidden" style={{ maxWidth: '420px', width: '90%' }}>
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h2 className="text-lg font-black flex items-center gap-2 text-slate-800">
+                <Armchair className="text-indigo-600" size={20} /> 
+                Detail Meja {actionTable.tableNo}
+              </h2>
+              <button 
+                type="button"
+                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors" 
+                onClick={() => setActionTable(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Info Meja */}
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Lokasi Area</div>
+                  <div className="font-bold text-slate-700 text-sm mt-0.5">{actionTable.name || 'Area Umum'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Kapasitas</div>
+                  <div className="font-bold text-slate-700 text-sm mt-0.5">{actionTable.capacity} Kursi</div>
+                </div>
+              </div>
+
+              {/* Status Pesanan */}
+              {(() => {
+                const activeOrder = getTableActiveOrder(actionTable.id);
+                if (activeOrder) {
+                  const isServed = getTableStatus(actionTable.id) === 'served';
+                  return (
+                    <div className="space-y-4">
+                      <div className="border-t border-slate-150 pt-4">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Informasi Tagihan Aktif</div>
+                        <div className="p-4 bg-indigo-50/30 border border-indigo-100 rounded-2xl space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-slate-800 text-base">{activeOrder.customerName}</span>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${isServed ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700 animate-pulse'}`}>
+                              {isServed ? 'DISAJIKAN' : 'DIPROSES'}
+                            </span>
+                          </div>
+                          
+                          <div className="flex justify-between text-xs text-slate-500 font-semibold">
+                            <span>Waktu Transaksi</span>
+                            <span className="flex items-center gap-1"><Clock size={12} /> {getWaitTime(activeOrder.createdAt)} yang lalu</span>
+                          </div>
+
+                          <div className="flex justify-between text-sm pt-2 border-t border-indigo-100/50">
+                            <span className="font-bold text-slate-600">Total Tagihan</span>
+                            <span className="font-black text-indigo-700 text-base">{formatCurrency(activeOrder.total)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          className="flex-1 py-3 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5"
+                          onClick={() => {
+                            const tableOrders = activeOrders.filter(o => o.tableId === actionTable.id);
+                            setSplitTableId(actionTable.id);
+                            setSplitTableName(`Meja ${actionTable.tableNo}`);
+                            setSplitActiveOrders(tableOrders);
+                            setIsSplitOpen(true);
+                            setActionTable(null);
+                          }}
+                        >
+                          <Scissors size={14} /> Split Bill
+                        </button>
+
+                        {activeOrder.status === 'Paid' ? (
+                          <button
+                            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-100"
+                            onClick={() => {
+                              handleReleaseTable(activeOrder.id);
+                              setActionTable(null);
+                            }}
+                          >
+                            <Check size={14} /> Kosongkan Meja
+                          </button>
+                        ) : (
+                          <button
+                            className="flex-1 py-3 bg-primary hover:bg-primary/95 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-100"
+                            onClick={() => {
+                              setSelectedOrderToPay(activeOrder);
+                              setIsCheckoutOpen(true);
+                              setActionTable(null);
+                            }}
+                          >
+                            <CreditCard size={14} /> Bayar Tagihan
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div className="space-y-4">
+                      <div className="border-t border-slate-150 pt-4 flex flex-col items-center justify-center py-6 text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
+                        <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">KOSONG</span>
+                        <p className="text-[11px] text-slate-400 mt-2 font-medium">Meja ini siap digunakan oleh pelanggan baru.</p>
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          className="flex-1 py-3 bg-slate-100 hover:bg-slate-250 text-slate-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5"
+                          onClick={() => {
+                            setSelectedTable(actionTable);
+                            setIsModalOpen(true);
+                            setActionTable(null);
+                          }}
+                        >
+                          <Edit size={14} /> Edit Meja
+                        </button>
+                        
+                        <button
+                          className="flex-1 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-2xl border border-rose-100 transition-all text-xs flex items-center justify-center gap-1.5"
+                          onClick={() => {
+                            handleDelete(actionTable.id);
+                            setActionTable(null);
+                          }}
+                        >
+                          <Trash2 size={14} /> Hapus Meja
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+              })()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

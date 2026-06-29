@@ -46,13 +46,43 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         name,
         capacity: Number(capacity) || 2,
         status: status || 'Aktif',
-        qrUrl
+        qrUrl,
+        posX: req.body.posX !== undefined ? Number(req.body.posX) : 10,
+        posY: req.body.posY !== undefined ? Number(req.body.posY) : 10,
+        shape: req.body.shape || 'square'
       }
     });
     res.status(201).json(table);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to create table' });
+  }
+});
+
+// Batch update table layouts (positions)
+router.put('/layout', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { layouts } = req.body;
+    if (!Array.isArray(layouts)) {
+      return res.status(400).json({ error: 'Format layouts tidak valid' });
+    }
+
+    const updates = await prisma.$transaction(
+      layouts.map((lay: any) => 
+        prisma.table.update({
+          where: { id: Number(lay.id) },
+          data: {
+            posX: lay.posX !== undefined ? Number(lay.posX) : undefined,
+            posY: lay.posY !== undefined ? Number(lay.posY) : undefined
+          }
+        })
+      )
+    );
+
+    res.json({ message: 'Tata letak meja berhasil diperbarui', count: updates.length });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Gagal memperbarui tata letak meja' });
   }
 });
 
@@ -69,7 +99,10 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
         name,
         capacity: capacity !== undefined ? Number(capacity) : undefined,
         status,
-        qrUrl
+        qrUrl,
+        posX: req.body.posX !== undefined ? Number(req.body.posX) : undefined,
+        posY: req.body.posY !== undefined ? Number(req.body.posY) : undefined,
+        shape: req.body.shape
       }
     });
     res.json(table);

@@ -14,6 +14,7 @@ const TableModal: React.FC<TableModalProps> = ({ isOpen, onClose, onSave, initia
     name: '',
     capacity: 2,
     status: 'Aktif',
+    shape: 'square'
   });
 
   useEffect(() => {
@@ -23,6 +24,7 @@ const TableModal: React.FC<TableModalProps> = ({ isOpen, onClose, onSave, initia
         name: initialData.name || '',
         capacity: initialData.capacity || 2,
         status: initialData.status || 'Aktif',
+        shape: initialData.shape || 'square'
       });
     } else {
       setFormData({
@@ -30,6 +32,7 @@ const TableModal: React.FC<TableModalProps> = ({ isOpen, onClose, onSave, initia
         name: '',
         capacity: 2,
         status: 'Aktif',
+        shape: 'square'
       });
     }
   }, [initialData, isOpen]);
@@ -120,17 +123,30 @@ const TableModal: React.FC<TableModalProps> = ({ isOpen, onClose, onSave, initia
               </div>
               
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Status</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Bentuk Meja</label>
                 <select 
-                  name="status"
+                  name="shape"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100/50 transition-all outline-none text-sm" 
-                  value={formData.status}
+                  value={formData.shape}
                   onChange={handleChange}
                 >
-                  <option value="Aktif">Aktif</option>
-                  <option value="Perbaikan">Sedang Perbaikan</option>
+                  <option value="square">Kotak</option>
+                  <option value="circle">Bulat</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Status</label>
+              <select 
+                name="status"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100/50 transition-all outline-none text-sm" 
+                value={formData.status}
+                onChange={handleChange}
+              >
+                <option value="Aktif">Aktif</option>
+                <option value="Perbaikan">Sedang Perbaikan</option>
+              </select>
             </div>
           </div>
 
