@@ -127,7 +127,7 @@ const LoginView = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="block w-full pl-11 pr-12 py-3.5 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 shadow-sm bg-slate-50/50 focus:bg-white text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none" 
-                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                  placeholder="Masukkan password atau PIN"
                   required
                 />
                 <button
