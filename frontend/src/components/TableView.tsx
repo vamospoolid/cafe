@@ -441,7 +441,8 @@ const TableView = () => {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="p-12 flex flex-col items-center justify-center text-gray-400">
