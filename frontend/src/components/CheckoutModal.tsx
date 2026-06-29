@@ -268,6 +268,41 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
           <div style={{ width: '42%', borderRight: '1px solid var(--border-color)', padding: '1.5rem', background: 'var(--bg-input)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <p style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Ringkasan Pesanan</p>
 
+            {/* List Item yang Dipesan */}
+            {cart && cart.length > 0 && (
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '0.5rem', 
+                maxHeight: '130px', 
+                overflowY: 'auto', 
+                background: 'white',
+                border: '1px solid var(--border-color)',
+                borderRadius: '0.75rem',
+                padding: '0.75rem',
+                marginBottom: '0.25rem'
+              }} className="scrollbar-thin">
+                {cart.map((item: any, idx: number) => {
+                  const prod = item.product || item;
+                  const qty = item.qty;
+                  const notes = item.notes;
+                  const price = prod.sellPrice || item.price || 0;
+                  return (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.75rem', borderBottom: idx < cart.length - 1 ? '1px dashed var(--border-color)' : 'none', paddingBottom: idx < cart.length - 1 ? '0.375rem' : '0' }}>
+                      <div style={{ flex: 1, paddingRight: '0.5rem', textAlign: 'left' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{prod.name || 'Menu'}</div>
+                        {notes && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>* {notes}</div>}
+                      </div>
+                      <div style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>
+                        <span style={{ color: 'var(--text-muted)', marginRight: '0.25rem', fontSize: '0.7rem' }}>{qty}x</span>
+                        <span style={{ fontWeight: 700 }}>{fmt(price * qty)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Summary rows */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>

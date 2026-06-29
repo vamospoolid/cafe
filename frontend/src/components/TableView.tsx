@@ -765,6 +765,35 @@ const TableView = () => {
                             <span className="font-bold text-slate-600">Total Tagihan</span>
                             <span className="font-black text-indigo-700 text-base">{formatCurrency(activeOrder.total)}</span>
                           </div>
+
+                          {/* Rincian Menu yang Dipesan */}
+                          {activeOrder.items && activeOrder.items.length > 0 && (
+                            <div className="pt-3 border-t border-indigo-100/50 space-y-2">
+                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left">Menu Yang Dipesan:</div>
+                              <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+                                {activeOrder.items.map((item: any, idx: number) => {
+                                  const prod = item.product || {};
+                                  const price = item.price || (prod.sellPrice || 0);
+                                  return (
+                                    <div key={idx} className="flex justify-between items-start text-xs">
+                                      <div className="flex-1 text-left pr-2">
+                                        <span className="font-bold text-slate-700">{prod.name || 'Menu'}</span>
+                                        {item.notes && (
+                                          <span className="block text-[10px] text-slate-400 font-medium italic">
+                                            * {item.notes}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-right whitespace-nowrap text-slate-500 font-semibold">
+                                        <span>{item.qty}x </span>
+                                        <span className="font-bold text-slate-700">{formatCurrency(price * item.qty)}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
