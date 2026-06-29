@@ -236,65 +236,81 @@ const TableView = () => {
   const getTableActiveOrder = (tableId: number) => {
     const tableOrders = activeOrders.filter(o => o.tableId === tableId);
     if (tableOrders.length === 0) return null;
-    if (tableOrders.length === 1) {
+
+    const pendingOrders = tableOrders.filter(o => o.status === 'Pending');
+
+    if (pendingOrders.length > 0) {
+      if (pendingOrders.length === 1) {
+        const normalizedItems = (pendingOrders[0].items || []).map((item: any) => ({
+          ...item,
+          product: item.product || { id: item.productId, name: item.product?.name || 'Menu' }
+        }));
+        return {
+          ...pendingOrders[0],
+          items: normalizedItems
+        };
+      }
+
+      // Combine multiple pending orders
+      const mergedItemsObj: { [key: number]: any } = {};
+      let subtotal = 0;
+      let tax = 0;
+      let serviceCharge = 0;
+      let total = 0;
+
+      pendingOrders.forEach(order => {
+        subtotal += order.subtotal;
+        tax += order.tax;
+        serviceCharge += order.serviceCharge;
+        total += order.total;
+
+        (order.items || []).forEach((item: any) => {
+          const existing = mergedItemsObj[item.productId];
+          if (existing) {
+            existing.qty += item.qty;
+            existing.subtotal += item.subtotal;
+            if (item.notes) {
+              existing.notes = existing.notes ? `${existing.notes}, ${item.notes}` : item.notes;
+            }
+          } else {
+            mergedItemsObj[item.productId] = {
+              ...item,
+              product: item.product || { id: item.productId, name: item.product?.name || 'Menu' }
+            };
+          }
+        });
+      });
+
+      const mergedItems = Object.values(mergedItemsObj);
+      const commaSeparatedIds = pendingOrders.map(o => o.id).join(',');
+
+      return {
+        id: commaSeparatedIds,
+        orderNumber: `Combined (${pendingOrders.length} Pesanan)`,
+        customerName: pendingOrders[0].customerName,
+        customerPhone: pendingOrders[0].customerPhone || '',
+        customerId: pendingOrders[0].customerId,
+        tableId: pendingOrders[0].tableId,
+        subtotal,
+        tax,
+        serviceCharge,
+        total,
+        items: mergedItems,
+        createdAt: pendingOrders[0].createdAt,
+        status: 'Pending',
+        kdsStatus: pendingOrders.every(o => o.kdsStatus === 'Served') ? 'Served' : 'Cooking'
+      };
+    } else {
       const normalizedItems = (tableOrders[0].items || []).map((item: any) => ({
         ...item,
         product: item.product || { id: item.productId, name: item.product?.name || 'Menu' }
       }));
       return {
         ...tableOrders[0],
+        status: 'Paid',
         items: normalizedItems
       };
     }
-
-    // Combine multiple orders
-    const mergedItemsObj: { [key: number]: any } = {};
-    let subtotal = 0;
-    let tax = 0;
-    let serviceCharge = 0;
-    let total = 0;
-
-    tableOrders.forEach(order => {
-      subtotal += order.subtotal;
-      tax += order.tax;
-      serviceCharge += order.serviceCharge;
-      total += order.total;
-
-      (order.items || []).forEach((item: any) => {
-        const existing = mergedItemsObj[item.productId];
-        if (existing) {
-          existing.qty += item.qty;
-          existing.subtotal += item.subtotal;
-          if (item.notes) {
-            existing.notes = existing.notes ? `${existing.notes}, ${item.notes}` : item.notes;
-          }
-        } else {
-          mergedItemsObj[item.productId] = {
-            ...item,
-            product: item.product || { id: item.productId, name: item.product?.name || 'Menu' }
-          };
-        }
-      });
-    });
-
-    const mergedItems = Object.values(mergedItemsObj);
-    const commaSeparatedIds = tableOrders.map(o => o.id).join(',');
-
-    return {
-      id: commaSeparatedIds,
-      orderNumber: `Combined (${tableOrders.length} Pesanan)`,
-      customerName: tableOrders[0].customerName,
-      customerPhone: tableOrders[0].customerPhone || '',
-      customerId: tableOrders[0].customerId,
-      tableId: tableOrders[0].tableId,
-      subtotal,
-      tax,
-      serviceCharge,
-      total,
-      items: mergedItems,
-      createdAt: tableOrders[0].createdAt,
-      kdsStatus: tableOrders.every(o => o.kdsStatus === 'Served') ? 'Served' : 'Cooking'
-    };
   };
 
   // 3 states: empty | cooking (Pending/Cooking/Ready) | served (Served)
