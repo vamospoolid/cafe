@@ -578,6 +578,8 @@ const TableView = () => {
                   }[tableStatus];
 
                   const isCircle = table.shape === 'circle';
+                  const isServed = tableStatus === 'served';
+                  const isPaid = activeOrder && activeOrder.status === 'Paid';
 
                   return (
                     <div
@@ -588,34 +590,59 @@ const TableView = () => {
                         position: 'absolute',
                         left: `${posX}%`,
                         top: `${posY}%`,
-                        width: isCircle ? '110px' : '110px',
-                        height: isCircle ? '110px' : '110px',
+                        width: '120px',
+                        height: '120px',
                         cursor: isEditMode ? 'move' : 'pointer',
                         zIndex: draggedId === table.id ? 50 : 10,
                         transition: draggedId === table.id ? 'none' : 'left 0.1s ease-out, top 0.1s ease-out',
                         userSelect: 'none'
                       }}
-                      className={`flex flex-col items-center justify-center p-3 border-2 text-center select-none shadow-sm ${
+                      className={`flex flex-col items-center justify-between p-2.5 border-2 text-center select-none shadow-sm ${
                         isCircle ? 'rounded-full' : 'rounded-2xl'
                       } ${cardStyle} ${isEditMode ? 'hover:scale-105 border-indigo-500 ring-4 ring-indigo-200' : 'hover:scale-[1.02] hover:shadow-md'}`}
                     >
-                      <div className="font-black text-2xl tracking-tight leading-none mb-1">{table.tableNo}</div>
-                      <div className="text-[9px] font-bold opacity-80 mb-2 truncate max-w-[80px]">
-                        {table.name || 'Umum'}
+                      {/* Nomor Meja & Keterangan */}
+                      <div>
+                        <div className="font-black text-xl tracking-tight leading-none text-slate-800">{table.tableNo}</div>
+                        <div className="text-[8px] font-bold opacity-75 truncate max-w-[90px] mx-auto mt-0.5 text-slate-500">
+                          {table.name || 'Umum'}
+                        </div>
                       </div>
                       
                       {isOccupied ? (
-                        <div className="flex flex-col items-center">
-                          <div className="text-[10px] font-black tracking-wide bg-white/20 px-2 py-0.5 rounded-full">
+                        <div className="flex flex-col items-center w-full">
+                          {/* Nama Pelanggan */}
+                          <div className="text-[9px] font-extrabold truncate max-w-[100px] leading-tight mb-0.5">
+                            {activeOrder.customerName}
+                          </div>
+                          
+                          {/* Status Badge */}
+                          <div className="mb-1">
+                            {isPaid ? (
+                              <span className="text-[8px] font-black bg-emerald-500 text-white px-1.5 py-0.2 rounded">DIBAYAR</span>
+                            ) : isServed ? (
+                              <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.2 rounded">SUDAH SIAP</span>
+                            ) : (
+                              <span className="text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded animate-pulse">MENUNGGU</span>
+                            )}
+                          </div>
+                          
+                          {/* Total Bill */}
+                          <div className="text-[10px] font-black tracking-wide bg-slate-900/10 px-2 py-0.5 rounded-full">
                             {formatCurrency(activeOrder.total)}
                           </div>
-                          <div className="text-[8px] font-semibold mt-1 opacity-90 flex items-center gap-0.5">
+                          
+                          {/* Waktu Tunggu */}
+                          <div className="text-[8px] font-semibold mt-0.5 opacity-85 flex items-center gap-0.5 justify-center">
                             <Clock size={8} /> {getWaitTime(activeOrder.createdAt)}
                           </div>
                         </div>
                       ) : (
-                        <div className="text-[9px] font-black tracking-widest text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">
-                          KOSONG
+                        <div className="flex flex-col items-center">
+                          <span className="text-[8px] font-black tracking-widest text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            KOSONG
+                          </span>
+                          <span className="text-[8px] font-bold text-slate-400 mt-1">Siap Pakai</span>
                         </div>
                       )}
                     </div>
