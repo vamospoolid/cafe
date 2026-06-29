@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { History, Search, RotateCcw, Printer, Filter, ShoppingCart, DollarSign, BarChart2, User, XCircle, Download, FileText } from 'lucide-react';
+import { History, Search, RotateCcw, Printer, Filter, ShoppingCart, DollarSign, BarChart2, User, XCircle, Download, FileText, Zap } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -19,6 +19,35 @@ const TransactionHistoryView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   
   const posContext = useContext(POSContext);
+  const [printLoading, setPrintLoading] = useState<number | null>(null);
+
+  const handleDirectPrint = async (orderId: number) => {
+    if (!posContext?.settings?.printerIp) {
+      toast('IP Printer belum dikonfigurasi di menu Pengaturan', 'error');
+      return;
+    }
+    setPrintLoading(orderId);
+    try {
+      const res = await fetch('/api/printer/receipt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ orderId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast('Struk berhasil dicetak langsung ke printer!', 'success');
+      } else {
+        toast(data.error || 'Gagal mencetak struk', 'error');
+      }
+    } catch (err: any) {
+      toast(err.message || 'Terjadi kesalahan jaringan ke printer', 'error');
+    } finally {
+      setPrintLoading(null);
+    }
+  };
 
   const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
   const formatDate = (isoString: string) => {
@@ -270,7 +299,15 @@ const TransactionHistoryView = () => {
                     </td>
                     <td className="text-right">
                       <div className="flex justify-end gap-1">
-                        <button className="icon-btn text-blue-600 bg-blue-50" title="Cetak Struk" onClick={() => setPrintOrder(trx)}><Printer size={16}/></button>
+                        <button className="icon-btn text-blue-600 bg-blue-50" title="Preview / Cetak PDF" onClick={() => setPrintOrder(trx)}><Printer size={16}/></button>
+                        <button 
+                          className={`icon-btn text-emerald-600 bg-emerald-50 ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`} 
+                          title="Cetak Struk Termal Langsung" 
+                          onClick={() => handleDirectPrint(trx.id)}
+                          disabled={printLoading === trx.id}
+                        >
+                          <Zap size={16} className={printLoading === trx.id ? 'animate-pulse' : ''} />
+                        </button>
                         {trx.status !== 'Void' && posContext?.user?.permissions?.canVoid && (
                           <button className="icon-btn text-red-600 bg-red-50" onClick={() => handleVoid(trx.id, trx.orderNumber)}>
                             <XCircle size={16}/>

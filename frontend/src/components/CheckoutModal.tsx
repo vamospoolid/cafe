@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check } from 'lucide-react';
+import { X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, Printer } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import CustomerModal from './CustomerModal';
@@ -25,6 +25,36 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
   const [isSuccess, setIsSuccess]         = useState(false);
   const [loading, setLoading]             = useState(false);
   const posContext = useContext(POSContext);
+  const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
+  const [printLoading, setPrintLoading] = useState(false);
+
+  const handleDirectPrint = async (id: number) => {
+    if (!posContext?.settings?.printerIp) {
+      toast('IP Printer belum dikonfigurasi di menu Pengaturan', 'error');
+      return;
+    }
+    setPrintLoading(true);
+    try {
+      const res = await fetch('/api/printer/receipt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ orderId: id })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast('Struk berhasil dicetak langsung ke printer!', 'success');
+      } else {
+        toast(data.error || 'Gagal mencetak struk', 'error');
+      }
+    } catch (err: any) {
+      toast(err.message || 'Terjadi kesalahan jaringan ke printer', 'error');
+    } finally {
+      setPrintLoading(false);
+    }
+  };
 
   const [currentCustomer, setCurrentCustomer] = useState<any>(customer || null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -89,8 +119,15 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
         });
       }
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Gagal checkout'); }
+      const data = await res.json();
+      
+      // Ambil ID order yang baru dibuat dari respon backend
+      const createdOrder = data.order || (data.orders && data.orders[0]) || data.orderItem?.order;
+      if (createdOrder) {
+        setCreatedOrderId(createdOrder.id);
+      }
+      
       setIsSuccess(true);
-      setTimeout(() => { setIsSuccess(false); setLoading(false); onSuccess(); onClose(); }, 2000);
     } catch (err: any) {
       toast(err.message || 'Gagal memproses pesanan.', 'error');
       setLoading(false);
@@ -100,12 +137,60 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
   if (isSuccess) {
     return (
       <div className="modal-overlay">
-        <div style={{ background: 'var(--bg-card)', borderRadius: '1.5rem', padding: '3rem', textAlign: 'center', maxWidth: 400, animation: 'modalIn 0.3s ease-out' }}>
+        <div style={{ background: 'var(--bg-card)', borderRadius: '1.5rem', padding: '2.5rem', textAlign: 'center', maxWidth: 400, width: '90%', animation: 'modalIn 0.3s ease-out' }}>
           <div style={{ width: 72, height: 72, background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
             <CheckCircle size={40} color="#16a34a" />
           </div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Pembayaran Berhasil!</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Mencetak struk dan mengirim ke dapur...</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>Pesanan Anda telah diproses dan dikirim ke dapur.</p>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {createdOrderId && (
+              <button 
+                onClick={() => handleDirectPrint(createdOrderId)}
+                disabled={printLoading}
+                style={{ 
+                  width: '100%', 
+                  padding: '0.8rem', 
+                  fontWeight: 700, 
+                  borderRadius: '0.75rem', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: 'var(--primary)',
+                  color: 'white'
+                }}
+              >
+                <Printer size={16} />
+                <span>{printLoading ? 'Mencetak...' : 'Cetak Struk Termal'}</span>
+              </button>
+            )}
+            
+            <button 
+              onClick={() => {
+                setIsSuccess(false);
+                setCreatedOrderId(null);
+                setLoading(false);
+                onSuccess();
+                onClose();
+              }}
+              style={{ 
+                width: '100%', 
+                padding: '0.8rem', 
+                fontWeight: 700, 
+                borderRadius: '0.75rem', 
+                cursor: 'pointer',
+                border: '1px solid var(--border-color)',
+                background: 'white',
+                color: 'var(--text-main)'
+              }}
+            >
+              Selesai & Tutup
+            </button>
+          </div>
         </div>
       </div>
     );
