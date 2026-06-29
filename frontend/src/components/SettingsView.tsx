@@ -506,7 +506,7 @@ const SettingsView = () => {
                           {formData.enableDrinkCustomization ? '✓ KUSTOMISASI AKTIF' : 'KUSTOMISASI NONAKTIF'}
                         </span>
                       </div>
-                    </div>  </div>
+                    </div>
                   </label>
                 </div>
               </div>
