@@ -91,7 +91,7 @@ const PurchaseOrderView: React.FC = () => {
   };
 
   const handleCancel = async (po: PO) => {
-    const c = await confirmAlert('Batalkan PO', `Batalkan PO ${po.poNumber}?`, 'warning');
+    const c = await confirmAlert('Batalkan PO', `Batalkan PO ${po.poNumber}?`);
     if (!c.isConfirmed) return;
     const res = await fetch(`${API}/purchase-orders/${po.id}/cancel`, { method: 'PATCH', headers });
     if (res.ok) { toast('PO dibatalkan', 'success'); fetchData(); }

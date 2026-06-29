@@ -199,7 +199,7 @@ const ReportView = () => {
         accountingData,
         startDate,
         endDate,
-        posContext?.user?.name
+        (posContext?.user as any)?.name || 'Admin'
       );
     } else {
       window.print();
