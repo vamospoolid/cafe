@@ -19,7 +19,13 @@
     "recharts": "^3.9.0",
     "socket.io-client": "^4.8.3",
     "sweetalert2": "^11.26.25",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/push-notifications": "^6.0.0",
+    "@capacitor-community/sqlite": "^6.0.0",
+    "@capacitor-mlkit/barcode-scanning": "^6.0.0",
+    "cordova-plugin-bluetooth-serial": "^0.4.7",
+    "esc-pos-encoder": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

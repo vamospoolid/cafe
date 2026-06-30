@@ -1,0 +1,8 @@
+{
+  "appId": "id.codenusa.poscafe",
+  "appName": "SOL CAFE POS",
+  "webDir": "../frontend/dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -4,6 +4,12 @@ import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
 import CustomerModal from './CustomerModal';
+import { 
+  isNativeMobile, 
+  connectBluetoothPrinter, 
+  printBluetoothReceipt, 
+  disconnectBluetoothPrinter 
+} from '../utils/printerBluetooth';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -36,6 +42,33 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
   const [printLoading, setPrintLoading] = useState(false);
 
   const handleDirectPrint = async (id: number) => {
+    // Check if running on native mobile platform with Bluetooth printer configured
+    if (isNativeMobile() && localStorage.getItem('bluetooth_printer_mac')) {
+      const macAddress = localStorage.getItem('bluetooth_printer_mac')!;
+      setPrintLoading(true);
+      try {
+        const orderRes = await fetch(`/api/orders/${id}`, {
+          headers: { Authorization: `Bearer ${posContext?.token}` }
+        });
+        if (!orderRes.ok) throw new Error('Gagal mengambil detail order untuk cetak Bluetooth');
+        const orderData = await orderRes.json();
+        
+        await connectBluetoothPrinter(macAddress);
+        await printBluetoothReceipt(orderData, {
+          name: posContext?.settings?.storeName || 'SOL CAFE',
+          address: posContext?.settings?.address || 'Jl. Kopi No.1',
+          footer: posContext?.settings?.receiptFooter || 'Terima kasih!'
+        });
+        await disconnectBluetoothPrinter();
+        toast('Struk berhasil dicetak via Bluetooth!', 'success');
+      } catch (err: any) {
+        toast(err.message || 'Gagal cetak via Bluetooth', 'error');
+      } finally {
+        setPrintLoading(false);
+      }
+      return;
+    }
+
     if (!posContext?.settings?.printerIp) {
       toast('IP Printer belum dikonfigurasi di menu Pengaturan', 'error');
       return;

@@ -3,6 +3,14 @@ import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
+import { 
+  isNativeMobile, 
+  listPairedBluetoothDevices, 
+  connectBluetoothPrinter, 
+  disconnectBluetoothPrinter, 
+  printRawBytes 
+} from '../utils/printerBluetooth';
+import EscPosEncoder from 'esc-pos-encoder';
 
 const SettingsView = () => {
   const [activeTab, setActiveTab] = useState('profil');
@@ -212,6 +220,16 @@ const SettingsView = () => {
             onClick={() => setActiveTab('inventaris')}
           >
             <PackageSearch size={18} className={activeTab === 'inventaris' ? 'text-white' : 'text-slate-400'} /> Mode Inventaris
+          </button>
+          <button 
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
+              activeTab === 'printer_bt' 
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
+                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
+            }`}
+            onClick={() => setActiveTab('printer_bt')}
+          >
+            <Printer size={18} className={activeTab === 'printer_bt' ? 'text-white' : 'text-slate-400'} /> Printer Bluetooth
           </button>
         </div>
 
@@ -902,7 +920,160 @@ const SettingsView = () => {
             </div>
           )}
 
+          {/* ─── Tab Printer Bluetooth ─── */}
+          {activeTab === 'printer_bt' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600"><Printer size={18} /></div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Pengaturan Printer Bluetooth</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Pindai dan hubungkan tablet Anda dengan printer termal nirkabel lokal.</p>
+                </div>
+              </div>
+              
+              {!isNativeMobile() ? (
+                <div className="p-4 border border-amber-100 bg-amber-50/50 rounded-2xl flex items-start gap-3">
+                  <Info className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                  <div className="text-xs text-amber-800 font-medium leading-relaxed">
+                    Pengaturan printer Bluetooth serial hanya dapat diakses melalui aplikasi native mobile POS (HP/Tablet) Android & iOS. Saat ini Anda mengakses aplikasi melalui browser web standar.
+                  </div>
+                </div>
+              ) : (
+                <BluetoothPrinterConfig />
+              )}
+            </div>
+          )}
+
         </div>
+      </div>
+    </div>
+  );
+};
+
+const BluetoothPrinterConfig = () => {
+  const [devices, setDevices] = useState<any[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [selectedMac, setSelectedMac] = useState(localStorage.getItem('bluetooth_printer_mac') || '');
+  const [connecting, setConnecting] = useState(false);
+
+  const scan = async () => {
+    setScanning(true);
+    try {
+      const list = await listPairedBluetoothDevices();
+      setDevices(list);
+      toast(`Menemukan ${list.length} perangkat Bluetooth terpasang.`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal memindai Bluetooth', 'error');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isNativeMobile()) {
+      scan();
+    }
+  }, []);
+
+  const handleSelectPrinter = async (mac: string) => {
+    setConnecting(true);
+    try {
+      await connectBluetoothPrinter(mac);
+      await disconnectBluetoothPrinter();
+      
+      localStorage.setItem('bluetooth_printer_mac', mac);
+      setSelectedMac(mac);
+      toast('Printer Bluetooth berhasil terhubung dan disimpan!', 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal terhubung ke printer', 'error');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleTestPrintBt = async () => {
+    if (!selectedMac) {
+      toast('Pilih printer terlebih dahulu', 'warning');
+      return;
+    }
+
+    try {
+      await connectBluetoothPrinter(selectedMac);
+      const encoder = new EscPosEncoder();
+      const bytes = encoder
+        .initialize()
+        .align('center')
+        .line('SOL CAFE')
+        .line('=== TEST PRINT OK ===')
+        .line('Printer Bluetooth Terkoneksi!')
+        .line(new Date().toLocaleString())
+        .line('\n\n\n')
+        .cut()
+        .encode();
+      
+      await printRawBytes(bytes);
+      await disconnectBluetoothPrinter();
+      toast('Test print berhasil dikirim!', 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal melakukan test print', 'error');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={scan}
+          disabled={scanning}
+          className="btn btn-outline flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold"
+        >
+          {scanning ? 'Memindai...' : 'Pindai Perangkat'}
+        </button>
+        {selectedMac && (
+          <button
+            type="button"
+            onClick={handleTestPrintBt}
+            className="btn btn-primary bg-indigo-600 border-indigo-600 flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold"
+          >
+            <Printer size={14} /> Tes Cetak Struk
+          </button>
+        )}
+      </div>
+
+      <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm bg-white">
+        <div className="bg-slate-50 px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-100">
+          Daftar Perangkat Bluetooth Berpasangan
+        </div>
+        {devices.length === 0 ? (
+          <div className="p-8 text-center text-xs text-slate-400 font-semibold leading-relaxed">
+            Tidak ada perangkat Bluetooth paired ditemukan.<br />
+            Pastikan printer thermal telah diaktifkan dan disandingkan (paired) di menu Pengaturan Bluetooth tablet Anda.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {devices.map(d => (
+              <div key={d.id} className="p-4 flex justify-between items-center hover:bg-slate-50/50 transition-colors">
+                <div>
+                  <div className="text-sm font-bold text-slate-800">{d.name || 'Printer Bluetooth'}</div>
+                  <div className="text-[10px] font-mono text-slate-400 mt-1 uppercase tracking-wider">{d.id}</div>
+                </div>
+                <button
+                  type="button"
+                  disabled={connecting}
+                  onClick={() => handleSelectPrinter(d.id)}
+                  className={`btn px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                    selectedMac === d.id 
+                      ? 'btn-primary bg-green-600 border-green-600 text-white hover:bg-green-700 shadow-md shadow-green-600/10' 
+                      : 'btn-outline border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {selectedMac === d.id ? 'Terpilih' : 'Hubungkan'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

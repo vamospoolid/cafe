@@ -8,6 +8,7 @@ import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
+import { isNativePlatform, startNativeBarcodeScan } from '../utils/barcodeScannerNative';
 
 export interface CartItem {
   product: any;
@@ -20,6 +21,7 @@ export const POSView = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -201,9 +203,60 @@ export const POSView = () => {
     }
   };
 
-  const filteredProducts = activeCategory === 'Semua' 
-    ? products 
-    : products.filter(p => p.categoryId === activeCategory);
+  const filteredProducts = products.filter(p => {
+    const matchesCategory = activeCategory === 'Semua' || p.categoryId === activeCategory;
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (p.barcode && p.barcode.toLowerCase().includes(searchTerm.toLowerCase()));
+    return matchesCategory && matchesSearch;
+  });
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchTerm(val);
+    
+    // Auto-add if it matches a barcode exactly (useful for hardware scanner emulation)
+    const match = products.find(p => p.barcode === val);
+    if (match) {
+      handleProductClick(match);
+      setSearchTerm('');
+      toast(`Menambahkan ${match.name} ke keranjang`, 'success');
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const match = products.find(p => 
+        p.barcode === searchTerm || 
+        p.name.toLowerCase() === searchTerm.toLowerCase()
+      );
+      if (match) {
+        handleProductClick(match);
+        setSearchTerm('');
+        toast(`Menambahkan ${match.name} ke keranjang`, 'success');
+      }
+    }
+  };
+
+  const handleCameraScan = async () => {
+    if (!isNativePlatform()) {
+      toast('Kamera native scanner hanya tersedia di aplikasi tablet/HP mobile.', 'info');
+      return;
+    }
+    try {
+      const barcodeValue = await startNativeBarcodeScan();
+      if (barcodeValue) {
+        const product = products.find(p => p.barcode === barcodeValue);
+        if (product) {
+          handleProductClick(product);
+          toast(`Menambahkan ${product.name} ke keranjang`, 'success');
+        } else {
+          toast(`Produk dengan barcode "${barcodeValue}" tidak ditemukan`, 'warning');
+        }
+      }
+    } catch (err: any) {
+      toast(err.message || 'Gagal memindai barcode', 'error');
+    }
+  };
 
   const isShiftRequired = posContext?.user?.role === 'Kasir' || posContext?.user?.role === 'Admin';
   const hasActiveShift = posContext?.activeShift !== null;
@@ -248,10 +301,13 @@ export const POSView = () => {
             <input 
               type="text" 
               className="scanner-input" 
-              placeholder="Scan / ketik barcode..."
+              placeholder="Cari menu / scan barcode..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
               autoFocus
             />
-            <button className="scanner-btn">
+            <button className="scanner-btn" onClick={handleCameraScan}>
               <Camera size={16} /> Kamera
             </button>
           </div>
