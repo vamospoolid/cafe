@@ -41,6 +41,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [printLoading, setPrintLoading] = useState(false);
 
+  const handleDirectPrint = async (id: number) => {
     const isHighPrecision = localStorage.getItem('high_precision_mode') === 'true';
     // Check if running on native mobile platform with Bluetooth printer configured and high precision mode is enabled
     if (isHighPrecision && isNativeMobile() && localStorage.getItem('bluetooth_printer_mac')) {
