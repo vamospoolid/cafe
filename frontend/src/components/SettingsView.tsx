@@ -17,6 +17,16 @@ const SettingsView = () => {
   const [loading, setLoading] = useState(false);
   const posContext = useContext(POSContext);
   const [testLoading, setTestLoading] = useState(false);
+  const [highPrecisionMode, setHighPrecisionMode] = useState(() => {
+    return localStorage.getItem('high_precision_mode') === 'true';
+  });
+
+  const handleHighPrecisionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setHighPrecisionMode(checked);
+    localStorage.setItem('high_precision_mode', checked ? 'true' : 'false');
+    toast(`Mode Presisi Tinggi ${checked ? 'diaktifkan' : 'dinonaktifkan'} untuk perangkat ini.`, 'success');
+  };
 
   const handleTestPrint = async () => {
     const ip = formData.printerIp;
@@ -626,6 +636,49 @@ const SettingsView = () => {
                     </div>
                   </label>
                 </div>
+
+                {/* High-Precision Mode Toggle Card */}
+                <div className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-sm transition-all mt-4">
+                  <label className="flex items-start gap-4 cursor-pointer select-none">
+                    <div className="relative mt-1 shrink-0">
+                      <input
+                        type="checkbox"
+                        name="highPrecisionMode"
+                        className="sr-only"
+                        checked={highPrecisionMode}
+                        onChange={handleHighPrecisionChange}
+                      />
+                      <div
+                        style={{
+                          width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                          background: highPrecisionMode ? '#4f46e5' : '#cbd5e1',
+                          transition: 'background 0.2s', position: 'relative',
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute', top: 3,
+                          left: highPrecisionMode ? 23 : 3,
+                          width: 18, height: 18, borderRadius: '50%', background: 'white',
+                          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                        }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                        <Sliders size={16} className="text-indigo-650" />
+                        <span>Mode Presisi Tinggi (Kontrol Hardware & Sistem Ketat)</span>
+                      </div>
+                      <div className="text-xs text-slate-400 mt-1 leading-relaxed">
+                        Aktifkan jika perangkat ini bertindak sebagai terminal kasir utama yang membutuhkan kontrol fisik ketat, cetak matrix bluetooth terpisah, pembukaan laci kas RJ11 otomatis, dan penguncian Kiosk mode.
+                      </div>
+                      <div className="mt-3">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full ${ highPrecisionMode ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                          {highPrecisionMode ? '✓ MODE PRESISI AKTIF' : 'MODE PRESISI NONAKTIF'}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
           )}
@@ -939,7 +992,17 @@ const SettingsView = () => {
                   </div>
                 </div>
               ) : (
-                <BluetoothPrinterConfig />
+                <>
+                  {!highPrecisionMode && (
+                    <div className="p-4 border border-amber-100 bg-amber-50/50 rounded-2xl flex items-start gap-3 mb-4">
+                      <Info className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                      <div className="text-xs text-amber-800 font-medium leading-relaxed">
+                        Catatan: <strong>Mode Presisi Tinggi</strong> sedang nonaktif. Aktifkan Mode Presisi Tinggi di tab <strong>Fitur Tambahan POS</strong> jika perangkat ini ingin melakukan cetak Bluetooth otomatis saat checkout kasir.
+                      </div>
+                    </div>
+                  )}
+                  <BluetoothPrinterConfig />
+                </>
               )}
             </div>
           )}

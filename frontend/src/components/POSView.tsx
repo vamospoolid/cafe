@@ -238,6 +238,11 @@ export const POSView = () => {
   };
 
   const handleCameraScan = async () => {
+    const isHighPrecision = localStorage.getItem('high_precision_mode') === 'true';
+    if (!isHighPrecision) {
+      toast('Aktifkan Mode Presisi Tinggi di Pengaturan untuk memfungsikan pemindaian kamera native.', 'info');
+      return;
+    }
     if (!isNativePlatform()) {
       toast('Kamera native scanner hanya tersedia di aplikasi tablet/HP mobile.', 'info');
       return;
