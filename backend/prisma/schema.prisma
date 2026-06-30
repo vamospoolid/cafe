@@ -25,6 +25,7 @@ model User {
   attendances    Attendance[]
   shifts         Shift[]
   purchaseOrders PurchaseOrder[]
+  debtPayments   DebtPayment[]
   
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -104,6 +105,7 @@ model Customer {
   
   orders       Order[]
   pointLogs    PointLog[]
+  debts        Debt[]
 }
 
 model PointLog {
@@ -144,6 +146,7 @@ model Order {
   paidAt        DateTime?   // Waktu transaksi pembayaran diselesaikan (untuk rekonsiliasi shift akurat)
   
   items         OrderItem[]
+  debt          Debt?
   
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -330,3 +333,31 @@ model PurchaseOrderItem {
   unitPrice    Float
   subtotal     Float
 }
+
+model Debt {
+  id           Int           @id @default(autoincrement())
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId   Int
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId      Int?          @unique
+  amount       Float         // Jumlah piutang awal
+  remaining    Float         // Sisa piutang yang belum dibayar
+  status       String        @default("Belum Lunas") // "Belum Lunas", "Lunas"
+  dueDate      DateTime?     // Tanggal jatuh tempo
+  notes        String?
+  payments     DebtPayment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model DebtPayment {
+  id            Int      @id @default(autoincrement())
+  debt          Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  debtId        Int
+  amountPaid    Float
+  paymentMethod String   // Tunai, Transfer, Kartu
+  user          User     @relation(fields: [userId], references: [id])
+  userId        Int
+  createdAt     DateTime @default(now())
+}
+

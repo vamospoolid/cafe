@@ -18,7 +18,8 @@ import {
   Plus,
   Minus,
   Cake,
-  AlertTriangle
+  AlertTriangle,
+  Wallet
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -48,6 +49,61 @@ const CRMView = () => {
     pointsAdjustment: 0,
     adjustmentReason: ''
   });
+
+  // Pay debt modal states
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+  const [selectedDebt, setSelectedDebt] = useState<any>(null);
+  const [payAmount, setPayAmount] = useState<number>(0);
+  const [payMethod, setPayMethod] = useState<string>('Tunai');
+  const [payLoading, setPayLoading] = useState(false);
+
+  const handleOpenPayModal = (debt: any) => {
+    setSelectedDebt(debt);
+    setPayAmount(debt.remaining); // Default bayar lunas
+    setPayMethod('Tunai');
+    setIsPayModalOpen(true);
+  };
+
+  const handlePayDebt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDebt) return;
+    if (payAmount <= 0 || payAmount > selectedDebt.remaining) {
+      toast(`Jumlah pembayaran tidak valid (Maksimal: ${formatCurrency(selectedDebt.remaining)})`, 'warning');
+      return;
+    }
+
+    setPayLoading(true);
+    try {
+      const res = await fetch(`/api/debts/${selectedDebt.id}/payments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          amountPaid: payAmount,
+          paymentMethod: payMethod
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast('Pembayaran piutang berhasil dicatat!', 'success');
+        setIsPayModalOpen(false);
+        fetchCustomers();
+        if (selectedCustomer) {
+          fetchCustomerDetail(selectedCustomer.id);
+        }
+      } else {
+        toast(data.error || 'Gagal mencatat pembayaran piutang', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Gangguan koneksi ke server', 'error');
+    } finally {
+      setPayLoading(false);
+    }
+  };
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -324,20 +380,23 @@ const CRMView = () => {
                   <th className="p-4 font-bold text-xs text-muted uppercase">Level / Tier</th>
                   <th className="p-4 font-bold text-xs text-muted uppercase text-right">Saldo Poin</th>
                   <th className="p-4 font-bold text-xs text-muted uppercase text-right">Total Transaksi</th>
+                  <th className="p-4 font-bold text-xs text-muted uppercase text-right">Total Piutang</th>
                   <th className="p-4 font-bold text-xs text-muted uppercase text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="text-center p-8 text-muted">Memuat data pelanggan...</td></tr>
+                  <tr><td colSpan={7} className="text-center p-8 text-muted">Memuat data pelanggan...</td></tr>
                 ) : customers.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center p-8 text-muted">Tidak ada member ditemukan.</td></tr>
-                ) : customers.map((c) => (
-                  <tr 
-                    key={c.id} 
-                    className={`hover:bg-slate-50 border-b border-gray-50 transition-colors cursor-pointer ${selectedCustomer?.id === c.id ? 'bg-blue-50/50' : ''}`}
-                    onClick={() => handleOpenDrawer(c)}
-                  >
+                  <tr><td colSpan={7} className="text-center p-8 text-muted">Tidak ada member ditemukan.</td></tr>
+                ) : customers.map((c) => {
+                  const totalDebt = c.debts ? c.debts.reduce((sum: number, d: any) => sum + d.remaining, 0) : 0;
+                  return (
+                    <tr 
+                      key={c.id} 
+                      className={`hover:bg-slate-50 border-b border-gray-50 transition-colors cursor-pointer ${selectedCustomer?.id === c.id ? 'bg-blue-50/50' : ''}`}
+                      onClick={() => handleOpenDrawer(c)}
+                    >
                     <td className="p-4">
                       <div className="font-bold text-gray-800">{c.name}</div>
                       {c.birthday && (
@@ -368,6 +427,9 @@ const CRMView = () => {
                     <td className="p-4 text-right font-semibold text-gray-800">
                       {formatCurrency(c.totalSpent)}
                     </td>
+                    <td className="p-4 text-right font-bold text-red-600">
+                      {totalDebt > 0 ? formatCurrency(totalDebt) : '-'}
+                    </td>
                     <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex justify-end gap-2">
                         <button 
@@ -396,7 +458,7 @@ const CRMView = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>
@@ -444,6 +506,88 @@ const CRMView = () => {
                   <span className="font-bold text-gray-800">{formatDate(selectedCustomer.createdAt)}</span>
                 </div>
               </div>
+
+              {customerDetail?.debts && customerDetail.debts.length > 0 && (
+                <div className="border-t border-indigo-100/70 pt-3 flex justify-between text-xs items-center">
+                  <span className="text-red-700 font-bold">Total Piutang Aktif</span>
+                  <span className="font-black text-red-600 text-sm">
+                    {formatCurrency(customerDetail.debts.filter((d: any) => d.status === 'Belum Lunas').reduce((sum: number, d: any) => sum + d.remaining, 0))}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Piutang & Kasbon Section */}
+            <div>
+              <h4 className="font-bold text-sm text-gray-800 flex items-center gap-2 mb-3">
+                <Wallet size={16} className="text-red-500" /> Piutang & Kasbon ({customerDetail?.debts?.filter((d: any) => d.status === 'Belum Lunas').length || 0})
+              </h4>
+              {drawerLoading ? (
+                <div className="text-xs text-muted py-2 text-center">Memuat data piutang...</div>
+              ) : !customerDetail?.debts || customerDetail.debts.length === 0 ? (
+                <div className="text-xs text-muted py-4 text-center border border-dashed rounded-lg">Tidak ada riwayat piutang</div>
+              ) : (
+                <div className="space-y-3">
+                  {customerDetail.debts.map((d: any) => {
+                    const isOverdue = d.status === 'Belum Lunas' && d.dueDate && new Date(d.dueDate) < new Date();
+                    return (
+                      <div key={d.id} className={`p-3 border rounded-lg flex flex-col gap-2 ${d.status === 'Lunas' ? 'border-gray-100 bg-gray-50/30' : 'border-red-100 bg-red-50/10'}`}>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-mono text-xs font-bold text-gray-700 block">{d.order?.orderNumber || 'Manual'}</span>
+                            <span className="text-[10px] text-muted block mt-0.5">Dibuat: {formatDate(d.createdAt)}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${d.status === 'Lunas' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                              {d.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between text-xs border-t border-dashed pt-2 mt-1">
+                          <div>
+                            <span className="text-muted block">Jumlah Piutang</span>
+                            <span className="font-bold text-gray-700">{formatCurrency(d.amount)}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-muted block">Sisa Tagihan</span>
+                            <span className={`font-black ${d.status === 'Lunas' ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(d.remaining)}</span>
+                          </div>
+                        </div>
+
+                        {d.status === 'Belum Lunas' && d.dueDate && (
+                          <div className="flex justify-between items-center text-[10px] mt-1 p-1 bg-amber-50 rounded">
+                            <span className="text-amber-800 font-semibold">Jatuh Tempo: {formatDate(d.dueDate)}</span>
+                            {isOverdue && <span className="text-red-600 font-bold uppercase tracking-wider animate-pulse">Overdue</span>}
+                          </div>
+                        )}
+
+                        {d.status === 'Belum Lunas' && (
+                          <button
+                            className="btn btn-outline btn-xs justify-center mt-1 py-1 w-full bg-white text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => handleOpenPayModal(d)}
+                          >
+                            Bayar Tagihan Ini
+                          </button>
+                        )}
+
+                        {/* Payment History inside each debt */}
+                        {d.payments && d.payments.length > 0 && (
+                          <div className="mt-2 bg-gray-50 p-2 rounded text-[10px] space-y-1">
+                            <div className="font-bold text-gray-500 uppercase tracking-wider">Riwayat Cicilan:</div>
+                            {d.payments.map((p: any) => (
+                              <div key={p.id} className="flex justify-between text-gray-600">
+                                <span>{formatDate(p.createdAt)} ({p.paymentMethod})</span>
+                                <span className="font-bold text-green-600">+{formatCurrency(p.amountPaid)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Shopping History List */}
@@ -611,6 +755,101 @@ const CRMView = () => {
               <div className="modal-footer flex gap-3 border-t border-gray-100 bg-slate-50">
                 <button type="button" className="btn btn-outline flex-1 justify-center" onClick={() => setIsModalOpen(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary flex-1 justify-center">Simpan Data</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Pay Debt Modal Dialog */}
+      {isPayModalOpen && selectedDebt && (
+        <div className="modal-overlay z-20">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header bg-slate-50 border-b border-gray-100">
+              <h2 className="modal-title flex items-center gap-2">
+                <Wallet className="text-red-500" /> Bayar Piutang / Kasbon
+              </h2>
+              <button className="icon-btn" onClick={() => setIsPayModalOpen(false)}><X size={20} /></button>
+            </div>
+            
+            <form onSubmit={handlePayDebt}>
+              <div className="modal-body space-y-4">
+                <div className="p-3 border border-red-100 bg-red-50/10 rounded-lg">
+                  <div className="text-xs text-muted font-bold uppercase">No. Order</div>
+                  <div className="text-sm font-mono font-bold text-gray-800">{selectedDebt.order?.orderNumber || 'Manual'}</div>
+                  <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-dashed border-red-200">
+                    <div>
+                      <span className="text-[10px] text-muted block">Total Piutang</span>
+                      <span className="text-xs font-bold text-gray-700">{formatCurrency(selectedDebt.amount)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted block">Sisa Tagihan</span>
+                      <span className="text-xs font-bold text-red-600">{formatCurrency(selectedDebt.remaining)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Jumlah Pembayaran *</label>
+                  <input 
+                    type="number" 
+                    className="form-control w-full" 
+                    placeholder="Masukkan nominal bayar..."
+                    required
+                    max={selectedDebt.remaining}
+                    min={1}
+                    value={payAmount || ''}
+                    onChange={e => setPayAmount(Number(e.target.value))}
+                  />
+                  <div className="flex gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs py-0.5 px-2 bg-slate-50 text-[10px]"
+                      onClick={() => setPayAmount(selectedDebt.remaining)}
+                    >
+                      Bayar Lunas
+                    </button>
+                    {selectedDebt.remaining > 50000 && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-xs py-0.5 px-2 bg-slate-50 text-[10px]"
+                        onClick={() => setPayAmount(50000)}
+                      >
+                        Rp 50.000
+                      </button>
+                    )}
+                    {selectedDebt.remaining > 100000 && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-xs py-0.5 px-2 bg-slate-50 text-[10px]"
+                        onClick={() => setPayAmount(100000)}
+                      >
+                        Rp 100.000
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Metode Pembayaran *</label>
+                  <select 
+                    className="form-control w-full"
+                    required
+                    value={payMethod}
+                    onChange={e => setPayMethod(e.target.value)}
+                  >
+                    <option value="Tunai">Tunai / Cash</option>
+                    <option value="Transfer">Transfer Bank</option>
+                    <option value="Kartu">Debit / Kredit</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer flex gap-3 border-t border-gray-100 bg-slate-50">
+                <button type="button" className="btn btn-outline flex-1 justify-center" onClick={() => setIsPayModalOpen(false)}>Batal</button>
+                <button type="submit" className="btn btn-primary flex-1 justify-center" disabled={payLoading}>
+                  {payLoading ? 'Memproses...' : 'Simpan Pembayaran'}
+                </button>
               </div>
             </form>
           </div>

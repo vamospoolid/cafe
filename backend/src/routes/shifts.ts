@@ -106,6 +106,7 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       const pm = paymentMethod.trim();
       const lowerPm = pm.toLowerCase();
       if (lowerPm === 'cash' || lowerPm === 'tunai') return 0;
+      if (lowerPm === 'piutang') return 0;
       if (lowerPm === 'qris' || lowerPm === 'debit' || lowerPm === 'transfer' || lowerPm === 'credit' || lowerPm === 'non-tunai') return total;
       if (pm.startsWith('Split')) {
         const cashMatch = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
@@ -122,19 +123,36 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       where: { date: { gte: activeShift.waktuBuka } }
     });
 
-    const manualCashIn = cashFlows.filter(cf => cf.type === 'Pemasukan').reduce((sum, cf) => sum + cf.amount, 0);
+    const debtPayments = await prisma.debtPayment.findMany({
+      where: { createdAt: { gte: activeShift.waktuBuka } }
+    });
+
+    const cashDebtIncome = debtPayments
+      .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
+      .reduce((sum, dp) => sum + dp.amountPaid, 0);
+
+    const nonCashDebtIncome = debtPayments
+      .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
+      .reduce((sum, dp) => sum + dp.amountPaid, 0);
+
+    const manualCashIn = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang')
+      .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
 
-    const expectedCash = activeShift.saldoAwal + cashSalesIncome + manualCashIn - manualCashOut;
+    const expectedCash = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
+    const expectedNonCash = nonCashSalesIncome + nonCashDebtIncome;
 
     res.json({
       activeShift,
       expectedCash,
-      expectedNonCash: nonCashSalesIncome,
+      expectedNonCash,
       cashSales: cashSalesIncome,
       nonCashSales: nonCashSalesIncome,
       manualCashIn,
-      manualCashOut
+      manualCashOut,
+      cashDebtIncome,
+      nonCashDebtIncome
     });
   } catch (error) {
     console.error(error);
@@ -189,6 +207,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       const pm = paymentMethod.trim();
       const lowerPm = pm.toLowerCase();
       if (lowerPm === 'cash' || lowerPm === 'tunai') return 0;
+      if (lowerPm === 'piutang') return 0;
       if (lowerPm === 'qris' || lowerPm === 'debit' || lowerPm === 'transfer' || lowerPm === 'credit' || lowerPm === 'non-tunai') return total;
       if (pm.startsWith('Split')) {
         const cashMatch = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
@@ -208,10 +227,25 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       }
     });
 
-    const manualCashIn = cashFlows.filter(cf => cf.type === 'Pemasukan').reduce((sum, cf) => sum + cf.amount, 0);
+    const debtPayments = await prisma.debtPayment.findMany({
+      where: { createdAt: { gte: activeShift.waktuBuka } }
+    });
+
+    const cashDebtIncome = debtPayments
+      .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
+      .reduce((sum, dp) => sum + dp.amountPaid, 0);
+
+    const nonCashDebtIncome = debtPayments
+      .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
+      .reduce((sum, dp) => sum + dp.amountPaid, 0);
+
+    const manualCashIn = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang')
+      .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
 
-    const saldoSistem = activeShift.saldoAwal + cashSalesIncome + manualCashIn - manualCashOut;
+    const saldoSistem = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
+    const saldoElektronik = nonCashSalesIncome + nonCashDebtIncome;
     const fisikLaci = Number(saldoFisikLaci) || 0;
     const selisih = fisikLaci - saldoSistem;
 
@@ -220,7 +254,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       data: {
         waktuTutup: new Date(),
         saldoSistem,
-        saldoElektronik: nonCashSalesIncome,
+        saldoElektronik,
         saldoFisikLaci: fisikLaci,
         selisih,
         status: 'Closed'

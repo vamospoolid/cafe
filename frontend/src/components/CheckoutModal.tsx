@@ -19,10 +19,16 @@ interface CheckoutModalProps {
 }
 
 const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSuccess, total, subtotal, tax, serviceCharge, cart, customer, orderId }) => {
-  const [paymentMethod, setPaymentMethod] = useState<'tunai' | 'qris' | 'kartu' | 'split'>('tunai');
+  const [paymentMethod, setPaymentMethod] = useState<'tunai' | 'qris' | 'kartu' | 'split' | 'piutang'>('tunai');
   const [cashGiven, setCashGiven]         = useState<number>(0);
   const [manualDiscount, setManualDiscount] = useState<number>(0);
   const [splitCash, setSplitCash]         = useState<number>(0);
+  const [dueDate, setDueDate]             = useState<string>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 14); // default 14 hari
+    return date.toISOString().slice(0, 10);
+  });
+  const [debtNotes, setDebtNotes]         = useState<string>('');
   const [isSuccess, setIsSuccess]         = useState(false);
   const [loading, setLoading]             = useState(false);
   const posContext = useContext(POSContext);
@@ -76,6 +82,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
   const isPayable =
     paymentMethod === 'tunai'  ? cashGiven >= finalTotal
     : paymentMethod === 'split' ? splitCash > 0 && splitCash < finalTotal
+    : paymentMethod === 'piutang' ? !!currentCustomer?.id
     : true;
 
   const quickAmounts = Array.from(new Set([finalTotal, 50000, 100000, 150000, 200000]))
@@ -87,6 +94,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       paymentMethod === 'tunai'  ? 'Cash'
       : paymentMethod === 'qris' ? 'QRIS'
       : paymentMethod === 'split' ? `Split (Tunai ${fmt(splitCash)} + Non-Tunai ${fmt(nonCash)})`
+      : paymentMethod === 'piutang' ? 'Piutang'
       : 'Card';
     // Handler Mode Offline
     if (!navigator.onLine || !posContext?.isOnline) {
@@ -113,7 +121,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
           paymentMethod: pmString,
           isPaid: true,
           createdAt: new Date().toISOString(),
-          paidAt: new Date().toISOString()
+          paidAt: new Date().toISOString(),
+          dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
+          debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined
         };
 
         await offlineDB.addOfflineOrder(offlineOrder);
@@ -139,7 +149,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
             discount: (currentCustomer?.discountAmount || 0) + manualDiscount, 
             total: finalTotal,
             customerId: currentCustomer?.id || null,
-            pointsUsed: currentCustomer?.pointsUsed || 0
+            pointsUsed: currentCustomer?.pointsUsed || 0,
+            dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
+            debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined
           }),
         });
       } else {
@@ -156,6 +168,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
             discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
             pointsUsed: currentCustomer?.pointsUsed || 0,
             tax, serviceCharge, total: finalTotal, paymentMethod: pmString, isPaid: true,
+            dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
+            debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined
           }),
         });
       }
@@ -237,11 +251,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
     );
   }
 
-  const methods: { key: 'tunai' | 'qris' | 'kartu' | 'split'; label: string; icon: React.ReactNode }[] = [
+  const methods: { key: 'tunai' | 'qris' | 'kartu' | 'split' | 'piutang'; label: string; icon: React.ReactNode }[] = [
     { key: 'tunai',  label: 'Tunai',  icon: <Wallet size={20} /> },
     { key: 'qris',   label: 'QRIS',   icon: <QrCode size={20} /> },
     { key: 'kartu',  label: 'Kartu',  icon: <CreditCard size={20} /> },
     { key: 'split',  label: 'Split',  icon: <Scissors size={20} /> },
+    { key: 'piutang', label: 'Piutang', icon: <User size={20} /> },
   ];
 
   return (
@@ -392,7 +407,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
           {/* RIGHT COLUMN: Payment Input */}
           <div style={{ flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {/* Payment method tabs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
               {methods.map(m => (
                 <button
                   key={m.key}
@@ -487,6 +502,45 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
                     <span style={{ fontWeight: 900, color: '#2563eb' }}>{fmt(nonCash)}</span>
                   </div>
                 </>
+              )}
+
+              {paymentMethod === 'piutang' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', textAlign: 'left' }}>
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '0.75rem', padding: '0.75rem 1rem' }}>
+                    <p style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
+                      <User size={14} />
+                      <span>Metode Pembayaran Piutang / Kasbon</span>
+                    </p>
+                    {!currentCustomer?.id && (
+                      <p style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 700, margin: '0.25rem 0 0' }}>
+                        * Hubungkan member terlebih dahulu untuk menggunakan metode ini!
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Tanggal Jatuh Tempo</label>
+                    <input
+                      type="date"
+                      style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-color)', borderRadius: '0.5rem', fontSize: '0.85rem', outline: 'none', color: 'var(--text-main)', boxSizing: 'border-box' }}
+                      value={dueDate}
+                      onChange={e => setDueDate(e.target.value)}
+                      required
+                      disabled={!currentCustomer?.id}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Catatan Piutang (Opsional)</label>
+                    <textarea
+                      style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-color)', borderRadius: '0.5rem', fontSize: '0.85rem', outline: 'none', height: '60px', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: 'var(--text-main)' }}
+                      placeholder="Contoh: Dibayar oleh instansi / Kasbon mingguan"
+                      value={debtNotes}
+                      onChange={e => setDebtNotes(e.target.value)}
+                      disabled={!currentCustomer?.id}
+                    />
+                  </div>
+                </div>
               )}
             </div>
 

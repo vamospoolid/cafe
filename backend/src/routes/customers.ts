@@ -26,6 +26,12 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 
     const customers = await prisma.customer.findMany({
       where: whereCondition,
+      include: {
+        debts: {
+          where: { status: 'Belum Lunas' },
+          select: { remaining: true }
+        }
+      },
       orderBy: { name: 'asc' }
     });
 
@@ -58,6 +64,19 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
         pointLogs: {
           orderBy: { createdAt: 'desc' },
           take: 20
+        },
+        debts: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            payments: {
+              orderBy: { createdAt: 'desc' }
+            },
+            order: {
+              select: {
+                orderNumber: true
+              }
+            }
+          }
         }
       }
     });

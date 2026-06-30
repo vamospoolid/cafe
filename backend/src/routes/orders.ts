@@ -449,6 +449,24 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
           await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber);
         }
 
+        // Piutang
+        if (isPaid && paymentMethod === 'Piutang') {
+          if (!finalCustomerId) {
+            throw new Error('Pelanggan (Member) wajib dipilih untuk transaksi Piutang');
+          }
+          await tx.debt.create({
+            data: {
+              customerId: finalCustomerId,
+              orderId: createdOrder.id,
+              amount: Number(total),
+              remaining: Number(total),
+              status: 'Belum Lunas',
+              dueDate: orderData.dueDate ? new Date(orderData.dueDate) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+              notes: orderData.debtNotes || null
+            }
+          });
+        }
+
         return createdOrder;
       });
 
@@ -627,6 +645,24 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
       }
 
+      // Piutang
+      if (isPaid && paymentMethod === 'Piutang') {
+        if (!finalCustomerId) {
+          throw new Error('Pelanggan (Member) wajib dipilih untuk transaksi Piutang');
+        }
+        await tx.debt.create({
+          data: {
+            customerId: finalCustomerId,
+            orderId: order.id,
+            amount: Number(total),
+            remaining: Number(total),
+            status: 'Belum Lunas',
+            dueDate: req.body.dueDate ? new Date(req.body.dueDate) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+            notes: req.body.debtNotes || null
+          }
+        });
+      }
+
       return order;
     });
 
@@ -712,6 +748,25 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
           }
           await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber);
         }
+
+        // Piutang
+        if (paymentMethod === 'Piutang') {
+          if (!finalCustomerId) {
+            throw new Error('Pelanggan (Member) wajib dipilih untuk transaksi Piutang');
+          }
+          await tx.debt.create({
+            data: {
+              customerId: finalCustomerId,
+              orderId: updated.id,
+              amount: Number(updated.total),
+              remaining: Number(updated.total),
+              status: 'Belum Lunas',
+              dueDate: req.body.dueDate ? new Date(req.body.dueDate) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+              notes: req.body.debtNotes || null
+            }
+          });
+        }
+
         updatedOrders.push(updated);
       } else {
         // Fix #2: Distribusi diskon PROPORSIONAL ke setiap order berdasarkan ratio subtotal
@@ -758,6 +813,25 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
             data: updateData
           });
           totalCombinedPaid += updated.total;
+
+          // Piutang
+          if (paymentMethod === 'Piutang') {
+            if (!finalCustomerId) {
+              throw new Error('Pelanggan (Member) wajib dipilih untuk transaksi Piutang');
+            }
+            await tx.debt.create({
+              data: {
+                customerId: finalCustomerId,
+                orderId: updated.id,
+                amount: Number(updated.total),
+                remaining: Number(updated.total),
+                status: 'Belum Lunas',
+                dueDate: req.body.dueDate ? new Date(req.body.dueDate) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+                notes: req.body.debtNotes || null
+              }
+            });
+          }
+
           updatedOrders.push(updated);
 
           // Poin loyalitas dicatat per masing-masing order agar sinkron saat void sebagian

@@ -29,6 +29,7 @@ import recipeRoutes from './routes/recipes';
 import supplierRoutes from './routes/suppliers';
 import purchaseOrderRoutes from './routes/purchaseOrders';
 import printerRoutes from './routes/printer';
+import debtsRoutes from './routes/debts';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -49,6 +50,7 @@ app.use('/api/recipes', recipeRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/printer', printerRoutes);
+app.use('/api/debts', debtsRoutes);
 
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'Backend is running' });
