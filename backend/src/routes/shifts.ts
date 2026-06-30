@@ -93,7 +93,7 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       const pm = paymentMethod.trim();
       if (pm.toLowerCase() === 'cash' || pm.toLowerCase() === 'tunai') return total;
       if (pm.startsWith('Split')) {
-        const match = pm.match(/Tunai Rp([\d\.]+)/);
+        const match = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
         if (match && match[1]) {
           return Number(match[1].replace(/\./g, '')) || 0;
         }
@@ -108,7 +108,7 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       if (lowerPm === 'cash' || lowerPm === 'tunai') return 0;
       if (lowerPm === 'qris' || lowerPm === 'debit' || lowerPm === 'transfer' || lowerPm === 'credit' || lowerPm === 'non-tunai') return total;
       if (pm.startsWith('Split')) {
-        const cashMatch = pm.match(/Tunai Rp([\d\.]+)/);
+        const cashMatch = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
         const cashAmt = cashMatch ? Number(cashMatch[1].replace(/\./g, '')) || 0 : 0;
         return Math.max(0, total - cashAmt);
       }
@@ -175,7 +175,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         return total;
       }
       if (pm.startsWith('Split')) {
-        const match = pm.match(/Tunai Rp([\d\.]+)/);
+        const match = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
         if (match && match[1]) {
           const cleanNum = match[1].replace(/\./g, '');
           return Number(cleanNum) || 0;
@@ -191,7 +191,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       if (lowerPm === 'cash' || lowerPm === 'tunai') return 0;
       if (lowerPm === 'qris' || lowerPm === 'debit' || lowerPm === 'transfer' || lowerPm === 'credit' || lowerPm === 'non-tunai') return total;
       if (pm.startsWith('Split')) {
-        const cashMatch = pm.match(/Tunai Rp([\d\.]+)/);
+        const cashMatch = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
         const cashAmt = cashMatch ? Number(cashMatch[1].replace(/\./g, '')) || 0 : 0;
         return Math.max(0, total - cashAmt);
       }

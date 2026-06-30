@@ -246,7 +246,10 @@ router.post('/dinein', async (req: Request, res: Response) => {
         include: { items: true, table: true }
       });
 
-      // Kurangi Stok Produk
+      // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
+      const settings = await tx.settings.findFirst();
+      const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
+
       for (const item of items) {
         await tx.product.update({
           where: { id: Number(item.productId) },
@@ -254,6 +257,29 @@ router.post('/dinein', async (req: Request, res: Response) => {
             stock: { decrement: Number(item.qty) }
           }
         });
+
+        // Advanced Mode: kurangi stok bahan baku berdasarkan resep
+        if (isAdvancedMode) {
+          const recipes = await tx.recipeItem.findMany({
+            where: { productId: Number(item.productId) }
+          });
+          for (const recipe of recipes) {
+            const used = recipe.qtyPerServing * Number(item.qty);
+            await tx.ingredient.update({
+              where: { id: recipe.ingredientId },
+              data: { stock: { decrement: used } }
+            });
+            await tx.ingredientLog.create({
+              data: {
+                ingredientId: recipe.ingredientId,
+                change: -used,
+                type: 'Produksi',
+                description: `Order ${orderNumber} (Dine-in Self-Order)`,
+                referenceId: orderNumber
+              }
+            });
+          }
+        }
       }
 
       return order;
@@ -379,7 +405,10 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
           include: { items: true, table: true }
         });
 
-        // Kurangi Stok Produk
+        // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
+        const settings = await tx.settings.findFirst();
+        const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
+
         for (const item of items) {
           await tx.product.update({
             where: { id: Number(item.productId) },
@@ -387,6 +416,29 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
               stock: { decrement: Number(item.qty) }
             }
           });
+
+          // Advanced Mode: kurangi stok bahan baku berdasarkan resep
+          if (isAdvancedMode) {
+            const recipes = await tx.recipeItem.findMany({
+              where: { productId: Number(item.productId) }
+            });
+            for (const recipe of recipes) {
+              const used = recipe.qtyPerServing * Number(item.qty);
+              await tx.ingredient.update({
+                where: { id: recipe.ingredientId },
+                data: { stock: { decrement: used } }
+              });
+              await tx.ingredientLog.create({
+                data: {
+                  ingredientId: recipe.ingredientId,
+                  change: -used,
+                  type: 'Produksi',
+                  description: `Order ${orderNumber} (Sync Offline)`,
+                  referenceId: orderNumber
+                }
+              });
+            }
+          }
         }
 
         // Poin Loyalitas
@@ -707,10 +759,11 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
           });
           totalCombinedPaid += updated.total;
           updatedOrders.push(updated);
-        }
 
-        if (finalCustomerId) {
-          await processLoyaltyEarnings(tx, finalCustomerId, totalCombinedPaid, orders[0].orderNumber);
+          // Poin loyalitas dicatat per masing-masing order agar sinkron saat void sebagian
+          if (finalCustomerId) {
+            await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber);
+          }
         }
       }
 
@@ -935,6 +988,8 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
 
       let newSubtotal = 0;
 
+      const originalParentDiscounts = new Map<number, number>();
+
       // 2. Proses memindahkan item
       for (const splitItem of splitItems) {
         const { orderItemId, qtyToMove } = splitItem;
@@ -953,6 +1008,10 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
 
         if (qtyToMove > item.qty) {
           throw new Error(`Kuantitas split (${qtyToMove}) melebihi kuantitas item (${item.qty})`);
+        }
+
+        if (!originalParentDiscounts.has(item.orderId)) {
+          originalParentDiscounts.set(item.orderId, item.order.discount || 0);
         }
 
         newSubtotal += item.price * qtyToMove;
@@ -990,45 +1049,40 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
         }
       }
 
-      // 3. Hitung ulang total untuk newOrder
+      // 3. Hitung porsi pajak dan service untuk newOrder
       const newTax = newSubtotal * (taxRate / 100);
       const newService = newSubtotal * (serviceChargeRate / 100);
-      const newTotal = newSubtotal + newTax + newService;
-
-      const finalNewOrder = await tx.order.update({
-        where: { id: newOrder.id },
-        data: {
-          subtotal: newSubtotal,
-          tax: newTax,
-          serviceCharge: newService,
-          total: newTotal
-        },
-        include: { items: true }
-      });
 
       // 4. Hitung ulang total untuk order-order asal
       const allParentOrders = await tx.order.findMany({
-        where: { tableId: Number(tableId), status: 'Pending', id: { not: finalNewOrder.id } },
+        where: { tableId: Number(tableId), status: 'Pending', id: { not: newOrder.id } },
         include: { items: true }
       });
 
+      let totalDiscountTransferred = 0;
+
       for (const parent of allParentOrders) {
+        const originalDiscount = originalParentDiscounts.get(parent.id) || 0;
+
         if (parent.items.length === 0) {
-          // Hapus order jika kosong
+          // Seluruh item dipindahkan, transfer semua diskon asal
+          totalDiscountTransferred += originalDiscount;
+          
           await tx.order.delete({
             where: { id: parent.id }
           });
         } else {
-          // Fix #3: Hitung ulang subtotal dan distribusikan diskon asal secara proporsional
-          // berdasarkan rasio subtotal sisa item terhadap subtotal asal
+          // Hitung ulang subtotal dan diskon proporsional
           const sub = parent.items.reduce((sum, i) => sum + i.subtotal, 0);
           const t = sub * (taxRate / 100);
           const s = sub * (serviceChargeRate / 100);
+          
           // Hitung proporsional diskon berdasarkan porsi nilai yang tersisa
           const originalSub = parent.subtotal > 0 ? parent.subtotal : sub;
           const proportionalDiscount = originalSub > 0
-            ? Math.floor((parent.discount || 0) * (sub / originalSub))
-            : (parent.discount || 0);
+            ? Math.floor(originalDiscount * (sub / originalSub))
+            : originalDiscount;
+          
           const tot = Math.max(0, sub - proportionalDiscount + t + s);
 
           await tx.order.update({
@@ -1041,8 +1095,27 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
               total: tot
             }
           });
+
+          // Porsi diskon yang berkurang ditransfer ke order baru
+          totalDiscountTransferred += Math.max(0, originalDiscount - proportionalDiscount);
         }
       }
+
+      // 5. Update total dan diskon akhir untuk newOrder
+      const finalDiscount = totalDiscountTransferred;
+      const finalTotalForNewOrder = Math.max(0, newSubtotal - finalDiscount + newTax + newService);
+
+      const finalNewOrder = await tx.order.update({
+        where: { id: newOrder.id },
+        data: {
+          subtotal: newSubtotal,
+          discount: finalDiscount,
+          tax: newTax,
+          serviceCharge: newService,
+          total: finalTotalForNewOrder
+        },
+        include: { items: true }
+      });
 
       return finalNewOrder;
     });

@@ -86,7 +86,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
     const pmString =
       paymentMethod === 'tunai'  ? 'Cash'
       : paymentMethod === 'qris' ? 'QRIS'
-      : paymentMethod === 'split' ? `Split (Tunai Rp${fmt(splitCash)} + Non-Tunai Rp${fmt(nonCash)})`
+      : paymentMethod === 'split' ? `Split (Tunai ${fmt(splitCash)} + Non-Tunai ${fmt(nonCash)})`
       : 'Card';
     // Handler Mode Offline
     if (!navigator.onLine || !posContext?.isOnline) {

@@ -147,7 +147,14 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
       // Payment method breakdown
       if (order.paymentMethod) {
-        const pm = order.paymentMethod;
+        let pm = order.paymentMethod.trim();
+        if (pm.toLowerCase() === 'cash' || pm === 'Tunai') {
+          pm = 'Tunai';
+        } else if (pm.toLowerCase() === 'card' || pm === 'Kartu') {
+          pm = 'Kartu';
+        } else if (pm.startsWith('Split')) {
+          pm = 'Split';
+        }
         paymentMethods[pm] = (paymentMethods[pm] || 0) + order.total;
       }
 
@@ -296,7 +303,16 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       }
 
       // Payments breakdown
-      const pm = order.paymentMethod || 'Tunai';
+      let pm = order.paymentMethod || 'Tunai';
+      pm = pm.trim();
+      if (pm.toLowerCase() === 'cash' || pm === 'Tunai') {
+        pm = 'Tunai';
+      } else if (pm.toLowerCase() === 'card' || pm === 'Kartu') {
+        pm = 'Kartu';
+      } else if (pm.startsWith('Split')) {
+        pm = 'Split';
+      }
+
       if (!paymentMethods[pm]) {
         paymentMethods[pm] = { count: 0, amount: 0 };
       }
