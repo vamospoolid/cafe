@@ -3,6 +3,7 @@
   "appName": "SOL CAFE POS",
   "webDir": "../frontend/dist",
   "server": {
-    "androidScheme": "https"
+    "url": "http://cafe.codenusa.id",
+    "cleartext": true
   }
 }
