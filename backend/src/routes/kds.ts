@@ -36,7 +36,7 @@ router.get('/active', authenticateToken, async (req: Request, res: Response) => 
         table: true,
         items: {
           include: {
-            product: { select: { name: true, imageUrl: true } }
+            product: { select: { name: true, imageUrl: true, categoryId: true } }
           }
         }
       },
@@ -180,7 +180,7 @@ router.get('/history', authenticateToken, async (req: Request, res: Response) =>
         table: true,
         items: {
           include: {
-            product: { select: { name: true } }
+            product: { select: { name: true, categoryId: true } }
           }
         }
       },

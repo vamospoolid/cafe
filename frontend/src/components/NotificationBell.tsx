@@ -33,19 +33,49 @@ const NotificationBell: React.FC = () => {
     };
     setNotifications(prev => [notif, ...prev].slice(0, 20));
 
-    // Sound cue untuk kds:ready dan order:void
-    if (type === 'kds:ready' || type === 'order:void') {
+    // Sound cue untuk order:new (double chime), kds:ready, dan order:void
+    if (type === 'order:new' || type === 'kds:ready' || type === 'order:void') {
       try {
         const ctx = new AudioContext();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = type === 'kds:ready' ? 880 : 440;
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.5);
+        const now = ctx.currentTime;
+        
+        if (type === 'order:new') {
+          // Bunyi bel ganda ("ding-dong") yang elegan
+          // Chime 1 (ding - D5)
+          const osc1 = ctx.createOscillator();
+          const gain1 = ctx.createGain();
+          osc1.connect(gain1);
+          gain1.connect(ctx.destination);
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(587.33, now); // D5
+          gain1.gain.setValueAtTime(0.3, now);
+          gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+          osc1.start(now);
+          osc1.stop(now + 0.8);
+
+          // Chime 2 (dong - A4) setelah jeda 0.25 detik
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(440.00, now + 0.25); // A4
+          gain2.gain.setValueAtTime(0.3, now + 0.25);
+          gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.05);
+          osc2.start(now + 0.25);
+          osc2.stop(now + 1.05);
+        } else {
+          // Nada tunggal untuk kds:ready (tinggi) dan order:void (rendah)
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.frequency.value = type === 'kds:ready' ? 880 : 330;
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+          osc.start(now);
+          osc.stop(now + 0.5);
+        }
       } catch (_) {}
     }
   };

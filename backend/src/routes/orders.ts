@@ -285,6 +285,14 @@ router.post('/dinein', async (req: Request, res: Response) => {
       return order;
     });
 
+    // Emit real-time event ke semua klien
+    io.emit('order:new', {
+      orderId: result.id,
+      orderNumber: result.orderNumber,
+      tableId: result.tableId,
+      tableNo: (result as any).table?.tableNo || null
+    });
+
     res.status(201).json({ message: 'Pesanan Dine-In berhasil dibuat', order: result });
   } catch (error) {
     console.error('Dine-In Order Error:', error);
