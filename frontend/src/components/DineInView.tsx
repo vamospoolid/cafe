@@ -39,6 +39,7 @@ const DineInView = () => {
   
   const [loading, setLoading] = useState(true);
   const [orderSuccess, setOrderSuccess] = useState<any>(null);
+  const [isLandingPage, setIsLandingPage] = useState(true);
 
   useEffect(() => {
     const initData = async () => {
@@ -217,6 +218,116 @@ const DineInView = () => {
             Pesan Menu Tambahan
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (isLandingPage) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col font-sans relative overflow-hidden">
+        {/* Ambient background glows */}
+        <div className="absolute top-[-20%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-500/10 blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-[-20%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-amber-500/10 blur-[100px] pointer-events-none" />
+
+        {/* Top Navbar */}
+        <header className="p-5 flex justify-between items-center z-10 max-w-md mx-auto w-full">
+          <span className="text-xl font-black tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+            SOL CAFE
+          </span>
+          <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-black text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            Meja {tableInfo?.tableNo || tableRef} &bull; Aktif
+          </span>
+        </header>
+
+        {/* Hero Section */}
+        <main className="flex-1 flex flex-col justify-center px-6 py-4 max-w-md mx-auto w-full z-10 space-y-8">
+          {/* Aesthetic Centerpiece (Illustrative Card) */}
+          <div className="relative group mx-auto w-full max-w-[280px] aspect-[4/3] rounded-3xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-xl p-5 flex flex-col justify-between shadow-2xl shadow-black/40">
+            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 pointer-events-none" />
+            <div className="flex justify-between items-start">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-amber-400">
+                <Coffee size={22} />
+              </div>
+              <span className="text-[10px] font-bold text-white/40 tracking-widest uppercase">Self-Order QR</span>
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-black text-white/90">Waktu Kopi Santai</h3>
+              <p className="text-[10px] text-white/50 leading-relaxed">
+                Pesan kopi hangat dan makanan penutup langsung dari HP Anda.
+              </p>
+            </div>
+          </div>
+
+          {/* Titles */}
+          <div className="text-center space-y-3">
+            <h2 className="text-2xl font-black tracking-tight leading-tight">
+              Selamat Datang di <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-200">SOL Cafe</span>
+            </h2>
+            <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+              Pesan menu favorit Anda langsung dari meja tanpa perlu mengantre. Makanan dan minuman akan disajikan hangat ke meja Anda!
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            <button 
+              onClick={() => setIsLandingPage(false)}
+              className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.98] text-white font-extrabold text-sm rounded-2xl shadow-xl shadow-amber-500/15 transition-all flex items-center justify-center gap-2"
+            >
+              <Utensils size={18} />
+              <span>Lihat Menu & Mulai Pesan</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => {
+                Swal.fire({
+                  title: 'Hubungi Pelayan?',
+                  text: 'Pelayan kami akan segera datang ke meja Anda.',
+                  icon: 'question',
+                  showCancelButton: true,
+                  confirmButtonText: 'Ya, Hubungi',
+                  cancelButtonText: 'Batal',
+                  confirmButtonColor: '#10b981',
+                  cancelButtonColor: '#3b82f6'
+                }).then((result) => {
+                  if (result.isConfirmed) {
+                    Swal.fire('Terkirim', 'Pelayan telah diberitahu dan sedang menuju meja Anda.', 'success');
+                  }
+                });
+              }}
+              className="w-full py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 active:scale-[0.98] text-white/80 font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-2"
+            >
+              <MessageSquare size={14} />
+              <span>Panggil Pelayan</span>
+            </button>
+          </div>
+
+          {/* Step Guide */}
+          <div className="pt-4 space-y-3">
+            <h4 className="text-[10px] text-center font-bold text-white/40 tracking-wider uppercase">3 Langkah Praktis</h4>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { step: '1', title: 'Pilih Menu', desc: 'Sesuaikan selera Anda' },
+                { step: '2', title: 'Kirim Order', desc: 'Nama & kirim pesanan' },
+                { step: '3', title: 'Disajikan', desc: 'Duduk & nikmati hidangan' }
+              ].map(s => (
+                <div key={s.step} className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center flex flex-col justify-center space-y-1">
+                  <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-black flex items-center justify-center mx-auto mb-1">
+                    {s.step}
+                  </span>
+                  <div className="text-[10px] font-bold text-white/80">{s.title}</div>
+                  <div className="text-[8px] text-white/40 leading-snug">{s.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="p-6 text-center text-[10px] text-white/30 z-10">
+          &copy; 2026 SOL Cafe &bull; Premium QR Ordering System
+        </footer>
       </div>
     );
   }
