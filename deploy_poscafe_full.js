@@ -33,15 +33,16 @@ const deployCommands = [
     fi`,
     `cd ${appDir}/backend && npx prisma generate`,
     `cd ${appDir}/backend && npx prisma db push`,
+    `cd ${appDir}/backend && npx tsc`,
     
     // 3. Restart PM2 Backend
     `echo "🔄 [3/5] Restart PM2 Backend..."`,
-    // Pastikan pm2, ts-node terinstall secara global jika belum
-    `npm install -g pm2 ts-node typescript`,
+    // Pastikan pm2 terinstall secara global jika belum
+    `npm install -g pm2`,
     `cd ${appDir}/backend && pm2 stop poscafe-backend || true`,
     `cd ${appDir}/backend && pm2 delete poscafe-backend || true`,
-    // Run backend on port 5000
-    `cd ${appDir}/backend && PORT=5000 pm2 start src/index.ts --name poscafe-backend --interpreter ts-node`,
+    // Run backend on port 5000 using compiled JS
+    `cd ${appDir}/backend && PORT=5000 pm2 start dist/src/index.js --name poscafe-backend --interpreter node`,
     `pm2 save`,
 
     // 4. Setup Frontend
