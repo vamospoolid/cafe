@@ -32,7 +32,7 @@ const deployCommands = [
         echo "✅ File .env berhasil dibuat."
     fi`,
     `cd ${appDir}/backend && npx prisma generate`,
-    `cd ${appDir}/backend && npx prisma db push`,
+    `cd ${appDir}/backend && npx prisma db push --accept-data-loss`,
     `cd ${appDir}/backend && npx tsc`,
     
     // 3. Restart PM2 Backend
