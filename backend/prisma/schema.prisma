@@ -218,6 +218,7 @@ model Settings {
   // Konfigurasi Printer Termal 80mm
   printerIp          String   @default("")    // IP Address printer di jaringan
   printerPort        Int      @default(9100)  // Port ESC/POS (default 9100)
+  windowsPrinterName String   @default("")
   autoPrintKDS       Boolean  @default(false) // Auto-print tiket dapur saat order masuk
   autoPrintReceipt   Boolean  @default(false) // Auto-print struk saat pembayaran selesai
 }
