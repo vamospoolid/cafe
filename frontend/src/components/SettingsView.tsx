@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -240,6 +240,16 @@ const SettingsView = () => {
             onClick={() => setActiveTab('printer_bt')}
           >
             <Printer size={18} className={activeTab === 'printer_bt' ? 'text-white' : 'text-slate-400'} /> Printer Bluetooth
+          </button>
+          <button 
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
+              activeTab === 'database' 
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
+                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
+            }`}
+            onClick={() => setActiveTab('database')}
+          >
+            <Database size={18} className={activeTab === 'database' ? 'text-white' : 'text-slate-400'} /> Database & Backup
           </button>
         </div>
 
@@ -1007,6 +1017,21 @@ const SettingsView = () => {
             </div>
           )}
 
+          {activeTab === 'database' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <Database size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Database & Backup</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Cadangkan data transaksi Anda atau restart server backend kasir.</p>
+                </div>
+              </div>
+              <DatabaseSettingsPanel token={posContext?.token} />
+            </div>
+          )}
+
         </div>
       </div>
     </div>
@@ -1137,6 +1162,139 @@ const BluetoothPrinterConfig = () => {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) => {
+  const [backingUp, setBackingUp] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+
+  const handleBackup = async () => {
+    if (!token) return;
+    setBackingUp(true);
+    try {
+      const response = await fetch('/api/database/backup', {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Gagal melakukan backup database');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup-poscafe-${new Date().toISOString().slice(0,10)}.db`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast('Backup database berhasil diunduh!', 'success');
+    } catch (err: any) {
+      toast(err.message || 'Terjadi kesalahan saat mengunduh backup', 'error');
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const handleRestart = async () => {
+    const result = await confirmAlert(
+      'Restart Server POS?',
+      'Apakah Anda yakin ingin melakukan restart pada server POS? Koneksi akan terputus sementara selama beberapa detik.'
+    );
+    if (!result.isConfirmed) return;
+
+    setRestarting(true);
+    try {
+      const response = await fetch('/api/database/restart', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        toast(data.message || 'Server sedang merestart...', 'success');
+        setTimeout(() => {
+          window.location.reload();
+        }, 5000);
+      } else {
+        toast(data.error || 'Gagal merestart server', 'error');
+      }
+    } catch (err: any) {
+      // It's normal to catch network error if server exits instantly
+      toast('Perintah restart berhasil dikirim. Halaman akan dimuat ulang...', 'success');
+      setTimeout(() => {
+        window.location.reload();
+      }, 5000);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 text-xs font-semibold text-indigo-800 flex items-start gap-3">
+        <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
+        <div>
+          Lakukan backup database secara berkala untuk menghindari kehilangan data penting toko. 
+          Restart server dapat digunakan untuk memuat ulang konfigurasi sistem atau membebaskan memori server.
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Backup Card */}
+        <div className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-sm transition-all space-y-4">
+          <div className="font-bold text-sm text-slate-800 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <UploadCloud size={16} />
+            </div>
+            <span>Cadangkan Database (Backup)</span>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Unduh seluruh data POS Anda (transaksi, stok, resep, member, dll) ke dalam file `.db`. 
+            File ini dapat digunakan untuk merestorasi data jika terjadi kerusakan sistem di masa mendatang.
+          </p>
+          <button
+            type="button"
+            onClick={handleBackup}
+            disabled={backingUp}
+            className="btn btn-primary bg-indigo-600 border-indigo-600 text-xs font-bold py-2.5 px-4 w-full flex items-center justify-center gap-2"
+          >
+            <UploadCloud size={14} />
+            {backingUp ? 'Mengunduh...' : 'Unduh Backup Database (.db)'}
+          </button>
+        </div>
+
+        {/* Restart Card */}
+        <div className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-sm transition-all space-y-4">
+          <div className="font-bold text-sm text-slate-800 flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-650">
+              <RefreshCw size={16} />
+            </div>
+            <span>Restart Server POS Cafe</span>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Matikan sementara dan nyalakan ulang proses backend POS di VPS (melalui pengelola proses PM2). 
+            Berguna jika server melambat atau untuk me-refresh cache database.
+          </p>
+          <button
+            type="button"
+            onClick={handleRestart}
+            disabled={restarting}
+            className="btn btn-danger text-xs font-bold py-2.5 px-4 w-full flex items-center justify-center gap-2"
+            style={{ backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer' }}
+          >
+            <RefreshCw size={14} className={restarting ? 'animate-spin' : ''} />
+            {restarting ? 'Merestart Server...' : 'Restart Server Sekarang'}
+          </button>
+        </div>
       </div>
     </div>
   );

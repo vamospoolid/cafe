@@ -4,6 +4,7 @@ import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
 import CustomerModal from './CustomerModal';
+import ReceiptPrinter from './ReceiptPrinter';
 import { 
   isNativeMobile, 
   connectBluetoothPrinter, 
@@ -40,6 +41,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
   const posContext = useContext(POSContext);
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [printLoading, setPrintLoading] = useState(false);
+  const [printOrderData, setPrintOrderData] = useState<any | null>(null);
 
   const handleDirectPrint = async (id: number) => {
     const isHighPrecision = localStorage.getItem('high_precision_mode') === 'true';
@@ -71,7 +73,20 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
     }
 
     if (!posContext?.settings?.printerIp) {
-      toast('IP Printer belum dikonfigurasi di menu Pengaturan', 'error');
+      // Fallback to browser standard print for USB connected printer on Web Desktop
+      setPrintLoading(true);
+      try {
+        const orderRes = await fetch(`/api/orders/${id}`, {
+          headers: { Authorization: `Bearer ${posContext?.token}` }
+        });
+        if (!orderRes.ok) throw new Error('Gagal mengambil detail order');
+        const orderData = await orderRes.json();
+        setPrintOrderData(orderData);
+      } catch (err: any) {
+        toast(err.message || 'Gagal menyiapkan cetak browser', 'error');
+      } finally {
+        setPrintLoading(false);
+      }
       return;
     }
     setPrintLoading(true);
@@ -601,6 +616,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
         onClose={() => setIsCustomerModalOpen(false)}
         onSelect={(selected) => setCurrentCustomer(selected)}
       />
+
+      {printOrderData && (
+        <ReceiptPrinter 
+          order={printOrderData} 
+          storeSettings={posContext?.settings} 
+          onClose={() => setPrintOrderData(null)} 
+        />
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import path from 'path';
 import authRoutes from './routes/auth';
 
 const app = express();
@@ -10,6 +11,7 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
 import categoryRoutes from './routes/categories';
@@ -31,6 +33,8 @@ import supplierRoutes from './routes/suppliers';
 import purchaseOrderRoutes from './routes/purchaseOrders';
 import printerRoutes from './routes/printer';
 import debtsRoutes from './routes/debts';
+import uploadRoutes from './routes/upload';
+import databaseRoutes from './routes/database';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -52,6 +56,8 @@ app.use('/api/suppliers', supplierRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/printer', printerRoutes);
 app.use('/api/debts', debtsRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/database', databaseRoutes);
 
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'Backend is running' });

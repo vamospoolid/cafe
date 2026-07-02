@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { X, Lock, Unlock } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
+import { offlineDB } from '../utils/offlineDb';
 
 interface OpenShiftModalProps {
   isOpen: boolean;
@@ -63,6 +64,20 @@ const OpenShiftModal: React.FC<OpenShiftModalProps> = ({ isOpen, onClose, onSucc
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    if (mode === 'close') {
+      try {
+        const queue = await offlineDB.getOfflineQueue();
+        if (queue.length > 0) {
+          toast(`Tidak dapat menutup shift. Masih ada ${queue.length} transaksi offline yang belum disinkronisasikan ke server. Harap hubungkan internet dan tunggu sinkronisasi selesai!`, 'error');
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.error('Gagal mengecek antrean offline:', err);
+      }
+    }
+
     try {
       const url = mode === 'open' ? '/api/shifts/open' : '/api/shifts/close';
       const body = mode === 'open' ? { saldoAwal: amount } : { saldoFisikLaci: amount };

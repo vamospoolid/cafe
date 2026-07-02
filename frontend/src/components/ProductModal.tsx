@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { X, Image as ImageIcon, RefreshCw, ScanBarcode, Package, Tag, Layers, Beaker, Plus, Trash2, Info } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -31,6 +31,51 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
 
   const posContext = useContext(POSContext);
   const isAdvancedMode = posContext?.settings?.ingredientTrackingEnabled;
+
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast('File harus berupa gambar', 'error');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast('Ukuran file maksimal adalah 2MB', 'error');
+      return;
+    }
+
+    const data = new FormData();
+    data.append('image', file);
+
+    setUploading(true);
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: data
+      });
+
+      const resData = await res.json();
+      if (res.ok) {
+        setFormData(prev => ({ ...prev, imageUrl: resData.imageUrl }));
+        toast('Foto berhasil diunggah!', 'success');
+      } else {
+        toast(resData.error || 'Gagal mengunggah foto', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan koneksi saat mengunggah foto', 'error');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Fetch ingredients if advanced mode is on
   useEffect(() => {
@@ -201,8 +246,23 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
               <div className="md:col-span-1 space-y-5">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Foto Produk</label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 h-48 flex flex-col items-center justify-center text-center cursor-pointer hover:border-primary hover:bg-secondary transition-colors relative overflow-hidden group">
-                    {formData.imageUrl ? (
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    accept="image/*" 
+                    onChange={handleFileChange} 
+                    style={{ display: 'none' }} 
+                  />
+                  <div 
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 h-48 flex flex-col items-center justify-center text-center cursor-pointer hover:border-primary hover:bg-secondary transition-colors relative overflow-hidden group"
+                  >
+                    {uploading ? (
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+                        <span className="text-sm font-semibold text-gray-600">Mengunggah...</span>
+                      </div>
+                    ) : formData.imageUrl ? (
                       <>
                         <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">

@@ -475,6 +475,100 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
           });
         }
 
+        // Rekalkulasi data shift jika order ini disinkronkan ke dalam shift yang sudah berstatus Closed
+        if (isPaid && datePaid) {
+          const closedShift = await tx.shift.findFirst({
+            where: {
+              userId: userId,
+              status: 'Closed',
+              waktuBuka: { lte: datePaid },
+              waktuTutup: { gte: datePaid }
+            }
+          });
+
+          if (closedShift) {
+            // Ambil semua order paid yang masuk ke rentang shift tertutup tersebut
+            const shiftOrders = await tx.order.findMany({
+              where: {
+                status: 'Paid',
+                OR: [
+                  { paidAt: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! } },
+                  { paidAt: null, createdAt: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! } }
+                ]
+              }
+            });
+
+            const getCashPortion = (pm: string | null, tot: number) => {
+              if (!pm) return 0;
+              const trimmed = pm.trim();
+              if (trimmed.toLowerCase() === 'cash' || trimmed.toLowerCase() === 'tunai') return tot;
+              if (trimmed.startsWith('Split')) {
+                const match = trimmed.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
+                if (match && match[1]) {
+                  return Number(match[1].replace(/\./g, '')) || 0;
+                }
+              }
+              return 0;
+            };
+
+            const getNonCashPortion = (pm: string | null, tot: number) => {
+              if (!pm) return 0;
+              const trimmed = pm.trim();
+              const lower = trimmed.toLowerCase();
+              if (lower === 'cash' || lower === 'tunai') return 0;
+              if (lower === 'piutang') return 0;
+              if (lower === 'qris' || lower === 'debit' || lower === 'transfer' || lower === 'credit' || lower === 'non-tunai') return tot;
+              if (trimmed.startsWith('Split')) {
+                const match = trimmed.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
+                const cashAmt = match ? Number(match[1].replace(/\./g, '')) || 0 : 0;
+                return Math.max(0, tot - cashAmt);
+              }
+              return tot;
+            };
+
+            const cashSalesIncome = shiftOrders.reduce((sum: number, o: any) => sum + getCashPortion(o.paymentMethod, o.total), 0);
+            const nonCashSalesIncome = shiftOrders.reduce((sum: number, o: any) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
+
+            const cashFlows = await tx.cashFlow.findMany({
+              where: {
+                date: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! }
+              }
+            });
+
+            const debtPayments = await tx.debtPayment.findMany({
+              where: {
+                createdAt: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! }
+              }
+            });
+
+            const cashDebtIncome = debtPayments
+              .filter((dp: any) => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
+              .reduce((sum: number, dp: any) => sum + dp.amountPaid, 0);
+
+            const nonCashDebtIncome = debtPayments
+              .filter((dp: any) => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
+              .reduce((sum: number, dp: any) => sum + dp.amountPaid, 0);
+
+            const manualCashIn = cashFlows
+              .filter((cf: any) => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang')
+              .reduce((sum: number, cf: any) => sum + cf.amount, 0);
+            const manualCashOut = cashFlows.filter((cf: any) => cf.type === 'Pengeluaran').reduce((sum: number, cf: any) => sum + cf.amount, 0);
+
+            const newSaldoSistem = closedShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
+            const newSaldoElektronik = nonCashSalesIncome + nonCashDebtIncome;
+            const newSelisih = (closedShift.saldoFisikLaci || 0) - newSaldoSistem;
+
+            await tx.shift.update({
+              where: { id: closedShift.id },
+              data: {
+                saldoSistem: newSaldoSistem,
+                saldoElektronik: newSaldoElektronik,
+                selisih: newSelisih
+              }
+            });
+          }
+        }
+
         return createdOrder;
       });
 
