@@ -169,6 +169,35 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
+// GET single order by ID
+router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const order = await prisma.order.findUnique({
+      where: { id: Number(id) },
+      include: {
+        table: true,
+        user: { select: { name: true, username: true } },
+        customer: true,
+        items: {
+          include: {
+            product: true
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order tidak ditemukan' });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error('Fetch Single Order Error:', error);
+    res.status(500).json({ error: 'Gagal mengambil detail order' });
+  }
+});
+
 // POST Create Order (Dine-In Customer Self-Ordering)
 router.post('/dinein', async (req: Request, res: Response) => {
   try {
