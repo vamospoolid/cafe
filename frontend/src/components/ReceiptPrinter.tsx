@@ -19,6 +19,24 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({ order, storeSettings, o
 
   useEffect(() => {
     console.log('ReceiptPrinter: mounted');
+    
+    // Check if running inside Electron POS app
+    const win = window as any;
+    if (win.electronPOS && win.electronPOS.printer) {
+      console.log('ReceiptPrinter: executing silent raw print via Electron');
+      win.electronPOS.printer.printReceipt(order, storeSettings)
+        .then((res: any) => {
+          console.log('Print success:', res);
+          onClose(); // Close modal immediately
+        })
+        .catch((err: any) => {
+          console.error('Print failed:', err);
+          alert('Gagal mencetak struk: ' + err.message);
+          onClose();
+        });
+      return;
+    }
+
     const timer = setTimeout(() => {
       console.log('ReceiptPrinter: executing window.print()');
       window.print();
@@ -33,7 +51,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({ order, storeSettings, o
       clearTimeout(timer);
       window.removeEventListener('afterprint', handleAfterPrint);
     };
-  }, [onClose]);
+  }, [onClose, order, storeSettings]);
 
   if (!order) return null;
 
