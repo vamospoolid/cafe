@@ -262,6 +262,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       const createdOrder = data.order || (data.orders && data.orders[0]) || data.orderItem?.order;
       if (createdOrder) {
         setCreatedOrderId(createdOrder.id);
+        
+        // Auto-Print Struk jika fitur diaktifkan di pengaturan
+        if (posContext?.settings?.autoPrintReceipt) {
+          handleDirectPrint(createdOrder.id);
+        }
       }
       
       setIsSuccess(true);
