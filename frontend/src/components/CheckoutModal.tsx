@@ -74,6 +74,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
 
     if (!posContext?.settings?.printerIp) {
       // Fallback to browser standard print for USB connected printer on Web Desktop
+      console.log('handleDirectPrint: starting fallback browser print for order id:', id);
       setPrintLoading(true);
       try {
         const orderRes = await fetch(`/api/orders/${id}`, {
@@ -81,8 +82,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
         });
         if (!orderRes.ok) throw new Error('Gagal mengambil detail order');
         const orderData = await orderRes.json();
+        console.log('handleDirectPrint: fetched orderData successfully:', orderData);
         setPrintOrderData(orderData);
       } catch (err: any) {
+        console.error('handleDirectPrint: fallback print failed with error:', err);
         toast(err.message || 'Gagal menyiapkan cetak browser', 'error');
       } finally {
         setPrintLoading(false);

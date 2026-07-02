@@ -18,18 +18,22 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({ order, storeSettings, o
   };
 
   useEffect(() => {
-    // Automatically trigger print dialog when mounted
-    setTimeout(() => {
+    console.log('ReceiptPrinter: mounted, scheduling window.print() with 500ms delay');
+    const timer = setTimeout(() => {
+      console.log('ReceiptPrinter: executing window.print() now');
       window.print();
     }, 500);
 
-    // After print dialog closes, we can optionally close this component
-    // We listen to window.onafterprint
     const handleAfterPrint = () => {
+      console.log('ReceiptPrinter: window.onafterprint event detected, closing...');
       onClose();
     };
     window.addEventListener('afterprint', handleAfterPrint);
-    return () => window.removeEventListener('afterprint', handleAfterPrint);
+    return () => {
+      console.log('ReceiptPrinter: unmounting, clearing timer...');
+      clearTimeout(timer);
+      window.removeEventListener('afterprint', handleAfterPrint);
+    };
   }, [onClose]);
 
   if (!order) return null;
