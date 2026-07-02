@@ -24,6 +24,13 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({ order, storeSettings, o
     const win = window as any;
     if (win.electronPOS && win.electronPOS.printer) {
       console.log('ReceiptPrinter: executing silent raw print via Electron');
+      
+      // Auto Print KDS (Jika diaktifkan)
+      if (storeSettings?.autoPrintKDS) {
+        win.electronPOS.printer.printKitchenTicket(order)
+          .catch((err: any) => console.error('KDS Print failed:', err));
+      }
+
       win.electronPOS.printer.printReceipt(order, storeSettings)
         .then((res: any) => {
           console.log('Print success:', res);

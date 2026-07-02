@@ -45,7 +45,7 @@ const CMD = {
 
 // Lebar cetak: 48 karakter untuk font standar pada kertas 80mm
 const PRINT_WIDTH = 48;
-const LINE_SOLID  = '\u2500'.repeat(PRINT_WIDTH);  // ─────
+const LINE_SOLID  = '='.repeat(PRINT_WIDTH);
 const LINE_DASH   = '-'.repeat(PRINT_WIDTH);
 const LINE_EQUAL  = '='.repeat(PRINT_WIDTH);
 
@@ -53,8 +53,21 @@ const LINE_EQUAL  = '='.repeat(PRINT_WIDTH);
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
 
-/** Konversi string ke buffer UTF-8 dengan newline */
-const str = (text) => Buffer.from(text + '\n', 'utf-8');
+/** 
+ * Konversi string ke buffer dengan newline.
+ * Sanitize karakter non-ASCII (seperti em-dash, bullet) menjadi ASCII biasa.
+ */
+const str = (text) => {
+  if (!text) return Buffer.from('\n', 'ascii');
+  const safeText = String(text)
+    .replace(/[—–]/g, '-')
+    .replace(/[•]/g, '*')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    // Ganti karakter non-ASCII lainnya menjadi karakter spasi/ASCII mendekati
+    .replace(/[^\x20-\x7E]/g, ' ');
+  return Buffer.from(safeText + '\n', 'ascii');
+};
 
 /** Pad kiri-kanan dalam satu baris */
 const pad = (left, right, width = PRINT_WIDTH) => {
@@ -86,66 +99,89 @@ let activePrinterName = 'POS80 Printer'; // Default nama printer Windows
 
 /**
  * Kirim buffer ESC/POS ke printer Windows via raw print.
- * Menggunakan perintah: copy /b file.bin "\\localhost\PrinterName"
+ * Menggunakan WinSpool API via PowerShell untuk kompatibilitas maksimal
+ * tanpa perlu melakukan "Share Printer".
  */
 function sendToWindowsPrinter(printerName, data) {
   const tmpFile = path.join(os.tmpdir(), `solcafe_receipt_${Date.now()}.bin`);
+  const psFile = path.join(os.tmpdir(), `solcafe_print_${Date.now()}.ps1`);
   
   try {
     // Tulis buffer ESC/POS ke file sementara
     fs.writeFileSync(tmpFile, data);
     
-    // Kirim ke printer via Windows share
-    // Metode 1: via share name (paling reliable)
-    const shareName = `\\\\localhost\\${printerName}`;
+    // Script PowerShell untuk memanggil Win32 API (winspool.drv) langsung
+    const psScript = `
+$code = @"
+using System;
+using System.Runtime.InteropServices;
+public class RawPrinterHelper {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public class DOCINFOA {
+        [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+        [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+        [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+    }
+    [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    public static extern bool OpenPrinter([MarshalAs(UnmanagedType.LPStr)] string szPrinter, out IntPtr hPrinter, IntPtr pd);
+    [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    public static extern bool ClosePrinter(IntPtr hPrinter);
+    [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+    [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    public static extern bool EndDocPrinter(IntPtr hPrinter);
+    [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    public static extern bool StartPagePrinter(IntPtr hPrinter);
+    [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    public static extern bool EndPagePrinter(IntPtr hPrinter);
+    [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+    public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
     
-    try {
-      execSync(`copy /b "${tmpFile}" "${shareName}"`, {
-        shell: 'cmd.exe',
-        timeout: 10000,
-        windowsHide: true
-      });
-      console.log(`[Printer] Berhasil cetak via share: ${shareName}`);
-      return;
-    } catch (shareErr) {
-      console.warn(`[Printer] Share gagal, coba via port langsung...`);
-    }
-
-    // Metode 2: via PowerShell Out-Printer (fallback)
-    try {
-      // Gunakan PowerShell untuk raw print
-      const psCmd = `
-        $bytes = [System.IO.File]::ReadAllBytes('${tmpFile.replace(/\\/g, '\\\\')}')
-        $printer = Get-WmiObject -Query "SELECT * FROM Win32_Printer WHERE Name='${printerName}'"
-        if ($printer) {
-          $portName = $printer.PortName
-          $file = [System.IO.File]::OpenWrite("\\\\.\\$portName")
-          $file.Write($bytes, 0, $bytes.Length)
-          $file.Close()
+    public static bool SendBytesToPrinter(string szPrinterName, IntPtr pBytes, Int32 dwCount) {
+        Int32 dwWritten = 0;
+        IntPtr hPrinter = new IntPtr(0);
+        DOCINFOA di = new DOCINFOA();
+        bool bSuccess = false;
+        di.pDocName = "RAW Document";
+        di.pDataType = "RAW";
+        if (OpenPrinter(szPrinterName.Normalize(), out hPrinter, IntPtr.Zero)) {
+            if (StartDocPrinter(hPrinter, 1, di)) {
+                if (StartPagePrinter(hPrinter)) {
+                    bSuccess = WritePrinter(hPrinter, pBytes, dwCount, out dwWritten);
+                    EndPagePrinter(hPrinter);
+                }
+                EndDocPrinter(hPrinter);
+            }
+            ClosePrinter(hPrinter);
         }
-      `.replace(/\n/g, '; ');
-      
-      execSync(`powershell -Command "${psCmd}"`, {
-        timeout: 10000,
-        windowsHide: true
-      });
-      console.log(`[Printer] Berhasil cetak via PowerShell port langsung`);
-      return;
-    } catch (psErr) {
-      console.warn(`[Printer] PowerShell gagal, coba via print command...`);
+        return bSuccess;
     }
+}
+"@
+Add-Type -TypeDefinition $code
+$bytes = [System.IO.File]::ReadAllBytes('${tmpFile.replace(/'/g, "''")}')
+$ptr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length)
+[System.Runtime.InteropServices.Marshal]::Copy($bytes, 0, $ptr, $bytes.Length)
+$result = [RawPrinterHelper]::SendBytesToPrinter('${printerName.replace(/'/g, "''")}', $ptr, $bytes.Length)
+[System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)
+if (-not $result) { throw "WinSpool printing failed" }
+`;
 
-    // Metode 3: via print command (fallback terakhir)
-    execSync(`print /d:"${shareName}" "${tmpFile}"`, {
-      shell: 'cmd.exe',
-      timeout: 10000,
+    fs.writeFileSync(psFile, psScript);
+    
+    // Eksekusi script PowerShell
+    execSync(`powershell -ExecutionPolicy Bypass -File "${psFile}"`, {
+      timeout: 15000,
       windowsHide: true
     });
-    console.log(`[Printer] Berhasil cetak via print command`);
-
+    console.log(`[Printer] Berhasil cetak via WinSpool API`);
+    
+  } catch (err) {
+    console.error(`[Printer] Gagal mencetak:`, err.message);
   } finally {
     // Hapus file sementara
     try { fs.unlinkSync(tmpFile); } catch (e) { /* ignore */ }
+    try { fs.unlinkSync(psFile); } catch (e) { /* ignore */ }
   }
 }
 
@@ -184,68 +220,83 @@ function buildReceipt(order, settings) {
     push(str(settings.storeName));
     push(CMD.DOUBLE_OFF, CMD.BOLD_OFF);
   }
+  push(CMD.LF);
   if (settings?.address)       push(str(settings.address));
-  if (settings?.phone)         push(str(`Tel: ${settings.phone}`));
+  if (settings?.phone)         push(str(`Telp: ${settings.phone}`));
   if (settings?.receiptHeader) {
     push(CMD.LF);
     push(str(settings.receiptHeader));
   }
+  push(CMD.LF);
 
   // ── INFO PESANAN ──
   push(CMD.ALIGN_LEFT);
   push(str(LINE_SOLID));
-  push(str(pad('No    :', order.orderNumber || '-')));
-  push(str(pad('Kasir :', order.user?.name || '-')));
-  if (order.table?.tableNo) {
-    push(str(pad('Meja  :', order.table.tableNo)));
-  }
+  push(str(pad(`No: ${order.orderNumber || '-'}`, fmtDate(order.paidAt || order.createdAt))));
+  
+  const kasirTxt = `Kasir: ${order.user?.name || '-'}`;
+  const tipeTxt = `Tipe: ${order.table?.tableNo ? `Meja ${order.table.tableNo}` : 'Take Away'}`;
+  push(str(pad(kasirTxt, tipeTxt)));
+
   if (order.customerName && order.customerName !== 'Umum') {
-    push(str(pad('Plgn  :', order.customerName)));
+    push(str(`Pelanggan: ${order.customerName}`));
   }
-  push(str(pad('Waktu :', fmtDate(order.paidAt || order.createdAt))));
   push(str(LINE_SOLID));
+  push(CMD.LF);
 
   // ── ITEM PESANAN ──
   for (const item of (order.items || [])) {
     const name = item.product?.name || 'Produk';
+    push(CMD.BOLD_ON);
     push(str(name));
-    const qtyPrice = `  ${item.qty}x ${fmt(item.price)}`;
+    push(CMD.BOLD_OFF);
+    const qtyPrice = `  ${item.qty} x ${fmt(item.price)}`;
     const subtotal = fmt(item.qty * item.price);
     push(str(pad(qtyPrice, subtotal)));
-    if (item.notes) push(str(`  * ${item.notes}`));
+    if (item.notes) push(str(`    * ${item.notes}`));
   }
+  push(CMD.LF);
 
   // ── TOTAL ──
-  push(str(LINE_SOLID));
+  push(str(LINE_DASH));
   push(str(pad('Subtotal', fmt(order.subtotal || order.total))));
   if (order.discount > 0)      push(str(pad('Diskon', `-${fmt(order.discount)}`)));
-  if (order.tax > 0)           push(str(pad('Pajak', fmt(order.tax))));
-  if (order.serviceCharge > 0) push(str(pad('Service', fmt(order.serviceCharge))));
+  if (order.tax > 0)           push(str(pad('Pajak PPN', fmt(order.tax))));
+  if (order.serviceCharge > 0) push(str(pad('Service Charge', fmt(order.serviceCharge))));
   push(str(LINE_SOLID));
-
+  
+  push(CMD.LF);
   // ── GRAND TOTAL (besar) ──
   push(CMD.BOLD_ON, CMD.DOUBLE_ON);
   push(str(pad('TOTAL', fmt(order.total), 24)));  // 24 = half width for double-size
   push(CMD.DOUBLE_OFF, CMD.BOLD_OFF);
-
-  push(str(pad('Bayar', order.paymentMethod || 'Tunai')));
+  push(CMD.LF);
+  push(str(pad('METODE BAYAR', (order.paymentMethod || 'Tunai').toUpperCase())));
 
   // ── MEMBER ──
   if (order.customer?.name) {
     push(str(LINE_DASH));
     push(str(pad('Member', order.customer.name)));
     if (order.customer.points !== undefined) {
-      push(str(pad('Poin', `${order.customer.points} poin`)));
+      push(str(pad('Poin Anda', `${order.customer.points} Poin`)));
     }
   }
 
   // ── FOOTER ──
+  push(CMD.LF);
   push(CMD.ALIGN_CENTER);
   push(str(LINE_SOLID));
   push(CMD.LF);
-  push(str(settings?.receiptFooter || 'Terima kasih atas kunjungan Anda!'));
-  push(str('Sampai jumpa lagi'));
-  push(CMD.LF, CMD.LF, CMD.LF);
+  push(str(settings?.receiptFooter || 'TERIMA KASIH ATAS KUNJUNGAN ANDA'));
+  push(str('Powered by SOL CAFE POS'));
+  push(CMD.LF, CMD.LF, CMD.LF, CMD.LF);
+  
+  // ── CASH DRAWER ──
+  // Buka laci jika pembayaran Tunai atau default
+  if (!order.paymentMethod || order.paymentMethod.toLowerCase() === 'tunai' || order.paymentMethod.toLowerCase() === 'cash') {
+    push(CMD.OPEN_DRAWER);
+  }
+  
   push(CMD.CUT);
 
   return Buffer.concat(parts);
