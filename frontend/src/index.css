@@ -1379,113 +1379,79 @@ input:checked + .toggle-slider:before {
 }
 
 @media print {
-  /* Hide everything else */
+  /* ── RESET: Sembunyikan semua elemen halaman ── */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 80mm !important;
+    overflow: hidden !important;
+  }
+
   body * {
     visibility: hidden;
   }
-  
-  /* Reset margins for POS printer */
+
+  /* ── Ukuran kertas 80mm tanpa margin ── */
   @page {
-    margin: 0;
-    size: 80mm auto; /* For 80mm/85mm thermal printers */
+    margin: 0mm;
+    padding: 0mm;
+    size: 80mm auto;
   }
 
-  /* Show only the receipt */
+  /* ── Container struk: isi penuh 80mm ── */
   .receipt-printer-container {
     display: block !important;
+    visibility: visible;
     position: absolute;
     left: 0;
     top: 0;
-    width: 80mm;
-    visibility: visible;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box;
   }
-  
+
   .receipt-printer-container * {
     visibility: visible;
-    color: #000000 !important; /* Paksa warna hitam pekat */
-    font-weight: bold !important; /* Paksa tebal agar printer thermal membakar kertas lebih pekat */
+    color: #000000 !important;
+    font-weight: bold !important;
     text-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box;
   }
 
-  .receipt-paper {
-    width: 100%;
-    padding: 2mm;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 13px; /* Ukuran font disesuaikan agar lebih terbaca */
+  /* ── Konten struk ── */
+  .receipt-printer-container > div {
+    width: 100% !important;
+    max-width: 80mm !important;
+    padding: 1mm 2mm !important;
+    margin: 0 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 11pt !important;
     color: #000 !important;
-    line-height: 1.3;
+    line-height: 1.3 !important;
+    box-sizing: border-box;
   }
 
-  .receipt-header, .receipt-footer {
-    text-align: center;
+  /* ── Table info isi penuh ── */
+  .receipt-printer-container table {
+    width: 100% !important;
+    table-layout: fixed !important;
   }
 
-  .receipt-store-name {
-    font-size: 16px;
-    font-weight: bold;
-    margin-bottom: 2px;
+  .receipt-printer-container table td {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
-  .receipt-address, .receipt-phone, .receipt-footer p {
-    font-size: 11px;
-    margin-bottom: 2px;
-  }
-
-  .receipt-divider {
-    text-align: center;
-    margin: 4px 0;
-    font-size: 12px;
-    letter-spacing: 1px;
-  }
-
-  .receipt-info {
-    display: flex;
-    flex-direction: column;
-    margin: 4px 0;
-    font-size: 11px;
-  }
-
-  .receipt-info div {
-    display: flex;
-  }
-
-  .receipt-info span:first-child {
-    width: 40px;
-  }
-
-  .receipt-item {
-    margin-bottom: 4px;
-  }
-
-  .item-name {
-    font-weight: bold;
-    font-size: 11px;
-  }
-
-  .item-calc {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    padding-left: 8px;
-  }
-
-  .receipt-totals {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 4px 0;
-    font-size: 11px;
-  }
-
-  .flex-between {
-    display: flex;
-    justify-content: space-between;
-  }
-
-  .receipt-grand-total {
-    font-size: 14px;
-    font-weight: bold;
-    margin: 2px 0;
+  /* ── Flex items isi penuh ── */
+  .receipt-printer-container div[style*="display: flex"] {
+    width: 100% !important;
   }
 }
 

@@ -17,6 +17,11 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({ order, storeSettings, o
     });
   };
 
+  const padLine = (left: string, right: string, totalWidth = 32): string => {
+    const space = totalWidth - left.length - right.length;
+    return left + ' '.repeat(Math.max(1, space)) + right;
+  };
+
   useEffect(() => {
     console.log('ReceiptPrinter: mounted, scheduling window.print() with 500ms delay');
     const timer = setTimeout(() => {
@@ -38,96 +43,164 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({ order, storeSettings, o
 
   if (!order) return null;
 
+  const S: React.CSSProperties = {
+    fontFamily: "'Courier New', Courier, monospace",
+    fontSize: '12pt',
+    color: '#000',
+    lineHeight: '1.3',
+    width: '100%',
+    padding: 0,
+    margin: 0,
+  };
+
+  const divider = '─'.repeat(32);
+
   return (
     <div className="receipt-printer-container">
-      <div className="receipt-paper">
-        {/* Header */}
-        <div className="receipt-header">
-          <h2 className="receipt-store-name">{storeSettings?.storeName || 'SOL CAFE'}</h2>
-          <p className="receipt-address">{storeSettings?.address || 'Jl. Kopi No.1, Jakarta Raya'}</p>
-          <p className="receipt-phone">Telp: {storeSettings?.phone || '0812-3456-7890'}</p>
-        </div>
-        
-        <div className="receipt-divider">--------------------------------</div>
+      <div style={S}>
 
-        {/* Info */}
-        <div className="receipt-info">
-          <div>
-            <span>Tgl</span>
-            <span>: {formatDate(order.createdAt)}</span>
+        {/* HEADER */}
+        <div style={{ textAlign: 'center', marginBottom: '2px' }}>
+          <div style={{ fontSize: '14pt', fontWeight: '900', letterSpacing: '1px' }}>
+            {storeSettings?.storeName || 'SOL CAFE'}
           </div>
-          <div>
-            <span>No</span>
-            <span>: {order.orderNumber}</span>
-          </div>
-          <div>
-            <span>Kasir</span>
-            <span>: {order.user?.name || 'Kasir'}</span>
-          </div>
-          <div>
-            <span>Plgn</span>
-            <span>: {order.customerName || 'Umum'}</span>
-          </div>
-          {order.table?.tableNo && (
-            <div>
-              <span>Meja</span>
-              <span>: {order.table.tableNo}</span>
-            </div>
+          {storeSettings?.address && (
+            <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>{storeSettings.address}</div>
+          )}
+          {storeSettings?.phone && (
+            <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>Telp: {storeSettings.phone}</div>
+          )}
+          {storeSettings?.receiptHeader && (
+            <div style={{ fontSize: '9pt', fontWeight: 'bold' }}>{storeSettings.receiptHeader}</div>
           )}
         </div>
 
-        <div className="receipt-divider">--------------------------------</div>
+        <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '2px 0' }}>{divider}</div>
 
-        {/* Items */}
-        <div className="receipt-items">
+        {/* INFO */}
+        <table style={{ width: '100%', fontSize: '10pt', fontWeight: 'bold', borderCollapse: 'collapse' }}>
+          <tbody>
+            <tr>
+              <td style={{ width: '12mm' }}>Tgl</td>
+              <td style={{ width: '4px' }}>:</td>
+              <td>{formatDate(order.paidAt || order.createdAt)}</td>
+            </tr>
+            <tr>
+              <td>No</td>
+              <td>:</td>
+              <td>{order.orderNumber}</td>
+            </tr>
+            <tr>
+              <td>Kasir</td>
+              <td>:</td>
+              <td>{order.user?.name || 'Kasir'}</td>
+            </tr>
+            <tr>
+              <td>Plgn</td>
+              <td>:</td>
+              <td>{order.customerName || 'Umum'}</td>
+            </tr>
+            {order.table?.tableNo && (
+              <tr>
+                <td>Meja</td>
+                <td>:</td>
+                <td>{order.table.tableNo}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '2px 0' }}>{divider}</div>
+
+        {/* ITEMS */}
+        <div style={{ fontWeight: 'bold', fontSize: '10pt' }}>
           {order.items?.map((item: any, idx: number) => (
-            <div key={idx} className="receipt-item">
-              <div className="item-name">{item.product?.name || 'Produk'}</div>
-              <div className="item-calc">
-                <span>{item.qty} x {formatCurrency(item.price)}</span>
+            <div key={idx} style={{ marginBottom: '3px' }}>
+              <div style={{ fontWeight: '900', fontSize: '10.5pt' }}>
+                {item.product?.name || 'Produk'}
+                {item.notes ? <span style={{ fontWeight: 'bold', fontSize: '9pt' }}> *{item.notes}</span> : null}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ paddingLeft: '8px' }}>
+                  {item.qty} x {formatCurrency(item.price)}
+                </span>
                 <span>{formatCurrency(item.qty * item.price)}</span>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="receipt-divider">--------------------------------</div>
+        <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '2px 0' }}>{divider}</div>
 
-        {/* Totals */}
-        <div className="receipt-totals">
-          <div className="flex-between">
+        {/* TOTALS */}
+        <div style={{ fontWeight: 'bold', fontSize: '10pt' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Subtotal</span>
             <span>{formatCurrency(order.subtotal || order.total)}</span>
           </div>
-          {(order.discount > 0) && (
-            <div className="flex-between">
+          {order.discount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>Diskon</span>
               <span>-{formatCurrency(order.discount)}</span>
             </div>
           )}
-          {(order.tax > 0) && (
-            <div className="flex-between">
-              <span>Pajak (PB1)</span>
+          {order.tax > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Pajak</span>
               <span>{formatCurrency(order.tax)}</span>
             </div>
           )}
-          <div className="flex-between receipt-grand-total">
-            <span>TOTAL</span>
-            <span>{formatCurrency(order.total)}</span>
-          </div>
-          <div className="flex-between">
-            <span>Metode</span>
-            <span>{order.paymentMethod || 'Tunai'}</span>
-          </div>
+          {order.serviceCharge > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Service</span>
+              <span>{formatCurrency(order.serviceCharge)}</span>
+            </div>
+          )}
         </div>
 
-        <div className="receipt-divider">--------------------------------</div>
+        <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '2px 0' }}>{divider}</div>
 
-        {/* Footer */}
-        <div className="receipt-footer">
-          <p>{storeSettings?.receiptFooter || 'Terima kasih atas kunjungannya!'}</p>
-          <p>Powered by {storeSettings?.storeName || 'SOL CAFE'} Enterprise</p>
+        {/* GRAND TOTAL */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14pt', fontWeight: '900', margin: '2px 0' }}>
+          <span>TOTAL</span>
+          <span>{formatCurrency(order.total)}</span>
         </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10pt', fontWeight: 'bold' }}>
+          <span>Bayar</span>
+          <span>{order.paymentMethod || 'Tunai'}</span>
+        </div>
+
+        {/* LOYALTY MEMBER */}
+        {order.customer?.name && (
+          <>
+            <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '2px 0' }}>{divider}</div>
+            <div style={{ fontSize: '10pt', fontWeight: 'bold' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Member</span>
+                <span>{order.customer.name}</span>
+              </div>
+              {order.customer.points !== undefined && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Poin</span>
+                  <span>{order.customer.points} poin</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '2px 0' }}>{divider}</div>
+
+        {/* FOOTER */}
+        <div style={{ textAlign: 'center', fontSize: '10pt', fontWeight: 'bold', marginTop: '2px' }}>
+          <div>{storeSettings?.receiptFooter || 'Terima kasih atas kunjungannya!'}</div>
+          <div style={{ marginTop: '2px', fontSize: '9pt' }}>★ Sampai jumpa lagi ★</div>
+        </div>
+
+        {/* Spacing before cut */}
+        <div style={{ height: '8mm' }}></div>
+
       </div>
     </div>
   );
