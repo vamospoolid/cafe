@@ -72,6 +72,36 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       return;
     }
 
+    // ── ELECTRON RAW PRINT (prioritas tertinggi untuk desktop) ──
+    if ((window as any).electronPOS?.isElectron) {
+      console.log('handleDirectPrint: Electron detected, using raw ESC/POS print');
+      setPrintLoading(true);
+      try {
+        const orderRes = await fetch(`/api/orders/${id}`, {
+          headers: { Authorization: `Bearer ${posContext?.token}` }
+        });
+        if (!orderRes.ok) throw new Error('Gagal mengambil detail order');
+        const orderData = await orderRes.json();
+        
+        const result = await (window as any).electronPOS.printer.printReceipt(
+          orderData, 
+          posContext?.settings
+        );
+        
+        if (result.success) {
+          toast('Struk berhasil dicetak!', 'success');
+        } else {
+          toast(`Gagal cetak: ${result.message}`, 'error');
+        }
+      } catch (err: any) {
+        console.error('handleDirectPrint: Electron print error:', err);
+        toast(err.message || 'Gagal cetak via Electron', 'error');
+      } finally {
+        setPrintLoading(false);
+      }
+      return;
+    }
+
     if (!posContext?.settings?.printerIp) {
       // Fallback to browser standard print for USB connected printer on Web Desktop
       console.log('handleDirectPrint: starting fallback browser print for order id:', id);

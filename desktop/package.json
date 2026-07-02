@@ -1,0 +1,46 @@
+{
+  "name": "sol-cafe-pos",
+  "version": "1.0.0",
+  "description": "SOL CAFE POS Desktop - Aplikasi kasir dengan raw thermal printing",
+  "main": "main.js",
+  "author": "SOL CAFE",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.solcafe.pos",
+    "productName": "SOL CAFE POS",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "shortcutName": "SOL CAFE POS"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "printer.js",
+      "assets/**/*"
+    ]
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
