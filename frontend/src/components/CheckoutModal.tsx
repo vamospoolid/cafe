@@ -299,6 +299,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
             </button>
           </div>
         </div>
+
+        {printOrderData && (
+          <ReceiptPrinter 
+            order={printOrderData} 
+            storeSettings={posContext?.settings} 
+            onClose={() => setPrintOrderData(null)} 
+          />
+        )}
       </div>
     );
   }
