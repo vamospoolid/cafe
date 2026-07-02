@@ -17,6 +17,22 @@ const SettingsView = () => {
   const [loading, setLoading] = useState(false);
   const posContext = useContext(POSContext);
   const [testLoading, setTestLoading] = useState(false);
+  
+  const [isElectronApp, setIsElectronApp] = useState(false);
+  const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
+
+  useEffect(() => {
+    const win = window as any;
+    if (win.electronPOS && win.electronPOS.printer) {
+      setIsElectronApp(true);
+      win.electronPOS.printer.getPrinters()
+        .then((list: any[]) => {
+          setAvailablePrinters(list);
+        })
+        .catch(console.error);
+    }
+  }, []);
+
   const [highPrecisionMode, setHighPrecisionMode] = useState(() => {
     return localStorage.getItem('high_precision_mode') === 'true';
   });
@@ -29,6 +45,24 @@ const SettingsView = () => {
   };
 
   const handleTestPrint = async () => {
+    const win = window as any;
+    if (win.electronPOS && win.electronPOS.printer) {
+      if (!formData.windowsPrinterName) {
+        toast('Pilih printer Windows terlebih dahulu!', 'error');
+        return;
+      }
+      setTestLoading(true);
+      try {
+        await win.electronPOS.printer.testPrint(formData.windowsPrinterName, formData.storeName);
+        toast('Halaman uji berhasil dikirim ke printer lokal!', 'success');
+      } catch (err: any) {
+        toast('Gagal mencetak: ' + err.message, 'error');
+      } finally {
+        setTestLoading(false);
+      }
+      return;
+    }
+
     const ip = formData.printerIp;
     const port = formData.printerPort || 9100;
     if (!ip) {
@@ -85,6 +119,7 @@ const SettingsView = () => {
     ingredientTrackingEnabled: false,
     printerIp: '',
     printerPort: 9100,
+    windowsPrinterName: '',
     autoPrintKDS: false,
     autoPrintReceipt: false,
   });
@@ -377,34 +412,60 @@ const SettingsView = () => {
                 <div className="space-y-5">
                   {/* Konfigurasi Koneksi Printer Termal */}
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-4 shadow-sm">
-                    <div className="font-bold text-xs text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Printer size={16} className="text-indigo-600" />
-                      <span>Koneksi Printer Jaringan (TCP/IP Direct)</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer</label>
-                        <input 
-                          type="text" 
-                          name="printerIp" 
-                          className="form-control text-sm" 
-                          value={formData.printerIp || ''} 
-                          onChange={handleChange}
-                          placeholder="Contoh: 192.168.1.100"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port</label>
-                        <input 
-                          type="number" 
-                          name="printerPort" 
-                          className="form-control text-sm" 
-                          value={formData.printerPort || 9100} 
-                          onChange={handleChange}
-                          placeholder="9100"
-                        />
-                      </div>
-                    </div>
+                    {isElectronApp ? (
+                      <>
+                        <div className="font-bold text-xs text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <Printer size={16} className="text-indigo-600" />
+                          <span>Koneksi Printer Lokal (Windows)</span>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Pilih Printer Thermal</label>
+                          <select 
+                            name="windowsPrinterName" 
+                            className="form-control text-sm" 
+                            value={formData.windowsPrinterName || ''} 
+                            onChange={handleChange}
+                          >
+                            <option value="">-- Pilih Printer --</option>
+                            {availablePrinters.map((printer, idx) => (
+                              <option key={idx} value={printer.name}>{printer.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-bold text-xs text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <Printer size={16} className="text-indigo-600" />
+                          <span>Koneksi Printer Jaringan (TCP/IP Direct)</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer</label>
+                            <input 
+                              type="text" 
+                              name="printerIp" 
+                              className="form-control text-sm" 
+                              value={formData.printerIp || ''} 
+                              onChange={handleChange}
+                              placeholder="Contoh: 192.168.1.100"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port</label>
+                            <input 
+                              type="number" 
+                              name="printerPort" 
+                              className="form-control text-sm" 
+                              value={formData.printerPort || 9100} 
+                              onChange={handleChange}
+                              placeholder="9100"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    
                     <button
                       type="button"
                       className="btn btn-secondary text-xs py-2 w-full flex items-center justify-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm"
