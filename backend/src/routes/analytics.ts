@@ -823,4 +823,116 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
   }
 });
 
+// GET Laporan Mutasi & Valuasi Stok Bahan Baku
+router.get('/inventory', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const start = new Date((startDate as string) || todayStr);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date((endDate as string) || todayStr);
+    end.setHours(23, 59, 59, 999);
+
+    // 1. Fetch all ingredients
+    const ingredients = await prisma.ingredient.findMany({
+      include: {
+        supplier: { select: { name: true } }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    // 2. Fetch all logs in the period
+    const logs = await prisma.ingredientLog.findMany({
+      where: {
+        createdAt: { gte: start, lte: end }
+      }
+    });
+
+    // 3. Fetch all logs after end date to calculate starting/ending stocks relative to current stock
+    const postPeriodLogs = await prisma.ingredientLog.findMany({
+      where: {
+        createdAt: { gt: end }
+      }
+    });
+
+    const report = ingredients.map(ing => {
+      // Sum of changes after the end of our period
+      const changesAfterPeriod = postPeriodLogs
+        .filter(l => l.ingredientId === ing.id)
+        .reduce((sum, l) => sum + l.change, 0);
+
+      // Ending stock of the period
+      const stockAkhir = ing.stock - changesAfterPeriod;
+
+      // Filter logs during the period
+      const periodLogs = logs.filter(l => l.ingredientId === ing.id);
+
+      // Calculate categories of changes in period
+      let masuk = 0;
+      let keluarProduksi = 0;
+      let keluarRusak = 0;
+      let penyesuaian = 0;
+
+      periodLogs.forEach(l => {
+        if (l.type === 'Restock' || l.type === 'PO') {
+          masuk += l.change;
+        } else if (l.type === 'Produksi') {
+          keluarProduksi += Math.abs(l.change);
+        } else if (l.type === 'Rusak') {
+          keluarRusak += Math.abs(l.change);
+        } else if (l.type === 'Penyesuaian') {
+          penyesuaian += l.change;
+        } else {
+          if (l.change > 0) {
+            masuk += l.change;
+          } else {
+            keluarRusak += Math.abs(l.change);
+          }
+        }
+      });
+
+      // Starting stock of the period
+      const sumPeriodChanges = periodLogs.reduce((sum, l) => sum + l.change, 0);
+      const stockAwal = stockAkhir - sumPeriodChanges;
+      const totalValuation = stockAkhir * (ing.buyPrice || 0);
+
+      return {
+        id: ing.id,
+        name: ing.name,
+        unit: ing.unit,
+        minStock: ing.minStock,
+        buyPrice: ing.buyPrice,
+        supplierName: ing.supplier?.name || '—',
+        stockAwal,
+        masuk,
+        keluarProduksi,
+        keluarRusak,
+        penyesuaian,
+        stockAkhir,
+        totalValuation
+      };
+    });
+
+    // Summary calculations
+    const totalAssetValuation = report.reduce((sum, item) => sum + item.totalValuation, 0);
+    const criticalItemsCount = report.filter(item => item.stockAkhir <= item.minStock).length;
+    const totalMutationsCount = logs.length;
+
+    res.json({
+      summary: {
+        totalAssetValuation,
+        criticalItemsCount,
+        totalMutationsCount
+      },
+      inventory: report
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Gagal memuat laporan stok' });
+  }
+});
+
 export default router;

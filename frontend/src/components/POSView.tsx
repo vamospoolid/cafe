@@ -34,6 +34,16 @@ export const POSView = () => {
   const [drinkModalOpen, setDrinkModalOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<any>(null);
   const [isOpenShiftOpen, setIsOpenShiftOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const posContext = useContext(POSContext);
   const drinkCustomizationEnabled = posContext?.settings?.enableDrinkCustomization ?? false;
@@ -238,11 +248,6 @@ export const POSView = () => {
   };
 
   const handleCameraScan = async () => {
-    const isHighPrecision = localStorage.getItem('high_precision_mode') === 'true';
-    if (!isHighPrecision) {
-      toast('Aktifkan Mode Presisi Tinggi di Pengaturan untuk memfungsikan pemindaian kamera native.', 'info');
-      return;
-    }
     if (!isNativePlatform()) {
       toast('Kamera native scanner hanya tersedia di aplikasi tablet/HP mobile.', 'info');
       return;
@@ -296,12 +301,12 @@ export const POSView = () => {
   }
 
   return (
-    <div className="pos-layout">
+    <div className="pos-layout" style={{ flexDirection: isMobile ? 'column' : 'row', height: '100%', overflow: 'hidden' }}>
       {/* Kiri: Daftar Produk */}
       <div className="pos-main">
         {/* Scanner & Filter */}
-        <div className="pos-toolbar">
-          <div className="scanner-box">
+        <div className="pos-toolbar" style={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '0.75rem' : '1.5rem', alignItems: 'stretch' }}>
+          <div className="scanner-box" style={{ width: '100%' }}>
             <Search size={20} />
             <input 
               type="text" 
@@ -366,145 +371,323 @@ export const POSView = () => {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Kanan: Keranjang */}
-      <div className="pos-sidebar">
-        <div className="cart-header">
-          <div className="cart-title">
-            <ShoppingCart size={20} /> Keranjang
-          </div>
-          <button className="icon-btn text-danger" onClick={() => setCart([])} disabled={cart.length === 0}>
-            <Trash2 size={18} />
-          </button>
-        </div>
-
-        <div className="cart-body flex-1 overflow-y-auto">
-          {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400">
-              <ShoppingCart size={48} className="mb-4 opacity-30" />
-              <p>Keranjang masih kosong</p>
+      </div>      {/* Kanan: Keranjang - Hanya dirender pada layar Desktop */}
+      {!isMobile && (
+        <div className="pos-sidebar">
+          <div className="cart-header">
+            <div className="cart-title">
+              <ShoppingCart size={20} /> Keranjang
             </div>
-          ) : (
-            cart.map((item, idx) => (
-              <div key={idx} className="cart-item">
-                <div className="cart-item-info">
-                  <div className="cart-item-name truncate max-w-[150px]">{item.product.name}</div>
-                  {item.notes && (
-                    <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem', lineHeight: 1.3 }}>{item.notes}</div>
-                  )}
-                  <div className="cart-item-price">{formatCurrency(item.product.sellPrice)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
-                  
-                  <div className="cart-item-controls mt-2">
-                    <button className="qty-btn" onClick={() => decreaseQty(item.product.id)}><Minus size={14} /></button>
-                    <span className="qty-val">{item.qty}</span>
-                    <button className="qty-btn" onClick={() => addToCart(item.product)}><Plus size={14} /></button>
+            <button className="icon-btn text-danger" onClick={() => setCart([])} disabled={cart.length === 0}>
+              <Trash2 size={18} />
+            </button>
+          </div>
+
+          <div className="cart-body flex-1 overflow-y-auto">
+            {cart.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                <ShoppingCart size={48} className="mb-4 opacity-30" />
+                <p>Keranjang masih kosong</p>
+              </div>
+            ) : (
+              cart.map((item, idx) => (
+                <div key={idx} className="cart-item">
+                  <div className="cart-item-info">
+                    <div className="cart-item-name truncate max-w-[150px]">{item.product.name}</div>
+                    {item.notes && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem', lineHeight: 1.3 }}>{item.notes}</div>
+                    )}
+                    <div className="cart-item-price">{formatCurrency(item.product.sellPrice)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
+                    
+                    <div className="cart-item-controls mt-2">
+                      <button className="qty-btn" onClick={() => decreaseQty(item.product.id)}><Minus size={14} /></button>
+                      <span className="qty-val">{item.qty}</span>
+                      <button className="qty-btn" onClick={() => addToCart(item.product)}><Plus size={14} /></button>
+                    </div>
+                  </div>
+                  <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between'}}>
+                    <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeFromCart(item.product.id)}><X size={16}/></button>
+                    <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency(item.product.sellPrice * item.qty)}</div>
                   </div>
                 </div>
-                <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between'}}>
-                  <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeFromCart(item.product.id)}><X size={16}/></button>
-                  <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency(item.product.sellPrice * item.qty)}</div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="cart-footer">
-          <div className="summary-row">
-            <span>Subtotal</span>
-            <span style={{fontWeight: 600, color: 'var(--text-main)'}}>{formatCurrency(subtotal)}</span>
-          </div>
-          <div className="summary-row">
-            <span>Diskon <span className="text-muted" style={{fontSize: '10px'}}>{customer?.pointsUsed ? `(Poin: ${customer.pointsUsed})` : ''}</span></span>
-            <span className="text-red-500">-{formatCurrency(discount)}</span>
-          </div>
-          <div className="summary-row">
-            <span>PPN <span className="text-muted" style={{fontSize: '10px'}}>({taxRate}%)</span></span>
-            <span>{formatCurrency(tax)}</span>
-          </div>
-          {serviceChargeRate > 0 && (
-            <div className="summary-row">
-              <span>Layanan <span className="text-muted" style={{fontSize: '10px'}}>({serviceChargeRate}%)</span></span>
-              <span>{formatCurrency(serviceCharge)}</span>
-            </div>
-          )}
-          <div className="summary-total border-t pt-3 mt-2">
-            <span>Total</span>
-            <span className="text-xl">{formatCurrency(total)}</span>
-          </div>
-          
-          {/* Customer Selection */}
-          <div 
-            className="mb-3 p-3 border border-gray-200 rounded-lg flex items-center justify-between bg-white cursor-pointer hover:border-primary transition-colors group shadow-sm"
-            onClick={() => setIsCustomerModalOpen(true)}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-50 text-primary flex items-center justify-center">
-                <User size={20} />
-              </div>
-              <div>
-                <div className="font-bold text-sm text-gray-800">
-                  {customer ? customer.name : 'Pelanggan Umum'}
-                </div>
-                <div className="text-xs text-muted">
-                  {customer?.points ? `Member (${customer.points} pts)` : 'Klik untuk data Pemesan'}
-                </div>
-              </div>
-            </div>
-            <Edit2 size={16} className="text-gray-400 group-hover:text-primary" />
-          </div>
-
-          {/* Table / Order Type Selection */}
-          <div className="mb-4 p-3 border border-gray-200 rounded-lg bg-white shadow-sm flex flex-col gap-3">
-            <div className="flex gap-2">
-              <button 
-                className={`flex-1 py-2 text-sm font-bold rounded-md border transition-all ${orderType === 'Take Away' ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
-                onClick={() => { setOrderType('Take Away'); setSelectedTableId(null); }}
-              >
-                Take Away
-              </button>
-              <button 
-                className={`flex-1 py-2 text-sm font-bold rounded-md border transition-all ${orderType === 'Dine In' ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
-                onClick={() => setOrderType('Dine In')}
-              >
-                Dine In
-              </button>
-            </div>
-            
-            {orderType === 'Dine In' && (
-              <select 
-                className="form-control font-semibold bg-blue-50 border-blue-200 text-blue-900"
-                value={selectedTableId || ''}
-                onChange={e => setSelectedTableId(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">-- Pilih Nomor Meja --</option>
-                {tables.filter(t => t.status === 'Aktif').map(t => (
-                  <option key={t.id} value={t.id}>Meja {t.tableNo} (Kapasitas: {t.capacity})</option>
-                ))}
-              </select>
+              ))
             )}
           </div>
 
-          {orderType === 'Dine In' && (
-            <button 
-              className={`w-full font-bold rounded-lg py-3 mb-2 flex items-center justify-center gap-2 border-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all shadow-sm ${cart.length === 0 || !selectedTableId ? 'opacity-50 cursor-not-allowed' : ''}`}
-              disabled={cart.length === 0 || !selectedTableId}
-              onClick={handleSaveBill}
+          <div className="cart-footer">
+            <div className="summary-row">
+              <span>Subtotal</span>
+              <span style={{fontWeight: 600, color: 'var(--text-main)'}}>{formatCurrency(subtotal)}</span>
+            </div>
+            <div className="summary-row">
+              <span>Diskon <span className="text-muted" style={{fontSize: '10px'}}>{customer?.pointsUsed ? `(Poin: ${customer.pointsUsed})` : ''}</span></span>
+              <span className="text-red-500">-{formatCurrency(discount)}</span>
+            </div>
+            <div className="summary-row">
+              <span>PPN <span className="text-muted" style={{fontSize: '10px'}}>({taxRate}%)</span></span>
+              <span>{formatCurrency(tax)}</span>
+            </div>
+            {serviceChargeRate > 0 && (
+              <div className="summary-row">
+                <span>Layanan <span className="text-muted" style={{fontSize: '10px'}}>({serviceChargeRate}%)</span></span>
+                <span>{formatCurrency(serviceCharge)}</span>
+              </div>
+            )}
+            <div className="summary-total border-t pt-3 mt-2">
+              <span>Total</span>
+              <span className="text-xl">{formatCurrency(total)}</span>
+            </div>
+            
+            {/* Customer Selection */}
+            <div 
+              className="mb-3 p-3 border border-gray-200 rounded-lg flex items-center justify-between bg-white cursor-pointer hover:border-primary transition-colors group shadow-sm"
+              onClick={() => setIsCustomerModalOpen(true)}
             >
-              <Save size={20} /> Simpan Bill (Kirim ke Dapur)
-            </button>
-          )}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-blue-50 text-primary flex items-center justify-center">
+                  <User size={20} />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-gray-800">
+                    {customer ? customer.name : 'Pelanggan Umum'}
+                  </div>
+                  <div className="text-xs text-muted">
+                    {customer?.points ? `Member (${customer.points} pts)` : 'Klik untuk data Pemesan'}
+                  </div>
+                </div>
+              </div>
+              <Edit2 size={16} className="text-gray-400 group-hover:text-primary" />
+            </div>
 
-          <button 
-            className="btn-checkout py-3 flex items-center justify-center gap-2"
-            disabled={cart.length === 0 || (orderType === 'Dine In' && !selectedTableId)}
-            onClick={() => setIsCheckoutOpen(true)}
-          >
-            <CreditCard size={20} /> Proses Pembayaran
-          </button>
+            {/* Table / Order Type Selection */}
+            <div className="mb-4 p-3 border border-gray-200 rounded-lg bg-white shadow-sm flex flex-col gap-3">
+              <div className="flex gap-2">
+                <button 
+                  className={`flex-1 py-2 text-sm font-bold rounded-md border transition-all ${orderType === 'Take Away' ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                  onClick={() => { setOrderType('Take Away'); setSelectedTableId(null); }}
+                >
+                  Take Away
+                </button>
+                <button 
+                  className={`flex-1 py-2 text-sm font-bold rounded-md border transition-all ${orderType === 'Dine In' ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                  onClick={() => setOrderType('Dine In')}
+                >
+                  Dine In
+                </button>
+              </div>
+              
+              {orderType === 'Dine In' && (
+                <select 
+                  className="form-control font-semibold bg-blue-50 border-blue-200 text-blue-900"
+                  value={selectedTableId || ''}
+                  onChange={e => setSelectedTableId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">-- Pilih Nomor Meja --</option>
+                  {tables.filter(t => t.status === 'Aktif').map(t => (
+                    <option key={t.id} value={t.id}>Meja {t.tableNo} (Kapasitas: {t.capacity})</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {orderType === 'Dine In' && (
+              <button 
+                className={`w-full font-bold rounded-lg py-3 mb-2 flex items-center justify-center gap-2 border-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all shadow-sm ${cart.length === 0 || !selectedTableId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={cart.length === 0 || !selectedTableId}
+                onClick={handleSaveBill}
+              >
+                <Save size={20} /> Simpan Bill (Kirim ke Dapur)
+              </button>
+            )}
+
+            <button 
+              className="btn-checkout py-3 flex items-center justify-center gap-2"
+              disabled={cart.length === 0 || (orderType === 'Dine In' && !selectedTableId)}
+              onClick={() => setIsCheckoutOpen(true)}
+            >
+              <CreditCard size={20} /> Proses Pembayaran
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Mobile Cart Floating bar (collapsed state) */}
+      {isMobile && cart.length > 0 && !isMobileCartOpen && (
+        <div 
+          onClick={() => setIsMobileCartOpen(true)}
+          className="fixed bottom-24 left-4 right-4 h-14 bg-emerald-600/95 backdrop-blur-md rounded-2xl border border-emerald-500/30 shadow-lg flex items-center justify-between px-5 z-30 cursor-pointer text-white animate-bounce-subtle"
+          style={{ boxShadow: '0 8px 30px rgba(16, 185, 129, 0.3)' }}
+        >
+          <div className="flex items-center gap-2">
+            <ShoppingCart size={18} />
+            <span className="font-extrabold text-xs">{cart.reduce((sum, item) => sum + item.qty, 0)} Item</span>
+            <span className="text-emerald-400">|</span>
+            <span className="font-extrabold text-xs">{formatCurrency(total)}</span>
+          </div>
+          <div className="flex items-center gap-1 font-bold text-[10px] bg-white text-emerald-700 px-3 py-1.5 rounded-xl">
+            <span>Lihat Keranjang</span>
+            <ArrowRight size={10} />
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Full Cart Drawer (expanded state bottom sheet) */}
+      {isMobile && isMobileCartOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end justify-center animate-in fade-in duration-200" onClick={() => setIsMobileCartOpen(false)}>
+          <div 
+            className="bg-white w-full rounded-t-3xl shadow-2xl max-w-md border-t border-slate-100 flex flex-col animate-in slide-in-from-bottom duration-300"
+            style={{ height: '80vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-100 p-4">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="text-indigo-650" size={18} />
+                <span className="font-extrabold text-sm text-slate-800">Keranjang Belanja ({cart.reduce((sum, item) => sum + item.qty, 0)})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="text-red-500 text-xs font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors" onClick={() => { setCart([]); setIsMobileCartOpen(false); }} disabled={cart.length === 0}>
+                  Kosongkan
+                </button>
+                <button 
+                  type="button"
+                  className="text-slate-400 hover:text-slate-600 font-bold p-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                  onClick={() => setIsMobileCartOpen(false)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Cart Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {cart.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                  <ShoppingCart size={48} className="mb-4 opacity-30" />
+                  <p>Keranjang masih kosong</p>
+                </div>
+              ) : (
+                cart.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-all">
+                    <div className="flex-1 min-w-0 pr-3">
+                      <div className="font-bold text-xs text-slate-800 truncate">{item.product.name}</div>
+                      {item.notes && (
+                        <div className="text-[10px] text-indigo-600 font-semibold mt-0.5">{item.notes}</div>
+                      )}
+                      <div className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrency(item.product.sellPrice)} x {item.qty}</div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => decreaseQty(item.product.id)}><Minus size={12} /></button>
+                        <span className="text-xs font-bold text-slate-800 min-w-[20px] text-center">{item.qty}</span>
+                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => addToCart(item.product)}><Plus size={12} /></button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end justify-between min-h-[70px]">
+                      <button className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-slate-100/50" onClick={() => removeFromCart(item.product.id)}><X size={14}/></button>
+                      <div className="font-extrabold text-xs text-slate-800">{formatCurrency(item.product.sellPrice * item.qty)}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Cart Footer */}
+            <div className="border-t border-slate-100 p-4 bg-slate-50/50 space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-slate-500">
+                <div className="flex justify-between border-r border-slate-200 pr-2">
+                  <span>Subtotal:</span>
+                  <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex justify-between pl-2">
+                  <span>Diskon:</span>
+                  <span className="font-bold text-red-500">-{formatCurrency(discount)}</span>
+                </div>
+                <div className="flex justify-between border-r border-slate-200 pr-2 pt-1 border-t border-slate-100">
+                  <span>PPN ({taxRate}%):</span>
+                  <span className="font-bold text-slate-800">{formatCurrency(tax)}</span>
+                </div>
+                <div className="flex justify-between pl-2 pt-1 border-t border-slate-100">
+                  <span>Layanan ({serviceChargeRate}%):</span>
+                  <span className="font-bold text-slate-800">{formatCurrency(serviceCharge)}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center border-t border-slate-200/80 pt-3">
+                <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Total Pembayaran</span>
+                <span className="text-base font-black text-indigo-650">{formatCurrency(total)}</span>
+              </div>
+
+              {/* Customer Selector */}
+              <div 
+                className="p-2.5 border border-slate-200 rounded-xl flex items-center justify-between bg-white cursor-pointer hover:border-indigo-600 transition-colors shadow-sm"
+                onClick={() => setIsCustomerModalOpen(true)}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-blue-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <User size={16} />
+                  </div>
+                  <div>
+                    <div className="font-bold text-xs text-slate-800">
+                      {customer ? customer.name : 'Pelanggan Umum'}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {customer?.points ? `Member (${customer.points} pts)` : 'Ketuk untuk data Pemesan'}
+                    </div>
+                  </div>
+                </div>
+                <Edit2 size={12} className="text-slate-400" />
+              </div>
+
+              {/* Order Type & Table */}
+              <div className="flex gap-2">
+                <button 
+                  className={`flex-1 py-2 text-xs font-extrabold rounded-xl border transition-all ${orderType === 'Take Away' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/10' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                  onClick={() => { setOrderType('Take Away'); setSelectedTableId(null); }}
+                >
+                  Take Away
+                </button>
+                <button 
+                  className={`flex-1 py-2 text-xs font-extrabold rounded-xl border transition-all ${orderType === 'Dine In' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/10' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                  onClick={() => setOrderType('Dine In')}
+                >
+                  Dine In
+                </button>
+              </div>
+
+              {orderType === 'Dine In' && (
+                <select 
+                  className="form-control font-bold bg-blue-50/50 border-blue-150 text-blue-900 py-2 text-xs"
+                  value={selectedTableId || ''}
+                  onChange={e => setSelectedTableId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">-- Pilih Nomor Meja --</option>
+                  {tables.filter(t => t.status === 'Aktif').map(t => (
+                    <option key={t.id} value={t.id}>Meja {t.tableNo} (Kapasitas: {t.capacity})</option>
+                  ))}
+                </select>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                {orderType === 'Dine In' && (
+                  <button 
+                    className={`flex-1 font-bold rounded-xl py-3 text-xs flex items-center justify-center gap-1.5 border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all ${cart.length === 0 || !selectedTableId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={cart.length === 0 || !selectedTableId}
+                    onClick={() => { handleSaveBill(); setIsMobileCartOpen(false); }}
+                  >
+                    <Save size={16} /> Simpan Bill
+                  </button>
+                )}
+                <button 
+                  className="flex-1 py-3 text-xs bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5"
+                  disabled={cart.length === 0 || (orderType === 'Dine In' && !selectedTableId)}
+                  onClick={() => { setIsCheckoutOpen(true); setIsMobileCartOpen(false); }}
+                >
+                  <CreditCard size={16} /> Pembayaran
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <CheckoutModal 
         isOpen={isCheckoutOpen} 

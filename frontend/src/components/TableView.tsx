@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { Plus, Edit, Trash2, Map, List, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard, X, Info } from 'lucide-react';
+import { Plus, Edit, Trash2, Map, List, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard, X, Info, RefreshCw } from 'lucide-react';
 import TableModal from './TableModal';
 import CheckoutModal from './CheckoutModal';
 import OpenShiftModal from './OpenShiftModal';
 import SplitBillModal from './SplitBillModal';
+import MoveMergeTableModal from './MoveMergeTableModal';
 import { POSContext } from '../context/POSContext';
 import useSocket from '../hooks/useSocket';
 
@@ -34,6 +35,8 @@ const TableView = () => {
   const [tempPositions, setTempPositions] = useState<any[]>([]);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [actionTable, setActionTable] = useState<any>(null);
+  const [isMoveMergeOpen, setIsMoveMergeOpen] = useState(false);
+  const [moveMergeSourceTable, setMoveMergeSourceTable] = useState<any>(null);
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
@@ -533,6 +536,15 @@ const TableView = () => {
                               <button
                                 className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
                                 onClick={() => {
+                                  setMoveMergeSourceTable(table);
+                                  setIsMoveMergeOpen(true);
+                                }}
+                              >
+                                <RefreshCw size={12} /> Pindah
+                              </button>
+                              <button
+                                className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
+                                onClick={() => {
                                   const tableOrders = activeOrders.filter(o => o.tableId === table.id);
                                   setSplitTableId(table.id);
                                   setSplitTableName(`Meja ${table.tableNo}`);
@@ -724,6 +736,21 @@ const TableView = () => {
         />
       )}
 
+      {isMoveMergeOpen && moveMergeSourceTable && (
+        <MoveMergeTableModal
+          isOpen={isMoveMergeOpen}
+          onClose={() => {
+            setIsMoveMergeOpen(false);
+            setMoveMergeSourceTable(null);
+          }}
+          sourceTable={moveMergeSourceTable}
+          tables={tables}
+          activeOrders={activeOrders}
+          onSuccess={fetchData}
+          token={posContext?.token || ''}
+        />
+      )}
+
       {/* Modal Detail & Aksi Meja (Action Sheet) */}
       {actionTable && (
         <div className="modal-overlay backdrop-blur-sm bg-slate-900/30">
@@ -813,9 +840,9 @@ const TableView = () => {
                         </div>
                       </div>
 
-                      <div className="flex gap-3 pt-2">
+                      <div className="flex gap-2.5 pt-2">
                         <button
-                          className="flex-1 py-3 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5"
+                          className="flex-1 py-3 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
                           onClick={() => {
                             const tableOrders = activeOrders.filter(o => o.tableId === actionTable.id);
                             setSplitTableId(actionTable.id);
@@ -828,29 +855,40 @@ const TableView = () => {
                           <Scissors size={14} /> Split Bill
                         </button>
 
-                        {activeOrder.status === 'Paid' ? (
-                          <button
-                            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-100"
-                            onClick={() => {
-                              handleReleaseTable(activeOrder.id);
-                              setActionTable(null);
-                            }}
-                          >
-                            <Check size={14} /> Kosongkan Meja
-                          </button>
-                        ) : (
-                          <button
-                            className="flex-1 py-3 bg-primary hover:bg-primary/95 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-100"
-                            onClick={() => {
-                              setSelectedOrderToPay(activeOrder);
-                              setIsCheckoutOpen(true);
-                              setActionTable(null);
-                            }}
-                          >
-                            <CreditCard size={14} /> Bayar Tagihan
-                          </button>
-                        )}
+                        <button
+                          className="flex-1 py-3 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                          onClick={() => {
+                            setMoveMergeSourceTable(actionTable);
+                            setIsMoveMergeOpen(true);
+                            setActionTable(null);
+                          }}
+                        >
+                          <RefreshCw size={14} /> Pindah / Gabung
+                        </button>
                       </div>
+
+                      {activeOrder.status === 'Paid' ? (
+                        <button
+                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-100 mt-3"
+                          onClick={() => {
+                            handleReleaseTable(activeOrder.id);
+                            setActionTable(null);
+                          }}
+                        >
+                          <Check size={14} /> Kosongkan Meja
+                        </button>
+                      ) : (
+                        <button
+                          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-100 mt-3"
+                          onClick={() => {
+                            setSelectedOrderToPay(activeOrder);
+                            setIsCheckoutOpen(true);
+                            setActionTable(null);
+                          }}
+                        >
+                          <CreditCard size={14} /> Bayar Tagihan
+                        </button>
+                      )}
                     </div>
                   );
                 } else {

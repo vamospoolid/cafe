@@ -31,10 +31,20 @@ import {
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const location = useLocation();
   const posContext = useContext(POSContext);
   const [kdsCount, setKdsCount] = useState(0);
   const socket = useSocket();
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const fetchKdsCount = async () => {
     if (!posContext?.token) return;
@@ -143,9 +153,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <div className={`app-container ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-container ${(isCollapsed && !isMobile) ? 'sidebar-collapsed' : ''}`}>
       {/* Sidebar */}
-      <aside className="sidebar">
+      {!isMobile && (
+        <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand-logo" style={{ overflow: 'hidden', background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {posContext?.settings?.logoUrl ? (
@@ -299,15 +310,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           )}
         </nav>
       </aside>
+      )}
 
       {/* Main Content */}
       <main className="main-content">
-        <header className="topbar">
-          <div className="flex items-center gap-4">
-            <button className="icon-btn hover:bg-gray-100 p-2 rounded-md" onClick={() => setIsCollapsed(!isCollapsed)}>
-              <Menu size={20} />
-            </button>
-            <h1 className="page-title">{pageTitle}</h1>
+        <header className="topbar" style={{ padding: isMobile ? '0 1rem' : '0 2rem' }}>
+          <div className="flex items-center gap-3">
+            {!isMobile && (
+              <button className="icon-btn hover:bg-gray-100 p-2 rounded-md" onClick={() => setIsCollapsed(!isCollapsed)}>
+                <Menu size={20} />
+              </button>
+            )}
+            <h1 className="page-title" style={{ fontSize: isMobile ? '1.15rem' : '1.25rem', fontWeight: 800 }}>{pageTitle}</h1>
           </div>
           
           <div className="topbar-actions flex items-center gap-3">
@@ -328,11 +342,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             
             <div className="user-profile relative group cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-colors">
               <div className="avatar bg-indigo-100 text-indigo-700">{posContext?.user?.username?.substring(0, 2).toUpperCase() || 'U'}</div>
-              <div className="user-info">
-                <span className="user-name">{posContext?.user?.username || 'User'}</span>
-                <span className="user-role capitalize">{posContext?.user?.role || 'Staff'}</span>
-              </div>
-              <ChevronDown size={16} className="text-muted" />
+              {!isMobile && (
+                <>
+                  <div className="user-info">
+                    <span className="user-name">{posContext?.user?.username || 'User'}</span>
+                    <span className="user-role capitalize">{posContext?.user?.role || 'Staff'}</span>
+                  </div>
+                  <ChevronDown size={16} className="text-muted" />
+                </>
+              )}
               
               {/* Dropdown Menu (Hover) */}
               <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
@@ -353,7 +371,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
         
-        <div className="page-content">
+        <div className="page-content" style={{ paddingBottom: isMobile ? '80px' : '0px' }}>
           {children}
         </div>
       </main>
@@ -444,6 +462,205 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 disabled={pinLoading || pinInput.length === 0}
               >
                 {pinLoading ? '...' : 'Masuk'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Bottom Navigation Bar for Mobile */}
+      {isMobile && (
+        <div className="fixed bottom-4 left-4 right-4 h-16 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-100/80 shadow-lg flex items-center justify-around px-4 z-40 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <NavLink to="/dashboard" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+            <LayoutDashboard size={20} className="transition-transform active:scale-95" />
+            <span className="text-[9px] tracking-wide font-black">Home</span>
+          </NavLink>
+          <NavLink to="/pos" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+            <ShoppingCart size={20} className="transition-transform active:scale-95" />
+            <span className="text-[9px] tracking-wide font-black">POS</span>
+          </NavLink>
+          <NavLink to="/meja" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+            <Grid size={20} className="transition-transform active:scale-95" />
+            <span className="text-[9px] tracking-wide font-black">Meja</span>
+          </NavLink>
+          <NavLink to="/riwayat" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+            <History size={20} className="transition-transform active:scale-95" />
+            <span className="text-[9px] tracking-wide font-black">Riwayat</span>
+          </NavLink>
+          <button 
+            type="button" 
+            onClick={() => setIsMoreMenuOpen(true)}
+            className="flex flex-col items-center justify-center gap-1 text-slate-400 focus:outline-none"
+          >
+            <Menu size={20} className="transition-transform active:scale-95" />
+            <span className="text-[9px] tracking-wide font-black">Lainnya</span>
+          </button>
+        </div>
+      )}
+
+      {/* Slide up Drawer Menu for other features */}
+      {isMobile && isMoreMenuOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end justify-center animate-in fade-in duration-200" onClick={() => setIsMoreMenuOpen(false)}>
+          <div 
+            className="bg-white w-full rounded-t-3xl p-6 pb-8 shadow-2xl max-w-md border-t border-slate-100 flex flex-col gap-4 animate-in slide-in-from-bottom duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <Grid size={16} />
+                </div>
+                <span className="font-extrabold text-sm text-slate-800">Semua Fitur POS</span>
+              </div>
+              <button 
+                type="button"
+                className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                onClick={() => setIsMoreMenuOpen(false)}
+              >
+                Tutup
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              {checkAccess(['Admin']) && (
+                <NavLink 
+                  to="/produk" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Package size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Produk</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin', 'Kasir']) && (
+                <NavLink 
+                  to="/reservasi" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Calendar size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Reservasi</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+                <NavLink 
+                  to="/kds" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center relative"
+                >
+                  <ChefHat size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Dapur (KDS)</span>
+                  {kdsCount > 0 && (
+                    <span className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full">
+                      {kdsCount}
+                    </span>
+                  )}
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin', 'Kasir']) && (
+                <NavLink 
+                  to="/qrcode" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <QrCode size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">QR Code</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin', 'Kasir']) && (
+                <NavLink 
+                  to="/kas" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Wallet size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Petty Cash</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin']) && (
+                <NavLink 
+                  to="/karyawan" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Users size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Karyawan</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin']) && (
+                <NavLink 
+                  to="/crm" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Award size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">CRM Member</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin', 'Kasir', 'Dapur', 'Waiter']) && (
+                <NavLink 
+                  to="/absensi" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Fingerprint size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Absensi</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin', 'Kasir']) && (
+                <NavLink 
+                  to="/shift" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Clock size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Shift History</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin']) && (
+                <NavLink 
+                  to="/laporan" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <FileText size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Laporan</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin']) && (
+                <NavLink 
+                  to="/pengaturan" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Settings size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Pengaturan</span>
+                </NavLink>
+              )}
+            </div>
+
+            <div className="border-t border-slate-100 pt-4 flex gap-2">
+              <button 
+                onClick={() => { setIsMoreMenuOpen(false); setIsPinModalOpen(true); }}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-indigo-600 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Fingerprint size={14} /> Ganti Kasir
+              </button>
+              <button 
+                onClick={() => posContext?.logout()}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                Log Out
               </button>
             </div>
           </div>

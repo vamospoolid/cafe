@@ -41,7 +41,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 2 * 1024 * 1024 } // Batas 2MB
+  limits: { fileSize: 10 * 1024 * 1024 } // Batas 10MB
 });
 
 // POST /api/upload - Menerima satu file gambar dengan key 'image'

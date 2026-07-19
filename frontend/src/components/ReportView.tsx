@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { Calendar, DollarSign, TrendingUp, ShoppingBag, Layers, PieChart as PieChartIcon, Printer, User, Award, ListFilter, AlertTriangle, ArrowUpRight, ArrowDownRight, BookOpen, CreditCard, ChevronRight, RefreshCw, Download, Check } from 'lucide-react';
+import { Calendar, DollarSign, TrendingUp, ShoppingBag, Layers, PieChart as PieChartIcon, Printer, User, Award, ListFilter, AlertTriangle, ArrowUpRight, ArrowDownRight, BookOpen, CreditCard, ChevronRight, RefreshCw, Download, Check, Search } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -8,7 +8,7 @@ import { exportFinancialPDF } from '../utils/pdfGenerator';
 const COLORS = ['#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
 
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-type TabType = 'dashboard' | 'products' | 'shifts' | 'accounting';
+type TabType = 'dashboard' | 'products' | 'shifts' | 'accounting' | 'inventory';
 type AccountingSubTabType = 'pl' | 'cashflow' | 'ledger';
 
 const ReportView = () => {
@@ -23,6 +23,15 @@ const ReportView = () => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [accountingSubTab, setAccountingSubTab] = useState<AccountingSubTabType>('pl');
   const [loading, setLoading] = useState(true);
+
+  // Search & Sort States
+  const [productSearch, setProductSearch] = useState('');
+  const [productSortKey, setProductSortKey] = useState<'qty' | 'revenue' | 'profit' | 'margin'>('qty');
+  const [productSortOrder, setProductSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [inventorySortKey, setInventorySortKey] = useState<'stockAwal' | 'masuk' | 'keluarProduksi' | 'stockAkhir' | 'totalValuation'>('totalValuation');
+  const [inventorySortOrder, setInventorySortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Laporan Data
   const [reportData, setReportData] = useState<any>({
@@ -43,6 +52,12 @@ const ReportView = () => {
     journals: []
   });
 
+  // Inventory Report Data
+  const [inventoryData, setInventoryData] = useState<any>({
+    summary: { totalAssetValuation: 0, criticalItemsCount: 0, totalMutationsCount: 0 },
+    inventory: []
+  });
+
   const posContext = useContext(POSContext);
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
@@ -60,77 +75,116 @@ const ReportView = () => {
   };
 
   const exportCSV = () => {
-    if (accountingSubTab === 'pl') {
-      const headers = ['Keterangan', 'Nominal'];
-      const data = [
-        ['1. PENDAPATAN OPERASIONAL', ''],
-        ['Penjualan Bersih Kasir', accountingData.profitLoss?.salesRevenue || 0],
-        ['Pendapatan Lain-lain (Petty Cash Masuk)', accountingData.profitLoss?.otherRevenue || 0],
-        ['Kelebihan Uang Kasir (Overage)', accountingData.profitLoss?.shiftOverage || 0],
-        ['Total Pendapatan Operasional', accountingData.profitLoss?.operatingRevenue || 0],
-        ['', ''],
-        ['2. HARGA POKOK PENJUALAN (HPP)', ''],
-        ['Beban Pokok Persediaan Bahan Baku (HPP)', -(accountingData.profitLoss?.cogs || 0)],
-        ['Total Beban HPP', -(accountingData.profitLoss?.cogs || 0)],
-        ['', ''],
-        ['LABA KOTOR (GROSS PROFIT)', accountingData.profitLoss?.grossProfit || 0],
-        ['', ''],
-        ['3. BEBAN OPERASIONAL (OPEX)', ''],
-        ['Beban Kas Operasional (Petty Cash Keluar)', -(accountingData.profitLoss?.opexAmount || 0)],
-        ['Kekurangan Uang Kasir (Shortage)', -(accountingData.profitLoss?.shiftShortage || 0)],
-        ['Total Beban Operasional', -(accountingData.profitLoss?.operatingExpenses || 0)],
-        ['', ''],
-        ['LABA BERSIH OPERASIONAL (NET INCOME)', accountingData.profitLoss?.netIncome || 0]
-      ];
-      
+    if (activeTab === 'inventory') {
+      const headers = ['Nama Bahan Baku', 'Satuan', 'Supplier', 'Stok Awal', 'Masuk (Restock/PO)', 'Keluar (Produksi)', 'Keluar (Rusak)', 'Penyesuaian', 'Stok Akhir', 'Estimasi Nilai Aset'];
+      const data = inventoryData.inventory?.map((item: any) => [
+        item.name,
+        item.unit,
+        item.supplierName,
+        item.stockAwal,
+        item.masuk,
+        item.keluarProduksi,
+        item.keluarRusak,
+        item.penyesuaian,
+        item.stockAkhir,
+        item.totalValuation
+      ]) || [];
+
       const csvRows = [headers.join(',')];
-      data.forEach(row => {
-        csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+      data.forEach((row: any) => {
+        csvRows.push(row.map((val: any) => `"${String(val).replace(/"/g, '""')}"`).join(','));
       });
-      
-      downloadCSVFile(`Laba_Rugi_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
-    } else if (accountingSubTab === 'cashflow') {
-      const headers = ['Kategori / Keterangan', 'Kas Masuk', 'Kas Keluar'];
-      const data = [
-        ['ARUS KAS MASUK (INFLOW)', '', ''],
-        ['Penerimaan Uang dari Pelanggan (Omzet)', accountingData.cashFlow?.inflow?.salesReceipts || 0, ''],
-        ['Penerimaan Petty Cash', accountingData.cashFlow?.inflow?.otherReceipts || 0, ''],
-        ['Akumulasi Kelebihan Uang Laci Shift', accountingData.cashFlow?.inflow?.overages || 0, ''],
-        ['Total Kas Masuk', accountingData.cashFlow?.inflow?.total || 0, ''],
-        ['', '', ''],
-        ['ARUS KAS KELUAR (OUTFLOW)', '', ''],
-        ['Pembayaran Biaya Petty Cash', '', -(accountingData.cashFlow?.outflow?.opexPayments || 0)],
-        ['Akumulasi Kekurangan Uang Laci Shift', '', -(accountingData.cashFlow?.outflow?.shortages || 0)],
-        ['Total Kas Keluar', '', -(accountingData.cashFlow?.outflow?.total || 0)],
-        ['', '', ''],
-        ['KENAIKAN/(PENURUNAN) KAS BERSIH', accountingData.cashFlow?.netCashFlow || 0, '']
-      ];
-      
+      downloadCSVFile(`Laporan_Stok_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
+    } else if (activeTab === 'products') {
+      const headers = ['Nama Menu', 'Kategori', 'Terjual (Qty)', 'Omzet Kotor', 'Total HPP', 'Keuntungan', 'Margin Laba (%)'];
+      const data = reportData.products?.map((p: any) => [
+        p.name,
+        p.category,
+        p.qty,
+        p.revenue,
+        p.cost,
+        p.profit,
+        p.margin
+      ]) || [];
+
       const csvRows = [headers.join(',')];
-      data.forEach(row => {
-        csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+      data.forEach((row: any) => {
+        csvRows.push(row.map((val: any) => `"${String(val).replace(/"/g, '""')}"`).join(','));
       });
-      
-      downloadCSVFile(`Arus_Kas_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
-    } else if (accountingSubTab === 'ledger') {
-      const headers = ['Tanggal', 'Referensi', 'Keterangan Transaksi', 'Nama Akun', 'Debit', 'Kredit'];
-      const csvRows = [headers.join(',')];
-      
-      accountingData.journals?.forEach((j: any) => {
-        j.lines?.forEach((l: any, idx: number) => {
-          const dateStr = new Date(j.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-          csvRows.push([
-            idx === 0 ? dateStr : '',
-            idx === 0 ? j.reference : '',
-            idx === 0 ? j.description : '',
-            l.account,
-            l.debit > 0 ? l.debit : 0,
-            l.credit > 0 ? l.credit : 0
-          ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+      downloadCSVFile(`Laporan_Penjualan_Menu_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
+    } else if (activeTab === 'accounting') {
+      if (accountingSubTab === 'pl') {
+        const headers = ['Keterangan', 'Nominal'];
+        const data = [
+          ['1. PENDAPATAN OPERASIONAL', ''],
+          ['Penjualan Bersih Kasir', accountingData.profitLoss?.salesRevenue || 0],
+          ['Pendapatan Lain-lain (Petty Cash Masuk)', accountingData.profitLoss?.otherRevenue || 0],
+          ['Kelebihan Uang Kasir (Overage)', accountingData.profitLoss?.shiftOverage || 0],
+          ['Total Pendapatan Operasional', accountingData.profitLoss?.operatingRevenue || 0],
+          ['', ''],
+          ['2. HARGA POKOK PENJUALAN (HPP)', ''],
+          ['Beban Pokok Persediaan Bahan Baku (HPP)', -(accountingData.profitLoss?.cogs || 0)],
+          ['Total Beban HPP', -(accountingData.profitLoss?.cogs || 0)],
+          ['', ''],
+          ['LABA KOTOR (GROSS PROFIT)', accountingData.profitLoss?.grossProfit || 0],
+          ['', ''],
+          ['3. BEBAN OPERASIONAL (OPEX)', ''],
+          ['Beban Kas Operasional (Petty Cash Keluar)', -(accountingData.profitLoss?.opexAmount || 0)],
+          ['Kekurangan Uang Kasir (Shortage)', -(accountingData.profitLoss?.shiftShortage || 0)],
+          ['Total Beban Operasional', -(accountingData.profitLoss?.operatingExpenses || 0)],
+          ['', ''],
+          ['LABA BERSIH OPERASIONAL (NET INCOME)', accountingData.profitLoss?.netIncome || 0]
+        ];
+        
+        const csvRows = [headers.join(',')];
+        data.forEach(row => {
+          csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
         });
-      });
-      
-      downloadCSVFile(`Buku_Besar_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
+        
+        downloadCSVFile(`Laba_Rugi_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
+      } else if (accountingSubTab === 'cashflow') {
+        const headers = ['Kategori / Keterangan', 'Kas Masuk', 'Kas Keluar'];
+        const data = [
+          ['ARUS KAS MASUK (INFLOW)', '', ''],
+          ['Penerimaan Uang dari Pelanggan (Omzet)', accountingData.cashFlow?.inflow?.salesReceipts || 0, ''],
+          ['Penerimaan Petty Cash', accountingData.cashFlow?.inflow?.otherReceipts || 0, ''],
+          ['Akumulasi Kelebihan Uang Laci Shift', accountingData.cashFlow?.inflow?.overages || 0, ''],
+          ['Total Kas Masuk', accountingData.cashFlow?.inflow?.total || 0, ''],
+          ['', '', ''],
+          ['ARUS KAS KELUAR (OUTFLOW)', '', ''],
+          ['Pembayaran Biaya Petty Cash', '', -(accountingData.cashFlow?.outflow?.opexPayments || 0)],
+          ['Akumulasi Kekurangan Uang Laci Shift', '', -(accountingData.cashFlow?.outflow?.shortages || 0)],
+          ['Total Kas Keluar', '', -(accountingData.cashFlow?.outflow?.total || 0)],
+          ['', '', ''],
+          ['KENAIKAN/(PENURUNAN) KAS BERSIH', accountingData.cashFlow?.netCashFlow || 0, '']
+        ];
+        
+        const csvRows = [headers.join(',')];
+        data.forEach(row => {
+          csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+        });
+        
+        downloadCSVFile(`Arus_Kas_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
+      } else if (accountingSubTab === 'ledger') {
+        const headers = ['Tanggal', 'Referensi', 'Keterangan Transaksi', 'Nama Akun', 'Debit', 'Kredit'];
+        const csvRows = [headers.join(',')];
+        
+        accountingData.journals?.forEach((j: any) => {
+          j.lines?.forEach((l: any, idx: number) => {
+            const dateStr = new Date(j.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            csvRows.push([
+              idx === 0 ? dateStr : '',
+              idx === 0 ? j.reference : '',
+              idx === 0 ? j.description : '',
+              l.account,
+              l.debit > 0 ? l.debit : 0,
+              l.credit > 0 ? l.credit : 0
+            ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+          });
+        });
+        
+        downloadCSVFile(`Buku_Besar_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
+      }
     }
   };
 
@@ -138,9 +192,10 @@ const ReportView = () => {
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${posContext?.token}` };
-      const [resReports, resAccounting] = await Promise.all([
+      const [resReports, resAccounting, resInventory] = await Promise.all([
         fetch(`/api/analytics/reports?startDate=${startDate}&endDate=${endDate}`, { headers }),
-        fetch(`/api/analytics/accounting?startDate=${startDate}&endDate=${endDate}`, { headers })
+        fetch(`/api/analytics/accounting?startDate=${startDate}&endDate=${endDate}`, { headers }),
+        fetch(`/api/analytics/inventory?startDate=${startDate}&endDate=${endDate}`, { headers })
       ]);
 
       if (resReports.ok) {
@@ -148,6 +203,9 @@ const ReportView = () => {
       }
       if (resAccounting.ok) {
         setAccountingData(await resAccounting.json());
+      }
+      if (resInventory.ok) {
+        setInventoryData(await resInventory.json());
       }
     } catch (err) {
       console.error(err);
@@ -201,8 +259,52 @@ const ReportView = () => {
         endDate,
         (posContext?.user as any)?.name || 'Admin'
       );
-    } else {
-      window.print();
+    } else if (activeTab === 'inventory') {
+      await exportFinancialPDF(
+        'inventory',
+        posContext?.settings || {},
+        inventoryData,
+        startDate,
+        endDate,
+        (posContext?.user as any)?.name || 'Admin'
+      );
+    } else if (activeTab === 'products') {
+      // Find filtered products to export the exact view
+      const query = productSearch.toLowerCase();
+      const filteredProducts = (reportData.products || [])
+        .filter((p: any) => p.name.toLowerCase().includes(query) || p.category.toLowerCase().includes(query))
+        .sort((a: any, b: any) => {
+          let valA = a[productSortKey];
+          let valB = b[productSortKey];
+          if (productSortOrder === 'asc') return valA > valB ? 1 : -1;
+          return valA < valB ? 1 : -1;
+        });
+      await exportFinancialPDF(
+        'products',
+        posContext?.settings || {},
+        filteredProducts,
+        startDate,
+        endDate,
+        (posContext?.user as any)?.name || 'Admin'
+      );
+    } else if (activeTab === 'shifts') {
+      await exportFinancialPDF(
+        'shifts',
+        posContext?.settings || {},
+        reportData.shifts || [],
+        startDate,
+        endDate,
+        (posContext?.user as any)?.name || 'Admin'
+      );
+    } else if (activeTab === 'dashboard') {
+      await exportFinancialPDF(
+        'dashboard',
+        posContext?.settings || {},
+        reportData,
+        startDate,
+        endDate,
+        (posContext?.user as any)?.name || 'Admin'
+      );
     }
   };
 
@@ -243,15 +345,116 @@ const ReportView = () => {
             color: black !important;
           }
         }
+        
+        .card-premium {
+          background: white;
+          border: 1px solid rgba(226, 232, 240, 0.8);
+          border-radius: 1.25rem;
+          padding: 1.25rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-premium:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 12px 20px -3px rgba(0, 0, 0, 0.08), 0 4px 8px -2px rgba(0, 0, 0, 0.04);
+          border-color: rgba(16, 185, 129, 0.3);
+        }
+        
+        .badge-premium {
+          font-size: 0.72rem;
+          font-weight: 800;
+          padding: 0.25rem 0.6rem;
+          border-radius: 9999px;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+        }
+        
+        .table-premium {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+        }
+        .table-premium th {
+          background: #f8fafc;
+          border-bottom: 2px solid #e2e8f0;
+          padding: 0.875rem 1.25rem;
+          text-align: left;
+          font-size: 0.7rem;
+          font-weight: 800;
+          color: #64748b;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+        }
+        .table-premium td {
+          padding: 1rem 1.25rem;
+          font-size: 0.82rem;
+          color: #334155;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        .table-premium tr {
+          transition: background 0.15s ease;
+        }
+        .table-premium tr:hover td {
+          background: #f8fafc !important;
+        }
+        .table-premium tr:last-child td {
+          border-bottom: none;
+        }
+        
+        .paper-report-container {
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 1.5rem;
+          padding: 2.5rem;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+          max-width: 780px;
+          margin: 0 auto;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        
+        .glow-pulse {
+          animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-glow {
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.85;
+            transform: scale(1.02);
+          }
+        }
+        
+        .grid-7-cards {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 0.75rem;
+        }
+        @media (max-width: 1200px) {
+          .grid-7-cards {
+            grid-template-columns: repeat(4, 1fr);
+          }
+        }
+        @media (max-width: 768px) {
+          .grid-7-cards {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
       `}</style>
 
-      {/* â”€â”€â”€ Top Info Bar â”€â”€â”€ */}
+      {/* ─── Top Info Bar ─── */}
       <div style={{ background: 'rgba(16,185,129,0.08)', borderLeft: '4px solid #10b981', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontSize: '0.78rem', color: '#10b981', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#10b981', animation: 'pulse 1.5s infinite' }} />
         INFO: REKAP HARIAN DIHITUNG PER SIKLUS OPERASIONAL KAFE (09:00 - SELESAI)
       </div>
 
-      {/* â”€â”€â”€ Header & Print Button (no-print) â”€â”€â”€ */}
+      {/* ─── Header & Print Button (no-print) ─── */}
       <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.4rem', color: '#1e293b', margin: 0 }}>
@@ -270,60 +473,60 @@ const ReportView = () => {
             onClick={handlePrint}
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.65rem 1.1rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem', boxShadow: '0 4px 14px rgba(16,185,129,0.2)' }}
           >
-            <Printer size={16} /> {activeTab === 'accounting' ? 'Unduh Laporan PDF' : 'Export PDF / Cetak'}
+            <Printer size={16} /> Unduh Laporan PDF
           </button>
         </div>
       </div>
 
-      {/* â”€â”€â”€ Today's Summary Grid (Rekap Hari Ini - 7 Cards) â”€â”€â”€ */}
+      {/* ─── Today's Summary Grid (Rekap Hari Ini - 7 Cards) ─── */}
       <div>
         <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ringkasan Operasional Hari Ini</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.75rem' }}>
+        <div className="grid-7-cards">
           
           {/* Revenue Hari Ini */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="card-premium">
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Revenue Hari Ini</span>
             <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.todayRecap?.revenue)}</span>
             <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Pendapatan hari ini</span>
           </div>
 
           {/* Tagihan Pending */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="card-premium">
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Tagihan Pending</span>
             <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f59e0b' }}>{formatCurrency(reportData.todayRecap?.pendingAmount)}</span>
             <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>{reportData.todayRecap?.pendingCount} tagihan belum lunas</span>
           </div>
 
           {/* Total Pengeluaran */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="card-premium">
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Pengeluaran</span>
             <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#ef4444' }}>{formatCurrency(reportData.todayRecap?.expenses)}</span>
             <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Operasional & petty cash</span>
           </div>
 
           {/* Total Cash Hari Ini */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="card-premium">
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Cash Hari Ini</span>
             <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f59e0b' }}>{formatCurrency(reportData.todayRecap?.cashInDrawer)}</span>
             <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Est. uang laci + modal awal</span>
           </div>
 
           {/* Total Porsi Terjual */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="card-premium">
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Porsi Terjual</span>
             <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#3b82f6' }}>{reportData.todayRecap?.qtySold} Qty</span>
             <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Makanan & minuman</span>
           </div>
 
           {/* Pemasukan Lain */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="card-premium">
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Pemasukan Lain</span>
             <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.todayRecap?.otherIncomes)}</span>
             <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Pemasukan manual kas</span>
           </div>
 
           {/* Transaksi QRIS */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="card-premium">
             <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Transaksi QRIS</span>
             <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#7c3aed' }}>{formatCurrency(reportData.todayRecap?.qris)}</span>
             <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Pembayaran non-tunai</span>
@@ -332,7 +535,7 @@ const ReportView = () => {
         </div>
       </div>
 
-      {/* â”€â”€â”€ Period Date Filter Bar (no-print) â”€â”€â”€ */}
+      {/* ─── Period Date Filter Bar (no-print) ─── */}
       <div className="no-print" style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '0.85rem 1.25rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
         
         {/* Date pickers */}
@@ -390,18 +593,18 @@ const ReportView = () => {
 
       </div>
 
-      {/* â”€â”€â”€ Period Performance Cards (Based on Date Filter) â”€â”€â”€ */}
+      {/* ─── Period Performance Cards (Based on Date Filter) ─── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.75rem' }}>
         
         {/* Period Net Income */}
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+        <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
           <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Net Income</span>
           <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.periodRecap?.netIncome)}</span>
           <span style={{ fontSize: '0.62rem', color: '#64748b' }}>Rev: {formatCurrency(reportData.periodRecap?.revenue)} - Exp: {formatCurrency(reportData.periodRecap?.expenses)}</span>
         </div>
 
         {/* Period Total Revenue */}
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+        <div className="card-premium">
           <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Total Revenue</span>
           <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.periodRecap?.revenue)}</span>
           <span style={{ fontSize: '0.58rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -410,7 +613,7 @@ const ReportView = () => {
         </div>
 
         {/* Trend vs Yesterday / Previous Period */}
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+        <div className="card-premium">
           <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Trend vs Previous Period</span>
           <span style={{ fontSize: '1.2rem', fontWeight: 900, color: reportData.periodRecap?.growth >= 0 ? '#10b981' : '#ef4444' }}>
             {reportData.periodRecap?.growth >= 0 ? '+' : ''}{reportData.periodRecap?.growth?.toFixed(1)}%
@@ -425,21 +628,21 @@ const ReportView = () => {
         </div>
 
         {/* Period Dine-In Revenue */}
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+        <div className="card-premium">
           <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Dine-In Bill</span>
           <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#3b82f6' }}>{formatCurrency(reportData.periodRecap?.dineIn)}</span>
           <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Penjualan makan di tempat</span>
         </div>
 
         {/* Period Takeaway Revenue */}
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+        <div className="card-premium">
           <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Takeaway Bill</span>
           <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#f59e0b' }}>{formatCurrency(reportData.periodRecap?.takeaway)}</span>
           <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Penjualan bungkus / ojek online</span>
         </div>
 
         {/* Period Trx QRIS */}
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+        <div className="card-premium">
           <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Trx QRIS</span>
           <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#7c3aed' }}>{formatCurrency(reportData.periodRecap?.qrisTotal)}</span>
           <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total dari {reportData.periodRecap?.qrisCount} transaksi QRIS</span>
@@ -447,12 +650,13 @@ const ReportView = () => {
 
       </div>
 
-      {/* â”€â”€â”€ Navigation Tabs (no-print) â”€â”€â”€ */}
+      {/* ─── Navigation Tabs (no-print) ─── */}
       <div className="no-print" style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem' }}>
         {[
           { key: 'dashboard', label: 'Dashboard Laporan', icon: <PieChartIcon size={16} /> },
           { key: 'products', label: 'Penjualan Per-Menu (Margin)', icon: <Award size={16} /> },
           { key: 'shifts', label: 'Laporan Audit Shift', icon: <User size={16} /> },
+          { key: 'inventory', label: 'Laporan Stok & Mutasi', icon: <Layers size={16} /> },
           { key: 'accounting', label: 'Laba Rugi & Arus Kas', icon: <BookOpen size={16} /> }
         ].map(t => (
           <button
@@ -465,7 +669,7 @@ const ReportView = () => {
         ))}
       </div>
 
-      {/* â”€â”€â”€ TAB CONTENT 1: DASHBOARD LAPORAN (Vamos Pool Style) â”€â”€â”€ */}
+      {/* ─── TAB CONTENT 1: DASHBOARD LAPORAN (Vamos Pool Style) ─── */}
       {activeTab === 'dashboard' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
@@ -559,7 +763,6 @@ const ReportView = () => {
                       <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>{formatCurrency(row.makanan)}</td>
                       <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(row.minuman)}</td>
                       <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', fontWeight: 800, color: '#1e293b' }}>{formatCurrency(row.total)}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', color: '#ef4444' }}>{row.expenses > 0 ? `-${formatCurrency(row.expenses)}` : 'Rp 0'}</td>
                       <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', fontWeight: 800, color: row.profit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(row.profit)}</td>
                       <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>{row.count} trx</td>
                     </tr>
@@ -572,89 +775,140 @@ const ReportView = () => {
         </div>
       )}
 
-      {/* â”€â”€â”€ TAB CONTENT 2: PENJUALAN PER-MENU â”€â”€â”€ */}
+      {/* ─── TAB CONTENT 2: PENJUALAN PER-MENU ─── */}
       {activeTab === 'products' && (
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                {['NAMA MENU', 'KATEGORI', 'TERJUAL (QTY)', 'OMZET KOTOR', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN LABA', 'AMBANG MARGIN'].map(h => (
-                  <th key={h} style={{ padding: '0.875rem 1.25rem', textAlign: 'left', fontSize: '0.68rem', fontWeight: 800, color: '#475569', letterSpacing: '0.06em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {reportData.products?.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#64748b', fontSize: '0.8rem' }}>Belum ada data penjualan produk</td>
-                </tr>
-              ) : (
-                reportData.products.map((p: any, idx: number) => {
-                  const ms = getMarginBadgeStyle(p.margin);
-                  return (
-                    <tr key={p.id} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? 'transparent' : '#f8fafc' }}>
-                      <td style={{ padding: '1rem 1.25rem', fontWeight: 700, color: '#1e293b', fontSize: '0.85rem' }}>{p.name}</td>
-                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{p.category}</td>
-                      <td style={{ padding: '1rem 1.25rem', fontWeight: 800, color: '#3b82f6', fontSize: '0.85rem' }}>{p.qty} porsi</td>
-                      <td style={{ padding: '1rem 1.25rem', fontWeight: 700, color: '#1e293b', fontSize: '0.82rem' }}>{formatCurrency(p.revenue)}</td>
-                      <td style={{ padding: '1rem 1.25rem', color: '#64748b', fontSize: '0.82rem', fontWeight: 500 }}>{formatCurrency(p.cost)}</td>
-                      <td style={{ padding: '1rem 1.25rem', fontWeight: 700, color: '#10b981', fontSize: '0.82rem' }}>{formatCurrency(p.profit)}</td>
-                      
-                      {/* Margin % */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <span style={{ fontWeight: 800, fontSize: '0.82rem', color: '#1e293b' }}>{p.margin}%</span>
-                          <div style={{ width: 45, height: 6, borderRadius: 3, background: '#e2e8f0', overflow: 'hidden' }}>
-                            <div style={{ width: `${Math.min(100, p.margin)}%`, background: p.margin >= 60 ? '#10b981' : p.margin >= 40 ? '#3b82f6' : '#f97316', height: '100%' }} />
-                          </div>
-                        </div>
-                      </td>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {/* Search & Filter bar (no-print) */}
+          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center' }}>
+            <Search size={16} color="#94a3b8" />
+            <input
+              type="text"
+              placeholder="Cari nama menu atau kategori..."
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+              style={{ border: 'none', outline: 'none', flex: 1, fontSize: '0.85rem', color: '#1e293b' }}
+            />
+            <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+              Urutkan: 
+              <select 
+                value={productSortKey} 
+                onChange={e => setProductSortKey(e.target.value as any)}
+                style={{ marginLeft: '0.35rem', border: '1px solid #e2e8f0', borderRadius: '0.35rem', padding: '0.2rem', background: '#f8fafc', fontWeight: 700 }}
+              >
+                <option value="qty">Terjual (Qty)</option>
+                <option value="revenue">Omzet Kotor</option>
+                <option value="profit">Keuntungan</option>
+                <option value="margin">Margin Laba</option>
+              </select>
+              <select 
+                value={productSortOrder} 
+                onChange={e => setProductSortOrder(e.target.value as any)}
+                style={{ marginLeft: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '0.35rem', padding: '0.2rem', background: '#f8fafc', fontWeight: 700 }}
+              >
+                <option value="desc">Terbesar</option>
+                <option value="asc">Terkecil</option>
+              </select>
+            </div>
+          </div>
 
-                      {/* Ambang Margin Tag */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, background: ms.bg, color: ms.text, padding: '0.25rem 0.5rem', borderRadius: '0.375rem' }}>
-                          {ms.label}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <table className="table-premium">
+              <thead>
+                <tr>
+                  {['Nama Menu', 'Kategori', 'Terjual (Qty)', 'Omzet Kotor', 'Total HPP', 'Keuntungan', 'Margin Laba', 'Ambang'].map(h => (
+                    <th key={h}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(reportData.products || [])
+                  .filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.category.toLowerCase().includes(productSearch.toLowerCase()))
+                  .sort((a: any, b: any) => {
+                    let valA = a[productSortKey] || 0;
+                    let valB = b[productSortKey] || 0;
+                    if (productSortOrder === 'asc') return valA > valB ? 1 : -1;
+                    return valA < valB ? 1 : -1;
+                  })
+                  .length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Belum ada data penjualan produk</td>
+                  </tr>
+                ) : (
+                  (reportData.products || [])
+                    .filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.category.toLowerCase().includes(productSearch.toLowerCase()))
+                    .sort((a: any, b: any) => {
+                      let valA = a[productSortKey] || 0;
+                      let valB = b[productSortKey] || 0;
+                      if (productSortOrder === 'asc') return valA > valB ? 1 : -1;
+                      return valA < valB ? 1 : -1;
+                    })
+                    .map((p: any, idx: number) => {
+                      const ms = getMarginBadgeStyle(p.margin);
+                      return (
+                        <tr key={p.id}>
+                          <td style={{ fontWeight: 700, color: '#1e293b' }}>{p.name}</td>
+                          <td style={{ color: '#64748b', fontWeight: 600 }}>{p.category}</td>
+                          <td style={{ fontWeight: 800, color: '#3b82f6' }}>{p.qty} porsi</td>
+                          <td style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(p.revenue)}</td>
+                          <td style={{ color: '#64748b', fontWeight: 500 }}>{formatCurrency(p.cost)}</td>
+                          <td style={{ fontWeight: 700, color: '#10b981' }}>{formatCurrency(p.profit)}</td>
+                          
+                          {/* Margin % */}
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span style={{ fontWeight: 800, color: '#1e293b' }}>{p.margin}%</span>
+                              <div style={{ width: 45, height: 6, borderRadius: 3, background: '#e2e8f0', overflow: 'hidden' }}>
+                                <div style={{ width: `${Math.min(100, p.margin)}%`, background: p.margin >= 60 ? '#10b981' : p.margin >= 40 ? '#3b82f6' : '#f97316', height: '100%' }} />
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Ambang Margin Tag */}
+                          <td>
+                            <span className="badge-premium" style={{ background: ms.bg, color: ms.text }}>
+                              {ms.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* â”€â”€â”€ TAB CONTENT 3: LAPORAN AUDIT SHIFT â”€â”€â”€ */}
+      {/* ─── TAB CONTENT 3: LAPORAN AUDIT SHIFT ─── */}
       {activeTab === 'shifts' && (
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+          <table className="table-premium">
             <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                {['WAKTU TUTUP', 'STAF KASIR', 'SALDO AWAL', 'KAS MASUK (SISTEM)', 'UANG DI LACI (FISIK)', 'SELISIH KAS', 'AUDIT STATUS'].map(h => (
-                  <th key={h} style={{ padding: '0.875rem 1.25rem', textAlign: 'left', fontSize: '0.68rem', fontWeight: 800, color: '#475569', letterSpacing: '0.06em' }}>{h}</th>
+              <tr>
+                {['Waktu Tutup', 'Staf Kasir', 'Saldo Awal', 'Sistem (POS)', 'Fisik Laci', 'Selisih Kas', 'Audit Status'].map(h => (
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {reportData.shifts?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#64748b', fontSize: '0.8rem' }}>Belum ada shift ditutup dalam rentang tanggal ini</td>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Belum ada shift ditutup dalam rentang tanggal ini</td>
                 </tr>
               ) : (
-                reportData.shifts.map((s: any, idx: number) => {
+                reportData.shifts.map((s: any) => {
                   const hasDiscrepancy = s.selisih !== 0;
                   const isNegative = s.selisih < 0;
                   return (
-                    <tr key={s.id} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? 'transparent' : '#f8fafc' }}>
-                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.8rem', color: '#1e293b', fontWeight: 700 }}>
+                    <tr key={s.id}>
+                      <td style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 700 }}>
                         {s.waktuTutup ? new Date(s.waktuTutup).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
                       </td>
-                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: 700, color: '#1e293b' }}>{s.user?.name}</td>
-                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: '#64748b', fontWeight: 600 }}>{formatCurrency(s.saldoAwal)}</td>
-                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: '#1e293b', fontWeight: 700 }}>{formatCurrency(s.saldoSistem || 0)}</td>
-                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: '#1e293b', fontWeight: 700 }}>{formatCurrency(s.saldoFisikLaci || 0)}</td>
-                      <td style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: 800 }}>
+                      <td style={{ fontWeight: 700, color: '#1e293b' }}>{s.user?.name}</td>
+                      <td style={{ color: '#64748b', fontWeight: 600 }}>{formatCurrency(s.saldoAwal)}</td>
+                      <td style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(s.saldoSistem || 0)}</td>
+                      <td style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(s.saldoFisikLaci || 0)}</td>
+                      <td style={{ fontWeight: 800 }}>
                         {s.selisih === 0 ? (
                           <span style={{ color: '#10b981' }}>Rp 0</span>
                         ) : isNegative ? (
@@ -667,14 +921,13 @@ const ReportView = () => {
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '1rem 1.25rem' }}>
+                      <td>
                         {!hasDiscrepancy ? (
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'rgba(16,185,129,0.08)', color: '#10b981', padding: '0.25rem 0.5rem', borderRadius: '0.375rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Check size={12} />
-                            <span>Cocok (OK)</span>
+                          <span className="badge-premium" style={{ background: 'rgba(16,185,129,0.08)', color: '#10b981' }}>
+                            <Check size={12} /> Cocok (OK)
                           </span>
                         ) : (
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, background: isNegative ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', color: isNegative ? '#ef4444' : '#f59e0b', padding: '0.25rem 0.5rem', borderRadius: '0.375rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span className="badge-premium" style={{ background: isNegative ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', color: isNegative ? '#ef4444' : '#f59e0b' }}>
                             <AlertTriangle size={11} /> {isNegative ? 'Selisih Minus' : 'Selisih Plus'}
                           </span>
                         )}
@@ -688,7 +941,107 @@ const ReportView = () => {
         </div>
       )}
 
-      {/* â”€â”€â”€ TAB CONTENT 4: LABA RUGI & ARUS KAS (AKUNTANSI) â”€â”€â”€ */}
+      {/* ─── TAB CONTENT 4: LAPORAN MUTASI & VALUASI STOK ─── */}
+      {activeTab === 'inventory' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          
+          {/* Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+            <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Valuasi Aset Persediaan</span>
+              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(inventoryData.summary?.totalAssetValuation)}</span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total nilai stok dikali harga beli</span>
+            </div>
+            
+            <div className="card-premium" style={{ borderLeft: '4px solid #ef4444' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Bahan Baku Kritis (Stok Menipis)</span>
+              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }} className={inventoryData.summary?.criticalItemsCount > 0 ? 'glow-pulse' : ''}>
+                {inventoryData.summary?.criticalItemsCount} Item
+              </span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Bahan dengan stok di bawah batas minimum</span>
+            </div>
+
+            <div className="card-premium" style={{ borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Aktivitas Mutasi Stok</span>
+              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#3b82f6' }}>{inventoryData.summary?.totalMutationsCount} Log</span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total mutasi tercatat dalam periode ini</span>
+            </div>
+          </div>
+
+          {/* Search bar & Export */}
+          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flex: 1 }}>
+              <Search size={16} color="#94a3b8" />
+              <input
+                type="text"
+                placeholder="Cari bahan baku..."
+                value={inventorySearch}
+                onChange={e => setInventorySearch(e.target.value)}
+                style={{ border: 'none', outline: 'none', width: '100%', maxWidth: '300px', fontSize: '0.85rem', color: '#1e293b' }}
+              />
+            </div>
+            
+            <button
+              onClick={exportCSV}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.75rem', cursor: 'pointer', color: '#10b981', fontWeight: 800, fontSize: '0.78rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+            >
+              <Download size={14} /> Ekspor CSV (Excel)
+            </button>
+          </div>
+
+          {/* Mutation Table */}
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <table className="table-premium">
+              <thead>
+                <tr>
+                  {['Nama Bahan', 'Satuan', 'Supplier', 'Stok Awal', 'Masuk (+)', 'Keluar (Prod)', 'Rusak (-)', 'Penyesuaian', 'Stok Akhir', 'Nilai Aset'].map(h => (
+                    <th key={h} style={{ textAlign: ['Nama Bahan', 'Satuan', 'Supplier'].includes(h) ? 'left' : 'right' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(inventoryData.inventory || [])
+                  .filter((item: any) => item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                  .length === 0 ? (
+                  <tr>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Tidak ada data mutasi stok</td>
+                  </tr>
+                ) : (
+                  (inventoryData.inventory || [])
+                    .filter((item: any) => item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                    .map((item: any) => {
+                      const isLow = item.stockAkhir <= item.minStock;
+                      return (
+                        <tr key={item.id} style={{ background: isLow ? 'rgba(239,68,68,0.02)' : 'transparent' }}>
+                          <td style={{ fontWeight: 700, color: isLow ? '#dc2626' : '#1e293b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            {isLow && <AlertTriangle size={14} color="#dc2626" />}
+                            {item.name}
+                          </td>
+                          <td style={{ color: '#64748b' }}>{item.unit}</td>
+                          <td style={{ color: '#64748b', fontSize: '0.78rem' }}>{item.supplierName}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{item.stockAwal.toLocaleString('id-ID')}</td>
+                          <td style={{ textAlign: 'right', color: '#166534', fontWeight: 600 }}>{item.masuk > 0 ? `+${item.masuk.toLocaleString('id-ID')}` : '0'}</td>
+                          <td style={{ textAlign: 'right', color: '#475569' }}>{item.keluarProduksi > 0 ? `-${item.keluarProduksi.toLocaleString('id-ID')}` : '0'}</td>
+                          <td style={{ textAlign: 'right', color: '#dc2626' }}>{item.keluarRusak > 0 ? `-${item.keluarRusak.toLocaleString('id-ID')}` : '0'}</td>
+                          <td style={{ textAlign: 'right', color: item.penyesuaian > 0 ? '#166534' : item.penyesuaian < 0 ? '#dc2626' : '#475569' }}>
+                            {item.penyesuaian === 0 ? '0' : `${item.penyesuaian > 0 ? '+' : ''}${item.penyesuaian.toLocaleString('id-ID')}`}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: isLow ? '#dc2626' : '#1e293b' }}>
+                            {item.stockAkhir.toLocaleString('id-ID')}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#10b981' }}>{formatCurrency(item.totalValuation)}</td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      )}
+
+      {/* ─── TAB CONTENT 5: LABA RUGI & ARUS KAS (AKUNTANSI) ─── */}
       {activeTab === 'accounting' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           
@@ -732,7 +1085,7 @@ const ReportView = () => {
 
           {/* Laba Rugi (P&L) */}
           {accountingSubTab === 'pl' && (
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div className="paper-report-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#1e293b', letterSpacing: '0.05em' }}>LAPORAN LABA RUGI</h3>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700, marginTop: '0.2rem' }}>
@@ -811,7 +1164,7 @@ const ReportView = () => {
 
           {/* Arus Kas */}
           {accountingSubTab === 'cashflow' && (
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div className="paper-report-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#1e293b', letterSpacing: '0.05em' }}>LAPORAN ARUS KAS (METODE LANGSUNG)</h3>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700, marginTop: '0.2rem' }}>

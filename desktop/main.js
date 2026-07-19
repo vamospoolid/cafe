@@ -124,8 +124,25 @@ ipcMain.handle('get-active-printer', async () => {
 });
 
 // ── App Lifecycle ──
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
+
+  // Auto-detect printer (prioritize XS 80 or POS80)
+  try {
+    const printers = await mainWindow.webContents.getPrintersAsync();
+    // Prioritize printer names with "xs", "pos", "thermal", or "80"
+    const targetPrinter = printers.find(p => {
+      const lower = p.name.toLowerCase();
+      return lower.includes('xs') || lower.includes('pos') || lower.includes('thermal') || lower.includes('80');
+    });
+    
+    if (targetPrinter) {
+      printer.setPrinterName(targetPrinter.name);
+      console.log('[Printer] Auto-detected POS/XS80 printer:', targetPrinter.name);
+    }
+  } catch (err) {
+    console.error('[Printer] Auto-detect error:', err.message);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

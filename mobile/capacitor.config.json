@@ -1,9 +1,5 @@
 {
   "appId": "id.codenusa.poscafe",
   "appName": "SOL CAFE POS",
-  "webDir": "../frontend/dist",
-  "server": {
-    "url": "http://cafe.codenusa.id",
-    "cleartext": true
-  }
+  "webDir": "../frontend/dist"
 }

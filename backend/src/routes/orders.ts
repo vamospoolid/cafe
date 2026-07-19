@@ -1332,4 +1332,198 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
+// POST Move Table (Pindah Meja)
+router.post('/move-table', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { sourceTableId, targetTableId } = req.body;
+    if (!sourceTableId || !targetTableId) {
+      return res.status(400).json({ error: 'Parameter sourceTableId dan targetTableId wajib diisi' });
+    }
+
+    // 1. Pastikan meja tujuan aktif & kosong (tidak ada order dengan status Pending)
+    const targetActiveOrdersCount = await prisma.order.count({
+      where: {
+        tableId: Number(targetTableId),
+        status: 'Pending'
+      }
+    });
+
+    if (targetActiveOrdersCount > 0) {
+      return res.status(400).json({ error: 'Meja tujuan sudah terisi pesanan aktif. Silakan gunakan fitur Gabung Meja.' });
+    }
+
+    // 2. Cari semua order aktif di meja asal
+    const activeOrders = await prisma.order.findMany({
+      where: {
+        tableId: Number(sourceTableId),
+        OR: [
+          { status: 'Pending' },
+          {
+            status: 'Paid',
+            kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+          }
+        ]
+      }
+    });
+
+    if (activeOrders.length === 0) {
+      return res.status(400).json({ error: 'Tidak ada pesanan aktif di meja asal' });
+    }
+
+    // 3. Pindahkan semua order ke meja tujuan
+    await prisma.order.updateMany({
+      where: {
+        id: { in: activeOrders.map(o => o.id) }
+      },
+      data: {
+        tableId: Number(targetTableId)
+      }
+    });
+
+    // 4. Emit socket event
+    io.emit('order:new', { message: 'Table moved', sourceTableId, targetTableId });
+    io.emit('kds:statusChanged', { message: 'Table moved KDS' });
+
+    res.json({ message: 'Meja berhasil dipindahkan', movedCount: activeOrders.length });
+  } catch (error: any) {
+    console.error('Move Table Error:', error);
+    res.status(500).json({ error: error.message || 'Gagal memindahkan meja' });
+  }
+});
+
+// POST Merge Table (Gabung Meja)
+router.post('/merge-table', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { sourceTableId, targetTableId } = req.body;
+    if (!sourceTableId || !targetTableId) {
+      return res.status(400).json({ error: 'Parameter sourceTableId dan targetTableId wajib diisi' });
+    }
+
+    if (Number(sourceTableId) === Number(targetTableId)) {
+      return res.status(400).json({ error: 'Meja asal dan meja tujuan tidak boleh sama' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Dapatkan setting pajak & service
+      const settings = await tx.settings.findFirst();
+      const taxRate = settings?.taxRate || 0;
+      const serviceChargeRate = settings?.serviceCharge || 0;
+
+      // 2. Cari order aktif di meja asal
+      const sourceActiveOrders = await tx.order.findMany({
+        where: {
+          tableId: Number(sourceTableId),
+          OR: [
+            { status: 'Pending' },
+            {
+              status: 'Paid',
+              kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+            }
+          ]
+        },
+        include: { items: true }
+      });
+
+      if (sourceActiveOrders.length === 0) {
+        throw new Error('Tidak ada pesanan aktif di meja asal');
+      }
+
+      // 3. Cari order aktif di meja tujuan
+      const targetActiveOrders = await tx.order.findMany({
+        where: {
+          tableId: Number(targetTableId),
+          OR: [
+            { status: 'Pending' },
+            {
+              status: 'Paid',
+              kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+            }
+          ]
+        },
+        include: { items: true },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      // Jika meja tujuan ternyata kosong, otomatis lakukan PINDAH MEJA saja
+      if (targetActiveOrders.length === 0) {
+        await tx.order.updateMany({
+          where: { id: { in: sourceActiveOrders.map(o => o.id) } },
+          data: { tableId: Number(targetTableId) }
+        });
+        return { type: 'move', count: sourceActiveOrders.length };
+      }
+
+      const primaryTargetOrder = targetActiveOrders[0];
+
+      // 4. Pindahkan & gabungkan item-item pesanan
+      for (const sourceOrder of sourceActiveOrders) {
+        for (const sourceItem of sourceOrder.items) {
+          // Cari item yang sama di meja tujuan (product sama & notes sama)
+          const matchingTargetItem = primaryTargetOrder.items.find(
+            ti => ti.productId === sourceItem.productId && ti.notes === sourceItem.notes
+          );
+
+          if (matchingTargetItem) {
+            const newQty = matchingTargetItem.qty + sourceItem.qty;
+            await tx.orderItem.update({
+              where: { id: matchingTargetItem.id },
+              data: {
+                qty: newQty,
+                subtotal: matchingTargetItem.price * newQty
+              }
+            });
+            await tx.orderItem.delete({
+              where: { id: sourceItem.id }
+            });
+          } else {
+            await tx.orderItem.update({
+              where: { id: sourceItem.id },
+              data: { orderId: primaryTargetOrder.id }
+            });
+          }
+        }
+
+        // Hapus order asal yang sudah kosong
+        await tx.order.delete({
+          where: { id: sourceOrder.id }
+        });
+      }
+
+      // 5. Hitung ulang total order tujuan
+      const updatedTargetItems = await tx.orderItem.findMany({
+        where: { orderId: primaryTargetOrder.id }
+      });
+
+      const newSubtotal = updatedTargetItems.reduce((sum, item) => sum + item.subtotal, 0);
+      const newTax = newSubtotal * (taxRate / 100);
+      const newService = newSubtotal * (serviceChargeRate / 100);
+      const newTotal = newSubtotal - primaryTargetOrder.discount + newTax + newService;
+
+      await tx.order.update({
+        where: { id: primaryTargetOrder.id },
+        data: {
+          subtotal: newSubtotal,
+          tax: newTax,
+          serviceCharge: newService,
+          total: newTotal
+        }
+      });
+
+      return { type: 'merge', targetOrderId: primaryTargetOrder.id };
+    });
+
+    // 6. Emit socket event
+    io.emit('order:new', { message: 'Table merged', sourceTableId, targetTableId });
+    io.emit('kds:statusChanged', { message: 'Table merged KDS' });
+
+    res.json({ 
+      message: result.type === 'move' ? 'Meja berhasil dipindahkan' : 'Meja berhasil digabungkan', 
+      type: result.type 
+    });
+  } catch (error: any) {
+    console.error('Merge Table Error:', error);
+    res.status(500).json({ error: error.message || 'Gagal menggabungkan meja' });
+  }
+});
+
 export default router;

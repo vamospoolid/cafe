@@ -43,8 +43,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
       toast('File harus berupa gambar', 'error');
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast('Ukuran file maksimal adalah 2MB', 'error');
+    if (file.size > 10 * 1024 * 1024) {
+      toast('Ukuran file maksimal adalah 10MB', 'error');
       return;
     }
 
@@ -273,12 +273,12 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
                       <>
                         <ImageIcon size={32} className="text-gray-400 mb-2" />
                         <span className="text-sm font-semibold text-gray-600">Pilih Foto</span>
-                        <span className="text-xs text-muted mt-1">JPG, PNG (Max 2MB)</span>
+                        <span className="text-xs text-muted mt-1">JPG, PNG, GIF, WEBP (Max 10MB)</span>
                       </>
                     )}
                   </div>
                   <input 
-                    type="url" 
+                    type="text" 
                     name="imageUrl"
                     className="form-control text-xs mt-2" 
                     placeholder="Atau tempel URL gambar disini..."

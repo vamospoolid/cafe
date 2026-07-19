@@ -1,14 +1,18 @@
 import { useEffect, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = '';
+const getSocketUrl = (): string => {
+  const baseUrl = localStorage.getItem('pos_backend_url') || 'http://localhost:5000';
+  return baseUrl;
+};
 
 // Singleton socket instance — satu koneksi untuk seluruh aplikasi
 let socket: Socket | null = null;
 
 const getSocket = (): Socket => {
   if (!socket || socket.disconnected) {
-    socket = io(SOCKET_URL, {
+    const url = getSocketUrl();
+    socket = io(url, {
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
       transports: ['websocket', 'polling']
