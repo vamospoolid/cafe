@@ -21,7 +21,9 @@ const DashboardView = () => {
     paymentMethods: { Tunai: 0, QRIS: 0, Kartu: 0, Split: 0 },
     hourlySales: [],
     tableOccupancy: { occupied: 0, total: 0, percentage: 0 },
-    lowStockProducts: []
+    lowStockProducts: [],
+    recentTransactions: [],
+    recentStockLogs: []
   });
   const [salesChart, setSalesChart] = useState<any[]>([]);
   const [bestSellers, setBestSellers] = useState<any[]>([]);
@@ -442,6 +444,91 @@ const DashboardView = () => {
             <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
               Semua Kategori <ChevronRight size={12} />
             </span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ─── Baris 4: Recent Transactions & Recent Stock Mutations ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+        
+        {/* Recent Transactions Card */}
+        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Activity size={18} color="var(--primary)" /> Transaksi Terbaru (POS)
+          </h3>
+          
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
+            {(summary.recentTransactions || []).length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', padding: '2rem' }}>
+                <span>Belum ada transaksi</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {(summary.recentTransactions || []).map((t: any) => (
+                  <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b' }}>{t.orderNumber}</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '0.25rem', background: t.status === 'Paid' ? '#dcfce7' : '#fef9c3', color: t.status === 'Paid' ? '#166534' : '#854d0e' }}>
+                          {t.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+                        Pelanggan: <span style={{ fontWeight: 600 }}>{t.customerName}</span> • {t.paymentMethod || 'Belum Bayar'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--primary)' }}>{formatCurrency(t.total)}</span>
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                        {new Date(t.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Recent Stock Mutations Card */}
+        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Layers size={18} color="var(--primary)" /> Aktivitas Mutasi Stok
+          </h3>
+          
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
+            {(summary.recentStockLogs || []).length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', padding: '2rem' }}>
+                <span>Belum ada aktivitas stok</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {(summary.recentStockLogs || []).map((l: any) => (
+                  <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b' }}>{l.ingredient?.name}</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '0.25rem', background: ['Restock', 'PO'].includes(l.type) ? '#dcfce7' : l.type === 'Rusak' ? '#fee2e2' : '#f1f5f9', color: ['Restock', 'PO'].includes(l.type) ? '#166534' : l.type === 'Rusak' ? '#991b1b' : '#475569' }}>
+                          {l.type}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+                        Ket: {l.description || '—'} {l.referenceId ? `(${l.referenceId})` : ''}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontWeight: 800, fontSize: '0.9rem', color: l.change > 0 ? '#166534' : '#dc2626' }}>
+                        {l.change > 0 ? `+${l.change}` : l.change} {l.ingredient?.unit}
+                      </span>
+                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                        {new Date(l.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

@@ -208,6 +208,35 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       }
     });
 
+    // 4. Fetch 5 Recent Transactions
+    const recentTransactions = await prisma.order.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        orderNumber: true,
+        customerName: true,
+        total: true,
+        paymentMethod: true,
+        status: true,
+        createdAt: true
+      }
+    });
+
+    // 5. Fetch 5 Recent Stock Mutations
+    const recentStockLogs = await prisma.ingredientLog.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        ingredient: {
+          select: {
+            name: true,
+            unit: true
+          }
+        }
+      }
+    });
+
     res.json({
       revenue: totalRevenue,
       profit: totalProfit,
@@ -220,7 +249,9 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
         total: totalTables,
         percentage: totalTables > 0 ? Math.round((occupiedTablesCount / totalTables) * 100) : 0
       },
-      lowStockProducts
+      lowStockProducts,
+      recentTransactions,
+      recentStockLogs
     });
   } catch (error) {
     console.error(error);
