@@ -36,7 +36,7 @@ async function main() {
   console.log('Created Setting:', setting.storeName);
 
   // 2. Setup Superadmin User
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  const passwordHash = await bcrypt.hash('123456', 10);
   const admin = await prisma.user.create({
     data: {
       name: 'Super Admin',
