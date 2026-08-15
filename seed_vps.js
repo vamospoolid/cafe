@@ -7,7 +7,7 @@ const config = {
     password: 'Ahmad_dcc07'
 };
 
-const cmd = 'cd /var/www/poscafe/backend && npx prisma db seed';
+const cmd = 'cd /var/www/poscafe && git reset --hard && git pull origin main && cd backend && npx prisma db seed';
 
 const conn = new Client();
 conn.on('ready', () => {
