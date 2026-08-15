@@ -9,7 +9,10 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   let finalInput = input;
   
   if (typeof input === 'string' && input.startsWith('/api')) {
-    const baseUrl = localStorage.getItem('pos_backend_url') || 'http://localhost:5000';
+    const defaultUrl = window.location.origin.includes('localhost') || window.location.origin.startsWith('file:') || window.location.origin.startsWith('capacitor:')
+      ? 'http://localhost:5000'
+      : window.location.origin;
+    const baseUrl = localStorage.getItem('pos_backend_url') || defaultUrl;
     const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     finalInput = `${cleanBaseUrl}${input}`;
   }

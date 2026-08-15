@@ -1387,8 +1387,11 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
 };
 
 const TerminalConnectionConfig = () => {
+  const defaultUrl = window.location.origin.includes('localhost') || window.location.origin.startsWith('file:') || window.location.origin.startsWith('capacitor:')
+    ? 'http://localhost:5000'
+    : window.location.origin;
   const [backendUrl, setBackendUrl] = useState(
-    localStorage.getItem('pos_backend_url') || 'http://localhost:5000'
+    localStorage.getItem('pos_backend_url') || defaultUrl
   );
   const [testing, setTesting] = useState(false);
   const [testStatus, setTestStatus] = useState<'idle' | 'success' | 'error'>('idle');

@@ -2,7 +2,10 @@ import { useEffect, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 const getSocketUrl = (): string => {
-  const baseUrl = localStorage.getItem('pos_backend_url') || 'http://localhost:5000';
+  const defaultUrl = window.location.origin.includes('localhost') || window.location.origin.startsWith('file:') || window.location.origin.startsWith('capacitor:')
+    ? 'http://localhost:5000'
+    : window.location.origin;
+  const baseUrl = localStorage.getItem('pos_backend_url') || defaultUrl;
   return baseUrl;
 };
 
