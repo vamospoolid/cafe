@@ -183,26 +183,50 @@ export const exportFinancialPDF = async (
   if (type === 'pl') {
     const pl = data.profitLoss || {};
     const tableColumn = ['KETERANGAN AKUN / OPERASIONAL', 'NOMINAL'];
-    const tableRows = [
+    const tableRows: any[] = [
       ['1. PENDAPATAN OPERASIONAL', ''],
-      ['   Penjualan Bersih Kasir (POS)', formatCurrency(pl.salesRevenue)],
-      ['   Pendapatan Lain-lain (Petty Cash Masuk)', formatCurrency(pl.otherRevenue)],
-      ['   Kelebihan Uang Kasir (Overage)', formatCurrency(pl.shiftOverage)],
-      ['TOTAL PENDAPATAN OPERASIONAL', formatCurrency(pl.operatingRevenue)],
-      ['', ''],
-      ['2. HARGA POKOK PENJUALAN (HPP)', ''],
-      ['   Beban Pokok Persediaan Bahan Baku (HPP)', `-${formatCurrency(pl.cogs)}`],
-      ['TOTAL BEBAN HPP', `-${formatCurrency(pl.cogs)}`],
-      ['', ''],
-      ['LABA KOTOR (GROSS PROFIT)', formatCurrency(pl.grossProfit)],
-      ['', ''],
-      ['3. BEBAN OPERASIONAL (OPEX)', ''],
-      ['   Beban Kas Operasional (Petty Cash Keluar)', `-${formatCurrency(pl.opexAmount)}`],
-      ['   Kekurangan Uang Kasir (Shortage)', `-${formatCurrency(pl.shiftShortage)}`],
-      ['TOTAL BEBAN OPERASIONAL', `-${formatCurrency(pl.operatingExpenses)}`],
-      ['', ''],
-      ['LABA BERSIH OPERASIONAL (NET INCOME)', formatCurrency(pl.netIncome)]
+      ['   Penjualan Bersih Kasir (POS)', formatCurrency(pl.salesRevenue)]
     ];
+
+    // Detail Pemasukan Kas Operasional dari Cashflow
+    if (pl.otherRevenueBreakdown && Object.keys(pl.otherRevenueBreakdown).length > 0) {
+      Object.entries(pl.otherRevenueBreakdown).forEach(([cat, val]) => {
+        tableRows.push([`   Pendapatan Lain-lain (${cat})`, formatCurrency(Number(val))]);
+      });
+    } else if (pl.otherRevenue > 0) {
+      tableRows.push(['   Pendapatan Lain-lain (Petty Cash Masuk)', formatCurrency(pl.otherRevenue)]);
+    }
+
+    if (pl.shiftOverage > 0) {
+      tableRows.push(['   Kelebihan Uang Kasir (Overage)', formatCurrency(pl.shiftOverage)]);
+    }
+
+    tableRows.push(['TOTAL PENDAPATAN OPERASIONAL', formatCurrency(pl.operatingRevenue)]);
+    tableRows.push(['', '']);
+    tableRows.push(['2. HARGA POKOK PENJUALAN (HPP)', '']);
+    tableRows.push(['   Beban Pokok Persediaan Bahan Baku (HPP)', `-${formatCurrency(pl.cogs)}`]);
+    tableRows.push(['TOTAL BEBAN HPP', `-${formatCurrency(pl.cogs)}`]);
+    tableRows.push(['', '']);
+    tableRows.push(['LABA KOTOR (GROSS PROFIT)', formatCurrency(pl.grossProfit)]);
+    tableRows.push(['', '']);
+    tableRows.push(['3. BEBAN OPERASIONAL (OPEX)', '']);
+
+    // Detail Beban Kas Operasional dari Cashflow
+    if (pl.opexBreakdown && Object.keys(pl.opexBreakdown).length > 0) {
+      Object.entries(pl.opexBreakdown).forEach(([cat, val]) => {
+        tableRows.push([`   Beban ${cat}`, `-${formatCurrency(Number(val))}`]);
+      });
+    } else if (pl.opexAmount > 0) {
+      tableRows.push(['   Beban Kas Operasional (Petty Cash Keluar)', `-${formatCurrency(pl.opexAmount)}`]);
+    }
+
+    if (pl.shiftShortage > 0) {
+      tableRows.push(['   Kekurangan Uang Kasir (Shortage)', `-${formatCurrency(pl.shiftShortage)}`]);
+    }
+
+    tableRows.push(['TOTAL BEBAN OPERASIONAL', `-${formatCurrency(pl.operatingExpenses)}`]);
+    tableRows.push(['', '']);
+    tableRows.push(['LABA BERSIH OPERASIONAL (NET INCOME)', formatCurrency(pl.netIncome)]);
 
     autoTable(doc, {
       head: [tableColumn],
@@ -506,25 +530,31 @@ export const exportFinancialPDF = async (
 
   // ─── 6. LAPORAN MUTASI & VALUASI STOK (inventory) ───
   else if (type === 'inventory') {
-    const tableColumn = ['NAMA BAHAN', 'SATUAN', 'STOK AWAL', 'MASUK', 'KELUAR', 'RUSAK', 'STOK AKHIR', 'NILAI ASET'];
+    const tableColumn = ['NAMA BAHAN', 'SATUAN', 'STOK AWAL', 'MASUK', 'KELUAR', 'STOK AKHIR', 'MIN STOK', 'STATUS', 'NILAI ASET'];
     const items = data.inventory || [];
     const summary = data.summary || {};
 
     const tableRows = items.map((item: any) => {
+      const totalKeluar = item.keluarProduksi + item.keluarRusak;
+      const isCritical = item.stockAkhir <= item.minStock;
+      const statusText = isCritical ? 'Kritis' : 'Aman';
+
       return [
         item.name,
         item.unit,
         item.stockAwal.toLocaleString('id-ID'),
         item.masuk.toLocaleString('id-ID'),
-        item.keluarProduksi.toLocaleString('id-ID'),
-        item.keluarRusak.toLocaleString('id-ID'),
+        totalKeluar.toLocaleString('id-ID'),
         item.stockAkhir.toLocaleString('id-ID'),
+        item.minStock.toLocaleString('id-ID'),
+        statusText,
         formatCurrency(item.totalValuation)
       ];
     });
 
     tableRows.push([
-      'TOTAL VALUASI ASET',
+      'TOTAL VALUASI ASET BAHAN BAKU',
+      '',
       '',
       '',
       '',
@@ -540,16 +570,17 @@ export const exportFinancialPDF = async (
       startY: 38,
       margin: { top: 38, bottom: 20 },
       theme: 'striped',
-      styles: { fontSize: 8, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
-      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+      styles: { fontSize: 7, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
       columnStyles: {
         0: { fontStyle: 'bold' },
         2: { halign: 'right' },
         3: { halign: 'right' },
         4: { halign: 'right' },
-        5: { halign: 'right' },
-        6: { halign: 'right', fontStyle: 'bold' },
-        7: { halign: 'right', fontStyle: 'bold' }
+        5: { halign: 'right', fontStyle: 'bold' },
+        6: { halign: 'right' },
+        7: { halign: 'center', fontStyle: 'bold' },
+        8: { halign: 'right', fontStyle: 'bold' }
       },
       didParseCell: (cellData: any) => {
         const isTotalRow = cellData.row.index === tableRows.length - 1;
@@ -557,17 +588,267 @@ export const exportFinancialPDF = async (
           cellData.cell.styles.fillColor = [241, 245, 249];
           cellData.cell.styles.textColor = [15, 118, 110];
           cellData.cell.styles.fontStyle = 'bold';
+        } else {
+          // Highlight critical stock rows in soft warning color
+          const rowStatus = cellData.row.cells[7]?.text[0];
+          if (rowStatus === 'Kritis') {
+            cellData.cell.styles.fillColor = [254, 242, 242]; // soft red
+            if (cellData.column.index === 7) {
+              cellData.cell.styles.textColor = [220, 38, 38]; // bold red status text
+            }
+          }
         }
       }
     });
 
-    // Add general summary information text above signature
     const finalY = (doc as any).lastAutoTable?.finalY || 120;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text(`Ringkasan Mutasi: Total Aset Bernilai ${formatCurrency(summary.totalAssetValuation || 0)} dengan ${summary.criticalItemsCount || 0} bahan kritis (stok menipis) dan ${summary.totalMutationsCount || 0} mutasi terdaftar.`, margin, finalY + 8);
 
     addSignatureBlock(doc, finalY + 10);
+  }
+
+  // ─── 8. LAPORAN DETAIL MENU & VALUASI BARANG JADI (product_details) ───
+  else if (type === 'product_details') {
+    const tableColumn = ['BARCODE', 'NAMA PRODUK', 'KATEGORI', 'STOK', 'HPP SATUAN', 'HARGA JUAL', 'MARGIN (%)', 'NILAI ASET', 'POTENSI OMZET'];
+    const products = data.products || [];
+    const summary = data.summary || {};
+
+    const tableRows = products.map((p: any) => {
+      const isCritical = p.stock <= p.minStock;
+      const statusText = isCritical ? ' (KRITIS)' : '';
+      return [
+        p.barcode || '—',
+        p.name + statusText,
+        p.categoryName,
+        `${p.stock} unit`,
+        formatCurrency(p.buyPrice),
+        formatCurrency(p.sellPrice),
+        `${p.marginPercent}%`,
+        formatCurrency(p.totalAssetValuation),
+        formatCurrency(p.totalPotentialSales)
+      ];
+    });
+
+    tableRows.push([
+      'TOTAL VALUASI ASET BARANG JADI',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      formatCurrency(summary.totalAssetValuation || 0),
+      formatCurrency(summary.totalPotentialSales || 0)
+    ]);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 38,
+      margin: { top: 38, bottom: 20 },
+      theme: 'striped',
+      styles: { fontSize: 7.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 22 },
+        1: { fontStyle: 'bold' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+        5: { halign: 'right' },
+        6: { halign: 'right', fontStyle: 'bold' },
+        7: { halign: 'right', fontStyle: 'bold' },
+        8: { halign: 'right', fontStyle: 'bold' }
+      },
+      didParseCell: (cellData: any) => {
+        const isTotalRow = cellData.row.index === tableRows.length - 1;
+        if (isTotalRow) {
+          cellData.cell.styles.fillColor = [209, 250, 229];
+          cellData.cell.styles.textColor = [16, 122, 68];
+          cellData.cell.styles.fontStyle = 'bold';
+        } else {
+          const nameText = cellData.row.cells[1]?.text[0] || '';
+          if (nameText.endsWith('(KRITIS)')) {
+            cellData.cell.styles.fillColor = [254, 242, 242]; // soft red
+            if (cellData.column.index === 1) {
+              cellData.cell.styles.textColor = [220, 38, 38];
+            }
+          }
+        }
+      }
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 120;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(`Ringkasan: Total Nilai Aset Barang Jadi bernilai ${formatCurrency(summary.totalAssetValuation || 0)} dengan potensi nilai penjualan sebesar ${formatCurrency(summary.totalPotentialSales || 0)}. Terdeteksi ${summary.criticalProductsCount || 0} produk dengan stok kritis.`, margin, finalY + 8);
+
+    addSignatureBlock(doc, finalY + 10);
+  }
+
+  // ─── 9. LAPORAN RIWAYAT TRANSAKSI DETAIL (transactions) ───
+  else if (type === 'transactions') {
+    const tableColumn = ['TANGGAL', 'NO. ORDER', 'PELANGGAN', 'KASIR', 'METODE', 'STATUS', 'TOTAL'];
+    const orders = data || [];
+    
+    let totalSales = 0;
+    let totalDiscount = 0;
+    let totalTax = 0;
+    let totalService = 0;
+    let totalNet = 0;
+    let voidCount = 0;
+
+    const paymentSummary: Record<string, number> = {
+      'Tunai': 0,
+      'QRIS': 0,
+      'Kartu': 0,
+      'Split': 0,
+      'Lainnya': 0
+    };
+
+    const tableRows = orders.map((o: any) => {
+      const isVoid = o.status === 'Void';
+      if (!isVoid) {
+        totalNet += o.total || 0;
+        totalDiscount += o.discount || 0;
+        totalTax += o.tax || 0;
+        totalService += o.serviceCharge || 0;
+        totalSales += o.subtotal || 0;
+
+        let pm = o.paymentMethod || 'Tunai';
+        pm = pm.trim();
+        if (pm.toLowerCase() === 'cash' || pm === 'Tunai') {
+          pm = 'Tunai';
+        } else if (pm.toLowerCase() === 'card' || pm === 'Kartu') {
+          pm = 'Kartu';
+        } else if (pm === 'QRIS') {
+          pm = 'QRIS';
+        } else if (pm.startsWith('Split')) {
+          pm = 'Split';
+        } else {
+          pm = 'Lainnya';
+        }
+        
+        paymentSummary[pm] = (paymentSummary[pm] || 0) + o.total;
+      } else {
+        voidCount++;
+      }
+
+      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '—';
+
+      return [
+        dateStr,
+        o.orderNumber,
+        o.customerName || 'Walk-in',
+        o.user?.name || 'Kasir',
+        o.paymentMethod || '—',
+        o.status,
+        formatCurrency(o.total)
+      ];
+    });
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 38,
+      margin: { top: 38, bottom: 20 },
+      theme: 'striped',
+      styles: { fontSize: 7, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { fontStyle: 'bold', cellWidth: 32 },
+        5: { fontStyle: 'bold' },
+        6: { halign: 'right', fontStyle: 'bold', cellWidth: 28 }
+      },
+      didParseCell: (cellData: any) => {
+        if (cellData.column.index === 5) {
+          const statusText = cellData.cell.text[0];
+          if (statusText === 'Void') {
+            cellData.cell.styles.textColor = [220, 38, 38]; // Red
+          } else if (statusText === 'Paid') {
+            cellData.cell.styles.textColor = [16, 122, 68]; // Green
+          }
+        }
+      }
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 100;
+    
+    // Summary Tables
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text('RINGKASAN KEUANGAN TRANSAKSI (SAH)', margin, finalY + 8);
+    
+    const summaryRows = [
+      ['Total Penjualan Kotor (POS)', formatCurrency(totalSales + totalDiscount)],
+      ['Total Diskon Penjualan', `-${formatCurrency(totalDiscount)}`],
+      ['Total Pajak Restoran (PB1)', formatCurrency(totalTax)],
+      ['Total Pendapatan Service Charge', formatCurrency(totalService)],
+      ['TOTAL PENJUALAN BERSIH (NET SALES)', formatCurrency(totalNet)]
+    ];
+
+    autoTable(doc, {
+      body: summaryRows,
+      startY: finalY + 12,
+      margin: { left: margin, right: margin + 95 },
+      theme: 'grid',
+      styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 55 },
+        1: { halign: 'right', fontStyle: 'bold', cellWidth: 30 }
+      },
+      didParseCell: (cellData: any) => {
+        if (cellData.row.index === summaryRows.length - 1) {
+          cellData.cell.styles.fillColor = [209, 250, 229];
+          cellData.cell.styles.textColor = [16, 122, 68];
+        }
+      }
+    });
+
+    const leftTableY = (doc as any).lastAutoTable?.finalY || finalY + 40;
+
+    doc.text('BREAKDOWN METODE PEMBAYARAN', margin + 95, finalY + 8);
+    const paymentRows = Object.entries(paymentSummary).map(([method, amount]) => [method, formatCurrency(amount)]);
+    paymentRows.push(['TOTAL PENERIMAAN KAS', formatCurrency(totalNet)]);
+
+    autoTable(doc, {
+      body: paymentRows,
+      startY: finalY + 12,
+      margin: { left: margin + 95, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 45 },
+        1: { halign: 'right', fontStyle: 'bold', cellWidth: 30 }
+      },
+      didParseCell: (cellData: any) => {
+        if (cellData.row.index === paymentRows.length - 1) {
+          cellData.cell.styles.fillColor = [241, 245, 249];
+          cellData.cell.styles.textColor = [15, 118, 110];
+        }
+      }
+    });
+
+    const rightTableY = (doc as any).lastAutoTable?.finalY || finalY + 40;
+    const finalSummaryY = Math.max(leftTableY, rightTableY);
+
+    if (voidCount > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(220, 38, 38);
+      doc.text(`* Perhatian: Terdapat ${voidCount} transaksi dibatalkan (Void) yang dikeluarkan dari kalkulasi keuangan di atas.`, margin, finalSummaryY + 6);
+      addSignatureBlock(doc, finalSummaryY + 10);
+    } else {
+      addSignatureBlock(doc, finalSummaryY + 6);
+    }
   }
 
   // ─── 7. LAPORAN RINGKASAN DASHBOARD (dashboard) ───

@@ -146,6 +146,17 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         gte: startDate,
         lte: endDate
       };
+    } else if (req.query.startDate && req.query.endDate) {
+      // Filter by custom date range
+      const startVal = new Date(req.query.startDate as string);
+      startVal.setHours(0, 0, 0, 0);
+      const endVal = new Date(req.query.endDate as string);
+      endVal.setHours(23, 59, 59, 999);
+      
+      whereCondition.createdAt = {
+        gte: startVal,
+        lte: endVal
+      };
     }
 
     const orders = await prisma.order.findMany({

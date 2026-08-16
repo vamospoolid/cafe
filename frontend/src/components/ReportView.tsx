@@ -8,7 +8,7 @@ import { exportFinancialPDF } from '../utils/pdfGenerator';
 const COLORS = ['#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
 
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-type TabType = 'dashboard' | 'products' | 'shifts' | 'accounting' | 'inventory';
+type TabType = 'dashboard' | 'products' | 'product_details' | 'shifts' | 'inventory' | 'transactions' | 'accounting';
 type AccountingSubTabType = 'pl' | 'cashflow' | 'ledger';
 
 const ReportView = () => {
@@ -29,6 +29,9 @@ const ReportView = () => {
   const [productSortKey, setProductSortKey] = useState<'qty' | 'revenue' | 'profit' | 'margin'>('qty');
   const [productSortOrder, setProductSortOrder] = useState<'asc' | 'desc'>('desc');
   
+  const [productDetailSearch, setProductDetailSearch] = useState('');
+  const [transactionSearch, setTransactionSearch] = useState('');
+  
   const [inventorySearch, setInventorySearch] = useState('');
   const [inventorySortKey, setInventorySortKey] = useState<'stockAwal' | 'masuk' | 'keluarProduksi' | 'stockAkhir' | 'totalValuation'>('totalValuation');
   const [inventorySortOrder, setInventorySortOrder] = useState<'asc' | 'desc'>('desc');
@@ -44,6 +47,13 @@ const ReportView = () => {
     periodRecap: { netIncome: 0, revenue: 0, expenses: 0, revenueBreakdown: { makanan: 0, minuman: 0, dessert: 0, other: 0 }, growth: 0, dineIn: 0, takeaway: 0, qrisTotal: 0, qrisCount: 0 },
     dailyTimeline: []
   });
+
+  // Product Details & Transactions State
+  const [productDetailsData, setProductDetailsData] = useState<any>({
+    summary: { totalAssetValuation: 0, totalPotentialSales: 0, criticalProductsCount: 0 },
+    products: []
+  });
+  const [transactionsData, setTransactionsData] = useState<any[]>([]);
 
   // Accounting Data
   const [accountingData, setAccountingData] = useState<any>({
@@ -192,10 +202,12 @@ const ReportView = () => {
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${posContext?.token}` };
-      const [resReports, resAccounting, resInventory] = await Promise.all([
+      const [resReports, resAccounting, resInventory, resProductDetails, resTransactions] = await Promise.all([
         fetch(`/api/analytics/reports?startDate=${startDate}&endDate=${endDate}`, { headers }),
         fetch(`/api/analytics/accounting?startDate=${startDate}&endDate=${endDate}`, { headers }),
-        fetch(`/api/analytics/inventory?startDate=${startDate}&endDate=${endDate}`, { headers })
+        fetch(`/api/analytics/inventory?startDate=${startDate}&endDate=${endDate}`, { headers }),
+        fetch(`/api/analytics/product-details`, { headers }),
+        fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}`, { headers })
       ]);
 
       if (resReports.ok) {
@@ -206,6 +218,12 @@ const ReportView = () => {
       }
       if (resInventory.ok) {
         setInventoryData(await resInventory.json());
+      }
+      if (resProductDetails.ok) {
+        setProductDetailsData(await resProductDetails.json());
+      }
+      if (resTransactions.ok) {
+        setTransactionsData(await resTransactions.json());
       }
     } catch (err) {
       console.error(err);
@@ -264,6 +282,34 @@ const ReportView = () => {
         'inventory',
         posContext?.settings || {},
         inventoryData,
+        startDate,
+        endDate,
+        (posContext?.user as any)?.name || 'Admin'
+      );
+    } else if (activeTab === 'product_details') {
+      // Find filtered product details to export
+      const query = productDetailSearch.toLowerCase();
+      const filteredDetails = (productDetailsData.products || []).filter((p: any) =>
+        p.name.toLowerCase().includes(query) || p.barcode.toLowerCase().includes(query) || p.categoryName.toLowerCase().includes(query)
+      );
+      await exportFinancialPDF(
+        'product_details',
+        posContext?.settings || {},
+        { ...productDetailsData, products: filteredDetails },
+        startDate,
+        endDate,
+        (posContext?.user as any)?.name || 'Admin'
+      );
+    } else if (activeTab === 'transactions') {
+      // Find filtered transactions to export
+      const query = transactionSearch.toLowerCase();
+      const filteredTransactions = transactionsData.filter((o: any) =>
+        o.orderNumber.toLowerCase().includes(query) || o.customerName.toLowerCase().includes(query)
+      );
+      await exportFinancialPDF(
+        'transactions',
+        posContext?.settings || {},
+        filteredTransactions,
         startDate,
         endDate,
         (posContext?.user as any)?.name || 'Admin'
@@ -651,18 +697,20 @@ const ReportView = () => {
       </div>
 
       {/* ─── Navigation Tabs (no-print) ─── */}
-      <div className="no-print" style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem' }}>
+      <div className="no-print" style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', overflowX: 'auto' }}>
         {[
           { key: 'dashboard', label: 'Dashboard Laporan', icon: <PieChartIcon size={16} /> },
           { key: 'products', label: 'Penjualan Per-Menu (Margin)', icon: <Award size={16} /> },
+          { key: 'product_details', label: 'Detail Menu & Valuasi', icon: <ShoppingBag size={16} /> },
           { key: 'shifts', label: 'Laporan Audit Shift', icon: <User size={16} /> },
           { key: 'inventory', label: 'Laporan Stok & Mutasi', icon: <Layers size={16} /> },
+          { key: 'transactions', label: 'Riwayat Transaksi', icon: <ListFilter size={16} /> },
           { key: 'accounting', label: 'Laba Rugi & Arus Kas', icon: <BookOpen size={16} /> }
         ].map(t => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key as TabType)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: 'transparent', borderBottom: activeTab === t.key ? '3px solid #10b981' : '3px solid transparent', color: activeTab === t.key ? '#10b981' : '#64748b', fontWeight: 700, fontSize: '0.85rem', padding: '0.5rem 1rem', cursor: 'pointer', transition: 'all 0.12s' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: 'transparent', borderBottom: activeTab === t.key ? '3px solid #10b981' : '3px solid transparent', color: activeTab === t.key ? '#10b981' : '#64748b', fontWeight: 700, fontSize: '0.85rem', padding: '0.5rem 1rem', cursor: 'pointer', transition: 'all 0.12s', whiteSpace: 'nowrap' }}
           >
             {t.icon} {t.label}
           </button>
@@ -1037,7 +1085,230 @@ const ReportView = () => {
               </tbody>
             </table>
           </div>
+ 
+         </div>
+       )}
 
+      {/* ─── TAB CONTENT 6: DETAIL MENU & VALUASI BARANG JADI (BARU) ─── */}
+      {activeTab === 'product_details' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          
+          {/* Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+            <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Valuasi Aset Barang Jadi (HPP)</span>
+              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(productDetailsData.summary?.totalAssetValuation)}</span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Investasi stok produk jadi siap jual</span>
+            </div>
+            
+            <div className="card-premium" style={{ borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Potensi Omzet Penjualan</span>
+              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#3b82f6' }}>{formatCurrency(productDetailsData.summary?.totalPotentialSales)}</span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Estimasi nilai jual seluruh stok barang jadi</span>
+            </div>
+
+            <div className="card-premium" style={{ borderLeft: '4px solid #ef4444' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Produk Jadi Stok Kritis</span>
+              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {productDetailsData.summary?.criticalProductsCount} Menu
+              </span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Produk dengan stok di bawah batas minimum</span>
+            </div>
+          </div>
+
+          {/* Search bar (no-print) */}
+          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center' }}>
+            <Search size={16} color="#94a3b8" />
+            <input
+              type="text"
+              placeholder="Cari barcode, nama produk, atau kategori..."
+              value={productDetailSearch}
+              onChange={e => setProductDetailSearch(e.target.value)}
+              style={{ border: 'none', outline: 'none', flex: 1, fontSize: '0.85rem', color: '#1e293b' }}
+            />
+          </div>
+
+          {/* Table */}
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <table className="table-premium">
+              <thead>
+                <tr>
+                  {['Barcode', 'Nama Produk', 'Kategori', 'Stok', 'Min Stok', 'Harga Beli (HPP)', 'Harga Jual', 'Margin (Rp / %)', 'Nilai Aset', 'Potensi Omzet', 'Status'].map(h => (
+                    <th key={h} style={{ textAlign: ['Barcode', 'Nama Produk', 'Kategori', 'Status'].includes(h) ? 'left' : 'right' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(productDetailsData.products || [])
+                  .filter((p: any) =>
+                    p.name.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
+                    p.barcode.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
+                    p.categoryName.toLowerCase().includes(productDetailSearch.toLowerCase())
+                  )
+                  .length === 0 ? (
+                  <tr>
+                    <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Tidak ada data produk</td>
+                  </tr>
+                ) : (
+                  (productDetailsData.products || [])
+                    .filter((p: any) =>
+                      p.name.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
+                      p.barcode.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
+                      p.categoryName.toLowerCase().includes(productDetailSearch.toLowerCase())
+                    )
+                    .map((p: any) => {
+                      const isLow = p.stock <= p.minStock;
+                      return (
+                        <tr key={p.id} style={{ background: isLow ? 'rgba(239,68,68,0.02)' : 'transparent' }}>
+                          <td style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.78rem' }}>{p.barcode}</td>
+                          <td style={{ fontWeight: 700, color: isLow ? '#dc2626' : '#1e293b' }}>{p.name}</td>
+                          <td style={{ color: '#64748b' }}>{p.categoryName}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: isLow ? '#dc2626' : '#1e293b' }}>{p.stock} unit</td>
+                          <td style={{ textAlign: 'right', color: '#64748b' }}>{p.minStock} unit</td>
+                          <td style={{ textAlign: 'right' }}>{formatCurrency(p.buyPrice)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(p.sellPrice)}</td>
+                          <td style={{ textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                            {formatCurrency(p.marginNominal)} ({p.marginPercent}%)
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#475569' }}>{formatCurrency(p.totalAssetValuation)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#10b981' }}>{formatCurrency(p.totalPotentialSales)}</td>
+                          <td>
+                            {isLow ? (
+                              <span className="badge-premium" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>
+                                <AlertTriangle size={11} /> Kritis
+                              </span>
+                            ) : (
+                              <span className="badge-premium" style={{ background: 'rgba(16,185,129,0.08)', color: '#10b981' }}>
+                                <Check size={11} /> Aman
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TAB CONTENT 7: LAPORAN RIWAYAT TRANSAKSI PENJUALAN (BARU) ─── */}
+      {activeTab === 'transactions' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          
+          {/* Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+            <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Omzet Sah (Bersih)</span>
+              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#10b981' }}>
+                {formatCurrency(transactionsData.filter(o => o.status !== 'Void').reduce((sum, o) => sum + o.total, 0))}
+              </span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total penjualan bersih dikurangi diskon</span>
+            </div>
+            
+            <div className="card-premium" style={{ borderLeft: '4px solid #3b82f6' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Volume Penjualan</span>
+              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#3b82f6' }}>
+                {transactionsData.filter(o => o.status !== 'Void').length} Transaksi
+              </span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Jumlah pesanan diselesaikan (non-Void)</span>
+            </div>
+
+            <div className="card-premium" style={{ borderLeft: '4px solid #f59e0b' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Rata-rata Keranjang Belanja</span>
+              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#f59e0b' }}>
+                {(() => {
+                  const valids = transactionsData.filter(o => o.status !== 'Void');
+                  const total = valids.reduce((sum, o) => sum + o.total, 0);
+                  const avg = valids.length > 0 ? total / valids.length : 0;
+                  return formatCurrency(avg);
+                })()}
+              </span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Rata-rata nilai belanja per transaksi</span>
+            </div>
+
+            <div className="card-premium" style={{ borderLeft: '4px solid #ef4444' }}>
+              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Transaksi Void (Batal)</span>
+              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#ef4444' }}>
+                {transactionsData.filter(o => o.status === 'Void').length} Void
+              </span>
+              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Transaksi dibatalkan & stok direfund</span>
+            </div>
+          </div>
+
+          {/* Search bar (no-print) */}
+          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center' }}>
+            <Search size={16} color="#94a3b8" />
+            <input
+              type="text"
+              placeholder="Cari berdasarkan No. Order atau nama pelanggan..."
+              value={transactionSearch}
+              onChange={e => setTransactionSearch(e.target.value)}
+              style={{ border: 'none', outline: 'none', flex: 1, fontSize: '0.85rem', color: '#1e293b' }}
+            />
+          </div>
+
+          {/* Table */}
+          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+            <table className="table-premium">
+              <thead>
+                <tr>
+                  {['Tanggal/Waktu', 'No. Order', 'Pelanggan', 'Kasir', 'Metode Bayar', 'Status', 'Total Bersih'].map(h => (
+                    <th key={h} style={{ textAlign: ['Tanggal/Waktu', 'No. Order', 'Pelanggan', 'Kasir', 'Metode Bayar', 'Status'].includes(h) ? 'left' : 'right' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {transactionsData.filter((o: any) =>
+                  o.orderNumber.toLowerCase().includes(transactionSearch.toLowerCase()) ||
+                  o.customerName.toLowerCase().includes(transactionSearch.toLowerCase())
+                ).length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Tidak ada transaksi ditemukan</td>
+                  </tr>
+                ) : (
+                  transactionsData
+                    .filter((o: any) =>
+                      o.orderNumber.toLowerCase().includes(transactionSearch.toLowerCase()) ||
+                      o.customerName.toLowerCase().includes(transactionSearch.toLowerCase())
+                    )
+                    .map((o: any) => {
+                      const isVoid = o.status === 'Void';
+                      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : '—';
+                      return (
+                        <tr key={o.id} style={{ background: isVoid ? 'rgba(239,68,68,0.02)' : 'transparent' }}>
+                          <td style={{ color: '#64748b', fontSize: '0.78rem' }}>{dateStr}</td>
+                          <td style={{ fontWeight: 800, color: '#1e293b' }}>{o.orderNumber}</td>
+                          <td style={{ fontWeight: 600, color: '#334155' }}>{o.customerName || 'Walk-in'}</td>
+                          <td style={{ color: '#64748b' }}>{o.user?.name || 'Kasir'}</td>
+                          <td style={{ color: '#334155', fontWeight: 600 }}>{o.paymentMethod || 'Tunai'}</td>
+                          <td>
+                            {isVoid ? (
+                              <span className="badge-premium" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>
+                                Void
+                              </span>
+                            ) : (
+                              <span className="badge-premium" style={{ background: 'rgba(16,185,129,0.08)', color: '#10b981' }}>
+                                Paid
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: isVoid ? '#94a3b8' : '#1e293b' }}>
+                            {formatCurrency(o.total)}
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

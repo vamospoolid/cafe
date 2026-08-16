@@ -700,12 +700,18 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
 
     let otherRevenue = 0;
     let opexAmount = 0;
+    const opexBreakdown: Record<string, number> = {};
+    const otherRevenueBreakdown: Record<string, number> = {};
 
     cashFlows.forEach(cf => {
       if (cf.type === 'Pemasukan') {
         otherRevenue += cf.amount;
+        const cat = cf.category || 'Lain-lain';
+        otherRevenueBreakdown[cat] = (otherRevenueBreakdown[cat] || 0) + cf.amount;
       } else {
         opexAmount += cf.amount;
+        const cat = cf.category || 'Lain-lain';
+        opexBreakdown[cat] = (opexBreakdown[cat] || 0) + cf.amount;
       }
     });
 
@@ -731,14 +737,17 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
       operatingRevenue,
       salesRevenue,
       otherRevenue,
+      otherRevenueBreakdown,
       shiftOverage,
       cogs: totalHpp,
       grossProfit,
       operatingExpenses,
       opexAmount,
+      opexBreakdown,
       shiftShortage,
       netIncome
     };
+
 
     // --- Kalkulasi Arus Kas (Cash Flow - Direct Method) ---
     const cashFlow = {
@@ -966,4 +975,59 @@ router.get('/inventory', authenticateToken, async (req: Request, res: Response) 
   }
 });
 
+// GET Laporan Detail Menu & Valuasi Persediaan Barang Jadi
+router.get('/product-details', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const products = await prisma.product.findMany({
+      include: {
+        category: true
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    const report = products.map(p => {
+      const buyPrice = p.buyPrice || 0;
+      const sellPrice = p.sellPrice || 0;
+      const stock = p.stock || 0;
+      const marginNominal = sellPrice - buyPrice;
+      const marginPercent = sellPrice > 0 ? Math.round((marginNominal / sellPrice) * 100) : 0;
+      const totalAssetValuation = stock * buyPrice;
+      const totalPotentialSales = stock * sellPrice;
+
+      return {
+        id: p.id,
+        barcode: p.barcode || '—',
+        name: p.name,
+        categoryName: p.category?.name || '—',
+        buyPrice,
+        sellPrice,
+        stock,
+        minStock: p.minStock,
+        status: p.status,
+        marginNominal,
+        marginPercent,
+        totalAssetValuation,
+        totalPotentialSales
+      };
+    });
+
+    const totalAssetValuation = report.reduce((sum, item) => sum + item.totalAssetValuation, 0);
+    const totalPotentialSales = report.reduce((sum, item) => sum + item.totalPotentialSales, 0);
+    const criticalProductsCount = report.filter(item => item.stock <= item.minStock).length;
+
+    res.json({
+      summary: {
+        totalAssetValuation,
+        totalPotentialSales,
+        criticalProductsCount
+      },
+      products: report
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Gagal memuat laporan detail barang jadi' });
+  }
+});
+
 export default router;
+

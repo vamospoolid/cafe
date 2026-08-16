@@ -5,6 +5,7 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import ReceiptPrinter from './ReceiptPrinter';
+import { exportFinancialPDF } from '../utils/pdfGenerator';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
 const TransactionHistoryView = () => {
@@ -113,33 +114,20 @@ const TransactionHistoryView = () => {
   const avgSales = validOrders.length > 0 ? totalSales / validOrders.length : 0;
 
   // EXPORT FUNCTIONS
-  const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.text('Laporan Riwayat Transaksi', 14, 15);
-    doc.setFontSize(10);
-    doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, 14, 22);
-
-    const tableColumn = ["No", "No. Transaksi", "Tanggal", "Pelanggan", "Kasir", "Total", "Status"];
-    const tableRows: any[] = [];
-
-    filteredOrders.forEach((trx, idx) => {
-      tableRows.push([
-        idx + 1,
-        trx.orderNumber,
-        formatDate(trx.createdAt),
-        trx.customerName,
-        trx.user?.name,
-        formatCurrency(trx.total),
-        trx.status
-      ]);
-    });
-
-    (doc as any).autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      startY: 25,
-    });
-    doc.save(`Laporan_Transaksi_${Date.now()}.pdf`);
+  const exportPDF = async () => {
+    // Determine the date range printed. If no filter is selected, default to oldest to current date
+    const oldestDate = orders.length > 0 ? orders[orders.length - 1].createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
+    const rangeStart = dateFilter || oldestDate;
+    const rangeEnd = dateFilter || new Date().toISOString().split('T')[0];
+    
+    await exportFinancialPDF(
+      'transactions',
+      posContext?.settings || {},
+      filteredOrders,
+      rangeStart,
+      rangeEnd,
+      (posContext?.user as any)?.name || 'Admin'
+    );
   };
 
   const exportExcel = () => {

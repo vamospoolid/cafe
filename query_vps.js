@@ -9,7 +9,7 @@ async function run() {
   console.log('---TABLES---');
   console.log(await prisma.table.findMany({ select: { id: true, tableNo: true } }));
   console.log('---CUSTOMERS---');
-  console.log(await prisma.customer.findMany({ select: { id: true, name: true } }));
+  console.log(await prisma.customer.findMany({ select: { id: true, name: true, phone: true } }));
 }
 run().catch(console.error).finally(() => prisma.$disconnect());
 EOF
