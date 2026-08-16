@@ -697,7 +697,19 @@ const ReportView = () => {
       </div>
 
       {/* ─── Navigation Tabs (no-print) ─── */}
-      <div className="no-print" style={{ display: 'flex', gap: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', overflowX: 'auto' }}>
+      <div className="no-print" style={{ 
+        display: 'flex', 
+        gap: '0.75rem', 
+        borderBottom: '1px solid #e2e8f0', 
+        paddingBottom: '0.5rem', 
+        overflowX: 'auto',
+        position: 'sticky',
+        top: '-1.5rem',
+        background: '#f8fafc',
+        zIndex: 40,
+        paddingTop: '1.5rem',
+        marginTop: '-0.5rem'
+      }}>
         {[
           { key: 'dashboard', label: 'Dashboard Laporan', icon: <PieChartIcon size={16} /> },
           { key: 'products', label: 'Penjualan Per-Menu (Margin)', icon: <Award size={16} /> },
