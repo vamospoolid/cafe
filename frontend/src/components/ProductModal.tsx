@@ -9,12 +9,21 @@ interface ProductModalProps {
   onSave?: (product: any) => void;
   initialData?: any;
   categories: any[];
+  onManageCategories?: () => void;
 }
 
-const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, initialData, categories }) => {
+const ProductModal: React.FC<ProductModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  initialData, 
+  categories,
+  onManageCategories 
+}) => {
   const [formData, setFormData] = useState({
     name: '',
     categoryId: '',
+    subCategoryId: '',
     barcode: '',
     buyPrice: '',
     sellPrice: '',
@@ -118,12 +127,13 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
     if (initialData) {
       setFormData({
         name: initialData.name || '',
-        categoryId: initialData.categoryId || '',
+        categoryId: initialData.categoryId ? String(initialData.categoryId) : '',
+        subCategoryId: initialData.subCategoryId ? String(initialData.subCategoryId) : '',
         barcode: initialData.barcode || '',
-        buyPrice: initialData.buyPrice || '',
-        sellPrice: initialData.sellPrice || '',
-        stock: initialData.stock || '',
-        minStock: initialData.minStock || '1',
+        buyPrice: initialData.buyPrice !== undefined ? String(initialData.buyPrice) : '',
+        sellPrice: initialData.sellPrice !== undefined ? String(initialData.sellPrice) : '',
+        stock: initialData.stock !== undefined ? String(initialData.stock) : '',
+        minStock: initialData.minStock !== undefined ? String(initialData.minStock) : '1',
         status: initialData.status || 'Aktif',
         imageUrl: initialData.imageUrl || ''
       });
@@ -131,6 +141,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
       setFormData({
         name: '',
         categoryId: '',
+        subCategoryId: '',
         barcode: '',
         buyPrice: '',
         sellPrice: '',
@@ -156,7 +167,11 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'categoryId') {
+      setFormData(prev => ({ ...prev, categoryId: value, subCategoryId: '' }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const generateBarcode = () => {
@@ -313,7 +328,20 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Kategori Utama <span className="text-danger">*</span></label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-semibold text-gray-700">
+                      Kategori Utama <span className="text-danger">*</span>
+                    </label>
+                    {onManageCategories && (
+                      <button
+                        type="button"
+                        onClick={onManageCategories}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-0.5"
+                      >
+                        + Kelola Kategori
+                      </button>
+                    )}
+                  </div>
                   <div className="relative">
                     <Tag size={18} className="absolute left-3.5 top-3.5 text-muted" />
                     <select 
@@ -330,6 +358,34 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, in
                     </select>
                   </div>
                 </div>
+
+                {/* Sub-Kategori Dropdown */}
+                {(() => {
+                  const selectedCat = categories.find(c => String(c.id) === String(formData.categoryId));
+                  const subCats = selectedCat?.subCategories || [];
+                  if (subCats.length === 0) return null;
+                  return (
+                    <div className="animate-fade-in">
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">
+                        Sub-Kategori <span className="text-xs font-normal text-muted">(Opsional)</span>
+                      </label>
+                      <div className="relative">
+                        <Layers size={18} className="absolute left-3.5 top-3.5 text-muted" />
+                        <select 
+                          name="subCategoryId"
+                          className="form-control !pl-10 appearance-none" 
+                          value={formData.subCategoryId}
+                          onChange={handleChange}
+                        >
+                          <option value="">-- Tanpa Sub-Kategori --</option>
+                          {subCats.map((sc: any) => (
+                            <option key={sc.id} value={sc.id}>{sc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="md:col-span-2 space-y-5">

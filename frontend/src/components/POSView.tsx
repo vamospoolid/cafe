@@ -24,6 +24,7 @@ export interface CartItem {
 export const POSView = () => {
   const socket = useSocket();
   const [activeCategory, setActiveCategory] = useState<number | 'Semua'>('Semua');
+  const [activeSubCategory, setActiveSubCategory] = useState<number | 'Semua'>('Semua');
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -335,9 +336,10 @@ export const POSView = () => {
 
   const filteredProducts = products.filter(p => {
     const matchesCategory = activeCategory === 'Semua' || p.categoryId === activeCategory;
+    const matchesSubCategory = activeSubCategory === 'Semua' || p.subCategoryId === activeSubCategory;
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (p.barcode && p.barcode.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesSubCategory && matchesSearch;
   });
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -509,7 +511,10 @@ export const POSView = () => {
           <div className="category-filter">
             <button 
               className={`category-chip ${activeCategory === 'Semua' ? 'active' : ''}`}
-              onClick={() => setActiveCategory('Semua')}
+              onClick={() => {
+                setActiveCategory('Semua');
+                setActiveSubCategory('Semua');
+              }}
             >
               Semua
             </button>
@@ -517,12 +522,51 @@ export const POSView = () => {
               <button 
                 key={cat.id}
                 className={`category-chip ${activeCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => {
+                  setActiveCategory(cat.id);
+                  setActiveSubCategory('Semua');
+                }}
               >
                 {cat.name}
               </button>
             ))}
           </div>
+
+          {/* Sub-Category Filter Chips (if selected category has subcategories) */}
+          {(() => {
+            if (activeCategory === 'Semua') return null;
+            const currentCat = categories.find(c => c.id === activeCategory);
+            const subCats = currentCat?.subCategories || [];
+            if (subCats.length === 0) return null;
+            return (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-1 animate-fade-in">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">Sub:</span>
+                <button
+                  className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all shrink-0 ${
+                    activeSubCategory === 'Semua'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                  onClick={() => setActiveSubCategory('Semua')}
+                >
+                  Semua {currentCat.name}
+                </button>
+                {subCats.map((sub: any) => (
+                  <button
+                    key={sub.id}
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all shrink-0 ${
+                      activeSubCategory === sub.id
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                    onClick={() => setActiveSubCategory(sub.id)}
+                  >
+                    {sub.name}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Grid Produk */}

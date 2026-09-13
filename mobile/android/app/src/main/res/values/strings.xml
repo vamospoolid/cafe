@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">SOL CAFE POS</string>
-    <string name="title_activity_main">SOL CAFE POS</string>
-    <string name="package_name">id.codenusa.poscafe</string>
-    <string name="custom_url_scheme">id.codenusa.poscafe</string>
+    <string name="app_name">Muki Staff Portal</string>
+    <string name="title_activity_main">Muki Staff Portal</string>
+    <string name="package_name">id.codenusa.cafestaff</string>
+    <string name="custom_url_scheme">id.codenusa.cafestaff</string>
 </resources>

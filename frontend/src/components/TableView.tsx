@@ -35,8 +35,13 @@ const TableView = () => {
   const [tempPositions, setTempPositions] = useState<any[]>([]);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [actionTable, setActionTable] = useState<any>(null);
+  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
   const [isMoveMergeOpen, setIsMoveMergeOpen] = useState(false);
   const [moveMergeSourceTable, setMoveMergeSourceTable] = useState<any>(null);
+  
+  const toggleItemCheck = (key: string) => {
+    setCheckedItems(prev => ({ ...prev, [key]: !prev[key] }));
+  };
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
@@ -184,6 +189,38 @@ const TableView = () => {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleClearTable = async (tableId: number, tableNo: string) => {
+    const confirmResult = await confirmAlert(
+      'Kosongkan Meja',
+      `Apakah Anda yakin ingin mengosongkan Meja ${tableNo}? Semua pesanan aktif pada meja ini akan ditandai selesai/disajikan.`
+    );
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/tables/${tableId}/clear`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        }
+      });
+      if (res.ok) {
+        toast(`Meja ${tableNo} berhasil dikosongkan!`, 'success');
+        setActionTable(null);
+        fetchData();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal mengosongkan meja', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -555,9 +592,9 @@ const TableView = () => {
                                 <Scissors size={12} /> Split
                               </button>
                               {activeOrder.status === 'Paid' ? (
-                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors" onClick={() => handleReleaseTable(activeOrder.id)}>Kosongkan</button>
+                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs" onClick={() => handleClearTable(table.id, table.tableNo)}>Kosongkan</button>
                               ) : (
-                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-primary hover:bg-primary/90 transition-colors" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
+                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-primary hover:bg-primary/90 transition-colors text-xs" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
                               )}
                             </>
                           ) : (
@@ -631,8 +668,8 @@ const TableView = () => {
                     >
                       {/* Nomor Meja & Keterangan */}
                       <div>
-                        <div className="font-black text-xl tracking-tight leading-none text-slate-800">{table.tableNo}</div>
-                        <div className="text-[8px] font-bold opacity-75 truncate max-w-[90px] mx-auto mt-0.5 text-slate-500">
+                        <div className={`font-black text-xl tracking-tight leading-none ${isOccupied ? 'text-white' : 'text-slate-800'}`}>{table.tableNo}</div>
+                        <div className={`text-[8px] font-bold opacity-75 truncate max-w-[90px] mx-auto mt-0.5 ${isOccupied ? 'text-white/80' : 'text-slate-500'}`}>
                           {table.name || 'Umum'}
                         </div>
                       </div>
@@ -647,16 +684,16 @@ const TableView = () => {
                           {/* Status Badge */}
                           <div className="mb-1">
                             {isPaid ? (
-                              <span className="text-[8px] font-black bg-emerald-500 text-white px-1.5 py-0.2 rounded">DIBAYAR</span>
+                              <span className="text-[8px] font-black bg-emerald-500 text-white px-1.5 py-0.2 rounded shadow-sm">DIBAYAR</span>
                             ) : isServed ? (
-                              <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.2 rounded">SUDAH SIAP</span>
+                              <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.2 rounded shadow-sm">SUDAH SIAP</span>
                             ) : (
                               <span className="text-[8px] font-black bg-amber-500 text-white px-1.5 py-0.2 rounded animate-pulse">MENUNGGU</span>
                             )}
                           </div>
                           
                           {/* Total Bill */}
-                          <div className="text-[10px] font-black tracking-wide bg-slate-900/10 px-2 py-0.5 rounded-full">
+                          <div className="text-[10px] font-black tracking-wide bg-slate-900/20 px-2 py-0.5 rounded-full">
                             {formatCurrency(activeOrder.total)}
                           </div>
                           
@@ -754,12 +791,17 @@ const TableView = () => {
       {/* Modal Detail & Aksi Meja (Action Sheet) */}
       {actionTable && (
         <div className="modal-overlay backdrop-blur-sm bg-slate-900/30">
-          <div className="modal-content !rounded-3xl border border-slate-100 shadow-2xl p-0 overflow-hidden" style={{ maxWidth: '420px', width: '90%' }}>
+          <div className="modal-content !rounded-3xl border border-slate-100 shadow-2xl p-0 overflow-hidden" style={{ maxWidth: '460px', width: '92%' }}>
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-lg font-black flex items-center gap-2 text-slate-800">
-                <Armchair className="text-indigo-600" size={20} /> 
-                Detail Meja {actionTable.tableNo}
-              </h2>
+              <div>
+                <h2 className="text-lg font-black flex items-center gap-2 text-slate-800">
+                  <Armchair className="text-indigo-600" size={20} /> 
+                  Detail Meja {actionTable.tableNo}
+                </h2>
+                <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+                  Area {actionTable.name || 'Umum'} • Kapasitas {actionTable.capacity} Kursi
+                </div>
+              </div>
               <button 
                 type="button"
                 className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors" 
@@ -769,80 +811,111 @@ const TableView = () => {
               </button>
             </div>
             
-            <div className="p-6 space-y-6">
-              {/* Info Meja */}
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Lokasi Area</div>
-                  <div className="font-bold text-slate-700 text-sm mt-0.5">{actionTable.name || 'Area Umum'}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Kapasitas</div>
-                  <div className="font-bold text-slate-700 text-sm mt-0.5">{actionTable.capacity} Kursi</div>
-                </div>
-              </div>
-
+            <div className="p-6 space-y-5">
               {/* Status Pesanan */}
               {(() => {
                 const activeOrder = getTableActiveOrder(actionTable.id);
                 if (activeOrder) {
+                  const isPaid = activeOrder.status === 'Paid';
                   const isServed = getTableStatus(actionTable.id) === 'served';
+                  
                   return (
                     <div className="space-y-4">
-                      <div className="border-t border-slate-150 pt-4">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Informasi Tagihan Aktif</div>
-                        <div className="p-4 bg-indigo-50/30 border border-indigo-100 rounded-2xl space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className="font-bold text-slate-800 text-base">{activeOrder.customerName}</span>
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${isServed ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700 animate-pulse'}`}>
-                              {isServed ? 'DISAJIKAN' : 'DIPROSES'}
-                            </span>
+                      {/* Box Info Pesanan */}
+                      <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pelanggan</span>
+                            <span className="font-extrabold text-slate-800 text-base">{activeOrder.customerName}</span>
                           </div>
-                          
-                          <div className="flex justify-between text-xs text-slate-500 font-semibold">
-                            <span>Waktu Transaksi</span>
-                            <span className="flex items-center gap-1"><Clock size={12} /> {getWaitTime(activeOrder.createdAt)} yang lalu</span>
+                          <div className="text-right">
+                            {isPaid ? (
+                              <span className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1 shadow-sm">
+                                <Check size={12} className="text-emerald-600" /> LUNAS ({activeOrder.paymentMethod || 'Paid'})
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-black px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                                BELUM BAYAR (BILL)
+                              </span>
+                            )}
                           </div>
-
-                          <div className="flex justify-between text-sm pt-2 border-t border-indigo-100/50">
-                            <span className="font-bold text-slate-600">Total Tagihan</span>
-                            <span className="font-black text-indigo-700 text-base">{formatCurrency(activeOrder.total)}</span>
-                          </div>
-
-                          {/* Rincian Menu yang Dipesan */}
-                          {activeOrder.items && activeOrder.items.length > 0 && (
-                            <div className="pt-3 border-t border-indigo-100/50 space-y-2">
-                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left">Menu Yang Dipesan:</div>
-                              <div className="max-h-[140px] overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
-                                {activeOrder.items.map((item: any, idx: number) => {
-                                  const prod = item.product || {};
-                                  const price = item.price || (prod.sellPrice || 0);
-                                  return (
-                                    <div key={idx} className="flex justify-between items-start text-xs">
-                                      <div className="flex-1 text-left pr-2">
-                                        <span className="font-bold text-slate-700">{prod.name || 'Menu'}</span>
-                                        {item.notes && (
-                                          <span className="block text-[10px] text-slate-400 font-medium italic">
-                                            * {item.notes}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="text-right whitespace-nowrap text-slate-500 font-semibold">
-                                        <span>{item.qty}x </span>
-                                        <span className="font-bold text-slate-700">{formatCurrency(price * item.qty)}</span>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-xs text-slate-500 font-semibold pt-2 border-t border-slate-200/60">
+                          <span className="flex items-center gap-1"><Clock size={12} className="text-slate-400" /> Dipesan: {getWaitTime(activeOrder.createdAt)} yang lalu</span>
+                          {activeOrder.orderNumber && (
+                            <span className="text-[11px] font-mono text-slate-400">#{activeOrder.orderNumber}</span>
                           )}
                         </div>
+
+                        <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-200/60">
+                          <span className="font-bold text-slate-600">Total Transaksi</span>
+                          <span className="font-black text-indigo-700 text-base">{formatCurrency(activeOrder.total)}</span>
+                        </div>
+
+                        {/* Rincian Menu & Checklist Pengantaran */}
+                        {activeOrder.items && activeOrder.items.length > 0 && (
+                          <div className="pt-3 border-t border-slate-200/60 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                                Daftar Menu yang Dipesan ({activeOrder.items.length} Menu):
+                              </span>
+                              <span className="text-[10px] text-slate-400 italic">Centang saat disajikan</span>
+                            </div>
+
+                            <div className="max-h-[170px] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                              {activeOrder.items.map((item: any, idx: number) => {
+                                const prod = item.product || {};
+                                const price = item.price || (prod.sellPrice || 0);
+                                const itemKey = `${actionTable.id}-${item.id || idx}-${item.productId}`;
+                                const isChecked = !!checkedItems[itemKey];
+
+                                return (
+                                  <div 
+                                    key={idx} 
+                                    onClick={() => toggleItemCheck(itemKey)}
+                                    className={`flex items-start gap-2.5 p-2 rounded-xl border transition-all cursor-pointer select-none ${
+                                      isChecked 
+                                        ? 'bg-emerald-50/70 border-emerald-200 text-slate-400' 
+                                        : 'bg-white border-slate-200/80 text-slate-800 hover:border-indigo-300'
+                                    }`}
+                                  >
+                                    <input 
+                                      type="checkbox" 
+                                      checked={isChecked} 
+                                      onChange={() => {}} // Handled by div onClick
+                                      className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className={`text-xs font-bold ${isChecked ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                                        {prod.name || 'Menu'}
+                                      </div>
+                                      {item.notes && (
+                                        <div className="text-[10px] text-slate-400 font-medium italic mt-0.5">
+                                          * {item.notes}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="text-right whitespace-nowrap">
+                                      <span className={`text-xs font-bold ${isChecked ? 'text-slate-400' : 'text-indigo-600'}`}>
+                                        {item.qty}x
+                                      </span>
+                                      <div className="text-[10px] font-semibold text-slate-400">
+                                        {formatCurrency(price * item.qty)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex gap-2.5 pt-2">
+                      {/* Tombol Aksi Tambahan */}
+                      <div className="flex gap-2">
                         <button
-                          className="flex-1 py-3 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                          className="flex-1 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
                           onClick={() => {
                             const tableOrders = activeOrders.filter(o => o.tableId === actionTable.id);
                             setSplitTableId(actionTable.id);
@@ -852,42 +925,48 @@ const TableView = () => {
                             setActionTable(null);
                           }}
                         >
-                          <Scissors size={14} /> Split Bill
+                          <Scissors size={13} /> Split Bill
                         </button>
 
                         <button
-                          className="flex-1 py-3 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                          className="flex-1 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
                           onClick={() => {
                             setMoveMergeSourceTable(actionTable);
                             setIsMoveMergeOpen(true);
                             setActionTable(null);
                           }}
                         >
-                          <RefreshCw size={14} /> Pindah / Gabung
+                          <RefreshCw size={13} /> Pindah / Gabung
                         </button>
                       </div>
 
-                      {activeOrder.status === 'Paid' ? (
+                      {/* Tombol Utama Status Selesai / Clear Table */}
+                      {isPaid ? (
                         <button
-                          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-100 mt-3"
-                          onClick={() => {
-                            handleReleaseTable(activeOrder.id);
-                            setActionTable(null);
-                          }}
+                          className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black rounded-2xl transition-all text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+                          onClick={() => handleClearTable(actionTable.id, actionTable.tableNo)}
                         >
-                          <Check size={14} /> Kosongkan Meja
+                          <Check size={16} className="stroke-[3]" /> Bersihkan / Kosongkan Meja
                         </button>
                       ) : (
-                        <button
-                          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-100 mt-3"
-                          onClick={() => {
-                            setSelectedOrderToPay(activeOrder);
-                            setIsCheckoutOpen(true);
-                            setActionTable(null);
-                          }}
-                        >
-                          <CreditCard size={14} /> Bayar Tagihan
-                        </button>
+                        <div className="flex flex-col gap-2">
+                          <button
+                            className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-black rounded-2xl transition-all text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20"
+                            onClick={() => {
+                              setSelectedOrderToPay(activeOrder);
+                              setIsCheckoutOpen(true);
+                              setActionTable(null);
+                            }}
+                          >
+                            <CreditCard size={16} /> Bayar Tagihan (F4)
+                          </button>
+                          <button
+                            className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-all text-[11px] flex items-center justify-center gap-1.5"
+                            onClick={() => handleClearTable(actionTable.id, actionTable.tableNo)}
+                          >
+                            <Check size={13} /> Kosongkan Meja Tanpa Bayar
+                          </button>
+                        </div>
                       )}
                     </div>
                   );

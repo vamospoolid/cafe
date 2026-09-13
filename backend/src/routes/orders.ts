@@ -272,7 +272,8 @@ router.post('/dinein', async (req: Request, res: Response) => {
       // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
       const settings = await tx.settings.findFirst();
       const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
-      const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
+      const hasTable = Boolean(resolvedTableId);
+      const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
 
       // Buat Order Induk
       const order = await tx.order.create({
@@ -438,7 +439,8 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
         const settings = await tx.settings.findFirst();
         const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
-        const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
+        const hasTable = Boolean(tableId);
+        const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
 
         // Buat Order Induk
         const createdOrder = await tx.order.create({
@@ -724,7 +726,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
       // Cek settings toko
       const settings = await tx.settings.findFirst();
-      const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
+      const hasTable = Boolean(tableId);
+      const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
       const isActuallyPaid = Boolean(isPaid);
       const nowPaid = isActuallyPaid ? new Date() : null;
 
@@ -895,7 +898,8 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       const updatedOrders = [];
       const paidNow = new Date(); // Fix #1: timestamp tunggal untuk semua order yang dibayar bersamaan
       const settings = await tx.settings.findFirst();
-      const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
+      const hasAnyTable = orders.some(o => Boolean(o.tableId));
+      const shouldAutoServe = !hasAnyTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
       
       if (ids.length === 1) {
         const order = orders[0];
@@ -1393,11 +1397,21 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
       return res.status(400).json({ error: 'Parameter sourceTableId dan targetTableId wajib diisi' });
     }
 
-    // 1. Pastikan meja tujuan aktif & kosong (tidak ada order dengan status Pending)
+    if (Number(sourceTableId) === Number(targetTableId)) {
+      return res.status(400).json({ error: 'Meja asal dan meja tujuan tidak boleh sama' });
+    }
+
+    // 1. Pastikan meja tujuan aktif & kosong (tidak ada order dengan status Pending atau Paid aktif)
     const targetActiveOrdersCount = await prisma.order.count({
       where: {
         tableId: Number(targetTableId),
-        status: 'Pending'
+        OR: [
+          { status: 'Pending' },
+          {
+            status: 'Paid',
+            kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+          }
+        ]
       }
     });
 
@@ -1435,6 +1449,7 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
 
     // 4. Emit socket event
     io.emit('order:new', { message: 'Table moved', sourceTableId, targetTableId });
+    io.emit('order:paid', { sourceTableId, targetTableId });
     io.emit('kds:statusChanged', { message: 'Table moved KDS' });
 
     res.json({ message: 'Meja berhasil dipindahkan', movedCount: activeOrders.length });
@@ -1506,67 +1521,18 @@ router.post('/merge-table', authenticateToken, async (req: Request, res: Respons
         return { type: 'move', count: sourceActiveOrders.length };
       }
 
-      const primaryTargetOrder = targetActiveOrders[0];
-
-      // 4. Pindahkan & gabungkan item-item pesanan
-      for (const sourceOrder of sourceActiveOrders) {
-        for (const sourceItem of sourceOrder.items) {
-          // Cari item yang sama di meja tujuan (product sama & notes sama)
-          const matchingTargetItem = primaryTargetOrder.items.find(
-            ti => ti.productId === sourceItem.productId && ti.notes === sourceItem.notes
-          );
-
-          if (matchingTargetItem) {
-            const newQty = matchingTargetItem.qty + sourceItem.qty;
-            await tx.orderItem.update({
-              where: { id: matchingTargetItem.id },
-              data: {
-                qty: newQty,
-                subtotal: matchingTargetItem.price * newQty
-              }
-            });
-            await tx.orderItem.delete({
-              where: { id: sourceItem.id }
-            });
-          } else {
-            await tx.orderItem.update({
-              where: { id: sourceItem.id },
-              data: { orderId: primaryTargetOrder.id }
-            });
-          }
-        }
-
-        // Hapus order asal yang sudah kosong
-        await tx.order.delete({
-          where: { id: sourceOrder.id }
-        });
-      }
-
-      // 5. Hitung ulang total order tujuan
-      const updatedTargetItems = await tx.orderItem.findMany({
-        where: { orderId: primaryTargetOrder.id }
+      // 4. Update tableId untuk semua source orders ke targetTableId
+      await tx.order.updateMany({
+        where: { id: { in: sourceActiveOrders.map(o => o.id) } },
+        data: { tableId: Number(targetTableId) }
       });
 
-      const newSubtotal = updatedTargetItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const newTax = newSubtotal * (taxRate / 100);
-      const newService = newSubtotal * (serviceChargeRate / 100);
-      const newTotal = newSubtotal - primaryTargetOrder.discount + newTax + newService;
-
-      await tx.order.update({
-        where: { id: primaryTargetOrder.id },
-        data: {
-          subtotal: newSubtotal,
-          tax: newTax,
-          serviceCharge: newService,
-          total: newTotal
-        }
-      });
-
-      return { type: 'merge', targetOrderId: primaryTargetOrder.id };
+      return { type: 'merge', count: sourceActiveOrders.length };
     });
 
-    // 6. Emit socket event
+    // 5. Emit socket events
     io.emit('order:new', { message: 'Table merged', sourceTableId, targetTableId });
+    io.emit('order:paid', { sourceTableId, targetTableId });
     io.emit('kds:statusChanged', { message: 'Table merged KDS' });
 
     res.json({ 

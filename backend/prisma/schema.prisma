@@ -33,31 +33,38 @@ model User {
 }
 
 model Category {
-  id            Int       @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   name          String
-  printerTarget String    @default("KITCHEN") // KITCHEN, BAR, NONE
-  products      Product[]
+  printerTarget String     @default("KITCHEN") // KITCHEN, BAR, NONE
+  parentId      Int?
+  parent        Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  subCategories Category[] @relation("CategoryHierarchy")
+  
+  products      Product[]  @relation("ProductCategory")
+  subProducts   Product[]  @relation("ProductSubCategory")
 }
 
 model Product {
-  id         Int                 @id @default(autoincrement())
-  barcode    String?             @unique
-  name       String
-  category   Category            @relation(fields: [categoryId], references: [id])
-  categoryId Int
-  buyPrice   Float               @default(0)
-  sellPrice  Float
-  stock      Int                 @default(0)
-  minStock   Int                 @default(1)
-  imageUrl   String?
-  status     String              @default("Aktif")
+  id            Int                 @id @default(autoincrement())
+  barcode       String?             @unique
+  name          String
+  category      Category            @relation("ProductCategory", fields: [categoryId], references: [id])
+  categoryId    Int
+  subCategory   Category?           @relation("ProductSubCategory", fields: [subCategoryId], references: [id])
+  subCategoryId Int?
+  buyPrice      Float               @default(0)
+  sellPrice     Float
+  stock         Int                 @default(0)
+  minStock      Int                 @default(1)
+  imageUrl      String?
+  status        String              @default("Aktif")
   
-  orderItems OrderItem[]
-  recipes    RecipeItem[]        // Komposisi bahan baku (Advanced Mode)
-  poItems    PurchaseOrderItem[] // Referensi PO (Simple Mode)
+  orderItems    OrderItem[]
+  recipes       RecipeItem[]        // Komposisi bahan baku (Advanced Mode)
+  poItems       PurchaseOrderItem[] // Referensi PO (Simple Mode)
   
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 }
 
 model Table {
@@ -305,6 +312,7 @@ model Ingredient {
   id           Int               @id @default(autoincrement())
   name         String
   category     String            @default("FOOD") // FOOD (Dapur), DRINK (Bar), PACKAGING (Kemasan/Showcase)
+  subCategory  String?           // Sub-kategori: Daging & Seafood, Sayuran Segar, Biji Kopi, dsb.
   unit         String            // gram, ml, buah, liter, kg
   stock        Float             @default(0)
   minStock     Float             @default(0)  // Batas minimum → alert stok menipis

@@ -26,15 +26,15 @@ const MoveMergeTableModal: React.FC<MoveMergeTableModalProps> = ({
 
   if (!isOpen || !sourceTable) return null;
 
-  // Helper untuk mengecek status meja target
+  // Helper untuk mengecek status meja target (terisi jika ada order aktif apapun)
   const getTableStatus = (tableId: number): 'empty' | 'occupied' => {
-    const isOccupied = activeOrders.some(o => o.tableId === tableId && o.status === 'Pending');
+    const isOccupied = activeOrders.some(o => o.tableId === tableId);
     return isOccupied ? 'occupied' : 'empty';
   };
 
   // Helper untuk mendapatkan order aktif pada meja
   const getTableActiveOrder = (tableId: number) => {
-    return activeOrders.find(o => o.tableId === tableId && o.status === 'Pending');
+    return activeOrders.find(o => o.tableId === tableId);
   };
 
   // Kategori area meja
@@ -58,8 +58,8 @@ const MoveMergeTableModal: React.FC<MoveMergeTableModalProps> = ({
 
     if (isMerge) {
       const targetOrder = getTableActiveOrder(targetTable.id);
-      title = 'Gabung Tagihan';
-      message = `Apakah Anda yakin ingin menggabungkan tagihan Meja ${sourceTable.tableNo} ke Meja ${targetTable.tableNo} (${targetOrder?.customerName || 'Pelanggan'})? Ini akan memindahkan seluruh item pesanan dan menghitung ulang total harga.`;
+      title = 'Gabung Meja & Tagihan';
+      message = `Apakah Anda yakin ingin menggabungkan Meja ${sourceTable.tableNo} ke Meja ${targetTable.tableNo} (${targetOrder?.customerName || 'Pelanggan'})? Seluruh pesanan aktif kedua meja akan disatukan ke Meja ${targetTable.tableNo}.`;
       url = '/api/orders/merge-table';
     } else {
       title = 'Pindah Meja';

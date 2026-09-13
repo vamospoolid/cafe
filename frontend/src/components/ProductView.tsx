@@ -1,19 +1,31 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Package, Plus, Search, RotateCcw, Edit, Copy, Trash2, AlertTriangle, CheckCircle, Wallet, Grid, List } from 'lucide-react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
+import { 
+  Package, Plus, Search, RotateCcw, Edit, Copy, Trash2, 
+  AlertTriangle, CheckCircle, Wallet, Grid, List, Layers, Tag 
+} from 'lucide-react';
 import ProductModal from './ProductModal';
+import { CategoryModal } from './CategoryModal';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 
 const ProductView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterSubCategory, setFilterSubCategory] = useState('');
+  const [filterStock, setFilterStock] = useState('Semua');
+
   const posContext = useContext(POSContext);
 
-  const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
+  const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
   const fetchProducts = async () => {
     try {
@@ -106,140 +118,260 @@ const ProductView = () => {
     }
   };
 
+  const resetFilters = () => {
+    setSearchQuery('');
+    setFilterCategory('');
+    setFilterSubCategory('');
+    setFilterStock('Semua');
+  };
+
+  // Get active subcategories based on selected category filter
+  const activeSubCategories = useMemo(() => {
+    if (!filterCategory) return [];
+    const cat = categories.find(c => String(c.id) === String(filterCategory));
+    return cat?.subCategories || [];
+  }, [filterCategory, categories]);
+
+  // Filtered products list
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      // Search
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = p.name?.toLowerCase().includes(q);
+        const matchBarcode = p.barcode?.toLowerCase().includes(q);
+        if (!matchName && !matchBarcode) return false;
+      }
+
+      // Category filter
+      if (filterCategory && String(p.categoryId) !== String(filterCategory)) {
+        return false;
+      }
+
+      // Sub-category filter
+      if (filterSubCategory && String(p.subCategoryId) !== String(filterSubCategory)) {
+        return false;
+      }
+
+      // Stock filter
+      if (filterStock === 'Stok Aman' && p.stock <= p.minStock) return false;
+      if (filterStock === 'Stok Menipis' && (p.stock <= 0 || p.stock > p.minStock)) return false;
+      if (filterStock === 'Habis' && p.stock > 0) return false;
+
+      return true;
+    });
+  }, [products, searchQuery, filterCategory, filterSubCategory, filterStock]);
+
   const totalValue = products.reduce((sum, p) => sum + (p.buyPrice * p.stock), 0);
   const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
   const activeCount = products.filter(p => p.status === 'Aktif').length;
 
   return (
     <div className="p-6 h-full flex flex-col bg-slate-50 overflow-y-auto">
-      <div className="flex justify-between items-center mb-6">
+      
+      {/* HEADER SECTION */}
+      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
+          <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
             <Package className="text-primary" /> Manajemen Produk
           </h2>
-          <p className="text-muted mt-1">Kelola semua produk yang dijual di toko Anda</p>
+          <p className="text-muted text-xs mt-1">Kelola katalog produk, harga jual, stok, dan klasifikasi kategori</p>
         </div>
-        <button className="btn btn-primary shadow-md hover:shadow-lg transition-all" onClick={openAddModal}>
-          <Plus size={18} /> Tambah Produk
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            className="btn bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-sm flex items-center gap-2 font-semibold text-xs py-2 px-3.5 rounded-xl transition-all"
+            onClick={() => setIsCategoryModalOpen(true)}
+          >
+            <Layers size={16} className="text-indigo-600" /> Kelola Kategori
+          </button>
+          <button 
+            className="btn btn-primary shadow-md hover:shadow-lg flex items-center gap-2 font-semibold text-xs py-2 px-4 rounded-xl transition-all" 
+            onClick={openAddModal}
+          >
+            <Plus size={16} /> Tambah Produk
+          </button>
+        </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow bg-white">
+      {/* SUMMARY STAT CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold">{products.length}</div>
-            <div className="text-sm font-semibold text-slate-500">Total Produk</div>
+            <div className="text-2xl font-bold text-slate-800">{products.length}</div>
+            <div className="text-xs font-semibold text-slate-500">Total Produk</div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
-            <Package size={24} />
+          <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
+            <Package size={22} />
           </div>
         </div>
         
-        <div className="card flex items-center justify-between p-4 border-l-4 border-amber-500 shadow-sm hover:shadow-md transition-shadow bg-white">
+        <div className="card flex items-center justify-between p-4 border-l-4 border-amber-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold">{lowStockCount}</div>
-            <div className="text-sm font-semibold text-slate-500">Stok Menipis</div>
+            <div className="text-2xl font-bold text-amber-600">{lowStockCount}</div>
+            <div className="text-xs font-semibold text-slate-500">Stok Menipis</div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-            <AlertTriangle size={24} />
+          <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+            <AlertTriangle size={22} />
           </div>
         </div>
 
-        <div className="card flex items-center justify-between p-4 border-l-4 border-success shadow-sm hover:shadow-md transition-shadow bg-white">
+        <div className="card flex items-center justify-between p-4 border-l-4 border-emerald-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold">{activeCount}</div>
-            <div className="text-sm font-semibold text-slate-500">Produk Aktif</div>
+            <div className="text-2xl font-bold text-emerald-600">{activeCount}</div>
+            <div className="text-xs font-semibold text-slate-500">Produk Aktif</div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center text-success">
-            <CheckCircle size={24} />
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <CheckCircle size={22} />
           </div>
         </div>
 
-        <div className="card flex items-center justify-between p-4 border-l-4 border-indigo-500 shadow-sm hover:shadow-md transition-shadow bg-white">
+        <div className="card flex items-center justify-between p-4 border-l-4 border-indigo-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
             <div className="text-2xl font-bold text-indigo-700">{formatCurrency(totalValue)}</div>
-            <div className="text-sm font-semibold text-slate-500">Nilai Stok (HPP)</div>
+            <div className="text-xs font-semibold text-slate-500">Nilai Stok (HPP)</div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
-            <Wallet size={24} />
+          <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
+            <Wallet size={22} />
           </div>
         </div>
       </div>
 
-      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm">
-        {/* Filter Section */}
-        <div className="p-4 border-b border-gray-200 bg-white grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-          <div className="relative md:col-span-3">
-            <Search size={16} className="absolute left-3 top-3.5 text-muted" />
-            <input type="text" className="form-control !pl-9" placeholder="Cari produk..." />
-          </div>
-          <select className="form-control md:col-span-2">
-            <option>Semua Kategori</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select className="form-control md:col-span-2">
-            <option>Semua Stok</option>
-            <option>Stok Aman</option>
-            <option>Stok Menipis</option>
-            <option>Habis</option>
-          </select>
-          <div className="flex gap-2 md:col-span-5 justify-end">
-            <button className="btn bg-gray-50 border border-gray-300 text-gray-700 flex justify-center items-center gap-2 hover:bg-gray-100">
-              <RotateCcw size={16} /> Reset
-            </button>
-            <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 ml-2">
-              <button 
-                className={`flex items-center justify-center p-2 px-3 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setViewMode('grid')}
-                title="Tampilan Grid (Kartu)"
-              >
-                <Grid size={18} />
-              </button>
-              <button 
-                className={`flex items-center justify-center p-2 px-3 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setViewMode('list')}
-                title="Tampilan List (Tabel)"
-              >
-                <List size={18} />
-              </button>
+      {/* FILTER & DATA SECTION */}
+      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm bg-white rounded-2xl">
+        
+        {/* FILTER BAR */}
+        <div className="p-4 border-b border-gray-200 bg-white flex flex-wrap gap-3 items-center justify-between">
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            {/* Search Input */}
+            <div className="relative min-w-[200px] flex-1">
+              <Search size={16} className="absolute left-3.5 top-3 text-muted" />
+              <input 
+                type="text" 
+                className="form-control !pl-9.5 text-xs py-2 rounded-xl" 
+                placeholder="Cari nama produk / barcode..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
+
+            {/* Category Filter */}
+            <div className="min-w-[160px]">
+              <select 
+                className="form-control text-xs py-2 rounded-xl"
+                value={filterCategory}
+                onChange={(e) => {
+                  setFilterCategory(e.target.value);
+                  setFilterSubCategory('');
+                }}
+              >
+                <option value="">Semua Kategori</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+
+            {/* Sub-Category Filter (Shows when category has subcategories) */}
+            {activeSubCategories.length > 0 && (
+              <div className="min-w-[160px] animate-fade-in">
+                <select 
+                  className="form-control text-xs py-2 rounded-xl border-indigo-200 bg-indigo-50/40 text-indigo-900"
+                  value={filterSubCategory}
+                  onChange={(e) => setFilterSubCategory(e.target.value)}
+                >
+                  <option value="">Semua Sub-Kategori</option>
+                  {activeSubCategories.map((sc: any) => (
+                    <option key={sc.id} value={sc.id}>{sc.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Stock Filter */}
+            <div className="min-w-[130px]">
+              <select 
+                className="form-control text-xs py-2 rounded-xl"
+                value={filterStock}
+                onChange={(e) => setFilterStock(e.target.value)}
+              >
+                <option value="Semua">Semua Stok</option>
+                <option value="Stok Aman">Stok Aman</option>
+                <option value="Stok Menipis">Stok Menipis</option>
+                <option value="Habis">Habis</option>
+              </select>
+            </div>
+
+            {/* Reset Button */}
+            {(searchQuery || filterCategory || filterSubCategory || filterStock !== 'Semua') && (
+              <button 
+                className="btn bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-colors"
+                onClick={resetFilters}
+                title="Reset Semua Filter"
+              >
+                <RotateCcw size={14} /> Reset
+              </button>
+            )}
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button 
+              className={`flex items-center justify-center p-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors ${viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setViewMode('grid')}
+              title="Tampilan Grid (Kartu)"
+            >
+              <Grid size={15} className="mr-1" /> Grid
+            </button>
+            <button 
+              className={`flex items-center justify-center p-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors ${viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              onClick={() => setViewMode('list')}
+              title="Tampilan List (Tabel)"
+            >
+              <List size={15} className="mr-1" /> Tabel
+            </button>
           </div>
         </div>
 
-        {/* Content Section */}
+        {/* CONTENT SECTION */}
         <div className="flex-1 overflow-y-auto bg-slate-50">
           {loading ? (
             <div className="p-12 flex flex-col items-center justify-center text-gray-400">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-              <p className="font-semibold">Memuat produk...</p>
+              <p className="font-semibold text-xs">Memuat produk...</p>
             </div>
           ) : viewMode === 'grid' ? (
-            <div className="p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-              {products.length === 0 ? (
-                <div className="col-span-full text-center py-12 text-gray-400 font-medium">Belum ada produk. Tambahkan produk baru.</div>
-              ) : products.map((prod) => (
-                <div key={prod.id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-gray-100 flex flex-col group">
-                  <div className="relative aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+            <div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+              {filteredProducts.length === 0 ? (
+                <div className="col-span-full text-center py-16 text-slate-400 font-medium text-xs">
+                  Tidak ada produk yang cocok dengan filter pencarian.
+                </div>
+              ) : filteredProducts.map((prod) => (
+                <div key={prod.id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-slate-100 flex flex-col group">
+                  <div className="relative aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
                     {prod.imageUrl ? (
                       <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                     ) : (
-                      <Package size={40} className="text-gray-300" />
+                      <Package size={36} className="text-slate-300" />
                     )}
                     {prod.stock <= prod.minStock && (
-                      <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm animate-pulse">
+                      <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm animate-pulse">
                         STOK {prod.stock}
                       </div>
                     )}
                   </div>
-                  <div className="p-4 flex flex-col flex-1">
-                    <div className="text-xs font-bold text-indigo-500 mb-1">{prod.category?.name || 'Tanpa Kategori'}</div>
-                    <h3 className="font-bold text-gray-800 text-sm leading-tight mb-2 flex-1">{prod.name}</h3>
-                    <div className="text-lg font-black text-primary mb-3">{formatCurrency(prod.sellPrice)}</div>
-                    <div className="flex gap-1 mt-auto border-t border-gray-100 pt-3">
-                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" title="Edit" onClick={() => openEditModal(prod)}><Edit size={14}/></button>
-                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-colors" title="Duplikasi"><Copy size={14}/></button>
-                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Hapus" onClick={() => handleDelete(prod.id)}><Trash2 size={14}/></button>
+                  <div className="p-3.5 flex flex-col flex-1">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 mb-1 truncate">
+                      <Tag size={11} className="shrink-0" />
+                      <span className="truncate">{prod.category?.name || 'Tanpa Kategori'}</span>
+                      {prod.subCategory && (
+                        <span className="text-slate-400 font-normal truncate">
+                          &gt; {prod.subCategory.name}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="font-bold text-slate-800 text-xs leading-tight mb-2 line-clamp-2 flex-1">{prod.name}</h3>
+                    <div className="text-sm font-black text-primary mb-2.5">{formatCurrency(prod.sellPrice)}</div>
+                    <div className="flex gap-1 mt-auto border-t border-slate-100 pt-2.5">
+                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" title="Edit" onClick={() => openEditModal(prod)}><Edit size={13}/></button>
+                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Hapus" onClick={() => handleDelete(prod.id)}><Trash2 size={13}/></button>
                     </div>
                   </div>
                 </div>
@@ -248,61 +380,71 @@ const ProductView = () => {
           ) : (
             <div className="table-responsive p-0 bg-white">
               <table className="data-table w-full text-left border-collapse">
-                <thead className="bg-slate-50 sticky top-0 shadow-sm z-10">
+                <thead className="bg-slate-50 sticky top-0 shadow-sm z-10 text-[11px] uppercase tracking-wider text-slate-600">
                   <tr>
-                    <th className="px-6 py-4">GAMBAR</th>
-                    <th className="px-6 py-4">BARCODE</th>
-                    <th className="px-6 py-4">NAMA PRODUK</th>
-                    <th className="px-6 py-4">KATEGORI</th>
-                    <th className="px-6 py-4">HARGA</th>
-                    <th className="px-6 py-4">STOK</th>
-                    <th className="px-6 py-4">STATUS</th>
-                    <th className="px-6 py-4 text-right">AKSI</th>
+                    <th className="px-5 py-3.5">GAMBAR</th>
+                    <th className="px-5 py-3.5">BARCODE</th>
+                    <th className="px-5 py-3.5">NAMA PRODUK</th>
+                    <th className="px-5 py-3.5">KATEGORI & SUB-KATEGORI</th>
+                    <th className="px-5 py-3.5">HARGA</th>
+                    <th className="px-5 py-3.5">STOK</th>
+                    <th className="px-5 py-3.5">STATUS</th>
+                    <th className="px-5 py-3.5 text-right">AKSI</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {products.length === 0 ? (
+                <tbody className="divide-y divide-gray-100 text-xs">
+                  {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-12 text-gray-400 font-medium">Belum ada produk. Tambahkan produk baru.</td>
+                      <td colSpan={8} className="text-center py-16 text-slate-400 font-medium">
+                        Tidak ada produk yang cocok dengan kriteria filter.
+                      </td>
                     </tr>
-                  ) : products.map((prod) => (
+                  ) : filteredProducts.map((prod) => (
                     <tr key={prod.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-3">
-                        <div className="w-14 h-14 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center border border-gray-200">
+                      <td className="px-5 py-2.5">
+                        <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center border border-slate-200">
                           {prod.imageUrl ? (
                             <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover" />
                           ) : (
-                            <Package size={20} className="text-gray-400" />
+                            <Package size={18} className="text-slate-400" />
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-3 font-mono text-xs text-gray-500">{prod.barcode || '-'}</td>
-                      <td className="px-6 py-3">
-                        <div className="font-bold text-gray-800 text-base">{prod.name}</div>
+                      <td className="px-5 py-2.5 font-mono text-xs text-slate-500">{prod.barcode || '-'}</td>
+                      <td className="px-5 py-2.5">
+                        <div className="font-bold text-slate-800 text-sm">{prod.name}</div>
                       </td>
-                      <td className="px-6 py-3">
-                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">
-                          {prod.category?.name || '-'}
-                        </span>
+                      <td className="px-5 py-2.5">
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
+                            {prod.category?.name || '-'}
+                          </span>
+                          {prod.subCategory && (
+                            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
+                              &gt; {prod.subCategory.name}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-6 py-3">
-                        <div className="text-xs text-muted font-medium">Beli: {formatCurrency(prod.buyPrice)}</div>
-                        <div className="text-sm font-black text-primary mt-0.5">Jual: {formatCurrency(prod.sellPrice)}</div>
+                      <td className="px-5 py-2.5">
+                        <div className="text-[11px] text-muted font-medium">Beli: {formatCurrency(prod.buyPrice)}</div>
+                        <div className="text-xs font-black text-primary mt-0.5">Jual: {formatCurrency(prod.sellPrice)}</div>
                       </td>
-                      <td className="px-6 py-3">
-                        <div className={`font-black text-lg ${prod.stock <= prod.minStock ? 'text-red-500' : 'text-emerald-600'}`}>{prod.stock} <span className="text-xs font-bold">pcs</span></div>
-                        <div className="text-xs text-muted font-medium mt-0.5">Min: {prod.minStock}</div>
+                      <td className="px-5 py-2.5">
+                        <div className={`font-black text-sm ${prod.stock <= prod.minStock ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {prod.stock} <span className="text-[10px] font-semibold">pcs</span>
+                        </div>
+                        <div className="text-[10px] text-muted font-medium mt-0.5">Min: {prod.minStock}</div>
                       </td>
-                      <td className="px-6 py-3">
-                        <span className={`badge ${prod.status === 'Aktif' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                      <td className="px-5 py-2.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${prod.status === 'Aktif' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
                           {prod.status}
                         </span>
                       </td>
-                      <td className="px-6 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button className="p-2 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" title="Edit" onClick={() => openEditModal(prod)}><Edit size={16}/></button>
-                          <button className="p-2 rounded-lg text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-colors" title="Duplikasi"><Copy size={16}/></button>
-                          <button className="p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Hapus" onClick={() => handleDelete(prod.id)}><Trash2 size={16}/></button>
+                      <td className="px-5 py-2.5 text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <button className="p-1.5 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" title="Edit" onClick={() => openEditModal(prod)}><Edit size={14}/></button>
+                          <button className="p-1.5 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Hapus" onClick={() => handleDelete(prod.id)}><Trash2 size={14}/></button>
                         </div>
                       </td>
                     </tr>
@@ -313,24 +455,38 @@ const ProductView = () => {
           )}
         </div>
         
-        <div className="p-4 border-t border-gray-200 bg-white text-xs font-semibold text-gray-400 flex justify-between items-center">
+        {/* FOOTER BAR */}
+        <div className="p-3.5 border-t border-gray-200 bg-white text-xs font-semibold text-slate-500 flex justify-between items-center">
           <span className="flex items-center gap-1.5">
-            <Package size={14} className="text-gray-400" />
-            <span>Menampilkan total {products.length} produk di sistem.</span>
+            <Package size={14} className="text-slate-400" />
+            <span>Menampilkan {filteredProducts.length} dari {products.length} produk</span>
           </span>
-          <span>{posContext?.settings?.storeName || 'SOL Cafe'} Inventory System</span>
+          <span>{posContext?.settings?.storeName || 'SOL Cafe'} Inventory</span>
         </div>
       </div>
 
+      {/* PRODUCT MODAL */}
       <ProductModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         initialData={selectedProduct}
         categories={categories}
         onSave={handleSave}
+        onManageCategories={() => setIsCategoryModalOpen(true)}
+      />
+
+      {/* CATEGORY MANAGEMENT MODAL */}
+      <CategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        onCategoriesUpdated={() => {
+          fetchCategories();
+          fetchProducts();
+        }}
       />
     </div>
   );
 };
 
 export default ProductView;
+

@@ -1,5 +1,9 @@
 {
-  "appId": "id.codenusa.poscafe",
-  "appName": "SOL CAFE POS",
-  "webDir": "../frontend/dist"
+  "appId": "id.codenusa.cafestaff",
+  "appName": "Muki Staff Portal",
+  "webDir": "../frontend/dist",
+  "server": {
+    "url": "http://cafe.codenusa.id/staff",
+    "cleartext": true
+  }
 }

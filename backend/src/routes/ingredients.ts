@@ -311,11 +311,12 @@ router.get('/low-stock', authenticateToken, async (req: Request, res: Response) 
 // POST create ingredient
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { name, category, unit, stock, minStock, buyPrice, supplierId } = req.body;
+    const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId } = req.body;
     const ingredient = await prisma.ingredient.create({
       data: {
-        name,
+        name: name ? name.trim() : '',
         category: category || 'FOOD',
+        subCategory: subCategory ? subCategory.trim() : null,
         unit,
         stock: Number(stock) || 0,
         minStock: Number(minStock) || 0,
@@ -335,12 +336,13 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, category, unit, stock, minStock, buyPrice, supplierId } = req.body;
+    const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId } = req.body;
     const ingredient = await prisma.ingredient.update({
       where: { id: Number(id) },
       data: {
-        name,
+        name: name !== undefined ? name.trim() : undefined,
         category: category !== undefined ? category : undefined,
+        subCategory: subCategory !== undefined ? (subCategory ? subCategory.trim() : null) : undefined,
         unit,
         stock: stock !== undefined ? Number(stock) : undefined,
         minStock: minStock !== undefined ? Number(minStock) : undefined,

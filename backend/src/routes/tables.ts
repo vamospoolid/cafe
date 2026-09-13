@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
+import { io } from '../index';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -155,6 +156,51 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
     res.json({ message: 'Table deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete table' });
+  }
+});
+
+// Clear / Release Table (Kosongkan Meja Langsung)
+router.post('/:id/clear', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const tableId = Number(id);
+
+    const activeOrders = await prisma.order.findMany({
+      where: {
+        tableId,
+        OR: [
+          { status: 'Pending' },
+          {
+            status: 'Paid',
+            kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+          }
+        ]
+      }
+    });
+
+    if (activeOrders.length === 0) {
+      return res.json({ message: 'Meja sudah dalam keadaan kosong' });
+    }
+
+    const now = new Date();
+    await prisma.order.updateMany({
+      where: {
+        id: { in: activeOrders.map(o => o.id) }
+      },
+      data: {
+        kdsStatus: 'Served',
+        servedAt: now
+      }
+    });
+
+    io.emit('order:paid', { tableId });
+    io.emit('order:new', { tableId });
+    io.emit('kds:statusChanged', { tableId, kdsStatus: 'Served' });
+
+    res.json({ message: 'Meja berhasil dibersihkan & dikosongkan', clearedCount: activeOrders.length });
+  } catch (error: any) {
+    console.error('Clear table error:', error);
+    res.status(500).json({ error: error.message || 'Gagal mengosongkan meja' });
   }
 });
 

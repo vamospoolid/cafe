@@ -10,7 +10,7 @@ router.get('/public', async (req: Request, res: Response) => {
   try {
     const products = await prisma.product.findMany({
       where: { status: 'Aktif' },
-      include: { category: true },
+      include: { category: true, subCategory: true },
       orderBy: { id: 'desc' }
     });
     res.json(products);
@@ -23,7 +23,7 @@ router.get('/public', async (req: Request, res: Response) => {
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const products = await prisma.product.findMany({
-      include: { category: true },
+      include: { category: true, subCategory: true },
       orderBy: { id: 'desc' }
     });
     res.json(products);
@@ -35,13 +35,14 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 // Create new product
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { barcode, name, categoryId, buyPrice, sellPrice, stock, minStock, imageUrl, status, recipeItems } = req.body;
+    const { barcode, name, categoryId, subCategoryId, buyPrice, sellPrice, stock, minStock, imageUrl, status, recipeItems } = req.body;
     
     const product = await prisma.product.create({
       data: {
         barcode,
         name,
         categoryId: Number(categoryId),
+        subCategoryId: subCategoryId ? Number(subCategoryId) : null,
         buyPrice: Number(buyPrice) || 0,
         sellPrice: Number(sellPrice),
         stock: Number(stock) || 0,
@@ -55,7 +56,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           }))
         } : undefined
       },
-      include: { category: true }
+      include: { category: true, subCategory: true }
     });
     res.status(201).json(product);
   } catch (error) {
@@ -68,7 +69,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { barcode, name, categoryId, buyPrice, sellPrice, stock, minStock, imageUrl, status, recipeItems } = req.body;
+    const { barcode, name, categoryId, subCategoryId, buyPrice, sellPrice, stock, minStock, imageUrl, status, recipeItems } = req.body;
     
     // We use a transaction because we need to clear old recipes and insert new ones
     const product = await prisma.$transaction(async (tx) => {
@@ -78,6 +79,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
           barcode,
           name,
           categoryId: categoryId ? Number(categoryId) : undefined,
+          subCategoryId: subCategoryId !== undefined ? (subCategoryId ? Number(subCategoryId) : null) : undefined,
           buyPrice: buyPrice !== undefined ? Number(buyPrice) : undefined,
           sellPrice: sellPrice !== undefined ? Number(sellPrice) : undefined,
           stock: stock !== undefined ? Number(stock) : undefined,
@@ -103,7 +105,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
 
       return await tx.product.findUnique({
         where: { id: Number(id) },
-        include: { category: true }
+        include: { category: true, subCategory: true }
       });
     });
 

@@ -16,10 +16,35 @@ import {
   exportStockOpnameVariancePDF 
 } from '../utils/pdfGenerator';
 
+const INGREDIENT_SUB_CATEGORIES: Record<string, string[]> = {
+  FOOD: [
+    'Daging & Seafood',
+    'Sayuran Segar',
+    'Bumbu & Saus',
+    'Tepung & Mie',
+    'Dairy & Telur',
+    'Bahan Kering & Rempah'
+  ],
+  DRINK: [
+    'Biji Kopi (Beans)',
+    'Sirup & Puree',
+    'Susu & Dairy',
+    'Teh & Powder',
+    'Topping Minuman'
+  ],
+  PACKAGING: [
+    'Cup & Tutup',
+    'Paper Box & Kantong',
+    'Plastik & Seal',
+    'Sedotan & Sendok'
+  ]
+};
+
 interface Ingredient {
   id: number;
   name: string;
   category?: 'FOOD' | 'DRINK' | 'PACKAGING' | string;
+  subCategory?: string | null;
   unit: string;
   stock: number;
   minStock: number;
@@ -84,6 +109,7 @@ export const IngredientView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
+  const [subCategoryFilter, setSubCategoryFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'all' | 'low' | 'out' | 'safe'>('all');
 
   // Stock Loss Data & Analytics
@@ -268,6 +294,7 @@ export const IngredientView: React.FC = () => {
   const [form, setForm] = useState({ 
     name: '', 
     category: 'FOOD', 
+    subCategory: '',
     unit: 'gram', 
     stock: '', 
     minStock: '', 
@@ -403,7 +430,7 @@ export const IngredientView: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditData(null);
-    setForm({ name: '', category: 'FOOD', unit: 'gram', stock: '', minStock: '', buyPrice: '', supplierId: '' });
+    setForm({ name: '', category: 'FOOD', subCategory: '', unit: 'gram', stock: '', minStock: '', buyPrice: '', supplierId: '' });
     setShowModal(true);
   };
 
@@ -412,6 +439,7 @@ export const IngredientView: React.FC = () => {
     setForm({
       name: ing.name,
       category: ing.category || 'FOOD',
+      subCategory: ing.subCategory || '',
       unit: ing.unit,
       stock: ing.stock.toString(),
       minStock: ing.minStock.toString(),
@@ -428,6 +456,7 @@ export const IngredientView: React.FC = () => {
     const payload = {
       name: form.name.trim(),
       category: form.category || 'FOOD',
+      subCategory: form.subCategory ? form.subCategory.trim() : null,
       unit: form.unit.trim() || 'gram',
       stock: parseFloat(form.stock) || 0,
       minStock: parseFloat(form.minStock) || 0,
@@ -615,12 +644,17 @@ export const IngredientView: React.FC = () => {
       matchCat = (i.category || 'FOOD') === categoryFilter;
     }
 
+    let matchSubCat = true;
+    if (subCategoryFilter !== 'ALL') {
+      matchSubCat = (i.subCategory || 'Lainnya') === subCategoryFilter;
+    }
+
     let matchStatus = true;
     if (statusFilter === 'out') matchStatus = i.stock === 0;
     else if (statusFilter === 'low') matchStatus = i.stock > 0 && i.stock <= i.minStock;
     else if (statusFilter === 'safe') matchStatus = i.stock > i.minStock;
 
-    return matchSearch && matchCat && matchStatus;
+    return matchSearch && matchCat && matchSubCat && matchStatus;
   });
 
   const lowStockCount = ingredients.filter(i => i.stock > 0 && i.stock <= i.minStock).length;
@@ -911,7 +945,10 @@ export const IngredientView: React.FC = () => {
             <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
               <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Kategori:</span>
               <button
-                onClick={() => setCategoryFilter('ALL')}
+                onClick={() => {
+                  setCategoryFilter('ALL');
+                  setSubCategoryFilter('ALL');
+                }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   categoryFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
@@ -919,7 +956,10 @@ export const IngredientView: React.FC = () => {
                 Semua
               </button>
               <button
-                onClick={() => setCategoryFilter('FOOD')}
+                onClick={() => {
+                  setCategoryFilter('FOOD');
+                  setSubCategoryFilter('ALL');
+                }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   categoryFilter === 'FOOD' ? 'bg-amber-500 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
@@ -928,7 +968,10 @@ export const IngredientView: React.FC = () => {
                 <span>🍲 Dapur (Food)</span>
               </button>
               <button
-                onClick={() => setCategoryFilter('DRINK')}
+                onClick={() => {
+                  setCategoryFilter('DRINK');
+                  setSubCategoryFilter('ALL');
+                }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   categoryFilter === 'DRINK' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
@@ -937,7 +980,10 @@ export const IngredientView: React.FC = () => {
                 <span>☕ Bar (Drink)</span>
               </button>
               <button
-                onClick={() => setCategoryFilter('PACKAGING')}
+                onClick={() => {
+                  setCategoryFilter('PACKAGING');
+                  setSubCategoryFilter('ALL');
+                }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   categoryFilter === 'PACKAGING' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
@@ -945,6 +991,27 @@ export const IngredientView: React.FC = () => {
                 <ShoppingBag size={13} />
                 <span>📦 Kemasan</span>
               </button>
+
+              {/* DYNAMIC SUBCATEGORY SELECTOR IN FILTER */}
+              {categoryFilter !== 'ALL' && (
+                <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 animate-fade-in">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Sub:</span>
+                  <select
+                    value={subCategoryFilter}
+                    onChange={e => setSubCategoryFilter(e.target.value)}
+                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                  >
+                    <option value="ALL">Semua Sub-Kategori</option>
+                    {(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).map(sc => (
+                      <option key={sc} value={sc}>{sc}</option>
+                    ))}
+                    {/* Unique custom subcategories present in current ingredients */}
+                    {Array.from(new Set(ingredients.filter(i => (i.category || 'FOOD') === categoryFilter && i.subCategory && !(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).includes(i.subCategory)).map(i => i.subCategory as string))).map(customSc => (
+                      <option key={customSc} value={customSc}>{customSc}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* STATUS FILTER PILLS */}
@@ -1022,8 +1089,15 @@ export const IngredientView: React.FC = () => {
                               </span>
                               <div>
                                 <div className="font-black text-slate-900">{ing.name}</div>
-                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                                  {cat === 'FOOD' ? 'Dapur (Food)' : (cat === 'DRINK' ? 'Bar (Minuman)' : 'Kemasan / Display')}
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                    {cat === 'FOOD' ? 'Dapur' : (cat === 'DRINK' ? 'Bar' : 'Kemasan')}
+                                  </span>
+                                  {ing.subCategory && (
+                                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
+                                      &gt; {ing.subCategory}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1847,17 +1921,59 @@ export const IngredientView: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Klasifikasi / Kategori Bahan</label>
-                <select
-                  value={form.category}
-                  onChange={e => setForm({ ...form, category: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                >
-                  <option value="FOOD">🍲 Bahan Dapur (Makanan & Sayuran)</option>
-                  <option value="DRINK">☕ Bahan Bar (Minuman Racikan)</option>
-                  <option value="PACKAGING">📦 Packaging & Showcase (Display)</option>
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Klasifikasi / Kategori Utama</label>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm({ ...form, category: e.target.value, subCategory: '' })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                  >
+                    <option value="FOOD">🍲 Bahan Dapur (Makanan & Sayuran)</option>
+                    <option value="DRINK">☕ Bahan Bar (Minuman Racikan)</option>
+                    <option value="PACKAGING">📦 Packaging & Showcase (Display)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Sub-Kategori Bahan</label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={
+                        (INGREDIENT_SUB_CATEGORIES[form.category] || []).includes(form.subCategory)
+                          ? form.subCategory
+                          : (form.subCategory ? '__CUSTOM__' : '')
+                      }
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '__CUSTOM__') {
+                          setForm({ ...form, subCategory: form.subCategory || 'Lainnya' });
+                        } else {
+                          setForm({ ...form, subCategory: val });
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                    >
+                      <option value="">-- Pilih Sub-Kategori --</option>
+                      {(INGREDIENT_SUB_CATEGORIES[form.category] || []).map(sc => (
+                        <option key={sc} value={sc}>{sc}</option>
+                      ))}
+                      <option value="__CUSTOM__">✍️ Input Sub-Kategori Kustom / Lainnya...</option>
+                    </select>
+
+                    {/* Show text input if custom subcategory is selected or active */}
+                    {(!(INGREDIENT_SUB_CATEGORIES[form.category] || []).includes(form.subCategory) && form.subCategory !== '') && (
+                      <input
+                        type="text"
+                        placeholder="Ketik nama sub-kategori khusus..."
+                        value={form.subCategory}
+                        onChange={e => setForm({ ...form, subCategory: e.target.value })}
+                        className="w-full px-3.5 py-2 bg-amber-50/50 border border-amber-300 rounded-xl text-xs font-bold text-slate-800"
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
