@@ -666,385 +666,459 @@ export const IngredientView: React.FC = () => {
   const estimatedLossAmount = (parseFloat(lossForm.qtyLoss) || 0) * (selectedLossIngredient?.buyPrice || 0);
 
   return (
-    <div className="h-full flex-1 overflow-y-auto w-full bg-slate-50/50">
-      <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto pb-24">
-      {/* HEADER UTAMA */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
-              <Package size={26} />
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+    <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      
+      {/* ─────────────────────────────────────────────────────────────
+          1. STICKY TOP BAR: HEADER, BADGE, & ACTION BUTTONS
+      ────────────────────────────────────────────────────────────── */}
+      <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+              <span style={{ padding: '.25rem .6rem', background: '#ede9fe', color: '#7c3aed', borderRadius: '.5rem', fontSize: '.75rem', fontWeight: 800 }}>
+                {posContext?.settings?.storeName || 'SOL CAFE & EATERY'}
+              </span>
+              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.4rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
                 Master Bahan Baku & Intelijen Stok
-              </h1>
-              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
-                Klasifikasi stok, audit potensi stock loss, mutasi distribusi, dan analisis rekomendasi belanja.
-              </p>
+              </h2>
             </div>
+            <p style={{ margin: '.25rem 0 0', fontSize: '.82rem', color: '#64748b' }}>
+              Klasifikasi stok, audit potensi stock loss, mutasi distribusi, dan analisis rekomendasi belanja
+            </p>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            onClick={() => {
-              fetchData();
-              if (activeTab === 'loss') fetchLossAnalytics();
-              if (activeTab === 'shopping') fetchShoppingAnalytics();
-              if (activeTab === 'movements') fetchMovements();
-              if (activeTab === 'forecast') fetchForecast();
-            }}
-            className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition-all flex items-center gap-2 text-xs font-bold"
-            title="Refresh Data"
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
-
-          {/* EXPORT LAPORAN PDF DROPDOWN */}
-          <div className="relative">
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', flexWrap: 'wrap' }}>
             <button
-              onClick={() => setPdfDropdownOpen(!pdfDropdownOpen)}
-              disabled={generatingPdf}
-              className="py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-bold text-xs rounded-2xl transition-all flex items-center gap-2 shadow-md shadow-emerald-600/20"
+              onClick={handleOpenAdd}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1.15rem',
+                background: 'linear-gradient(135deg, #7c3aed, #6366f1)', color: 'white',
+                border: 'none', borderRadius: '.75rem', fontWeight: 800, fontSize: '.85rem',
+                cursor: 'pointer', boxShadow: '0 4px 12px rgba(124,58,237,0.3)', transition: 'all 0.15s'
+              }}
             >
-              <FileText size={16} />
-              <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak Laporan PDF'}</span>
-              <ChevronDown size={14} className={`transition-transform ${pdfDropdownOpen ? 'rotate-180' : ''}`} />
+              <Plus size={16} /> Tambah Bahan Baku
             </button>
 
-            {pdfDropdownOpen && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setPdfDropdownOpen(false)} 
-                />
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-3xl shadow-2xl border border-slate-200/90 py-3 z-50 animate-fade-in space-y-1">
-                  <div className="px-4 py-2 border-b border-slate-100">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">PILIH LAPORAN AUDIT KEUANGAN</p>
+            {/* EXPORT LAPORAN PDF DROPDOWN */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setPdfDropdownOpen(!pdfDropdownOpen)}
+                disabled={generatingPdf}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1rem',
+                  background: 'white', color: '#334155', border: '1px solid #cbd5e1',
+                  borderRadius: '.75rem', fontWeight: 700, fontSize: '.82rem', cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+              >
+                <FileText size={15} />
+                <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak Laporan PDF'}</span>
+                <ChevronDown size={14} className={`transition-transform ${pdfDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {pdfDropdownOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setPdfDropdownOpen(false)} 
+                  />
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-fade-in space-y-1">
+                    <div className="px-4 py-2 border-b border-slate-100">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">PILIH LAPORAN AUDIT STOK & KEUANGAN</p>
+                    </div>
+
+                    <button
+                      onClick={handleExportValuationPDF}
+                      className="w-full px-4 py-2.5 hover:bg-purple-50 text-left flex items-start gap-3 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                        <DollarSign size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800 group-hover:text-purple-900">Laporan Valuasi Aset Persediaan</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Posisi modal uang mengendap di gudang & dapur</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={handleExportLossPDF}
+                      className="w-full px-4 py-2.5 hover:bg-rose-50 text-left flex items-start gap-3 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                        <TrendingDown size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800 group-hover:text-rose-900">Laporan Audit Kerusakan (Stock Loss)</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Evaluasi biaya waste, bahan busuk & yield chef</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={handleExportShoppingPDF}
+                      className="w-full px-4 py-2.5 hover:bg-indigo-50 text-left flex items-start gap-3 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        <ShoppingCart size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800 group-hover:text-indigo-900">Laporan Estimasi Belanja (Restock)</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Proyeksi kebutuhan dana kas keluar supplier</p>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={handleExportOpnamePDF}
+                      className="w-full px-4 py-2.5 hover:bg-sky-50 text-left flex items-start gap-3 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-sky-600 group-hover:text-white transition-colors">
+                        <ClipboardCheck size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800 group-hover:text-sky-900">Berita Acara Stock Opname Fisik</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Rekonsiliasi selisih fisik riil vs stok buku sistem</p>
+                      </div>
+                    </button>
                   </div>
+                </>
+              )}
+            </div>
 
-                  <button
-                    onClick={handleExportValuationPDF}
-                    className="w-full px-4 py-2.5 hover:bg-amber-50/70 text-left flex items-start gap-3 transition-colors group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                      <DollarSign size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black text-slate-800 group-hover:text-amber-900">Laporan Valuasi Aset Persediaan</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Posisi modal uang mengendap di gudang & dapur</p>
-                    </div>
-                  </button>
+            <button
+              onClick={() => handleOpenLossModal()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1rem',
+                background: 'white', color: '#e11d48', border: '1px solid #fecdd3',
+                borderRadius: '.75rem', fontWeight: 700, fontSize: '.82rem', cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <TrendingDown size={15} /> Catat Stock Loss
+            </button>
 
-                  <button
-                    onClick={handleExportLossPDF}
-                    className="w-full px-4 py-2.5 hover:bg-rose-50/70 text-left flex items-start gap-3 transition-colors group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-rose-600 group-hover:text-white transition-colors">
-                      <TrendingDown size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black text-slate-800 group-hover:text-rose-900">Laporan Audit Kerusakan (Stock Loss)</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Evaluasi biaya waste, bahan busuk & yield chef</p>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={handleExportShoppingPDF}
-                    className="w-full px-4 py-2.5 hover:bg-indigo-50/70 text-left flex items-start gap-3 transition-colors group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                      <ShoppingCart size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black text-slate-800 group-hover:text-indigo-900">Laporan Estimasi Belanja (Restock)</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Proyeksi kebutuhan dana kas keluar supplier</p>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={handleExportOpnamePDF}
-                    className="w-full px-4 py-2.5 hover:bg-sky-50/70 text-left flex items-start gap-3 transition-colors group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-sky-600 group-hover:text-white transition-colors">
-                      <ClipboardCheck size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-black text-slate-800 group-hover:text-sky-900">Berita Acara Stock Opname Fisik</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Rekonsiliasi selisih fisik riil vs stok buku sistem</p>
-                    </div>
-                  </button>
-                </div>
-              </>
-            )}
+            <button
+              onClick={() => {
+                fetchData();
+                if (activeTab === 'loss') fetchLossAnalytics();
+                if (activeTab === 'shopping') fetchShoppingAnalytics();
+                if (activeTab === 'movements') fetchMovements();
+                if (activeTab === 'forecast') fetchForecast();
+              }}
+              title="Perbarui Data"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38,
+                background: 'white', border: '1px solid #cbd5e1', borderRadius: '.75rem',
+                color: '#475569', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            </button>
           </div>
-
-          <button
-            onClick={() => handleOpenLossModal()}
-            className="py-3 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-2xl transition-all flex items-center gap-2 text-xs font-bold shadow-sm shadow-rose-500/10"
-          >
-            <TrendingDown size={16} />
-            <span>Catat Stock Loss</span>
-          </button>
-
-          <button
-            onClick={handleOpenAdd}
-            className="py-3 px-5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs rounded-2xl transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
-          >
-            <Plus size={16} />
-            <span>Tambah Bahan Baku</span>
-          </button>
         </div>
       </div>
 
-      {/* 5 NAVIGATION TABS */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar border-b border-slate-200">
-        <button
-          onClick={() => setActiveTab('master')}
-          className={`px-4 py-3 font-black text-xs rounded-2xl transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'master'
-              ? 'bg-slate-900 text-white shadow-md'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <Package size={16} />
-          <span>Master Bahan ({ingredients.length})</span>
-        </button>
+      {/* ─────────────────────────────────────────────────────────────
+          2. NAVIGASI 6 TAB UTAMA BAHAN BAKU
+      ────────────────────────────────────────────────────────────── */}
+      <div 
+        style={{ 
+          background: 'white', 
+          borderRadius: '1.15rem', 
+          padding: '.5rem', 
+          border: '1px solid #e2e8f0', 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '.5rem', 
+          flexShrink: 0
+        }}
+      >
+        {[
+          { 
+            id: 'master', 
+            title: 'Master Bahan', 
+            subtitle: 'Katalog & Stok Fisik', 
+            icon: Package,
+            badge: ingredients.length > 0 ? `${ingredients.length} Bahan` : null
+          },
+          { 
+            id: 'loss', 
+            title: 'Stock Loss & Kerusakan', 
+            subtitle: 'Audit Waste & Kerugian', 
+            icon: TrendingDown, 
+            badge: (lossData?.summary?.totalLossCount || 0) > 0 ? `${lossData?.summary?.totalLossCount} Insiden` : null
+          },
+          { 
+            id: 'movements', 
+            title: 'Kartu Stok & Alur', 
+            subtitle: 'Mutasi & Log Distribusi', 
+            icon: History,
+            badge: movements.length > 0 ? `${movements.length} Log` : null
+          },
+          { 
+            id: 'shopping', 
+            title: 'Analisis Belanja', 
+            subtitle: 'Stok Minim & Forecast', 
+            icon: ShoppingCart,
+            badge: (lowStockCount + outStockCount) > 0 ? `${lowStockCount + outStockCount} Kritis` : null
+          },
+          { 
+            id: 'forecast', 
+            title: 'Kapasitas Menu (BOM)', 
+            subtitle: 'Resep & Yield Menu', 
+            icon: Utensils,
+            badge: forecastList.length > 0 ? `${forecastList.length} Menu` : null
+          },
+          { 
+            id: 'opname', 
+            title: 'Audit Opname Fisik', 
+            subtitle: 'Rekonsiliasi Stok Riil', 
+            icon: ClipboardCheck,
+            badge: opnameHistory.length > 0 ? `${opnameHistory.length} Audit` : null
+          },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isSelected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.75rem',
+                padding: '.75rem 1rem',
+                background: isSelected 
+                  ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' 
+                  : '#f8fafc',
+                color: isSelected ? '#ffffff' : '#334155',
+                border: isSelected ? '1px solid #7c3aed' : '1px solid #e2e8f0',
+                borderRadius: '.85rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                textAlign: 'left',
+                boxShadow: isSelected ? '0 4px 12px rgba(124, 58, 237, 0.25)' : 'none',
+              }}
+            >
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '.65rem',
+                  background: isSelected ? 'rgba(255,255,255,0.2)' : '#ede9fe',
+                  color: isSelected ? '#ffffff' : '#7c3aed',
+                  flexShrink: 0
+                }}
+              >
+                <Icon size={18} />
+              </div>
 
-        <button
-          onClick={() => setActiveTab('loss')}
-          className={`px-4 py-3 font-black text-xs rounded-2xl transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'loss'
-              ? 'bg-rose-600 text-white shadow-md shadow-rose-500/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <TrendingDown size={16} />
-          <span>Stock Loss & Kerusakan</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('movements')}
-          className={`px-4 py-3 font-black text-xs rounded-2xl transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'movements'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <History size={16} />
-          <span>Kartu Stok & Alur Distribusi</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('shopping')}
-          className={`px-4 py-3 font-black text-xs rounded-2xl transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'shopping'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <ShoppingCart size={16} />
-          <span>Analisis Belanja & Stok Minim ({lowStockCount + outStockCount})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('forecast')}
-          className={`px-4 py-3 font-black text-xs rounded-2xl transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'forecast'
-              ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <Utensils size={16} />
-          <span>Kapasitas Menu (BOM)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('opname')}
-          className={`px-4 py-3 font-black text-xs rounded-2xl transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'opname'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-          }`}
-        >
-          <ClipboardCheck size={16} />
-          <span>Audit Opname Fisik</span>
-        </button>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.25rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '.85rem', color: isSelected ? '#ffffff' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {tab.title}
+                  </span>
+                  {tab.badge && (
+                    <span 
+                      style={{ 
+                        fontSize: '.62rem', 
+                        padding: '.12rem .4rem', 
+                        background: isSelected ? 'rgba(255,255,255,0.25)' : '#ede9fe', 
+                        color: isSelected ? '#ffffff' : '#7c3aed', 
+                        borderRadius: '9999px', 
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: '.72rem', color: isSelected ? 'rgba(255,255,255,0.8)' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tab.subtitle}
+                </span>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
           TAB 1: MASTER BAHAN & KLASIFIKASI
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'master' && (
-        <div className="space-y-6">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* STATS OVERVIEW CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Bahan Baku</p>
-                <h3 className="text-2xl font-black text-slate-900 mt-1">{ingredients.length}</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Semua jenis bahan aktif</p>
+                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Bahan Baku</p>
+                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{ingredients.length}</h3>
+                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>Semua jenis bahan aktif</p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#ede9fe', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Package size={22} />
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Stok Menipis</p>
-                <h3 className="text-2xl font-black text-amber-600 mt-1">{lowStockCount}</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Mendekati batas minimum</p>
+                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stok Menipis</p>
+                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.6rem', fontWeight: 900, color: '#d97706' }}>{lowStockCount}</h3>
+                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>Mendekati batas minimum</p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <AlertTriangle size={22} />
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-xs font-bold text-rose-600 uppercase tracking-wider">Stok Habis (Kritis)</p>
-                <h3 className="text-2xl font-black text-rose-600 mt-1">{outStockCount}</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Harus segera di-restock</p>
+                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#e11d48', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stok Habis (Kritis)</p>
+                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.6rem', fontWeight: 900, color: '#e11d48' }}>{outStockCount}</h3>
+                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>Harus segera di-restock</p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#ffe4e6', color: '#e11d48', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ShieldAlert size={22} />
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Valuasi Aset Stok</p>
-                <h3 className="text-xl font-black text-emerald-700 mt-1">
+                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Valuasi Aset Stok</p>
+                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#059669' }}>
                   Rp {totalValuation.toLocaleString('id-ID')}
                 </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">{ingredients.length} item tersimpan</p>
+                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>{ingredients.length} item tersimpan</p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <DollarSign size={22} />
               </div>
             </div>
           </div>
 
           {/* FILTER CONTROLS */}
-          <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="relative w-full md:w-96">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Cari nama bahan atau supplier..."
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-              />
-            </div>
+          <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="relative w-full md:w-96">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Cari nama bahan atau supplier..."
+                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
 
-            {/* CATEGORY FILTER PILLS */}
-            <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
-              <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Kategori:</span>
-              <button
-                onClick={() => {
-                  setCategoryFilter('ALL');
-                  setSubCategoryFilter('ALL');
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  categoryFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Semua
-              </button>
-              <button
-                onClick={() => {
-                  setCategoryFilter('FOOD');
-                  setSubCategoryFilter('ALL');
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  categoryFilter === 'FOOD' ? 'bg-amber-500 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <Utensils size={13} />
-                <span>🍲 Dapur (Food)</span>
-              </button>
-              <button
-                onClick={() => {
-                  setCategoryFilter('DRINK');
-                  setSubCategoryFilter('ALL');
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  categoryFilter === 'DRINK' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <Coffee size={13} />
-                <span>☕ Bar (Drink)</span>
-              </button>
-              <button
-                onClick={() => {
-                  setCategoryFilter('PACKAGING');
-                  setSubCategoryFilter('ALL');
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  categoryFilter === 'PACKAGING' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <ShoppingBag size={13} />
-                <span>📦 Kemasan</span>
-              </button>
+              {/* CATEGORY FILTER PILLS */}
+              <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
+                <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Kategori:</span>
+                <button
+                  onClick={() => {
+                    setCategoryFilter('ALL');
+                    setSubCategoryFilter('ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    categoryFilter === 'ALL' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Semua
+                </button>
+                <button
+                  onClick={() => {
+                    setCategoryFilter('FOOD');
+                    setSubCategoryFilter('ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    categoryFilter === 'FOOD' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <Utensils size={13} />
+                  <span>🍲 Dapur (Food)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCategoryFilter('DRINK');
+                    setSubCategoryFilter('ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    categoryFilter === 'DRINK' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <Coffee size={13} />
+                  <span>☕ Bar (Drink)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCategoryFilter('PACKAGING');
+                    setSubCategoryFilter('ALL');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    categoryFilter === 'PACKAGING' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <ShoppingBag size={13} />
+                  <span>📦 Kemasan</span>
+                </button>
 
-              {/* DYNAMIC SUBCATEGORY SELECTOR IN FILTER */}
-              {categoryFilter !== 'ALL' && (
-                <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 animate-fade-in">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Sub:</span>
-                  <select
-                    value={subCategoryFilter}
-                    onChange={e => setSubCategoryFilter(e.target.value)}
-                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                  >
-                    <option value="ALL">Semua Sub-Kategori</option>
-                    {(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).map(sc => (
-                      <option key={sc} value={sc}>{sc}</option>
-                    ))}
-                    {/* Unique custom subcategories present in current ingredients */}
-                    {Array.from(new Set(ingredients.filter(i => (i.category || 'FOOD') === categoryFilter && i.subCategory && !(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).includes(i.subCategory)).map(i => i.subCategory as string))).map(customSc => (
-                      <option key={customSc} value={customSc}>{customSc}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
+                {/* DYNAMIC SUBCATEGORY SELECTOR IN FILTER */}
+                {categoryFilter !== 'ALL' && (
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 animate-fade-in">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Sub:</span>
+                    <select
+                      value={subCategoryFilter}
+                      onChange={e => setSubCategoryFilter(e.target.value)}
+                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                    >
+                      <option value="ALL">Semua Sub-Kategori</option>
+                      {(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).map(sc => (
+                        <option key={sc} value={sc}>{sc}</option>
+                      ))}
+                      {Array.from(new Set(ingredients.filter(i => (i.category || 'FOOD') === categoryFilter && i.subCategory && !(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).includes(i.subCategory)).map(i => i.subCategory as string))).map(customSc => (
+                        <option key={customSc} value={customSc}>{customSc}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
 
-            {/* STATUS FILTER PILLS */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
-              <button
-                onClick={() => setStatusFilter('all')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  statusFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Semua
-              </button>
-              <button
-                onClick={() => setStatusFilter('low')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  statusFilter === 'low' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Menipis
-              </button>
-              <button
-                onClick={() => setStatusFilter('out')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  statusFilter === 'out' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                Habis
-              </button>
+              {/* STATUS FILTER PILLS */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    statusFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Semua
+                </button>
+                <button
+                  onClick={() => setStatusFilter('low')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    statusFilter === 'low' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Menipis
+                </button>
+                <button
+                  onClick={() => setStatusFilter('out')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    statusFilter === 'out' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Habis
+                </button>
+              </div>
             </div>
           </div>
 
           {/* INGREDIENTS TABLE */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -1063,7 +1137,7 @@ export const IngredientView: React.FC = () => {
                   {loading ? (
                     <tr>
                       <td colSpan={8} className="py-12 text-center text-slate-400">
-                        <RefreshCw className="animate-spin inline-block mb-2 text-amber-500" size={24} />
+                        <RefreshCw className="animate-spin inline-block mb-2 text-purple-600" size={24} />
                         <p>Memuat data bahan baku...</p>
                       </td>
                     </tr>
@@ -1081,7 +1155,7 @@ export const IngredientView: React.FC = () => {
                       const cat = ing.category || 'FOOD';
 
                       return (
-                        <tr key={ing.id} className="hover:bg-slate-50/80 transition-colors">
+                        <tr key={ing.id} className="hover:bg-purple-50/30 transition-colors">
                           <td className="py-4 px-6">
                             <div className="flex items-center gap-2.5">
                               <span className="text-base">
@@ -1090,11 +1164,11 @@ export const IngredientView: React.FC = () => {
                               <div>
                                 <div className="font-black text-slate-900">{ing.name}</div>
                                 <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                  <span className="text-[10px] text-purple-700 font-bold uppercase tracking-wider">
                                     {cat === 'FOOD' ? 'Dapur' : (cat === 'DRINK' ? 'Bar' : 'Kemasan')}
                                   </span>
                                   {ing.subCategory && (
-                                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
+                                    <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/60">
                                       &gt; {ing.subCategory}
                                     </span>
                                   )}
@@ -1162,7 +1236,7 @@ export const IngredientView: React.FC = () => {
                                   setAdjustForm({ change: '', type: 'Restock', description: '' });
                                 }}
                                 title="Penyesuaian Cepat / Restock"
-                                className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl transition-colors"
+                                className="p-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-xl transition-colors"
                               >
                                 <RefreshCw size={14} />
                               </button>
@@ -2053,7 +2127,17 @@ export const IngredientView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-amber-500/20"
+                  style={{
+                    padding: '.65rem 1.25rem',
+                    background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '.75rem',
+                    fontWeight: 800,
+                    fontSize: '.85rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(124,58,237,0.3)'
+                  }}
                 >
                   Simpan Bahan Baku
                 </button>
@@ -2232,7 +2316,17 @@ export const IngredientView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20"
+                  style={{
+                    padding: '.65rem 1.25rem',
+                    background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '.75rem',
+                    fontWeight: 800,
+                    fontSize: '.85rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(124,58,237,0.3)'
+                  }}
                 >
                   Simpan Penyesuaian
                 </button>
@@ -2241,7 +2335,6 @@ export const IngredientView: React.FC = () => {
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 };
