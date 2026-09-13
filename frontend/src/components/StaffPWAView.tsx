@@ -864,14 +864,14 @@ export const StaffPWAView: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col justify-between p-4 max-w-md mx-auto shadow-2xl relative select-none font-sans text-white">
         <div className="text-center pt-6 space-y-2 relative z-10">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-500 mx-auto flex items-center justify-center shadow-xl shadow-blue-500/20 border border-white/20">
+          <div className="w-16 h-16 rounded-2xl bg-[#0052cc] mx-auto flex items-center justify-center shadow-lg border border-white/10">
             <Fingerprint size={32} className="text-white animate-pulse" />
           </div>
           <h1 className="text-xl font-black tracking-tight">{settings?.storeName || 'SOL CAFE'}</h1>
           <p className="text-xs text-blue-200 font-medium">Portal Absensi & Operasional Staf</p>
         </div>
 
-        <div className="bg-white text-slate-900 rounded-[2.5rem] p-6 shadow-2xl relative z-10 space-y-5">
+        <div className="bg-white text-slate-900 rounded-[2rem] p-6 shadow-2xl relative z-10 space-y-5">
           {loginMode === 'kiosk' && !selectedStaffUser ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1021,78 +1021,76 @@ export const StaffPWAView: React.FC = () => {
   // RENDER AUTHENTICATED STAFF APP WITH STICKY BOTTOM DOCK
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
+    <div className="min-h-screen bg-slate-900/90 flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
       {/* Mobile Device Simulation Shell on Desktop, Native Edge-to-Edge on Mobile */}
-      <div className="w-full sm:max-w-[450px] min-h-screen sm:min-h-[860px] bg-slate-100 sm:rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.6)] sm:border-[6px] sm:border-slate-800 flex flex-col relative overflow-hidden">
+      <div className="w-full sm:max-w-[430px] min-h-screen sm:min-h-[860px] bg-slate-100 sm:rounded-[2rem] shadow-2xl sm:border sm:border-slate-800 flex flex-col relative overflow-hidden">
         
         {/* ─────────────────────────────────────────────────────────────
-            1. TOP APP BAR & STAFF BANNER
+            1. TOP APP BAR & STAFF BANNER (SOLID CLEAN HEADER)
             ───────────────────────────────────────────────────────────── */}
-        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white px-5 pt-5 pb-6 rounded-b-[2rem] shadow-xl relative overflow-hidden shrink-0">
-          <div className="flex items-center justify-between relative z-10 pb-3 border-b border-white/10">
+        <div className="bg-slate-900 text-white px-5 pt-4 pb-4 border-b border-slate-800 shrink-0">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-md shadow-emerald-400/50" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-blue-200">
-                {settings?.storeName || 'SOL CAFE'} • MOBILE STAFF
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-300">
+                {settings?.storeName || 'SOL CAFE'} • PORTAL STAF
               </span>
             </div>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
             >
               <LogOut size={13} />
               <span>Keluar</span>
             </button>
           </div>
 
-          <div className="pt-3.5 flex items-center gap-3.5 relative z-10">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 p-0.5 shadow-lg border border-white/20 shrink-0">
-              <div className="w-12 h-12 bg-slate-900/60 rounded-[14px] flex items-center justify-center font-black text-base text-white">
-                {user.name.substring(0, 2).toUpperCase()}
-              </div>
+          <div className="pt-3 flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-[#0052cc] text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
+              {user.name.substring(0, 2).toUpperCase()}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-black text-white truncate">{user.name}</h2>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 font-extrabold border border-indigo-400/30">
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-800 text-blue-300 font-extrabold border border-slate-700">
                   {user.role}
                 </span>
               </div>
-              <p className="text-[11px] text-blue-200/90 font-medium mt-0.5 flex items-center gap-1.5">
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
                 <Clock size={12} className="text-emerald-400" />
-                <span className="font-mono font-bold text-white">{currentTime}</span>
-                <span className="text-blue-300/60">•</span>
-                <span>{currentDateStr}</span>
+                <span className="font-mono font-bold text-slate-200">{currentTime}</span>
+                <span className="text-slate-600">•</span>
+                <span className="truncate">{currentDateStr}</span>
               </p>
             </div>
           </div>
 
           {/* Shift status banner */}
-          <div className="mt-3.5 pt-2.5 border-t border-white/10 flex items-center justify-between relative z-10">
+          <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-blue-200/80 text-[10px] font-bold uppercase tracking-wider">Status:</span>
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Status:</span>
               {mySummary?.todayStatus?.clockedIn ? (
                 mySummary?.todayStatus?.clockedOut ? (
-                  <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-200 border border-blue-400/30 text-[10px] font-black">
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/30 text-[10px] font-black">
                     ✓ Selesai Shift
                   </span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black flex items-center gap-1.5">
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-black flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Sedang Bertugas
                   </span>
                 )
               ) : (
-                <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-black flex items-center gap-1.5">
+                <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-black flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Belum Presensi
                 </span>
               )}
             </div>
 
             {mySummary?.todayStatus?.todayLog?.shiftName && (
-              <span className="text-[10px] text-blue-100 font-extrabold bg-white/10 px-2.5 py-1 rounded-lg border border-white/15">
+              <span className="text-[10px] text-slate-300 font-extrabold bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
                 {mySummary.todayStatus.todayLog.shiftName.split('(')[0]}
               </span>
             )}
@@ -1109,12 +1107,12 @@ export const StaffPWAView: React.FC = () => {
           {activeTab === 'attendance' && (
             <div className="p-4 space-y-4 animate-fade-in">
               {/* GPS RADAR CARD */}
-              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-bold shrink-0 ${
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
                     isWithinRadius ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'
                   }`}>
-                    <MapPin size={22} />
+                    <MapPin size={20} />
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
@@ -1146,7 +1144,7 @@ export const StaffPWAView: React.FC = () => {
                   type="button"
                   onClick={requestGpsLocation}
                   disabled={gpsLoading}
-                  className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 active:scale-95 shrink-0 transition-all shadow-sm"
+                  className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 active:scale-95 shrink-0 transition-all shadow-sm"
                   title="Perbarui GPS"
                 >
                   <RefreshCw size={14} className={gpsLoading ? 'animate-spin text-[#0052cc]' : ''} />
@@ -1155,7 +1153,7 @@ export const StaffPWAView: React.FC = () => {
 
               {/* PILIHAN SHIFT (JIKA BELUM CLOCK IN) */}
               {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
-                <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-2.5">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2.5">
                   <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                     <Clock size={14} className="text-[#0052cc]" /> Jadwal Shift Kerja:
                   </label>
@@ -1165,9 +1163,9 @@ export const StaffPWAView: React.FC = () => {
                         key={s.id}
                         type="button"
                         onClick={() => setSelectedShiftId(s.id)}
-                        className={`p-3 rounded-2xl border text-left transition-all ${
+                        className={`p-3 rounded-xl border text-left transition-all ${
                           selectedShiftId === s.id
-                            ? 'border-[#0052cc] bg-blue-50/70 shadow-sm ring-2 ring-[#0052cc]/30'
+                            ? 'border-2 border-[#0052cc] bg-blue-50/70 shadow-sm'
                             : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
                         }`}
                       >
@@ -1183,7 +1181,7 @@ export const StaffPWAView: React.FC = () => {
               )}
 
               {/* FOTO SELFIE KAMERA CONTAINER */}
-              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
                     <Camera size={15} className="text-[#0052cc]" />
@@ -1223,9 +1221,9 @@ export const StaffPWAView: React.FC = () => {
                           <button
                             type="button"
                             onClick={capturePhoto}
-                            className="w-13 h-13 rounded-full bg-white text-slate-950 flex items-center justify-center shadow-lg active:scale-90 border-4 border-blue-500"
+                            className="w-12 h-12 rounded-full bg-white text-slate-950 flex items-center justify-center shadow-lg active:scale-90 border-4 border-blue-500"
                           >
-                            <div className="w-8 h-8 rounded-full bg-[#0052cc]" />
+                            <div className="w-7 h-7 rounded-full bg-[#0052cc]" />
                           </button>
                           <button
                             type="button"
@@ -1241,7 +1239,7 @@ export const StaffPWAView: React.FC = () => {
                         <button
                           type="button"
                           onClick={startCamera}
-                          className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-95"
+                          className="w-full py-3.5 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
                         >
                           <Camera size={16} />
                           <span>Buka Kamera Selfie Presensi</span>
@@ -1285,14 +1283,14 @@ export const StaffPWAView: React.FC = () => {
                   </div>
                 )}
 
-                {/* BUTTON ACTION CLOCK IN / OUT */}
+                {/* BUTTON ACTION CLOCK IN / OUT (SOLID HIGH CONTRAST) */}
                 <div className="pt-2">
                   {!mySummary?.todayStatus?.clockedIn ? (
                     <button
                       type="button"
                       disabled={clockLoading || !isWithinRadius}
                       onClick={() => handleClockAction('IN')}
-                      className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-400 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95"
+                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
                     >
                       <CheckCircle2 size={18} />
                       <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK IN (MASUK KERJA)'}</span>
@@ -1302,13 +1300,13 @@ export const StaffPWAView: React.FC = () => {
                       type="button"
                       disabled={clockLoading}
                       onClick={() => handleClockAction('OUT')}
-                      className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-400 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25 active:scale-95"
+                      className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:bg-slate-300 text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
                     >
                       <LogOut size={18} />
                       <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK OUT (SELESAI SHIFT)'}</span>
                     </button>
                   ) : (
-                    <div className="p-3.5 rounded-2xl bg-slate-100 text-center text-xs font-bold text-slate-600 border border-slate-200">
+                    <div className="p-3.5 rounded-xl bg-slate-100 text-center text-xs font-bold text-slate-600 border border-slate-200">
                       ✓ Anda telah menyelesaikan shift hari ini. Terima kasih atas kerja keras Anda!
                     </div>
                   )}
@@ -1929,7 +1927,7 @@ export const StaffPWAView: React.FC = () => {
         {/* ─────────────────────────────────────────────────────────────
             STICKY BOTTOM NAVIGATION BAR (PROFESSIONAL MOBILE APP DOCK)
             ───────────────────────────────────────────────────────────── */}
-        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[450px] mx-auto z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] py-2 px-2 sm:rounded-b-[2.2rem]">
+        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[430px] mx-auto z-40 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-2 px-2 sm:rounded-b-[2rem]">
           <div className="flex items-center justify-around">
             {/* Tab 1: Presensi */}
             <button
