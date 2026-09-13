@@ -509,4 +509,191 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
   }
 });
 
+// ─── Leave & Permission Requests (Izin / Sakit / Cuti) ──────────────────
+
+// POST Submit Leave Request
+router.post('/leaves', async (req: Request, res: Response) => {
+  try {
+    const { userId, type, startDate, endDate, reason, photoUrl } = req.body;
+    if (!userId || !type || !startDate || !endDate || !reason) {
+      return res.status(400).json({ error: 'Lengkapi seluruh data pengajuan izin/sakit' });
+    }
+
+    const leave = await prisma.leaveRequest.create({
+      data: {
+        userId: Number(userId),
+        type,
+        startDate,
+        endDate,
+        reason,
+        photoUrl: photoUrl || null,
+        status: 'Pending',
+      },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+
+    res.status(201).json(leave);
+  } catch (error) {
+    console.error('Error creating leave request:', error);
+    res.status(500).json({ error: 'Gagal membuat pengajuan izin/sakit' });
+  }
+});
+
+// GET Leave Requests (Filtered by user or all for admin)
+router.get('/leaves', async (req: Request, res: Response) => {
+  try {
+    const { userId, status } = req.query;
+    const whereClause: any = {};
+    if (userId) whereClause.userId = Number(userId);
+    if (status) whereClause.status = String(status);
+
+    const leaves = await prisma.leaveRequest.findMany({
+      where: whereClause,
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(leaves);
+  } catch (error) {
+    console.error('Error fetching leave requests:', error);
+    res.status(500).json({ error: 'Gagal mengambil daftar pengajuan izin' });
+  }
+});
+
+// PATCH Approve or Reject Leave Request (Admin only)
+router.patch('/leaves/:id/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status, approvedBy, adminNotes } = req.body;
+
+    if (!['Approved', 'Rejected', 'Pending'].includes(status)) {
+      return res.status(400).json({ error: 'Status tidak valid' });
+    }
+
+    const updated = await prisma.leaveRequest.update({
+      where: { id: Number(id) },
+      data: {
+        status,
+        approvedBy: approvedBy || 'Admin',
+        adminNotes: adminNotes || null,
+      },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating leave status:', error);
+    res.status(500).json({ error: 'Gagal memperbarui status pengajuan izin' });
+  }
+});
+
+// ─── Shift Handover Logbook (Serah Terima Shift) ─────────────────────────
+
+// POST Shift Handover
+router.post('/handover', async (req: Request, res: Response) => {
+  try {
+    const { userId, shiftName, cashBalance, equipmentStatus, notes } = req.body;
+    if (!userId || !shiftName || !notes) {
+      return res.status(400).json({ error: 'Data serah terima shift tidak lengkap' });
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const handover = await prisma.shiftHandover.create({
+      data: {
+        userId: Number(userId),
+        shiftName,
+        date: todayStr,
+        cashBalance: Number(cashBalance) || 0,
+        equipmentStatus: equipmentStatus || 'Normal',
+        notes,
+      },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+
+    res.status(201).json(handover);
+  } catch (error) {
+    console.error('Error creating shift handover:', error);
+    res.status(500).json({ error: 'Gagal menyimpan catatan handover shift' });
+  }
+});
+
+// GET Shift Handover Logs
+router.get('/handover', async (req: Request, res: Response) => {
+  try {
+    const { limit = 20 } = req.query;
+    const handovers = await prisma.shiftHandover.findMany({
+      take: Number(limit),
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(handovers);
+  } catch (error) {
+    console.error('Error fetching handover logs:', error);
+    res.status(500).json({ error: 'Gagal mengambil catatan handover' });
+  }
+});
+
+// ─── Kitchen SOP Checklist (Opening & Closing) ──────────────────────────
+
+// POST Kitchen Checklist
+router.post('/checklist', async (req: Request, res: Response) => {
+  try {
+    const { userId, type, shiftName, items, notes } = req.body;
+    if (!userId || !type || !items) {
+      return res.status(400).json({ error: 'Lengkapi data checklist SOP' });
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const checklist = await prisma.kitchenChecklist.create({
+      data: {
+        userId: Number(userId),
+        type, // OPENING or CLOSING
+        date: todayStr,
+        shiftName: shiftName || null,
+        itemsJson: typeof items === 'string' ? items : JSON.stringify(items),
+        notes: notes || null,
+      },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+
+    res.status(201).json(checklist);
+  } catch (error) {
+    console.error('Error saving kitchen checklist:', error);
+    res.status(500).json({ error: 'Gagal menyimpan checklist SOP' });
+  }
+});
+
+// GET Today's Kitchen Checklists
+router.get('/checklist/today', async (req: Request, res: Response) => {
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const checklists = await prisma.kitchenChecklist.findMany({
+      where: { date: todayStr },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(checklists);
+  } catch (error) {
+    console.error('Error fetching today checklists:', error);
+    res.status(500).json({ error: 'Gagal mengambil checklist hari ini' });
+  }
+});
+
 export default router;
+

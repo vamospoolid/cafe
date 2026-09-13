@@ -44,11 +44,15 @@ interface IndividualSummary {
 }
 
 export const AttendanceView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'daily' | 'individual'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'individual' | 'leaves' | 'sop_handover'>('daily');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [attendances, setAttendances] = useState<any[]>([]);
   const [summaries, setSummaries] = useState<IndividualSummary[]>([]);
+  const [leavesList, setLeavesList] = useState<any[]>([]);
+  const [handoverList, setHandoverList] = useState<any[]>([]);
+  const [todaySopList, setTodaySopList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState<'ALL' | 'Pending' | 'Approved' | 'Rejected'>('ALL');
   
   const [dateFilter, setDateFilter] = useState(() => {
     const d = new Date();
@@ -98,12 +102,66 @@ export const AttendanceView: React.FC = () => {
     }
   };
 
+  const fetchLeaves = async () => {
+    setLoading(true);
+    try {
+      let url = '/api/attendance/leaves';
+      if (leaveStatusFilter !== 'ALL') url += `?status=${leaveStatusFilter}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${posContext?.token}` } });
+      if (res.ok) setLeavesList(await res.json());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchHandoverAndSop = async () => {
+    setLoading(true);
+    try {
+      const [hoRes, sopRes] = await Promise.all([
+        fetch('/api/attendance/handover', { headers: { Authorization: `Bearer ${posContext?.token}` } }),
+        fetch('/api/attendance/checklist/today', { headers: { Authorization: `Bearer ${posContext?.token}` } })
+      ]);
+      if (hoRes.ok) setHandoverList(await hoRes.json());
+      if (sopRes.ok) setTodaySopList(await sopRes.json());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateLeaveStatus = async (id: number, status: 'Approved' | 'Rejected', adminNotes?: string) => {
+    try {
+      const res = await fetch(`/api/attendance/leaves/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          status,
+          approvedBy: (posContext?.user as any)?.name || 'Admin',
+          adminNotes: adminNotes || (status === 'Approved' ? 'Disetujui oleh Manajemen' : 'Ditolak')
+        })
+      });
+      if (res.ok) {
+        fetchLeaves();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     if (posContext?.token) {
       if (activeTab === 'daily') fetchAttendances();
-      else fetchIndividualSummaries();
+      else if (activeTab === 'individual') fetchIndividualSummaries();
+      else if (activeTab === 'leaves') fetchLeaves();
+      else if (activeTab === 'sop_handover') fetchHandoverAndSop();
     }
-  }, [posContext?.token, dateFilter, monthFilter, activeTab]);
+  }, [posContext?.token, dateFilter, monthFilter, activeTab, leaveStatusFilter]);
 
   const formatTime = (isoString?: string) => {
     if (!isoString) return '-';
@@ -235,7 +293,7 @@ export const AttendanceView: React.FC = () => {
         </div>
 
         {/* TAB CONTROLS */}
-        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-fit">
+        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-fit flex-wrap">
           <button
             onClick={() => setActiveTab('daily')}
             className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
@@ -256,7 +314,34 @@ export const AttendanceView: React.FC = () => {
             }`}
           >
             <User size={15} />
-            <span>Rekapitulasi Individu Karyawan</span>
+            <span>Rekapitulasi Individu</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('leaves')}
+            className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              activeTab === 'leaves'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <FileText size={15} />
+            <span>Pengajuan Izin & Sakit</span>
+            {leavesList.filter(l => l.status === 'Pending').length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center shadow-sm">
+                {leavesList.filter(l => l.status === 'Pending').length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('sop_handover')}
+            className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+              activeTab === 'sop_handover'
+                ? 'bg-white text-indigo-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles size={15} />
+            <span>SOP Dapur & Handover</span>
           </button>
         </div>
 
@@ -660,6 +745,184 @@ export const AttendanceView: React.FC = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─────────────────────────────────────────────────────────────
+            TAB 3: PENGAJUAN IZIN & SAKIT KARYAWAN (APPROVAL FLOW)
+            ───────────────────────────────────────────────────────────── */}
+        {activeTab === 'leaves' && (
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-800">Daftar Pengajuan Izin & Sakit</h3>
+                <p className="text-xs text-slate-500">Persetujuan atau penolakan permohonan izin karyawan secara online.</p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                {(['ALL', 'Pending', 'Approved', 'Rejected'] as const).map(st => (
+                  <button
+                    key={st}
+                    onClick={() => setLeaveStatusFilter(st)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                      leaveStatusFilter === st ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {st === 'ALL' ? 'Semua' : st === 'Pending' ? 'Menunggu' : st === 'Approved' ? 'Disetujui' : 'Ditolak'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {leavesList.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-400">
+                Tidak ada data pengajuan izin dengan filter ini.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {leavesList.map(item => (
+                  <div
+                    key={item.id}
+                    className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-sm text-slate-900">{item.user?.name}</span>
+                        <span className="text-xs font-bold text-slate-500">({item.user?.role})</span>
+                        <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {item.type}
+                        </span>
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            item.status === 'Approved'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : item.status === 'Rejected'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {item.status === 'Approved' ? '✓ Disetujui' : item.status === 'Rejected' ? '✕ Ditolak' : '⏳ Menunggu Review'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-700 font-medium">"{item.reason}"</p>
+
+                      <p className="text-[11px] text-slate-400">
+                        Periode: <strong>{item.startDate}</strong> s/d <strong>{item.endDate}</strong> • Diajukan: {new Date(item.createdAt).toLocaleDateString('id-ID')}
+                      </p>
+
+                      {item.adminNotes && (
+                        <p className="text-[11px] text-slate-500 bg-white p-2 rounded-lg border border-slate-100">
+                          <strong>Catatan Manajer ({item.approvedBy || 'Admin'}):</strong> {item.adminNotes}
+                        </p>
+                      )}
+                    </div>
+
+                    {item.status === 'Pending' && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateLeaveStatus(item.id, 'Approved')}
+                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95"
+                        >
+                          ✓ Setujui
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateLeaveStatus(item.id, 'Rejected')}
+                          className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95"
+                        >
+                          ✕ Tolak
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─────────────────────────────────────────────────────────────
+            TAB 4: MONITORING SOP DAPUR & HANDOVER SERAH TERIMA SHIFT
+            ───────────────────────────────────────────────────────────── */}
+        {activeTab === 'sop_handover' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Checklist SOP Harian */}
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-4">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <Sparkles size={16} className="text-indigo-600" />
+                  <span>Kepatuhan SOP Buka / Tutup Dapur Hari Ini</span>
+                </h3>
+                <span className="text-xs font-bold text-slate-400">{todaySopList.length} Sesi</span>
+              </div>
+
+              {todaySopList.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Belum ada laporan checklist SOP yang dikirim staf hari ini.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {todaySopList.map(sop => {
+                    let items: any[] = [];
+                    try {
+                      items = typeof sop.itemsJson === 'string' ? JSON.parse(sop.itemsJson) : sop.itemsJson;
+                    } catch {
+                      items = [];
+                    }
+                    const totalChecked = items.filter((i: any) => i.checked).length;
+
+                    return (
+                      <div key={sop.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-xs text-slate-900">
+                            {sop.type === 'OPENING' ? '🌅 Opening Checklist' : '🌙 Closing Checklist'} • {sop.user?.name}
+                          </span>
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-[#0052cc]">
+                            {totalChecked}/{items.length} Selesai
+                          </span>
+                        </div>
+                        {sop.notes && <p className="text-[11px] text-slate-500 italic">"{sop.notes}"</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Handover Serah Terima Shift */}
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 space-y-4">
+              <div className="flex items-center justify-between border-b pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <UserCheck size={16} className="text-indigo-600" />
+                  <span>Log Serah Terima (Handover) Shift</span>
+                </h3>
+                <span className="text-xs font-bold text-slate-400">{handoverList.length} Catatan</span>
+              </div>
+
+              {handoverList.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Belum ada catatan handover shift.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {handoverList.slice(0, 10).map(ho => (
+                    <div key={ho.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between font-black text-slate-900">
+                        <span>{ho.shiftName}</span>
+                        <span className="text-[10px] text-slate-400">{ho.date}</span>
+                      </div>
+                      <p className="text-slate-700 font-medium">"{ho.notes}"</p>
+                      <div className="flex justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200">
+                        <span>Staf: <strong>{ho.user?.name}</strong></span>
+                        <span>Kas Laci: <strong>Rp {Number(ho.cashBalance).toLocaleString('id-ID')}</strong></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -6,11 +6,14 @@ import {
   History, Calendar, Check, AlertCircle, ChevronRight, X, Phone, User,
   Award, ShieldCheck, Flame, DollarSign, Layers, ChevronDown, CheckCircle,
   Zap, Info, Bell, Search, Filter, ArrowUpRight, Copy, ShoppingCart, List, 
-  ArrowDownLeft, FileDown, Trash2, CheckSquare, MessageCircle
+  ArrowDownLeft, FileDown, Trash2, CheckSquare, MessageCircle, ChefHat,
+  FileText, ClipboardList, Send, Upload, FileCheck, CheckCheck, RefreshCcw,
+  Smartphone, UserCheck
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast, confirmAlert } from '../utils/alert';
+import useSocket from '../hooks/useSocket';
 
 interface WorkShift {
   id: string;
@@ -24,6 +27,7 @@ interface Ingredient {
   id: number;
   name: string;
   category?: 'FOOD' | 'DRINK' | 'PACKAGING' | string;
+  subCategory?: string;
   unit: string;
   stock: number;
   minStock: number;
@@ -46,7 +50,22 @@ interface AttendanceLog {
   notes?: string;
 }
 
+interface LeaveRequestItem {
+  id: number;
+  type: string;
+  startDate: string;
+  endDate: string;
+  reason: string;
+  photoUrl?: string;
+  status: 'Pending' | 'Approved' | 'Rejected' | string;
+  approvedBy?: string;
+  adminNotes?: string;
+  createdAt: string;
+}
+
 export const StaffPWAView: React.FC = () => {
+  const socket = useSocket();
+
   // Authentication state
   const [token, setToken] = useState<string>(() => localStorage.getItem('staff_token') || '');
   const [user, setUser] = useState<any>(() => {
@@ -64,26 +83,27 @@ export const StaffPWAView: React.FC = () => {
   const [staffList, setStaffList] = useState<any[]>([]);
   const [selectedStaffUser, setSelectedStaffUser] = useState<any | null>(null);
   const [loginMode, setLoginMode] = useState<'pin' | 'kiosk' | 'qr'>('kiosk');
-  const [badgeCodeInput, setBadgeCodeInput] = useState('');
-  
+
   // Barcode / QR Camera Scanner State
   const scannerVideoRef = useRef<HTMLVideoElement>(null);
   const [scannerStream, setScannerStream] = useState<MediaStream | null>(null);
   const [isScannerScanning, setIsScannerScanning] = useState(false);
   const scannerIntervalRef = useRef<any>(null);
 
-  // Active Tab: 'attendance' | 'stock' | 'recap'
-  const [activeTab, setActiveTab] = useState<'attendance' | 'stock' | 'recap'>('attendance');
+  // Active Tab: 5 Bottom Tabs: 'attendance' | 'kds' | 'stock' | 'leave' | 'profile'
+  const [activeTab, setActiveTab] = useState<'attendance' | 'kds' | 'stock' | 'leave' | 'profile'>('attendance');
 
   // Live Digital Time
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDateStr, setCurrentDateStr] = useState<string>('');
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       setCurrentDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+      setTick(t => t + 1);
     };
     updateTime();
     const timer = setInterval(updateTime, 1000);
@@ -93,7 +113,7 @@ export const StaffPWAView: React.FC = () => {
   // Store Settings & Shifts
   const [settings, setSettings] = useState<any>(null);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
-  const [selectedShiftId, setSelectedShiftId] = useState<string>('pagi');
+  const [selectedShiftId, setSelectedShiftId] = useState<string>('1');
 
   // GPS State
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -104,6 +124,7 @@ export const StaffPWAView: React.FC = () => {
 
   // Camera State
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -112,6 +133,12 @@ export const StaffPWAView: React.FC = () => {
   // Attendance Clocking State
   const [clockLoading, setClockLoading] = useState(false);
   const [mySummary, setMySummary] = useState<any>(null);
+
+  // KDS Orders State
+  const [kdsOrders, setKdsOrders] = useState<any[]>([]);
+  const [kdsFilter, setKdsFilter] = useState<'ALL' | 'FOOD' | 'DRINK'>('ALL');
+  const [kdsLoading, setKdsLoading] = useState(false);
+  const prevOrderCountRef = useRef(0);
 
   // Kitchen Stock State
   const [stockSubTab, setStockSubTab] = useState<'catalog' | 'movements' | 'shopping'>('catalog');
@@ -152,25 +179,80 @@ export const StaffPWAView: React.FC = () => {
   const [adjustForm, setAdjustForm] = useState({ change: '', description: '' });
   const [submittingAdjust, setSubmittingAdjust] = useState(false);
 
-  const userRole = (user?.role || '').trim().toLowerCase();
-  const isCashierOrWaiter = ['kasir', 'cashier', 'waiter', 'pelayan'].includes(userRole);
-  const isKitchenStaff = !!user && !isCashierOrWaiter && ['dapur', 'kitchen', 'barista', 'chef', 'admin', 'superadmin', 'owner'].includes(userRole);
+  // Leave & Permission Requests State
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>([]);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+  const [showNewLeaveModal, setShowNewLeaveModal] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({
+    type: 'Izin',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    reason: '',
+    photoUrl: ''
+  });
+  const [submittingLeave, setSubmittingLeave] = useState(false);
 
-  // Auto-switch to attendance tab if user is not authorized for kitchen/stock activities
-  useEffect(() => {
-    if (!isKitchenStaff && activeTab === 'stock') {
-      setActiveTab('attendance');
+  // Shift Handover & SOP Checklist State
+  const [profileSubTab, setProfileSubTab] = useState<'slip' | 'sop' | 'handover'>('slip');
+  const [sopType, setSopType] = useState<'OPENING' | 'CLOSING'>('OPENING');
+  const [openingItems, setOpeningItems] = useState([
+    { title: 'Nyalakan Lampu, AC & Display Toko', checked: false },
+    { title: 'Cek Kebersihan Meja, Kursi & Lantai Dining Area', checked: false },
+    { title: 'Cek Suhu Kulkas & Chiller Bahan Baku', checked: false },
+    { title: 'Kalibrasi Mesin Espresso & Cek Air Grinder', checked: false },
+    { title: 'Cek Persediaan Gas LPG & Air Galon', checked: false },
+    { title: 'Pastikan Kertas Thermal Printer Kasir Terpasang', checked: false },
+  ]);
+  const [closingItems, setClosingItems] = useState([
+    { title: 'Matikan Mesin Espresso, Kompor & Gas LPG', checked: false },
+    { title: 'Bersihkan Portafilter, Steam Wand & Drip Tray', checked: false },
+    { title: 'Tutup & Simpan Bahan Sisa ke Dalam Chiller', checked: false },
+    { title: 'Buang Sampah Dapur & Ganti Plastik Tempat Sampah', checked: false },
+    { title: 'Hitung Uang Fisik Kasir & Cocokkan dengan Laporan POS', checked: false },
+    { title: 'Kunci Pintu Toko, Matikan AC & Nyalakan Alarm/CCTV', checked: false },
+  ]);
+  const [sopNotes, setSopNotes] = useState('');
+  const [submittingSop, setSubmittingSop] = useState(false);
+
+  // Shift Handover State
+  const [handoverLogs, setHandoverLogs] = useState<any[]>([]);
+  const [handoverForm, setHandoverForm] = useState({
+    shiftName: 'Shift Pagi -> Shift Siang',
+    cashBalance: '',
+    equipmentStatus: 'Semua alat dan mesin beroperasi normal.',
+    notes: ''
+  });
+  const [submittingHandover, setSubmittingHandover] = useState(false);
+
+  // Sound generator
+  const playBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.3);
+    } catch (e) {
+      console.warn('AudioContext beep error', e);
     }
-  }, [isKitchenStaff, activeTab]);
+  };
 
-  // Distance calculator helper
+  // Distance calculator (Haversine)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3;
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
     const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return Math.round(R * c);
   };
@@ -178,28 +260,41 @@ export const StaffPWAView: React.FC = () => {
   // Fetch Settings & Shifts
   const fetchSettingsAndShifts = async () => {
     try {
-      const resShifts = await fetch('/api/attendance/shifts');
-      if (resShifts.ok) {
-        const data = await resShifts.json();
-        setShifts(data);
-        if (data.length > 0) setSelectedShiftId(data[0].id);
-      }
-
-      if (token) {
-        const resSet = await fetch('/api/settings', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (resSet.ok) {
-          const s = await resSet.json();
-          setSettings(s);
-        }
+      const [setRes, shiftRes] = await Promise.all([
+        fetch('/api/settings'),
+        fetch('/api/attendance/shifts')
+      ]);
+      if (setRes.ok) setSettings(await setRes.json());
+      if (shiftRes.ok) {
+        const shiftData = await shiftRes.json();
+        setShifts(shiftData);
+        if (shiftData.length > 0) setSelectedShiftId(shiftData[0].id);
       }
     } catch (e) {
       console.error(e);
     }
   };
 
-  // Fetch GPS Location
+  // Fetch Staff List for Kiosk Login
+  const fetchStaffList = async () => {
+    try {
+      const res = await fetch('/api/users');
+      if (res.ok) {
+        const users = await res.json();
+        const activeStaff = users.filter((u: any) => u.status === 'Aktif' || !u.status);
+        setStaffList(activeStaff);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettingsAndShifts();
+    fetchStaffList();
+  }, []);
+
+  // Request GPS
   const requestGpsLocation = () => {
     setGpsLoading(true);
     setGpsError('');
@@ -216,9 +311,9 @@ export const StaffPWAView: React.FC = () => {
         setGpsLocation({ lat, lng });
         setGpsLoading(false);
 
-        const storeLat = settings?.storeLatitude ?? -6.200000;
-        const storeLon = settings?.storeLongitude ?? 106.816666;
-        const maxRadius = settings?.gpsRadiusMeters ?? 100;
+        const storeLat = settings?.storeLatitude ?? -6.229728;
+        const storeLon = settings?.storeLongitude ?? 106.807464;
+        const maxRadius = settings?.gpsRadiusMeters ?? 150;
 
         const dist = calculateDistance(lat, lng, storeLat, storeLon);
         setGpsDistance(dist);
@@ -226,30 +321,36 @@ export const StaffPWAView: React.FC = () => {
       },
       err => {
         setGpsLoading(false);
-        setGpsError('Gagal mendeteksi GPS. Harap izinkan akses lokasi di browser HP.');
+        setGpsError('Gagal mendeteksi GPS. Harap izinkan akses lokasi di browser/aplikasi.');
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
-  // Camera Management
+  // Camera Management with WebRTC + fallback
   const startCamera = async () => {
     setIsCameraActive(true);
     try {
       if (cameraStream) {
         cameraStream.getTracks().forEach(t => t.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cameraFacing, width: { ideal: 640 }, height: { ideal: 640 } },
-        audio: false
-      });
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: cameraFacing, width: { ideal: 640 }, height: { ideal: 640 } },
+          audio: false
+        });
+      } catch (err1) {
+        console.warn('First camera constraint failed, fallback to basic video...', err1);
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       setCameraStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
     } catch (e) {
       console.error('Camera error:', e);
-      toast('Gagal mengakses kamera. Harap beri izin kamera.', 'error');
+      toast('Kamera WebRTC belum diizinkan. Anda dapat menggunakan tombol "Buka Kamera Bawaan HP" di bawah.', 'info');
       setIsCameraActive(false);
     }
   };
@@ -276,7 +377,21 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch My Attendance Summary
+  const handleNativeCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setCapturedPhoto(dataUrl);
+        stopCamera();
+        toast('Foto selfie berhasil diambil!', 'success');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Fetch Attendance Summary
   const fetchMySummary = async () => {
     if (!token) return;
     try {
@@ -292,7 +407,49 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch Kitchen Stock
+  // Fetch KDS Live Orders
+  const fetchKdsOrders = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/kds/active', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.length > prevOrderCountRef.current && prevOrderCountRef.current !== 0) {
+          playBeep();
+        }
+        prevOrderCountRef.current = data.length;
+        setKdsOrders(data);
+      }
+    } catch (e) {
+      console.error('KDS Fetch error:', e);
+    }
+  };
+
+  // Update KDS Order Status
+  const handleUpdateKdsStatus = async (orderId: number, kdsStatus: string) => {
+    try {
+      const res = await fetch(`/api/kds/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ kdsStatus })
+      });
+      if (res.ok) {
+        toast(`Status pesanan diperbarui: ${kdsStatus}`, 'success');
+        fetchKdsOrders();
+      } else {
+        toast('Gagal memperbarui status pesanan', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    }
+  };
+
+  // Fetch Ingredients
   const fetchIngredients = async () => {
     if (!token) return;
     setStockLoading(true);
@@ -301,8 +458,7 @@ export const StaffPWAView: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
-        setIngredients(data);
+        setIngredients(await res.json());
       }
     } catch (e) {
       console.error(e);
@@ -311,314 +467,94 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch Active Staff for 1-Tap Avatar Switcher
-  const fetchStaffList = async () => {
-    try {
-      const res = await fetch('/api/auth/staff-list');
-      if (res.ok) {
-        const list = await res.json();
-        setStaffList(list);
-      }
-    } catch (e) {
-      console.error('Failed to load staff list:', e);
-    }
-  };
-
-  // Fetch Today's Stock Movements
+  // Fetch Today Movements
   const fetchTodayMovements = async () => {
     if (!token) return;
     setMovementsLoading(true);
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const res = await fetch(`/api/ingredients/stock-movements?date=${todayStr}`, {
+      const today = new Date().toISOString().split('T')[0];
+      const res = await fetch(`/api/ingredients/logs?date=${today}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
-        setTodayMovements(data);
+        setTodayMovements(await res.json());
       }
     } catch (e) {
-      console.error('Failed to fetch stock movements:', e);
+      console.error(e);
     } finally {
       setMovementsLoading(false);
     }
   };
 
-  const handleAddCustomShoppingItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newShoppingInput.trim()) return;
-    const updated = [...customShoppingItems, newShoppingInput.trim()];
-    setCustomShoppingItems(updated);
-    localStorage.setItem('staff_custom_shopping_items', JSON.stringify(updated));
-    setNewShoppingInput('');
-    toast('Item belanja berhasil ditambahkan!', 'success');
-  };
-
-  const handleRemoveCustomShoppingItem = (index: number) => {
-    const updated = customShoppingItems.filter((_, i) => i !== index);
-    setCustomShoppingItems(updated);
-    localStorage.setItem('staff_custom_shopping_items', JSON.stringify(updated));
-    toast('Item dihapus dari daftar', 'info');
-  };
-
-  const handleClearCustomShoppingItems = () => {
-    setCustomShoppingItems([]);
-    localStorage.removeItem('staff_custom_shopping_items');
-    toast('Catatan tambahan belanja dikosongkan', 'info');
-  };
-
-  const copyShoppingListToWA = () => {
-    const lowItems = ingredients.filter(i => i.stock <= i.minStock);
-    const nowStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const store = settings?.storeName || 'MUKI RAMEN';
-    
-    let text = `🛒 *DAFTAR KEBUTUHAN BELANJA DAPUR - ${store.toUpperCase()}*\n`;
-    text += `📅 *Tanggal*: ${nowStr}\n`;
-    text += `👨‍🍳 *Dicatat Oleh*: ${user?.name || 'Staff Dapur'} (${user?.role || 'Staff'})\n\n`;
-
-    if (lowItems.length > 0) {
-      text += `🚨 *BAHAN KRITIS / MENIPIS SISTEM:*\n`;
-      lowItems.forEach((ing, idx) => {
-        const targetStock = Math.max(ing.minStock * 2, 1);
-        const needed = Math.max(1, targetStock - ing.stock);
-        text += `${idx + 1}. *${ing.name}*\n`;
-        text += `   • Sisa Stok: ${ing.stock} ${ing.unit} (Min: ${ing.minStock} ${ing.unit})\n`;
-        text += `   • Kebutuhan Beli: *${needed} ${ing.unit}*\n`;
-        if (ing.supplier?.name) {
-          text += `   • Supplier: ${ing.supplier.name} ${ing.supplier.phone ? `(${ing.supplier.phone})` : ''}\n`;
-        }
-      });
-      text += `\n`;
-    } else {
-      text += `✅ *Stok Sistem: Semua bahan masih dalam batas aman.*\n\n`;
-    }
-
-    if (customShoppingItems.length > 0) {
-      text += `📝 *CATATAN TAMBAHAN DARI DAPUR:*\n`;
-      customShoppingItems.forEach((item, idx) => {
-        text += `• ${item}\n`;
-      });
-      text += `\n`;
-    }
-
-    text += `Mohon segera dicek dan diproses untuk kelancaran operasional. Terima kasih! 🙏`;
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text)
-        .then(() => toast('✓ Format WhatsApp berhasil disalin ke clipboard!', 'success'))
-        .catch(() => toast('Gagal menyalin otomatis. Silakan salin manual.', 'error'));
-    } else {
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      toast('✓ Format WhatsApp berhasil disalin!', 'success');
-    }
-  };
-
-  const exportShoppingPDF = () => {
-    const doc = new jsPDF();
-    const store = settings?.storeName || 'MUKI RAMEN';
-    const nowStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`DAFTAR KEBUTUHAN BELANJA DAPUR`, 14, 15);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Toko: ${store} | Dicatat Oleh: ${user?.name || 'Staff Dapur'}`, 14, 22);
-    doc.text(`Tanggal: ${nowStr} (${new Date().toLocaleTimeString('id-ID')})`, 14, 28);
-
-    const lowItems = ingredients.filter(i => i.stock <= i.minStock);
-    const tableColumn = ["No", "Bahan Baku", "Kategori", "Sisa Stok", "Batas Min", "Kebutuhan Beli", "Supplier", "Est. Biaya"];
-    const tableRows: any[] = [];
-    let totalEstCost = 0;
-
-    lowItems.forEach((ing, idx) => {
-      const targetStock = Math.max(ing.minStock * 2, 1);
-      const needed = Math.max(1, targetStock - ing.stock);
-      const cost = needed * ing.buyPrice;
-      totalEstCost += cost;
-      tableRows.push([
-        idx + 1,
-        ing.name,
-        ing.category || 'FOOD',
-        `${ing.stock} ${ing.unit}`,
-        `${ing.minStock} ${ing.unit}`,
-        `${needed} ${ing.unit}`,
-        ing.supplier?.name || '-',
-        `Rp ${cost.toLocaleString('id-ID')}`
-      ]);
-    });
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows.length > 0 ? tableRows : [["-", "Semua bahan baku dalam kondisi aman", "-", "-", "-", "-", "-", "-"]],
-      startY: 34,
-      theme: 'grid',
-      headStyles: { fillColor: [245, 158, 11] },
-      styles: { fontSize: 8 }
-    });
-
-    const finalY = (doc as any).lastAutoTable?.finalY || 60;
-    
-    if (customShoppingItems.length > 0) {
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Catatan Tambahan Belanja / Pasar:`, 14, finalY + 10);
-      doc.setFont('helvetica', 'normal');
-      let lineY = finalY + 16;
-      customShoppingItems.forEach((item) => {
-        doc.text(`• ${item}`, 16, lineY);
-        lineY += 6;
-      });
-    }
-
-    doc.save(`Kebutuhan_Belanja_${new Date().toISOString().slice(0, 10)}.pdf`);
-    toast('Laporan PDF Kebutuhan Belanja berhasil diunduh!', 'success');
-  };
-
-  useEffect(() => {
-    fetchSettingsAndShifts();
-    fetchStaffList();
-    if (token) {
-      fetchMySummary();
-      fetchIngredients();
-      requestGpsLocation();
-      if (stockSubTab === 'movements') {
-        fetchTodayMovements();
-      }
-    }
-    return () => {
-      stopCamera();
-      stopQrScanner();
-    };
-  }, [token, stockSubTab]);
-
-  // QR / Barcode Login Handler
-  const handleQrLogin = async (code: string) => {
-    if (!code || !code.trim()) return;
-    setPinLoading(true);
-    setPinError('');
+  // Fetch Leave Requests
+  const fetchMyLeaves = async () => {
+    if (!token || !user?.id) return;
+    setLeaveLoading(true);
     try {
-      const res = await fetch('/api/auth/qr-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code.trim() })
+      const res = await fetch(`/api/attendance/leaves?userId=${user.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      const data = await res.json();
       if (res.ok) {
-        localStorage.setItem('staff_token', data.token);
-        localStorage.setItem('staff_user', JSON.stringify(data.user));
-        setToken(data.token);
-        setUser(data.user);
-        setBadgeCodeInput('');
-        stopQrScanner();
-        toast(`Selamat bertugas, ${data.user.name}! 🚀`, 'success');
-      } else {
-        setPinError(data.error || 'Barcode / Badge ID tidak dikenali.');
-        toast(data.error || 'Barcode / Badge ID tidak dikenali', 'error');
+        setLeaveRequests(await res.json());
       }
     } catch (e) {
-      setPinError('Terjadi kesalahan koneksi.');
+      console.error(e);
     } finally {
-      setPinLoading(false);
+      setLeaveLoading(false);
     }
   };
 
-  // Camera QR / Barcode Scanner Controls
-  const startQrScanner = async () => {
-    setIsScannerScanning(true);
-    setPinError('');
+  // Fetch Handover Logs
+  const fetchHandoverLogs = async () => {
+    if (!token) return;
     try {
-      if (scannerStream) {
-        scannerStream.getTracks().forEach(t => t.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } },
-        audio: false
+      const res = await fetch('/api/attendance/handover', {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      setScannerStream(stream);
-      if (scannerVideoRef.current) {
-        scannerVideoRef.current.srcObject = stream;
-        scannerVideoRef.current.play();
-      }
-
-      // If BarcodeDetector API exists on browser (Chrome/Edge/Android Web)
-      if ('BarcodeDetector' in window) {
-        const detector = new (window as any).BarcodeDetector({
-          formats: ['qr_code', 'code_128', 'ean_13', 'code_39', 'data_matrix']
-        });
-
-        scannerIntervalRef.current = setInterval(async () => {
-          if (scannerVideoRef.current && scannerVideoRef.current.readyState >= 2) {
-            try {
-              const barcodes = await detector.detect(scannerVideoRef.current);
-              if (barcodes.length > 0) {
-                const detectedCode = barcodes[0].rawValue;
-                if (detectedCode) {
-                  stopQrScanner();
-                  handleQrLogin(detectedCode);
-                }
-              }
-            } catch (err) {
-              // Ignore frame detection skips
-            }
-          }
-        }, 300);
+      if (res.ok) {
+        setHandoverLogs(await res.json());
       }
     } catch (e) {
-      console.error('QR Scanner error:', e);
-      toast('Gagal mengakses kamera scanner. Pastikan izin kamera aktif.', 'error');
-      setIsScannerScanning(false);
+      console.error(e);
     }
   };
 
-  const stopQrScanner = () => {
-    if (scannerIntervalRef.current) {
-      clearInterval(scannerIntervalRef.current);
-      scannerIntervalRef.current = null;
-    }
-    if (scannerStream) {
-      scannerStream.getTracks().forEach(t => t.stop());
-      setScannerStream(null);
-    }
-    setIsScannerScanning(false);
-  };
-
-  // Listen to Hardware USB/Bluetooth Barcode Scanner keystrokes on login page
+  // Socket.IO Listeners
   useEffect(() => {
-    if (token) return;
-    let barcodeBuffer = '';
-    let lastKeyTime = Date.now();
+    if (socket) {
+      const handleOrderUpdate = () => {
+        fetchKdsOrders();
+      };
+      socket.on('orderCreated', handleOrderUpdate);
+      socket.on('orderUpdated', handleOrderUpdate);
+      socket.on('kdsUpdate', handleOrderUpdate);
+      socket.on('tableStatusChanged', handleOrderUpdate);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in a text input field directly
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
-        return;
-      }
+      return () => {
+        socket.off('orderCreated', handleOrderUpdate);
+        socket.off('orderUpdated', handleOrderUpdate);
+        socket.off('kdsUpdate', handleOrderUpdate);
+        socket.off('tableStatusChanged', handleOrderUpdate);
+      };
+    }
+  }, [socket, token]);
 
-      const currentTime = Date.now();
-      if (currentTime - lastKeyTime > 150) {
-        barcodeBuffer = '';
-      }
-      lastKeyTime = currentTime;
-
-      if (e.key === 'Enter') {
-        if (barcodeBuffer.length >= 3) {
-          e.preventDefault();
-          handleQrLogin(barcodeBuffer);
-          barcodeBuffer = '';
-        }
-      } else if (e.key.length === 1) {
-        barcodeBuffer += e.key;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [token]);
+  // Tab Change Fetcher
+  useEffect(() => {
+    if (!token) return;
+    fetchMySummary();
+    if (activeTab === 'attendance') {
+      requestGpsLocation();
+    } else if (activeTab === 'kds') {
+      fetchKdsOrders();
+    } else if (activeTab === 'stock') {
+      fetchIngredients();
+    } else if (activeTab === 'leave') {
+      fetchMyLeaves();
+    } else if (activeTab === 'profile') {
+      fetchHandoverLogs();
+    }
+  }, [token, activeTab]);
 
   // Submit Login PIN
   const handlePinSubmit = async (pinValue: string) => {
@@ -671,7 +607,6 @@ export const StaffPWAView: React.FC = () => {
     setToken('');
     setUser(null);
     stopCamera();
-    stopQrScanner();
     toast('Berhasil keluar sesi', 'info');
   };
 
@@ -723,7 +658,123 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Submit Stock Loss from Kitchen PWA
+  // Submit Leave Request
+  const handleSubmitLeave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leaveForm.reason.trim()) {
+      return toast('Harap isi alasan pengajuan izin/sakit', 'warning');
+    }
+
+    setSubmittingLeave(true);
+    try {
+      const res = await fetch('/api/attendance/leaves', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          ...leaveForm
+        })
+      });
+
+      if (res.ok) {
+        toast('Pengajuan izin berhasil dikirim ke Admin!', 'success');
+        setShowNewLeaveModal(false);
+        setLeaveForm({
+          type: 'Izin',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0],
+          reason: '',
+          photoUrl: ''
+        });
+        fetchMyLeaves();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal mengirim pengajuan', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSubmittingLeave(false);
+    }
+  };
+
+  // Submit SOP Checklist
+  const handleSubmitSop = async () => {
+    const items = sopType === 'OPENING' ? openingItems : closingItems;
+    setSubmittingSop(true);
+    try {
+      const res = await fetch('/api/attendance/checklist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          type: sopType,
+          shiftName: mySummary?.todayStatus?.todayLog?.shiftName || 'Shift Bertugas',
+          items,
+          notes: sopNotes
+        })
+      });
+
+      if (res.ok) {
+        toast(`Checklist SOP ${sopType === 'OPENING' ? 'Buka' : 'Tutup'} Dapur berhasil disimpan!`, 'success');
+        setSopNotes('');
+      } else {
+        toast('Gagal menyimpan checklist SOP', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSubmittingSop(false);
+    }
+  };
+
+  // Submit Shift Handover
+  const handleSubmitHandover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!handoverForm.notes.trim()) {
+      return toast('Harap isi catatan pesan serah terima shift', 'warning');
+    }
+
+    setSubmittingHandover(true);
+    try {
+      const res = await fetch('/api/attendance/handover', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          ...handoverForm
+        })
+      });
+
+      if (res.ok) {
+        toast('Catatan serah terima shift berhasil disimpan!', 'success');
+        setHandoverForm({
+          shiftName: 'Shift Pagi -> Shift Siang',
+          cashBalance: '',
+          equipmentStatus: 'Semua alat dan mesin beroperasi normal.',
+          notes: ''
+        });
+        fetchHandoverLogs();
+      } else {
+        toast('Gagal menyimpan handover shift', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSubmittingHandover(false);
+    }
+  };
+
+  // Submit Stock Loss
   const handleSubmitStockLoss = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseFloat(lossForm.qtyLoss);
@@ -741,7 +792,7 @@ export const StaffPWAView: React.FC = () => {
         },
         body: JSON.stringify({
           ...lossForm,
-          notes: `${lossForm.notes ? lossForm.notes + ' - ' : ''}[PWA Dapur: ${user?.name}]`
+          notes: `${lossForm.notes ? lossForm.notes + ' - ' : ''}[Staf: ${user?.name}]`
         })
       });
 
@@ -751,22 +802,23 @@ export const StaffPWAView: React.FC = () => {
         setLossForm({ ingredientId: '', qtyLoss: '', reason: 'Busuk / Kadaluarsa', notes: '' });
         fetchIngredients();
       } else {
-        const err = await res.json();
-        toast(err.error || 'Gagal mencatat loss', 'error');
+        toast('Gagal menyimpan stock loss', 'error');
       }
-    } catch {
+    } catch (e) {
       toast('Terjadi kesalahan koneksi', 'error');
     } finally {
       setSubmittingLoss(false);
     }
   };
 
-  // Submit Quick Adjust / Restock from Kitchen PWA
-  const handleSubmitAdjust = async (e: React.FormEvent) => {
+  // Submit Quick Restock
+  const handleQuickAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjustModal.ingredient) return;
-    const change = parseFloat(adjustForm.change);
-    if (isNaN(change) || change === 0) return toast('Jumlah perubahan tidak boleh 0', 'warning');
+    const changeVal = parseFloat(adjustForm.change);
+    if (isNaN(changeVal) || changeVal <= 0) {
+      return toast('Masukkan jumlah barang masuk yang valid', 'warning');
+    }
 
     setSubmittingAdjust(true);
     try {
@@ -777,321 +829,118 @@ export const StaffPWAView: React.FC = () => {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          change,
-          type: change > 0 ? 'Restock' : 'Penyesuaian',
-          description: `${adjustForm.description ? adjustForm.description + ' ' : ''}[PWA Dapur: ${user?.name}]`
+          change: changeVal,
+          type: 'Restock',
+          description: adjustForm.description || `Quick Restock Staf (${user?.name})`
         })
       });
 
       if (res.ok) {
-        toast('Stok berhasil disesuaikan!', 'success');
+        toast(`Berhasil restock ${adjustModal.ingredient.name}!`, 'success');
         setAdjustModal({ open: false, ingredient: null });
         setAdjustForm({ change: '', description: '' });
         fetchIngredients();
       } else {
-        const err = await res.json();
-        toast(err.error || 'Gagal menyesuaikan stok', 'error');
+        toast('Gagal melakukan restock', 'error');
       }
-    } catch {
+    } catch (e) {
       toast('Terjadi kesalahan koneksi', 'error');
     } finally {
       setSubmittingAdjust(false);
     }
   };
 
-  // Filtered ingredients
-  const filteredIngredients = ingredients.filter(i => {
-    const matchSearch = i.name.toLowerCase().includes(stockSearch.toLowerCase());
-    let matchCat = true;
-    if (stockCategory === 'FOOD') matchCat = (i.category || 'FOOD') === 'FOOD';
-    else if (stockCategory === 'DRINK') matchCat = i.category === 'DRINK';
-    else if (stockCategory === 'PACKAGING') matchCat = i.category === 'PACKAGING';
-    else if (stockCategory === 'LOW') matchCat = i.stock <= i.minStock;
-
-    return matchSearch && matchCat;
-  });
-
-  // Selected ingredient in loss modal
-  const selectedLossItem = ingredients.find(i => i.id === Number(lossForm.ingredientId));
-  const estimatedLossRupiah = (parseFloat(lossForm.qtyLoss) || 0) * (selectedLossItem?.buyPrice || 0);
+  // Helper format time
+  const formatDuration = (dateStr: string) => {
+    const diffMs = Math.max(0, new Date().getTime() - new Date(dateStr).getTime());
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffSecs = Math.floor((diffMs % 60000) / 1000);
+    return `${diffMins.toString().padStart(2, '0')}:${diffSecs.toString().padStart(2, '0')}`;
+  };
 
   // ─────────────────────────────────────────────────────────────
-  // RENDER LOGIN SCREEN (IF NOT LOGGED IN)
+  // RENDER LOGIN SCREEN IF NOT AUTHENTICATED
   // ─────────────────────────────────────────────────────────────
   if (!token || !user) {
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col justify-between p-5 text-slate-900 max-w-md mx-auto relative overflow-hidden font-sans">
-        {/* Top Decorative Blue Curved Background */}
-        <div className="absolute top-0 left-0 right-0 h-64 bg-gradient-to-b from-[#0052cc] via-[#004bbd] to-[#003d99] rounded-b-[3rem] shadow-xl pointer-events-none" />
-
-        {/* Top Branding */}
-        <div className="pt-6 text-center relative z-10 text-white">
-          <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mx-auto shadow-lg mb-2.5 border border-white/25">
-            <Utensils size={26} className="text-white drop-shadow" />
+      <div className="min-h-screen bg-slate-900 flex flex-col justify-between p-4 max-w-md mx-auto shadow-2xl relative select-none font-sans text-white">
+        <div className="text-center pt-6 space-y-2 relative z-10">
+          <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-500 mx-auto flex items-center justify-center shadow-xl shadow-blue-500/20 border border-white/20">
+            <Fingerprint size={32} className="text-white animate-pulse" />
           </div>
-          <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-white/20 text-blue-100 border border-white/20 inline-block mb-1">
-            KITCHEN & STAFF SUPERAPP
-          </span>
-          <h1 className="text-xl font-black tracking-tight text-white drop-shadow-sm">PORTAL STAF & DAPUR</h1>
-          <p className="text-[11px] font-semibold text-blue-100/90 mt-0.5">
-            1-Tap Kiosk Switch &bull; Scan ID Badge &bull; Live Stock Lock
-          </p>
-
-          {/* Mode Switcher Tabs */}
-          <div className="flex bg-white/20 backdrop-blur-md p-1 rounded-2xl border border-white/20 mt-4 shadow-md max-w-xs mx-auto">
-            <button
-              type="button"
-              onClick={() => { setLoginMode('kiosk'); stopQrScanner(); }}
-              className={`flex-1 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
-                loginMode === 'kiosk'
-                  ? 'bg-white text-[#0052cc] shadow-md'
-                  : 'text-white/80 hover:text-white'
-              }`}
-            >
-              <Zap size={14} /> 1-Tap Kiosk
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLoginMode('qr'); startQrScanner(); }}
-              className={`flex-1 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
-                loginMode === 'qr'
-                  ? 'bg-white text-[#0052cc] shadow-md'
-                  : 'text-white/80 hover:text-white'
-              }`}
-            >
-              <Camera size={14} /> Scan Badge
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLoginMode('pin'); stopQrScanner(); }}
-              className={`flex-1 py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
-                loginMode === 'pin'
-                  ? 'bg-white text-[#0052cc] shadow-md'
-                  : 'text-white/80 hover:text-white'
-              }`}
-            >
-              <Fingerprint size={14} /> PIN
-            </button>
-          </div>
+          <h1 className="text-xl font-black tracking-tight">{settings?.storeName || 'SOL CAFE'}</h1>
+          <p className="text-xs text-blue-200 font-medium">Portal Absensi & Operasional Staf</p>
         </div>
 
-        {/* Dynamic Card Container */}
-        <div className="my-auto py-4 relative z-10">
-          {/* MODE 1: 1-TAP KIOSK AVATAR SWITCHER */}
-          {loginMode === 'kiosk' && (
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                  <User size={14} className="text-[#0052cc]" /> Pilih Profil Karyawan
-                </span>
-                <span className="text-[10px] bg-blue-50 text-[#0052cc] font-bold px-2 py-0.5 rounded-full border border-blue-100">
-                  {staffList.length} Staf Aktif
-                </span>
+        <div className="bg-white text-slate-900 rounded-[2.5rem] p-6 shadow-2xl relative z-10 space-y-5">
+          {loginMode === 'kiosk' && !selectedStaffUser ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <User size={16} className="text-[#0052cc]" />
+                  <span>Pilih Profil Karyawan</span>
+                </h3>
+                <span className="text-[10px] font-bold text-slate-400">{staffList.length} Staf</span>
               </div>
 
-              {/* Avatar Grid / List */}
-              <div className="grid grid-cols-3 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                {staffList.map(st => {
-                  const isSelected = selectedStaffUser?.id === st.id;
-                  return (
+              <div className="grid grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                {staffList.map(st => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedStaffUser(st);
+                      setPinInput('');
+                      setPinError('');
+                    }}
+                    className="p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-left transition-all active:scale-95 group shadow-sm"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-[#0052cc] text-white flex items-center justify-center font-black text-xs mb-2 group-hover:scale-105 transition-transform">
+                      {st.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="text-xs font-black text-slate-900 truncate">{st.name}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">{st.role}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  {selectedStaffUser && (
                     <button
-                      key={st.id}
                       type="button"
                       onClick={() => {
-                        setSelectedStaffUser(st);
-                        setPinError('');
+                        setSelectedStaffUser(null);
                         setPinInput('');
+                        setPinError('');
                       }}
-                      className={`p-2.5 rounded-2xl border transition-all flex flex-col items-center text-center relative ${
-                        isSelected
-                          ? 'bg-blue-50/80 border-[#0052cc] shadow-md shadow-blue-500/10 scale-[1.02]'
-                          : 'bg-slate-50 border-slate-200/80 hover:bg-slate-100 hover:border-slate-300'
-                      }`}
+                      className="p-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0052cc] to-indigo-500 p-0.5 mb-1.5 shadow-sm">
-                        <div className="w-full h-full bg-white rounded-[10px] flex items-center justify-center font-black text-sm text-[#0052cc]">
-                          {st.name.substring(0, 2).toUpperCase()}
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-slate-800 truncate w-full">{st.name}</span>
-                      <span className="text-[9px] font-black text-slate-400 mt-0.5 uppercase tracking-wide">
-                        {st.role}
-                      </span>
+                      <ArrowLeft size={14} />
                     </button>
-                  );
-                })}
-              </div>
-
-              {/* PIN / Quick Confirm for Selected Staff */}
-              {selectedStaffUser ? (
-                <div className="pt-2 border-t border-slate-100 space-y-3">
-                  <div className="text-center">
-                    <p className="text-xs text-slate-600 font-bold">
-                      Masukkan PIN untuk <span className="text-[#0052cc] font-black">{selectedStaffUser.name}</span>
-                    </p>
-                  </div>
-
-                  <div className="flex justify-center gap-2.5">
-                    {[...Array(6)].map((_, i) => (
-                      <div
-                        key={i}
-                        className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-200 ${
-                          i < pinInput.length
-                            ? 'bg-[#0052cc] border-[#0052cc] scale-110 shadow-sm shadow-blue-400'
-                            : 'border-slate-300 bg-slate-100'
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  {pinError && (
-                    <p className="text-[11px] text-rose-600 font-bold text-center bg-rose-50 py-1.5 px-3 rounded-xl border border-rose-200">
-                      {pinError}
-                    </p>
                   )}
-
-                  {/* Compact Keypad */}
-                  <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
-                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
-                      <button
-                        key={num}
-                        type="button"
-                        disabled={pinLoading}
-                        onClick={() => handleKeypadClick(num)}
-                        className="h-11 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-lg font-black transition-all active:scale-95 border border-slate-200 flex items-center justify-center shadow-sm"
-                      >
-                        {num}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      disabled={pinLoading}
-                      onClick={() => setPinInput('')}
-                      className="h-11 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-[10px] font-black border border-rose-200 flex items-center justify-center"
-                    >
-                      CLEAR
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pinLoading}
-                      onClick={() => handleKeypadClick('0')}
-                      className="h-11 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-lg font-black border border-slate-200 flex items-center justify-center shadow-sm"
-                    >
-                      0
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pinLoading}
-                      onClick={() => setPinInput(prev => prev.slice(0, -1))}
-                      className="h-11 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-500 text-sm font-bold border border-slate-200 flex items-center justify-center"
-                    >
-                      ⌫
-                    </button>
+                  <div>
+                    <h3 className="text-xs font-black text-slate-900">
+                      {selectedStaffUser ? selectedStaffUser.name : 'Masukkan 6-Digit PIN'}
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      {selectedStaffUser ? `Role: ${selectedStaffUser.role}` : 'Ketik PIN rahasia Anda'}
+                    </p>
                   </div>
                 </div>
-              ) : (
-                <div className="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
-                  <p className="text-xs text-slate-500">
-                    👆 Ketuk avatar Anda di atas untuk login cepat dapur
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* MODE 2: QR & BARCODE BADGE CAMERA SCANNER */}
-          {loginMode === 'qr' && (
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                  <Camera size={14} className="text-[#0052cc]" /> Arahkan QR / Barcode ID
-                </span>
-                <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Scanner
-                </span>
               </div>
 
-              {/* Camera Scanner Viewfinder */}
-              <div className="relative aspect-square w-full max-w-[280px] mx-auto rounded-3xl overflow-hidden bg-slate-950 border-2 border-blue-500/40 shadow-inner flex items-center justify-center">
-                <video
-                  ref={scannerVideoRef}
-                  playsInline
-                  muted
-                  autoPlay
-                  className="w-full h-full object-cover"
-                />
-
-                {/* Reticle Scanner Line Overlay */}
-                <div className="absolute inset-0 border-2 border-dashed border-white/30 rounded-3xl pointer-events-none"></div>
-                <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-pulse shadow-lg shadow-cyan-400"></div>
-
-                {!isScannerScanning && (
-                  <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center p-4 text-center">
-                    <Camera size={36} className="text-slate-500 mb-2" />
-                    <p className="text-xs font-bold text-slate-300 mb-3">Kamera scanner belum aktif</p>
-                    <button
-                      type="button"
-                      onClick={startQrScanner}
-                      className="px-4 py-2 bg-[#0052cc] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg"
-                    >
-                      Nyalakan Kamera
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Manual Badge code fallback */}
-              <div className="pt-2 border-t border-slate-100">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleQrLogin(badgeCodeInput);
-                  }}
-                  className="flex gap-2"
-                >
-                  <input
-                    type="text"
-                    placeholder="Scan atau ketik ID Badge / Barcode..."
-                    value={badgeCodeInput}
-                    onChange={(e) => setBadgeCodeInput(e.target.value)}
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none focus:border-[#0052cc]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={pinLoading || !badgeCodeInput.trim()}
-                    className="px-4 py-2 bg-[#0052cc] hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black"
-                  >
-                    Masuk
-                  </button>
-                </form>
-                <p className="text-[10px] text-slate-400 text-center mt-2">
-                  💡 Scanner Barcode Fisik (USB / Bluetooth) aktif otomatis saat ditembakkan.
-                </p>
-              </div>
-
-              {pinError && (
-                <p className="text-xs text-rose-600 font-bold text-center bg-rose-50 py-2 px-3 rounded-xl border border-rose-200">
-                  {pinError}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* MODE 3: KEYPAD PIN TRADITIONAL */}
-          {loginMode === 'pin' && (
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xl space-y-5">
-              <p className="text-xs font-bold text-center text-slate-600">
-                Masukkan 6 Digit PIN Karyawan Anda
-              </p>
-
-              <div className="flex justify-center gap-3">
-                {[...Array(6)].map((_, i) => (
+              {/* PIN Dots */}
+              <div className="flex justify-center gap-2.5 py-2">
+                {[0, 1, 2, 3, 4, 5].map(idx => (
                   <div
-                    key={i}
-                    className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
-                      i < pinInput.length
-                        ? 'bg-[#0052cc] border-[#0052cc] scale-125 shadow-sm shadow-blue-400'
-                        : 'border-slate-300 bg-slate-100'
+                    key={idx}
+                    className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                      pinInput.length > idx
+                        ? 'bg-[#0052cc] scale-110 shadow-sm shadow-blue-500/50'
+                        : 'bg-slate-200'
                     }`}
                   />
                 ))}
@@ -1104,14 +953,14 @@ export const StaffPWAView: React.FC = () => {
               )}
 
               {/* Keypad */}
-              <div className="grid grid-cols-3 gap-2.5 max-w-xs mx-auto pt-2">
+              <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto pt-1">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
                   <button
                     key={num}
                     type="button"
                     disabled={pinLoading}
                     onClick={() => handleKeypadClick(num)}
-                    className="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-xl font-black transition-all active:scale-90 border border-slate-200 flex items-center justify-center shadow-sm"
+                    className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-lg font-black transition-all active:scale-90 border border-slate-200 flex items-center justify-center shadow-sm"
                   >
                     {num}
                   </button>
@@ -1120,7 +969,7 @@ export const StaffPWAView: React.FC = () => {
                   type="button"
                   disabled={pinLoading}
                   onClick={() => setPinInput('')}
-                  className="h-14 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-black transition-all active:scale-90 border border-rose-200 flex items-center justify-center"
+                  className="h-12 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-black transition-all active:scale-90 border border-rose-200 flex items-center justify-center"
                 >
                   CLEAR
                 </button>
@@ -1128,7 +977,7 @@ export const StaffPWAView: React.FC = () => {
                   type="button"
                   disabled={pinLoading}
                   onClick={() => handleKeypadClick('0')}
-                  className="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-xl font-black transition-all active:scale-90 border border-slate-200 flex items-center justify-center shadow-sm"
+                  className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-lg font-black transition-all active:scale-90 border border-slate-200 flex items-center justify-center shadow-sm"
                 >
                   0
                 </button>
@@ -1136,7 +985,7 @@ export const StaffPWAView: React.FC = () => {
                   type="button"
                   disabled={pinLoading}
                   onClick={() => setPinInput(prev => prev.slice(0, -1))}
-                  className="h-14 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-400 text-sm font-bold transition-all active:scale-90 border border-slate-200 flex items-center justify-center"
+                  className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-400 text-sm font-bold transition-all active:scale-90 border border-slate-200 flex items-center justify-center"
                 >
                   ⌫
                 </button>
@@ -1145,100 +994,94 @@ export const StaffPWAView: React.FC = () => {
           )}
         </div>
 
-        {/* Footer */}
         <div className="text-center pb-2 relative z-10">
           <a
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0052cc] hover:text-blue-800 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-300 hover:text-white transition-colors"
           >
-            <ArrowLeft size={14} /> Kembali ke Kasir Utama
+            <ArrowLeft size={14} /> Kembali ke Kasir Utama POS
           </a>
         </div>
       </div>
     );
   }
 
+  // Filter KDS Orders
+  const filteredKdsOrders = kdsOrders.filter(order => {
+    if (kdsFilter === 'ALL') return true;
+    if (kdsFilter === 'FOOD') {
+      return order.items?.some((i: any) => i.product?.category?.printerTarget === 'KITCHEN' || !i.product?.category?.printerTarget);
+    }
+    if (kdsFilter === 'DRINK') {
+      return order.items?.some((i: any) => i.product?.category?.printerTarget === 'BAR');
+    }
+    return true;
+  });
+
   // ─────────────────────────────────────────────────────────────
-  // RENDER AUTHENTICATED STAFF APP (GAMBAR 2 LUXE ROYAL BLUE EXPERIENCE)
+  // RENDER AUTHENTICATED STAFF APP WITH STICKY BOTTOM DOCK
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col max-w-md mx-auto pb-24 shadow-2xl relative font-sans">
+    <div className="min-h-screen bg-slate-100 flex flex-col max-w-md mx-auto pb-28 shadow-2xl relative font-sans select-none">
       {/* ─────────────────────────────────────────────────────────────
-          1. GAMBAR 2 ROYAL BLUE HERO TOP HEADER & PROFILE BANNER
+          1. TOP APP BAR & STAFF BANNER
           ───────────────────────────────────────────────────────────── */}
       <div className="bg-gradient-to-b from-[#0052cc] via-[#004bbd] to-[#003d99] text-white p-5 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
-        {/* Subtle Ambient Radial Glow */}
-        <div className="absolute -top-16 -right-16 w-56 h-56 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-20 w-56 h-56 bg-indigo-400/10 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Top Mini-Bar */}
-        <div className="flex items-center justify-between relative z-10 pb-3.5 border-b border-white/15">
+        <div className="flex items-center justify-between relative z-10 pb-3 border-b border-white/15">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400" />
             <span className="text-[11px] font-black uppercase tracking-wider text-blue-100">
-              {settings?.storeName || 'MUKI RAMEN'} • PORTAL STAF
+              {settings?.storeName || 'SOL CAFE'} • MOBILE STAFF
             </span>
           </div>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
-            title="Keluar Sesi"
+            className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-1.5 active:scale-95"
           >
             <LogOut size={13} />
             <span>Keluar</span>
           </button>
         </div>
 
-        {/* Profile Details */}
         <div className="pt-3.5 flex items-center gap-3.5 relative z-10">
-          {/* Avatar with Ring */}
-          <div className="relative shrink-0">
-            <div className="w-14 h-14 rounded-2xl bg-white/20 p-0.5 shadow-md backdrop-blur-sm border border-white/30">
-              <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center font-black text-lg text-[#0052cc]">
-                {user.name.substring(0, 2).toUpperCase()}
-              </div>
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-emerald-400 border-2 border-[#0052cc] flex items-center justify-center text-slate-900 text-[9px] font-black">
-              ✓
+          <div className="w-12 h-12 rounded-2xl bg-white/20 p-0.5 shadow-md border border-white/30 shrink-0">
+            <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center font-black text-base text-[#0052cc]">
+              {user.name.substring(0, 2).toUpperCase()}
             </div>
           </div>
 
-          {/* User Details */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-sm sm:text-base font-black text-white truncate">{user.name}</h2>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-black border border-white/25 backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-black text-white truncate">{user.name}</h2>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-black border border-white/25">
                 {user.role}
               </span>
             </div>
-            <p className="text-[11px] text-blue-100/85 font-semibold mt-0.5">
-              ID Karyawan: <span className="text-white font-mono font-bold">#EMP-{user.id.toString().padStart(3, '0')}</span>
-            </p>
             <p className="text-[10px] text-blue-100/80 font-medium mt-0.5 flex items-center gap-1">
               <Clock size={11} className="text-emerald-300" /> {currentTime} • {currentDateStr}
             </p>
           </div>
         </div>
 
-        {/* Shift Status Bar */}
-        <div className="mt-3.5 pt-3 border-t border-white/15 flex items-center justify-between text-xs relative z-10">
+        {/* Shift status banner */}
+        <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center justify-between text-xs relative z-10">
           <div className="flex items-center gap-2">
-            <span className="text-blue-100/90 text-[11px] font-semibold">Status Hari Ini:</span>
+            <span className="text-blue-100/90 text-[10px] font-semibold">Status Presensi:</span>
             {mySummary?.todayStatus?.clockedIn ? (
               mySummary?.todayStatus?.clockedOut ? (
-                <span className="px-2.5 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-black border border-white/20">
+                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold">
                   Selesai Shift
                 </span>
               ) : (
-                <span className="px-2.5 py-0.5 rounded-lg bg-emerald-400 text-slate-950 text-[10px] font-black shadow-sm flex items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded-lg bg-emerald-400 text-slate-950 text-[10px] font-black flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping" /> Sedang Bertugas
                 </span>
               )
             ) : (
-              <span className="px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-[10px] font-black shadow-sm">
-                Belum Presensi Masuk
+              <span className="px-2 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-[10px] font-black">
+                Belum Presensi
               </span>
             )}
           </div>
@@ -1252,60 +1095,12 @@ export const StaffPWAView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. FLOATING SEGMENTED TAB NAVIGATION (GAMBAR 2 WHITE PILL BAR)
-          ───────────────────────────────────────────────────────────── */}
-      <div className="p-3 sticky top-0 z-30">
-        <div className="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-md flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => setActiveTab('attendance')}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === 'attendance'
-                ? 'bg-[#0052cc] text-white shadow-md shadow-blue-500/25 scale-[1.02]'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <Camera size={14} />
-            <span>Presensi Selfie</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('recap')}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === 'recap'
-                ? 'bg-[#0052cc] text-white shadow-md shadow-blue-500/25 scale-[1.02]'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-            }`}
-          >
-            <History size={14} />
-            <span>Rekap Kehadiran</span>
-          </button>
-
-          {isKitchenStaff && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('stock')}
-              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
-                activeTab === 'stock'
-                  ? 'bg-[#0052cc] text-white shadow-md shadow-blue-500/25 scale-[1.02]'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Package size={14} />
-              <span>Stok Dapur</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 1: ABSENSI GPS & BIOMETRIC FACE SCANNER (GAMBAR 2 LUXE WHITE CARDS)
+          TAB 1: ABSENSI GPS & BIOMETRIC SELFIE CAMERA
           ───────────────────────────────────────────────────────────── */}
       {activeTab === 'attendance' && (
         <div className="p-4 space-y-4 max-w-md mx-auto animate-fade-in">
           {/* GPS RADAR CARD */}
-          <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] flex items-center justify-between">
+          <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-bold shrink-0 ${
                 isWithinRadius ? 'bg-blue-50 text-[#0052cc] border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'
@@ -1314,10 +1109,8 @@ export const StaffPWAView: React.FC = () => {
               </div>
               <div>
                 <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                  <span>{settings?.storeName || 'Muki Ramen'}</span>
-                  {isWithinRadius && (
-                    <CheckCircle2 size={14} className="text-emerald-500" />
-                  )}
+                  <span>{settings?.storeName || 'SOL CAFE'}</span>
+                  {isWithinRadius && <CheckCircle2 size={14} className="text-emerald-500" />}
                 </h4>
                 <p className="text-[11px] font-semibold mt-0.5">
                   {gpsLoading ? (
@@ -1326,7 +1119,7 @@ export const StaffPWAView: React.FC = () => {
                     </span>
                   ) : isWithinRadius ? (
                     <span className="text-emerald-600 font-bold flex items-center gap-1">
-                      <span>✓ GPS Terverifikasi</span>
+                      <span>✓ GPS Valid</span>
                       <span className="text-slate-400 font-normal font-mono">
                         ({gpsDistance !== null ? `${gpsDistance}m` : '0m'})
                       </span>
@@ -1344,7 +1137,7 @@ export const StaffPWAView: React.FC = () => {
               type="button"
               onClick={requestGpsLocation}
               disabled={gpsLoading}
-              className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-all border border-slate-200 active:scale-95 shrink-0"
+              className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 active:scale-95 shrink-0"
               title="Perbarui GPS"
             >
               <RefreshCw size={14} className={gpsLoading ? 'animate-spin text-[#0052cc]' : ''} />
@@ -1353,152 +1146,118 @@ export const StaffPWAView: React.FC = () => {
 
           {/* PILIHAN SHIFT (JIKA BELUM CLOCK IN) */}
           {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
-            <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] space-y-2.5">
+            <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-2.5">
               <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                 <Clock size={14} className="text-[#0052cc]" /> Jadwal Shift Kerja:
               </label>
               <div className="grid grid-cols-2 gap-2">
-                {shifts.map(shift => {
-                  const isSelected = selectedShiftId === shift.id;
-                  return (
-                    <button
-                      key={shift.id}
-                      type="button"
-                      onClick={() => setSelectedShiftId(shift.id)}
-                      className={`p-3 rounded-2xl border text-left transition-all ${
-                        isSelected
-                          ? 'border-[#0052cc] bg-blue-50/70 text-[#0052cc] shadow-sm'
-                          : 'border-slate-200 bg-slate-50/80 text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-slate-900">{shift.name}</span>
-                        {isSelected && <Check size={14} className="text-[#0052cc] font-bold" />}
-                      </div>
-                      <span className="text-[10px] text-slate-500 block mt-0.5">
-                        {shift.start} - {shift.end}
-                      </span>
-                    </button>
-                  );
-                })}
+                {shifts.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSelectedShiftId(s.id)}
+                    className={`p-2.5 rounded-2xl border text-left transition-all ${
+                      selectedShiftId === s.id
+                        ? 'border-[#0052cc] bg-blue-50/50 shadow-sm ring-1 ring-[#0052cc]'
+                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="text-xs font-black text-slate-900 truncate">{s.name}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">{s.start} - {s.end}</div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
 
-          {/* BIOMETRIC CAMERA SCANNER VIEWPORT */}
-          <div className="relative rounded-3xl overflow-hidden border-2 border-slate-200/80 bg-slate-950 aspect-[3/4] max-w-xs sm:max-w-sm mx-auto flex items-center justify-center shadow-2xl ring-4 ring-blue-500/10">
-            {capturedPhoto ? (
-              <div className="w-full h-full relative">
-                <img src={capturedPhoto} alt="Captured Selfie" className="w-full h-full object-cover" />
-                <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-[#0052cc] text-white text-[10px] font-black backdrop-blur-md flex items-center gap-1.5 shadow-lg">
-                  <CheckCircle2 size={12} />
-                  <span>Foto Terkunci</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCapturedPhoto(null);
-                    startCamera();
-                  }}
-                  className="absolute top-3 right-3 px-3 py-1.5 bg-slate-900/85 hover:bg-slate-900 text-white rounded-full text-xs font-bold backdrop-blur-md border border-white/20 flex items-center gap-1.5 shadow-lg active:scale-95"
-                >
-                  <RefreshCw size={12} />
-                  <span>Ulangi</span>
-                </button>
-              </div>
-            ) : isCameraActive ? (
-              <div className="w-full h-full relative flex items-center justify-center">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+          {/* FOTO SELFIE KAMERA CONTAINER */}
+          <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                <Camera size={14} className="text-[#0052cc]" />
+                <span>Foto Selfie Kehadiran</span>
+              </h4>
+              {capturedPhoto && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                  ✓ Foto Terpasang
+                </span>
+              )}
+            </div>
 
-                {/* Top Badge 1: Mode Clock In/Out */}
-                <div className="absolute top-3 left-3 px-3 py-1 rounded-full bg-slate-950/80 backdrop-blur-md border border-white/15 text-[10px] font-black text-white flex items-center gap-1.5 shadow-lg">
-                  <span className={`w-2 h-2 rounded-full ${!mySummary?.todayStatus?.clockedIn ? 'bg-cyan-400 animate-ping' : 'bg-rose-400 animate-ping'}`} />
-                  <span>{!mySummary?.todayStatus?.clockedIn ? 'Presensi Masuk' : 'Presensi Selesai'}</span>
-                </div>
+            {/* Hidden native camera file input */}
+            <input
+              type="file"
+              accept="image/*"
+              capture="user"
+              ref={fileInputRef}
+              onChange={handleNativeCameraCapture}
+              className="hidden"
+            />
 
-                {/* Top Badge 2: In-App Camera + Flip Toggle */}
-                <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCameraFacing(prev => (prev === 'user' ? 'environment' : 'user'));
-                      startCamera();
-                    }}
-                    className="px-2.5 py-1 rounded-full bg-slate-950/80 text-white border border-white/15 backdrop-blur-md text-[10px] font-bold flex items-center gap-1 active:scale-95"
-                    title="Ganti Kamera Depan/Belakang"
-                  >
-                    <RefreshCw size={11} />
-                    <span>Putar</span>
-                  </button>
-                </div>
-
-                {/* Biometric Oval Face Guide Overlay */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4">
-                  <div className="w-48 h-64 sm:w-52 sm:h-72 border-2 border-dashed border-cyan-400/90 rounded-[50%] shadow-[0_0_25px_rgba(6,182,212,0.4)] animate-pulse" />
-                  <p className="text-[10px] text-cyan-300 font-bold bg-slate-950/80 px-3 py-1 rounded-full mt-3 backdrop-blur-sm border border-cyan-500/30 shadow-md">
-                    Posisikan wajah Anda di dalam lingkaran oval
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 text-center space-y-3">
-                <div className="w-14 h-14 rounded-2xl bg-slate-900 text-cyan-400 flex items-center justify-center mx-auto border border-slate-800">
-                  <Camera size={28} />
-                </div>
-                <p className="text-xs text-slate-400 font-medium">
-                  Kamera selfie siap digunakan untuk verifikasi kehadiran.
-                </p>
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="px-5 py-2.5 bg-gradient-to-r from-[#0052cc] to-blue-600 hover:from-blue-700 hover:to-blue-800 text-white font-black text-xs rounded-xl shadow-lg shadow-blue-500/25 inline-flex items-center gap-1.5 active:scale-95"
-                >
-                  <Camera size={14} />
-                  <span>Buka Kamera Presensi</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* MAIN BOTTOM ACTION BUTTONS */}
-          <div className="pt-2 max-w-xs sm:max-w-sm mx-auto space-y-2">
             {!capturedPhoto ? (
-              <button
-                type="button"
-                onClick={capturePhoto}
-                disabled={!isCameraActive}
-                className="w-full py-4 bg-gradient-to-r from-[#0052cc] to-blue-600 hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-600/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-              >
-                <Camera size={18} />
-                <span>Jepret Foto Presensi</span>
-              </button>
-            ) : (
-              <div className="space-y-2">
-                {!mySummary?.todayStatus?.clockedIn ? (
-                  <button
-                    type="button"
-                    disabled={clockLoading}
-                    onClick={() => handleClockAction('IN')}
-                    className="w-full py-4 bg-gradient-to-r from-[#0052cc] to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-600/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                  >
-                    {clockLoading ? <RefreshCw size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                    <span>KONFIRMASI CLOCK-IN</span>
-                  </button>
-                ) : !mySummary?.todayStatus?.clockedOut ? (
-                  <button
-                    type="button"
-                    disabled={clockLoading}
-                    onClick={() => handleClockAction('OUT')}
-                    className="w-full py-4 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 disabled:opacity-50 text-white font-black text-sm rounded-2xl shadow-xl shadow-rose-600/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                  >
-                    {clockLoading ? <RefreshCw size={18} className="animate-spin" /> : <LogOut size={18} />}
-                    <span>KONFIRMASI CLOCK-OUT</span>
-                  </button>
+              <div className="space-y-3">
+                {isCameraActive ? (
+                  <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[280px] mx-auto border-2 border-[#0052cc] shadow-inner">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover transform -scale-x-100"
+                    />
+                    <div className="absolute inset-0 pointer-events-none border-2 border-white/40 rounded-full m-8 border-dashed animate-pulse" />
+                    
+                    <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-3 px-4">
+                      <button
+                        type="button"
+                        onClick={capturePhoto}
+                        className="w-12 h-12 rounded-full bg-white text-slate-950 flex items-center justify-center shadow-lg active:scale-90 border-4 border-blue-500"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-[#0052cc]" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={stopCamera}
+                        className="px-3 py-1.5 rounded-xl bg-black/60 text-white text-[10px] font-bold backdrop-blur-sm"
+                      >
+                        Tutup
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="p-4 bg-white text-slate-500 rounded-2xl text-center text-xs font-black border border-slate-200">
-                    Shift Anda hari ini telah selesai. Terima kasih atas dedikasinya!
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-95"
+                    >
+                      <Camera size={16} />
+                      <span>Buka Kamera Selfie Presensi</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <Smartphone size={14} className="text-[#0052cc]" />
+                      <span>Ambil Foto via Kamera HP (Alternatif)</span>
+                    </button>
                   </div>
                 )}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[200px] mx-auto border-2 border-emerald-500 shadow-md">
+                  <img src={capturedPhoto} alt="Selfie" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setCapturedPhoto(null)}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -1506,7 +1265,7 @@ export const StaffPWAView: React.FC = () => {
                     setCapturedPhoto(null);
                     startCamera();
                   }}
-                  className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
+                  className="w-full py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <RefreshCw size={12} />
                   <span>Ambil Ulang Foto</span>
@@ -1514,803 +1273,819 @@ export const StaffPWAView: React.FC = () => {
               </div>
             )}
 
-            <p className="text-[10px] text-slate-400 text-center font-medium pt-1">
-              🔒 Lokasi GPS & foto selfie diverifikasi secara real-time demi akurasi reward.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 2: STOK DAPUR & BAR (PENGINPUTAN MUDAH BERDASARKAN KATEGORI)
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'stock' && isKitchenStaff && (
-        <div className="p-4 space-y-4">
-          {/* SUB-TAB NAVIGATOR (STOK FISIK / MUTASI HARI INI / KEBUTUHAN BELANJA) */}
-          <div className="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-sm flex gap-1">
-            <button
-              type="button"
-              onClick={() => setStockSubTab('catalog')}
-              className={`flex-1 py-2 px-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${
-                stockSubTab === 'catalog'
-                  ? 'bg-[#0052cc] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Package size={13} />
-              <span>Stok Fisik</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setStockSubTab('movements');
-                fetchTodayMovements();
-              }}
-              className={`flex-1 py-2 px-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${
-                stockSubTab === 'movements'
-                  ? 'bg-[#0052cc] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <History size={13} />
-              <span>Mutasi Hari Ini</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setStockSubTab('shopping')}
-              className={`flex-1 py-2 px-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 ${
-                stockSubTab === 'shopping'
-                  ? 'bg-[#0052cc] text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <ShoppingCart size={13} />
-              <span>List Belanja</span>
-              {ingredients.filter(i => i.stock <= i.minStock).length > 0 && (
-                <span className="w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
-                  {ingredients.filter(i => i.stock <= i.minStock).length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* ─────────────────────────────────────────────────────────────
-              SUB-VIEW 1: KATALOG BAHAN BAKU & QUICK ACTIONS
-              ───────────────────────────────────────────────────────────── */}
-          {stockSubTab === 'catalog' && (
-            <div className="space-y-4 animate-fade-in">
-              {/* TOP CATEGORY PILLS (MAKANAN / MINUMAN / KEMASAN / MENIPIS) */}
-              <div className="bg-white p-3 rounded-3xl border border-slate-200/80 shadow-sm space-y-2.5">
-                <div className="relative">
-                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={stockSearch}
-                    onChange={e => setStockSearch(e.target.value)}
-                    placeholder="Cari bahan (mie, telur, sirup, teh)..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </div>
-
-                {/* CATEGORY SELECTOR CAROUSEL */}
-                <div className="grid grid-cols-4 gap-1.5">
-                  <button
-                    onClick={() => setStockCategory('ALL')}
-                    className={`py-2 px-2 rounded-xl text-center transition-all ${
-                      stockCategory === 'ALL'
-                        ? 'bg-[#0052cc] text-white font-black shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold text-[11px]'
-                    }`}
-                  >
-                    <div className="text-xs">✨ Semua</div>
-                    <div className="text-[10px] opacity-75">{ingredients.length}</div>
-                  </button>
-
-                  <button
-                    onClick={() => setStockCategory('FOOD')}
-                    className={`py-2 px-2 rounded-xl text-center transition-all ${
-                      stockCategory === 'FOOD'
-                        ? 'bg-[#0052cc] text-white font-black shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold text-[11px]'
-                    }`}
-                  >
-                    <div className="text-xs">🍲 Makanan</div>
-                    <div className="text-[10px] opacity-75">{ingredients.filter(i => (i.category || 'FOOD') === 'FOOD').length}</div>
-                  </button>
-
-                  <button
-                    onClick={() => setStockCategory('DRINK')}
-                    className={`py-2 px-2 rounded-xl text-center transition-all ${
-                      stockCategory === 'DRINK'
-                        ? 'bg-[#0052cc] text-white font-black shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold text-[11px]'
-                    }`}
-                  >
-                    <div className="text-xs">☕ Minuman</div>
-                    <div className="text-[10px] opacity-75">{ingredients.filter(i => i.category === 'DRINK').length}</div>
-                  </button>
-
-                  <button
-                    onClick={() => setStockCategory('LOW')}
-                    className={`py-2 px-2 rounded-xl text-center transition-all ${
-                      stockCategory === 'LOW'
-                        ? 'bg-rose-600 text-white font-black shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold text-[11px]'
-                    }`}
-                  >
-                    <div className="text-xs">⚠️ Kritis</div>
-                    <div className="text-[10px] opacity-75">{ingredients.filter(i => i.stock <= i.minStock).length}</div>
-                  </button>
-                </div>
-              </div>
-
-              {/* INGREDIENT LIST CARDS */}
-              <div className="space-y-3">
-                {stockLoading ? (
-                  <div className="p-8 bg-white rounded-3xl border border-slate-200 text-center text-xs text-slate-400">
-                    <RefreshCw size={24} className="animate-spin inline-block text-[#0052cc] mb-2" />
-                    <p>Memuat data stok...</p>
-                  </div>
-                ) : filteredIngredients.length === 0 ? (
-                  <div className="p-8 bg-white rounded-3xl border border-slate-200 text-center text-xs text-slate-400">
-                    <Package size={32} className="mx-auto text-slate-300 mb-2" />
-                    <p>Tidak ada bahan yang cocok dengan kategori ini.</p>
-                  </div>
-                ) : (
-                  filteredIngredients.map(ing => {
-                    const isLow = ing.stock <= ing.minStock && ing.stock > 0;
-                    const isOut = ing.stock === 0;
-                    const cat = ing.category || 'FOOD';
-                    const stockPercent = ing.minStock > 0 ? Math.min(100, Math.round((ing.stock / (ing.minStock * 2)) * 100)) : 100;
-
-                    return (
-                      <div
-                        key={ing.id}
-                        className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3 transition-all hover:border-slate-300"
-                      >
-                        {/* Top Row: Name & Category */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg ${
-                              cat === 'DRINK' ? 'bg-emerald-50 text-emerald-600' : (cat === 'PACKAGING' ? 'bg-blue-50 text-blue-600' : 'bg-blue-50 text-[#0052cc]')
-                            }`}>
-                              {cat === 'DRINK' ? '☕' : (cat === 'PACKAGING' ? '📦' : '🍲')}
-                            </div>
-                            <div>
-                              <h4 className="text-xs font-black text-slate-900 leading-snug">{ing.name}</h4>
-                              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
-                                {cat === 'DRINK' ? 'Bar & Minuman' : (cat === 'PACKAGING' ? 'Kemasan' : 'Dapur & Makanan')} • Rp {ing.buyPrice.toLocaleString('id-ID')}/{ing.unit}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Status Chip */}
-                          <div>
-                            {isOut ? (
-                              <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 text-[10px] font-black border border-rose-200">
-                                Habis
-                              </span>
-                            ) : isLow ? (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black border border-amber-200">
-                                Menipis
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black border border-emerald-200">
-                                Aman
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Stock Bar & Quantity Display */}
-                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-[11px] font-bold text-slate-500">Sisa Stok Fisik:</span>
-                            <div className="text-right">
-                              <span className="text-sm font-black text-slate-900">{ing.stock.toLocaleString('id-ID')}</span>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">{ing.unit}</span>
-                            </div>
-                          </div>
-
-                          {/* Progress Bar */}
-                          <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-300 ${
-                                isOut ? 'bg-rose-500 w-0' : (isLow ? 'bg-amber-500' : 'bg-blue-600')
-                              }`}
-                              style={{ width: `${isOut ? 0 : Math.max(8, stockPercent)}%` }}
-                            />
-                          </div>
-
-                          <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-                            <span>Batas Minimum: {ing.minStock} {ing.unit}</span>
-                            <span>{ing.supplier?.name || 'Supplier Utama'}</span>
-                          </div>
-                        </div>
-
-                        {/* ACTION BUTTONS (1-TAP RESTOCK & 1-TAP LOSS) */}
-                        <div className="grid grid-cols-2 gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLossForm({
-                                ingredientId: ing.id.toString(),
-                                qtyLoss: '',
-                                reason: 'Busuk / Kadaluarsa',
-                                notes: ''
-                              });
-                              setShowLossModal(true);
-                            }}
-                            className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                          >
-                            <TrendingDown size={14} className="text-rose-600" />
-                            <span>Catat Rusak / Loss</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAdjustModal({ open: true, ingredient: ing });
-                              setAdjustForm({ change: '', description: '' });
-                            }}
-                            className="py-2.5 px-3 bg-blue-50 hover:bg-blue-100 text-[#0052cc] border border-blue-200 rounded-xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                          >
-                            <Plus size={14} className="text-[#0052cc]" />
-                            <span>Restock (+)</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────
-              SUB-VIEW 2: MUTASI & LOG PERUBAHAN STOK HARI INI
-              ───────────────────────────────────────────────────────────── */}
-          {stockSubTab === 'movements' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between bg-white p-3.5 rounded-3xl border border-slate-200/80 shadow-sm">
-                <div>
-                  <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                    <History size={14} className="text-[#0052cc]" /> Mutasi Stok Hari Ini
-                  </h4>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    {currentDateStr} • {todayMovements.length} transaksi mutasi
-                  </p>
-                </div>
+            {/* BUTTON ACTION CLOCK IN / OUT */}
+            <div className="pt-2">
+              {!mySummary?.todayStatus?.clockedIn ? (
                 <button
                   type="button"
-                  onClick={fetchTodayMovements}
-                  disabled={movementsLoading}
-                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#0052cc] rounded-xl text-xs font-bold transition-all flex items-center gap-1 border border-blue-200"
+                  disabled={clockLoading || !isWithinRadius}
+                  onClick={() => handleClockAction('IN')}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95"
                 >
-                  <RefreshCw size={12} className={movementsLoading ? 'animate-spin' : ''} />
-                  <span>Refresh</span>
+                  <CheckCircle2 size={18} />
+                  <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK IN (MASUK KERJA)'}</span>
                 </button>
-              </div>
-
-              {/* MOVEMENT LOGS LIST */}
-              <div className="space-y-2.5">
-                {movementsLoading ? (
-                  <div className="p-8 bg-white rounded-3xl border border-slate-200 text-center text-xs text-slate-400">
-                    <RefreshCw size={24} className="animate-spin inline-block text-[#0052cc] mb-2" />
-                    <p>Memuat riwayat mutasi stok hari ini...</p>
-                  </div>
-                ) : todayMovements.length === 0 ? (
-                  <div className="p-8 bg-white rounded-3xl border border-slate-200 text-center text-xs text-slate-400 space-y-1">
-                    <Package size={32} className="mx-auto text-slate-300 mb-2" />
-                    <p className="font-bold text-slate-600">Belum ada mutasi stok hari ini.</p>
-                    <p className="text-[11px]">Setiap restock, bahan terpakai kasir, atau catatan rusak akan tercatat di sini.</p>
-                  </div>
-                ) : (
-                  todayMovements.map(log => {
-                    const isPlus = log.change > 0;
-                    const timeStr = new Date(log.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-                    return (
-                      <div
-                        key={log.id}
-                        className="bg-white p-3.5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between gap-3"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs ${
-                            log.type === 'Restock'
-                              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                              : log.type === 'Rusak'
-                              ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                              : log.type === 'Produksi'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-blue-50 text-[#0052cc] border border-blue-200'
-                          }`}>
-                            {log.type === 'Restock' ? 'IN' : log.type === 'Rusak' ? 'LOSS' : log.type === 'Produksi' ? 'OUT' : 'ADJ'}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h5 className="text-xs font-black text-slate-900">{log.ingredient?.name || 'Bahan Baku'}</h5>
-                              <span className="text-[10px] text-slate-400 font-medium font-mono">{timeStr}</span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                              {log.description || log.reason || log.type}
-                              {log.user?.name && <span className="text-slate-400"> • {log.user.name}</span>}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <span className={`text-xs font-black font-mono ${
-                            isPlus ? 'text-emerald-600' : 'text-rose-600'
-                          }`}>
-                            {isPlus ? `+${log.change}` : log.change} {log.ingredient?.unit}
-                          </span>
-                          {log.cost > 0 && (
-                            <p className="text-[10px] text-slate-400 font-bold">
-                              Rp {log.cost.toLocaleString('id-ID')}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+              ) : !mySummary?.todayStatus?.clockedOut ? (
+                <button
+                  type="button"
+                  disabled={clockLoading}
+                  onClick={() => handleClockAction('OUT')}
+                  className="w-full py-4 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-95"
+                >
+                  <LogOut size={18} />
+                  <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK OUT (SELESAI SHIFT)'}</span>
+                </button>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-slate-100 text-center text-xs font-bold text-slate-600 border border-slate-200">
+                  ✓ Anda telah menyelesaikan shift hari ini. Terima kasih atas kerja keras Anda!
+                </div>
+              )}
             </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────
-              SUB-VIEW 3: DAFTAR KEBUTUHAN BELANJA & SHARE WHATSAPP / PDF
-              ───────────────────────────────────────────────────────────── */}
-          {stockSubTab === 'shopping' && (
-            <div className="space-y-4 animate-fade-in">
-              {/* ACTION BUTTONS (COPY WHATSAPP & DOWNLOAD PDF) */}
-              <div className="bg-gradient-to-br from-[#0052cc] via-[#0047b3] to-[#1e3a8a] p-4 rounded-3xl text-white shadow-xl space-y-3 border border-blue-400/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-white/20 text-amber-300 flex items-center justify-center font-bold border border-white/20">
-                      <ShoppingCart size={16} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-white uppercase tracking-wider">
-                        Kebutuhan Belanja Dapur
-                      </h4>
-                      <p className="text-[10px] text-blue-100/90">
-                        Siap dibagikan ke WhatsApp atau diunduh sebagai PDF
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={copyShoppingListToWA}
-                    className="py-3 px-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-2xl text-xs transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
-                  >
-                    <MessageCircle size={15} />
-                    <span>Salin WhatsApp</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={exportShoppingPDF}
-                    className="py-3 px-3 bg-white/15 hover:bg-white/25 text-white border border-white/25 rounded-2xl text-xs font-black transition-all active:scale-95 flex items-center justify-center gap-2 backdrop-blur-sm"
-                  >
-                    <FileDown size={15} />
-                    <span>Unduh PDF</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* SECTION: BAHAN KRITIS & MENIPIS OTOMATIS */}
-              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                    <AlertTriangle size={14} className="text-amber-500" />
-                    <span>Bahan Kritis / Menipis Sistem</span>
-                  </h4>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                    {ingredients.filter(i => i.stock <= i.minStock).length} Bahan
-                  </span>
-                </div>
-
-                {ingredients.filter(i => i.stock <= i.minStock).length === 0 ? (
-                  <div className="py-6 text-center text-xs text-slate-400 space-y-1">
-                    <CheckCircle size={28} className="mx-auto text-emerald-500 mb-1" />
-                    <p className="font-bold text-slate-700">Semua bahan baku dalam kondisi aman!</p>
-                    <p className="text-[11px] text-slate-400">Tidak ada stok yang berada di bawah batas minimum.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {ingredients.filter(i => i.stock <= i.minStock).map((ing, idx) => {
-                      const targetStock = Math.max(ing.minStock * 2, 1);
-                      const needed = Math.max(1, targetStock - ing.stock);
-                      return (
-                        <div
-                          key={ing.id}
-                          className="p-3 rounded-2xl border border-amber-100 bg-amber-50/40 flex items-center justify-between gap-2"
-                        >
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-black w-4 h-4 rounded bg-amber-200/80 text-amber-900 flex items-center justify-center">
-                                {idx + 1}
-                              </span>
-                              <h5 className="text-xs font-black text-slate-900">{ing.name}</h5>
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-1">
-                              Sisa: <strong>{ing.stock} {ing.unit}</strong> • Min: {ing.minStock} {ing.unit}
-                              {ing.supplier?.name && ` • ${ing.supplier.name}`}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-xs font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-xl border border-rose-200">
-                              +Beli {needed} {ing.unit}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION: CATATAN TAMBAHAN DARI DAPUR (MANUAL ITEMS) */}
-              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                    <List size={14} className="text-indigo-600" />
-                    <span>Catatan Tambahan Belanja / Pasar</span>
-                  </h4>
-                  {customShoppingItems.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleClearCustomShoppingItems}
-                      className="text-[10px] font-bold text-rose-500 hover:text-rose-700"
-                    >
-                      Kosongkan
-                    </button>
-                  )}
-                </div>
-
-                {/* INPUT FORM TAMBAH ITEM */}
-                <form onSubmit={handleAddCustomShoppingItem} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newShoppingInput}
-                    onChange={e => setNewShoppingInput(e.target.value)}
-                    placeholder="Misal: Gas LPG 3kg 2 tabung, Sayur Pakcoy 5 ikat..."
-                    className="flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black transition-all active:scale-95 shadow-sm whitespace-nowrap"
-                  >
-                    + Tambah
-                  </button>
-                </form>
-
-                {/* CUSTOM ITEMS LIST */}
-                {customShoppingItems.length === 0 ? (
-                  <p className="text-[11px] text-slate-400 text-center py-3">
-                    Belum ada catatan tambahan. Ketik item di atas untuk menyertakan barang belanjaan non-stok.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {customShoppingItems.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-2 text-xs"
-                      >
-                        <span className="font-bold text-slate-800">
-                          {idx + 1}. {item}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveCustomShoppingItem(idx)}
-                          className="text-slate-400 hover:text-rose-600 p-1"
-                          title="Hapus item"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          TAB 3: REKAP SAYA & RIWAYAT ABSENSI (GAMBAR 2 COLORTONE)
+          TAB 2: MOBILE KDS (DAPUR & BAR LIVE TICKET STATION)
           ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'recap' && (
-        <div className="p-4 space-y-4">
-          {/* STATS SUMMARY TILES */}
-          <div className="grid grid-cols-3 gap-2.5">
-            <div className="bg-white p-3.5 rounded-3xl border border-slate-200/80 shadow-sm text-center space-y-1">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Hadir</p>
-              <h3 className="text-xl font-black text-[#0052cc]">{mySummary?.stats?.totalHadir || 0}</h3>
-              <p className="text-[9px] text-slate-400 font-semibold">Hari Bulan Ini</p>
+      {activeTab === 'kds' && (
+        <div className="p-4 space-y-4 animate-fade-in">
+          {/* FILTER TABS & SOUND STATUS */}
+          <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between gap-1">
+            <div className="flex gap-1 flex-1">
+              <button
+                type="button"
+                onClick={() => setKdsFilter('ALL')}
+                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all ${
+                  kdsFilter === 'ALL'
+                    ? 'bg-[#0052cc] text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Semua ({kdsOrders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setKdsFilter('FOOD')}
+                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all ${
+                  kdsFilter === 'FOOD'
+                    ? 'bg-[#0052cc] text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                🍳 Dapur
+              </button>
+              <button
+                type="button"
+                onClick={() => setKdsFilter('DRINK')}
+                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all ${
+                  kdsFilter === 'DRINK'
+                    ? 'bg-[#0052cc] text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                ☕ Bar
+              </button>
             </div>
-            <div className="bg-white p-3.5 rounded-3xl border border-slate-200/80 shadow-sm text-center space-y-1">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Terlambat</p>
-              <h3 className="text-xl font-black text-rose-600">{mySummary?.stats?.totalTerlambat || 0}</h3>
-              <p className="text-[9px] text-slate-400 font-semibold">{mySummary?.stats?.totalLateMinutes || 0} mnt total</p>
-            </div>
-            <div className="bg-white p-3.5 rounded-3xl border border-slate-200/80 shadow-sm text-center space-y-1">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jam Kerja</p>
-              <h3 className="text-xl font-black text-[#0052cc]">{mySummary?.stats?.totalWorkHours || 0}</h3>
-              <p className="text-[9px] text-slate-400 font-semibold">Jam Akumulasi</p>
-            </div>
+
+            <button
+              type="button"
+              onClick={fetchKdsOrders}
+              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200"
+              title="Refresh KDS"
+            >
+              <RefreshCw size={14} />
+            </button>
           </div>
 
-          {/* REWARD & PUNISHMENT DISCIPLINE CARD */}
-          {mySummary?.discipline && (
-            <div className="bg-gradient-to-br from-[#0052cc] via-[#0047b3] to-[#1e3a8a] text-white p-5 rounded-3xl border border-blue-400/20 shadow-xl space-y-3 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-
-              <div className="flex items-center justify-between relative z-10">
-                <span className="text-[11px] font-black uppercase tracking-wider text-blue-100 flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-amber-300" /> Reward & Kedisiplinan Staf
-                </span>
-                {mySummary.discipline.enableZeroLateBonus && (
-                  <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
-                    mySummary.discipline.zeroLateStatus === 'ELIGIBLE' ? 'bg-emerald-400/20 text-emerald-200 border-emerald-300/40' :
-                    mySummary.discipline.zeroLateStatus === 'ON_TRACK' ? 'bg-white/20 text-white border-white/40 animate-pulse' :
-                    'bg-rose-500/20 text-rose-200 border-rose-400/40'
-                  }`}>
-                    {mySummary.discipline.zeroLateStatus === 'ELIGIBLE' ? '⭐ DAPAT BONUS' :
-                     mySummary.discipline.zeroLateStatus === 'ON_TRACK' ? '🎯 ON TRACK' : '❌ HANGUS'}
-                  </span>
-                )}
-              </div>
-
-              {/* Progress & Target */}
-              {mySummary.discipline.enableZeroLateBonus && (
-                <div className="space-y-1.5 relative z-10">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-blue-100">Target Zero Late:</span>
-                    <span className="text-amber-300 font-mono font-black">Rp {(mySummary.discipline.zeroLateBonusAmount || 0).toLocaleString()}</span>
-                  </div>
-                  <div className="w-full h-2 bg-blue-950/40 rounded-full overflow-hidden border border-white/20">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        mySummary.discipline.zeroLateStatus === 'HANGUS'
-                          ? 'bg-rose-500 w-full'
-                          : 'bg-gradient-to-r from-amber-300 to-emerald-300'
-                      }`}
-                      style={{
-                        width: mySummary.discipline.zeroLateStatus === 'HANGUS'
-                          ? '100%'
-                          : `${Math.min(100, ((mySummary.stats?.totalHadir || 0) / (mySummary.discipline.zeroLateMinAttendance || 20)) * 100)}%`
-                      }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-blue-100/80">
-                    {mySummary.discipline.zeroLateStatus === 'ELIGIBLE'
-                      ? 'Selamat! Anda memenuhi target hari hadir tanpa ada keterlambatan.'
-                      : mySummary.discipline.zeroLateStatus === 'ON_TRACK'
-                      ? `Tercapai ${mySummary.stats?.totalHadir || 0} dari min. ${mySummary.discipline.zeroLateMinAttendance} hari kerja. Pertahankan 0 keterlambatan!`
-                      : `Bonus hangus karena tercatat ${mySummary.stats?.totalTerlambat || 0}x keterlambatan bulan ini.`}
-                  </p>
-                </div>
-              )}
-
-              {/* Deductions breakdown if any */}
-              {mySummary.discipline.enableLatePenalty && (mySummary.discipline.totalLatePenalty || 0) > 0 && (
-                <div className="pt-2 border-t border-white/15 flex justify-between items-center text-xs relative z-10">
-                  <span className="text-rose-200 font-semibold">Potongan Keterlambatan:</span>
-                  <span className="text-rose-200 font-black font-mono">
-                    -Rp {(mySummary.discipline.totalLatePenalty || 0).toLocaleString()}
-                  </span>
-                </div>
-              )}
+          {/* KDS TICKET CARDS LIST */}
+          {filteredKdsOrders.length === 0 ? (
+            <div className="py-12 bg-white rounded-3xl border border-slate-200 text-center space-y-2 p-4">
+              <ChefHat size={36} className="mx-auto text-slate-300" />
+              <h4 className="text-sm font-black text-slate-700">Dapur & Bar Santai</h4>
+              <p className="text-xs text-slate-400">Tidak ada antrean pesanan aktif saat ini.</p>
             </div>
-          )}
+          ) : (
+            <div className="space-y-3">
+              {filteredKdsOrders.map(order => {
+                const isCooking = order.kdsStatus === 'Cooking';
+                const isReady = order.kdsStatus === 'Ready';
 
-          {/* HISTORY LOG CARDS */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
-            <h4 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-              <Calendar size={14} className="text-[#0052cc]" /> Riwayat Log Kehadiran Anda
-            </h4>
-
-            {mySummary?.history?.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">Belum ada riwayat absensi bulan ini.</p>
-            ) : (
-              <div className="space-y-2.5 divide-y divide-slate-100">
-                {mySummary?.history?.map((log: AttendanceLog) => (
-                  <div key={log.id} className="pt-2.5 first:pt-0 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      {log.photoIn ? (
-                        <img src={log.photoIn} alt="Foto Selfie" className="w-11 h-11 rounded-2xl object-cover border border-slate-200 shadow-sm" />
-                      ) : (
-                        <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center font-bold text-xs">
-                          <User size={18} />
-                        </div>
-                      )}
+                return (
+                  <div
+                    key={order.id}
+                    className={`bg-white rounded-3xl border p-4 shadow-sm space-y-3 transition-all ${
+                      isReady
+                        ? 'border-emerald-300 bg-emerald-50/20'
+                        : isCooking
+                        ? 'border-amber-300 bg-amber-50/20'
+                        : 'border-slate-200'
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <h5 className="text-xs font-black text-slate-800">{log.date}</h5>
-                          <span
-                            className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
-                              log.status === 'Hadir'
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : log.status === 'Terlambat'
-                                ? 'bg-rose-50 text-rose-600'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {log.status} {log.lateMinutes ? `(+${log.lateMinutes}m)` : ''}
+                          <span className="text-xs font-black text-white bg-slate-900 px-2 py-0.5 rounded-lg">
+                            {order.table?.tableNo ? `Meja ${order.table.tableNo}` : 'Takeaway'}
                           </span>
+                          <span className="text-xs font-mono font-bold text-slate-500">#{order.orderNumber}</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                          {log.shiftName?.split('(')[0] || 'Shift'} • Masuk: {new Date(log.clockIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          {log.clockOut ? ` - Pulang: ${new Date(log.clockOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                        <p className="text-[10px] text-slate-400 mt-0.5">Pemesan: {order.customerName || 'Tamu'}</p>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="inline-flex items-center gap-1 text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200">
+                          <Clock size={11} />
+                          <span>{formatDuration(order.createdAt)}</span>
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                          Status: <strong className="text-slate-800">{order.kdsStatus || 'Pending'}</strong>
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-right text-[10px] text-slate-400 font-semibold">
-                      {log.distanceIn !== null && log.distanceIn !== undefined && (
-                        <span>{log.distanceIn}m</span>
+                    {/* Order Items */}
+                    <div className="space-y-2">
+                      {order.items?.map((item: any) => (
+                        <div key={item.id} className="flex items-start justify-between text-xs">
+                          <div className="flex items-start gap-2">
+                            <span className="w-5 h-5 rounded-md bg-blue-100 text-[#0052cc] font-black text-[11px] flex items-center justify-center shrink-0">
+                              {item.qty}x
+                            </span>
+                            <div>
+                              <span className="font-bold text-slate-800">{item.product?.name}</span>
+                              {item.notes && (
+                                <p className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded mt-0.5 border border-amber-200">
+                                  📝 {item.notes}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="pt-2 border-t border-slate-100 flex gap-2">
+                      {order.kdsStatus === 'Pending' && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateKdsStatus(order.id, 'Cooking')}
+                          className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                        >
+                          <Flame size={14} />
+                          <span>Mulai Masak</span>
+                        </button>
+                      )}
+
+                      {order.kdsStatus === 'Cooking' && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateKdsStatus(order.id, 'Ready')}
+                          className="flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>Siap Saji</span>
+                        </button>
+                      )}
+
+                      {order.kdsStatus === 'Ready' && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateKdsStatus(order.id, 'Served')}
+                          className="flex-1 py-2.5 rounded-2xl bg-[#0052cc] hover:bg-blue-800 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                        >
+                          <CheckCheck size={14} />
+                          <span>Diantar ke Meja</span>
+                        </button>
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 3: STOK BAHAN BAKU, SPOILAGE & LIST BELANJA PASAR
+          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'stock' && (
+        <div className="p-4 space-y-4 animate-fade-in">
+          {/* Quick Actions Header */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLossModal(true)}
+              className="flex-1 py-2.5 px-3 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-black flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm"
+            >
+              <TrendingDown size={14} />
+              <span>Lapor Bahan Rusak</span>
+            </button>
+            <button
+              type="button"
+              onClick={fetchIngredients}
+              className="p-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
+
+          {/* Search & Category Filter */}
+          <div className="bg-white p-3 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
+            <div className="relative">
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={stockSearch}
+                onChange={e => setStockSearch(e.target.value)}
+                placeholder="Cari bahan (kopi, susu, tuna, matcha)..."
+                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-4 gap-1 text-center">
+              <button
+                onClick={() => setStockCategory('ALL')}
+                className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                  stockCategory === 'ALL' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                Semua ({ingredients.length})
+              </button>
+              <button
+                onClick={() => setStockCategory('FOOD')}
+                className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                  stockCategory === 'FOOD' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                🍲 Dapur
+              </button>
+              <button
+                onClick={() => setStockCategory('DRINK')}
+                className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                  stockCategory === 'DRINK' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                ☕ Bar
+              </button>
+              <button
+                onClick={() => setStockCategory('LOW')}
+                className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                  stockCategory === 'LOW' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                ⚠️ Kritis ({ingredients.filter(i => i.stock <= i.minStock).length})
+              </button>
+            </div>
+          </div>
+
+          {/* List Ingredients */}
+          <div className="space-y-2.5">
+            {ingredients
+              .filter(i => {
+                if (stockCategory === 'FOOD') return (i.category || 'FOOD') === 'FOOD';
+                if (stockCategory === 'DRINK') return i.category === 'DRINK';
+                if (stockCategory === 'PACKAGING') return i.category === 'PACKAGING';
+                if (stockCategory === 'LOW') return i.stock <= i.minStock;
+                return true;
+              })
+              .filter(i => i.name.toLowerCase().includes(stockSearch.toLowerCase()))
+              .map(ing => {
+                const isLow = ing.stock <= ing.minStock;
+                return (
+                  <div
+                    key={ing.id}
+                    className={`bg-white p-3.5 rounded-3xl border shadow-sm flex items-center justify-between gap-3 ${
+                      isLow ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200/80'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <h5 className="text-xs font-black text-slate-900">{ing.name}</h5>
+                        {isLow && (
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-600 text-white">
+                            Menipis
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Min: {ing.minStock} {ing.unit} {ing.subCategory ? `• ${ing.subCategory}` : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <span className="text-sm font-black text-slate-900 font-mono">
+                          {ing.stock} <span className="text-[10px] font-bold text-slate-500">{ing.unit}</span>
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdjustModal({ open: true, ingredient: ing });
+                          setAdjustForm({ change: '', description: '' });
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-[#0052cc] hover:bg-blue-100 font-bold text-[10px] border border-blue-200"
+                      >
+                        +Restock
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          MODAL BOTTOM SHEET: CATAT STOCK LOSS (SUPER CEPAT)
+          TAB 4: FORM IZIN, SAKIT, CUTI & RIWAYAT APPROVAL
           ───────────────────────────────────────────────────────────── */}
-      {showLossModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-[2.5rem] sm:rounded-3xl w-full max-w-md p-6 border border-slate-100 shadow-2xl space-y-4 animate-in slide-in-from-bottom duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                  <TrendingDown size={22} />
+      {activeTab === 'leave' && (
+        <div className="p-4 space-y-4 animate-fade-in">
+          {/* Header & New Request Button */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black text-slate-900">Pengajuan Izin & Sakit</h3>
+              <p className="text-[10px] text-slate-400">Pengajuan digital tanpa surat manual</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowNewLeaveModal(true)}
+              className="py-2 px-3 rounded-2xl bg-[#0052cc] hover:bg-blue-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95"
+            >
+              <Plus size={14} />
+              <span>Buat Izin</span>
+            </button>
+          </div>
+
+          {/* Riwayat Pengajuan Izin */}
+          {leaveRequests.length === 0 ? (
+            <div className="py-12 bg-white rounded-3xl border border-slate-200 text-center space-y-2 p-4">
+              <FileCheck size={36} className="mx-auto text-slate-300" />
+              <h4 className="text-sm font-black text-slate-700">Belum Ada Pengajuan</h4>
+              <p className="text-xs text-slate-400">Tekan tombol "+ Buat Izin" untuk mengajukan izin/sakit/cuti.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {leaveRequests.map(item => (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-2.5"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-slate-900">{item.type}</span>
+                      <span className="text-[10px] text-slate-400">
+                        ({item.startDate === item.endDate ? item.startDate : `${item.startDate} s/d ${item.endDate}`})
+                      </span>
+                    </div>
+
+                    <span
+                      className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                        item.status === 'Approved'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : item.status === 'Rejected'
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {item.status === 'Approved' ? '✓ Disetujui' : item.status === 'Rejected' ? '✕ Ditolak' : '⏳ Menunggu Review'}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-700 font-medium">"{item.reason}"</p>
+
+                  {item.adminNotes && (
+                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600">
+                      <strong>Catatan Admin ({item.approvedBy || 'Admin'}):</strong> {item.adminNotes}
+                    </div>
+                  )}
+
+                  {item.photoUrl && (
+                    <div className="pt-1">
+                      <a
+                        href={item.photoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-[#0052cc] font-bold hover:underline flex items-center gap-1"
+                      >
+                        <FileText size={11} /> Lihat Bukti / Surat Dokter
+                      </a>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">Catat Stock Loss & Kerusakan</h3>
-                  <p className="text-[10px] text-slate-400">Dicatat oleh: <strong>{user?.name}</strong></p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 5: SLIP GAJI, SOP BUKA/TUTUP DAPUR & HANDOVER SHIFT
+          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'profile' && (
+        <div className="p-4 space-y-4 animate-fade-in">
+          {/* Sub-Tabs Selector */}
+          <div className="bg-white p-1 rounded-2xl border border-slate-200 flex gap-1">
+            <button
+              type="button"
+              onClick={() => setProfileSubTab('slip')}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-black ${
+                profileSubTab === 'slip' ? 'bg-[#0052cc] text-white' : 'text-slate-600'
+              }`}
+            >
+              💵 Slip Gaji
+            </button>
+            <button
+              type="button"
+              onClick={() => setProfileSubTab('sop')}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-black ${
+                profileSubTab === 'sop' ? 'bg-[#0052cc] text-white' : 'text-slate-600'
+              }`}
+            >
+              📋 SOP Dapur
+            </button>
+            <button
+              type="button"
+              onClick={() => setProfileSubTab('handover')}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-black ${
+                profileSubTab === 'handover' ? 'bg-[#0052cc] text-white' : 'text-slate-600'
+              }`}
+            >
+              🔄 Handover
+            </button>
+          </div>
+
+          {/* SUBTAB 1: SLIP GAJI & REKAP */}
+          {profileSubTab === 'slip' && (
+            <div className="space-y-3">
+              {/* STATS TILES */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 text-center">
+                  <p className="text-[10px] font-bold text-slate-400">Total Hadir</p>
+                  <h4 className="text-base font-black text-[#0052cc]">{mySummary?.stats?.totalHadir || 0} Hari</h4>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 text-center">
+                  <p className="text-[10px] font-bold text-slate-400">Terlambat</p>
+                  <h4 className="text-base font-black text-rose-600">{mySummary?.stats?.totalTerlambat || 0}x</h4>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 text-center">
+                  <p className="text-[10px] font-bold text-slate-400">Jam Kerja</p>
+                  <h4 className="text-base font-black text-slate-800">{mySummary?.stats?.totalWorkHours || 0} Jam</h4>
                 </div>
               </div>
-              <button onClick={() => setShowLossModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full bg-slate-100">
+
+              {/* ESTIMASI TAKE HOME PAY */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2.5">
+                <h4 className="text-xs font-black text-slate-900 border-b pb-2 flex items-center justify-between">
+                  <span>Rincian Insentif & Kedisiplinan</span>
+                  <span className="text-[10px] font-bold text-slate-400">Bulan Ini</span>
+                </h4>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Bonus Zero-Late:</span>
+                    <span className="font-bold text-emerald-600">
+                      +Rp {(mySummary?.discipline?.zeroLateBonusEarned || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Potongan Terlambat:</span>
+                    <span className="font-bold text-rose-600">
+                      -Rp {(mySummary?.discipline?.totalLatePenalty || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t font-black">
+                    <span className="text-slate-900">Total Reward Disiplin:</span>
+                    <span className="text-[#0052cc]">
+                      Rp {(mySummary?.discipline?.netDisciplineAmount || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUBTAB 2: SOP BUKA / TUTUP DAPUR */}
+          {profileSubTab === 'sop' && (
+            <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b pb-2">
+                <h4 className="text-xs font-black text-slate-900">Checklist SOP Harian</h4>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSopType('OPENING')}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-black ${
+                      sopType === 'OPENING' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    Opening
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSopType('CLOSING')}
+                    className={`px-2 py-1 rounded-lg text-[10px] font-black ${
+                      sopType === 'CLOSING' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    Closing
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {(sopType === 'OPENING' ? openingItems : closingItems).map((item, idx) => (
+                  <label
+                    key={idx}
+                    className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-blue-50/50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        if (sopType === 'OPENING') {
+                          const updated = [...openingItems];
+                          updated[idx].checked = checked;
+                          setOpeningItems(updated);
+                        } else {
+                          const updated = [...closingItems];
+                          updated[idx].checked = checked;
+                          setClosingItems(updated);
+                        }
+                      }}
+                      className="mt-0.5 rounded text-[#0052cc]"
+                    />
+                    <span className="text-xs font-semibold text-slate-800">{item.title}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Catatan Tambahan:</label>
+                <input
+                  type="text"
+                  value={sopNotes}
+                  onChange={e => setSopNotes(e.target.value)}
+                  placeholder="Misal: Chiller 1 suhu stabil 3°C..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                />
+              </div>
+
+              <button
+                type="button"
+                disabled={submittingSop}
+                onClick={handleSubmitSop}
+                className="w-full py-3 bg-[#0052cc] hover:bg-blue-800 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20"
+              >
+                {submittingSop ? 'Menyimpan...' : 'Simpan Checklist SOP'}
+              </button>
+            </div>
+          )}
+
+          {/* SUBTAB 3: SHIFT HANDOVER LOGBOOK */}
+          {profileSubTab === 'handover' && (
+            <div className="space-y-3">
+              <form onSubmit={handleSubmitHandover} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2.5">
+                <h4 className="text-xs font-black text-slate-900 border-b pb-2">Form Serah Terima (Handover)</h4>
+                
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Pergantian Shift:</label>
+                  <input
+                    type="text"
+                    value={handoverForm.shiftName}
+                    onChange={e => setHandoverForm({ ...handoverForm, shiftName: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Sisa Uang Kas Kecil / Laci (Rp):</label>
+                  <input
+                    type="number"
+                    value={handoverForm.cashBalance}
+                    onChange={e => setHandoverForm({ ...handoverForm, cashBalance: e.target.value })}
+                    placeholder="Misal: 150000"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Catatan Tugas / Pesan Penting:</label>
+                  <textarea
+                    rows={2}
+                    value={handoverForm.notes}
+                    onChange={e => setHandoverForm({ ...handoverForm, notes: e.target.value })}
+                    placeholder="Ketik catatan untuk shift berikutnya..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingHandover}
+                  className="w-full py-2.5 bg-[#0052cc] hover:bg-blue-800 text-white rounded-xl text-xs font-black shadow-md"
+                >
+                  {submittingHandover ? 'Menyimpan...' : 'Kirim Handover'}
+                </button>
+              </form>
+
+              {/* Riwayat Handover */}
+              <div className="space-y-2">
+                {handoverLogs.slice(0, 5).map(h => (
+                  <div key={h.id} className="bg-white p-3 rounded-2xl border border-slate-200 text-xs space-y-1">
+                    <div className="flex justify-between font-black text-slate-900">
+                      <span>{h.shiftName}</span>
+                      <span className="text-[10px] text-slate-400">{h.date}</span>
+                    </div>
+                    <p className="text-slate-600 font-medium">"{h.notes}"</p>
+                    <p className="text-[10px] text-slate-400">Oleh: {h.user?.name} • Kas: Rp {Number(h.cashBalance).toLocaleString('id-ID')}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          STICKY BOTTOM NAVIGATION BAR (PROFESSIONAL MOBILE APP DOCK)
+          ───────────────────────────────────────────────────────────── */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-2 px-2 max-w-md mx-auto">
+        <div className="flex items-center justify-around">
+          {/* Tab 1: Presensi */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('attendance')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+              activeTab === 'attendance'
+                ? 'text-[#0052cc] font-black scale-105'
+                : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+              <Fingerprint size={19} />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Presensi</span>
+          </button>
+
+          {/* Tab 2: Dapur KDS */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('kds')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
+              activeTab === 'kds'
+                ? 'text-[#0052cc] font-black scale-105'
+                : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'kds' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+              <ChefHat size={19} />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Dapur KDS</span>
+            {kdsOrders.filter(o => o.kdsStatus !== 'Served').length > 0 && (
+              <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center shadow-sm">
+                {kdsOrders.filter(o => o.kdsStatus !== 'Served').length}
+              </span>
+            )}
+          </button>
+
+          {/* Tab 3: Stok Bahan */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('stock')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
+              activeTab === 'stock'
+                ? 'text-[#0052cc] font-black scale-105'
+                : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'stock' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+              <Package size={19} />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Stok</span>
+            {ingredients.filter(i => i.stock <= i.minStock).length > 0 && (
+              <span className="absolute top-1 right-5 w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+            )}
+          </button>
+
+          {/* Tab 4: Izin / Cuti */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('leave')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
+              activeTab === 'leave'
+                ? 'text-[#0052cc] font-black scale-105'
+                : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'leave' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+              <FileText size={19} />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Izin / Cuti</span>
+          </button>
+
+          {/* Tab 5: Slip & SOP */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+              activeTab === 'profile'
+                ? 'text-[#0052cc] font-black scale-105'
+                : 'text-slate-400 hover:text-slate-600 font-semibold'
+            }`}
+          >
+            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'profile' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+              <UserCheck size={19} />
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">Slip & SOP</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL BUAT PENGAJUAN IZIN
+          ───────────────────────────────────────────────────────────── */}
+      {showNewLeaveModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-2.5">
+              <h3 className="text-sm font-black text-slate-900">Form Pengajuan Izin / Cuti</h3>
+              <button onClick={() => setShowNewLeaveModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitStockLoss} className="space-y-4">
-              {/* PILIH BAHAN BAKU */}
+            <form onSubmit={handleSubmitLeave} className="space-y-3">
               <div>
-                <label className="text-[11px] font-black text-slate-700 block mb-1">Pilih Bahan Baku</label>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Jenis Pengajuan:</label>
                 <select
-                  value={lossForm.ingredientId}
-                  onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800"
-                  required
+                  value={leaveForm.type}
+                  onChange={e => setLeaveForm({ ...leaveForm, type: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                 >
-                  <option value="">-- Pilih Bahan Baku --</option>
-                  {ingredients.map(i => (
-                    <option key={i.id} value={i.id}>
-                      {i.category === 'DRINK' ? '☕' : (i.category === 'PACKAGING' ? '📦' : '🍲')} {i.name} (Sisa: {i.stock} {i.unit})
-                    </option>
-                  ))}
+                  <option value="Izin">Izin (Keperluan Mendesak)</option>
+                  <option value="Sakit">Sakit (Dengan / Tanpa Surat Dokter)</option>
+                  <option value="Cuti">Cuti Tahunan</option>
+                  <option value="Tukar Shift">Tukar Shift Kerja</option>
+                  <option value="Lainnya">Lainnya</option>
                 </select>
               </div>
 
-              {/* INPUT JUMLAH & PRESET BUTTONS */}
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-[11px] font-black text-slate-700">
-                    Jumlah Kerusakan ({selectedLossItem?.unit || 'Unit'})
-                  </label>
-                  {selectedLossItem && (
-                    <span className="text-[10px] text-slate-400">
-                      Sisa: {selectedLossItem.stock} {selectedLossItem.unit}
-                    </span>
-                  )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Mulai:</label>
+                  <input
+                    type="date"
+                    value={leaveForm.startDate}
+                    onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    required
+                  />
                 </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Sampai:</label>
+                  <input
+                    type="date"
+                    value={leaveForm.endDate}
+                    onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    required
+                  />
+                </div>
+              </div>
 
-                <input
-                  type="number"
-                  step="any"
-                  value={lossForm.qtyLoss}
-                  onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
-                  placeholder="Ketik jumlah rusak (misal: 0.5)"
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-slate-800"
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Alasan / Keterangan:</label>
+                <textarea
+                  rows={3}
+                  value={leaveForm.reason}
+                  onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                  placeholder="Ketik alasan izin secara jelas..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                   required
                 />
-
-                {/* PRESET BUTTONS */}
-                <div className="flex gap-1.5 mt-2">
-                  {['0.25', '0.5', '1', '2', '5'].map(val => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setLossForm(prev => ({ ...prev, qtyLoss: val }))}
-                      className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-black text-slate-700 transition-all"
-                    >
-                      +{val}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              {/* ESTIMASI NILAI KERUGIAN REAL-TIME */}
-              {estimatedLossRupiah > 0 && (
-                <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-rose-700">
-                    <DollarSign size={16} />
-                    <span className="text-xs font-black">Estimasi Nilai Kerugian:</span>
-                  </div>
-                  <span className="text-sm font-black text-rose-700">
-                    Rp {estimatedLossRupiah.toLocaleString('id-ID')}
-                  </span>
-                </div>
-              )}
-
-              {/* ALASAN KERUSAKAN (VISUAL PILLS) */}
-              <div>
-                <label className="text-[11px] font-black text-slate-700 block mb-1.5">Alasan Kerusakan</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'Busuk / Kadaluarsa', label: '🍅 Busuk / Expired' },
-                    { id: 'Tumpah / Rusak Fisik', label: '💥 Tumpah / Bocor' },
-                    { id: 'Sisa Trimming / Kupas', label: '🔪 Sisa Trimming' },
-                    { id: 'Kesalahan Masak / Hangus', label: '🍳 Kesalahan Masak' },
-                    { id: 'Kualitas Buruk Supplier', label: '📦 Rusak dr Supplier' },
-                    { id: 'Lainnya', label: '⚠️ Lainnya' }
-                  ].map(r => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => setLossForm(prev => ({ ...prev, reason: r.id }))}
-                      className={`p-2.5 rounded-xl text-left text-xs font-bold transition-all border ${
-                        lossForm.reason === r.id
-                          ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* CATATAN INSIDEN */}
-              <div>
-                <label className="text-[11px] font-black text-slate-700 block mb-1">Catatan Insiden (Opsional)</label>
-                <input
-                  type="text"
-                  value={lossForm.notes}
-                  onChange={e => setLossForm({ ...lossForm, notes: e.target.value })}
-                  placeholder="Misal: Tomat lembek berjamur di chiller"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                />
-              </div>
-
-              {/* SUBMIT BUTTONS */}
-              <div className="pt-2 flex gap-2">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowLossModal(false)}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold"
+                  onClick={() => setShowNewLeaveModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingLoss}
-                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-black shadow-lg shadow-rose-600/20"
+                  disabled={submittingLeave}
+                  className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
                 >
-                  {submittingLoss ? 'Menyimpan...' : 'Simpan Stock Loss'}
+                  {submittingLeave ? 'Mengirim...' : 'Kirim Izin'}
                 </button>
               </div>
             </form>
@@ -2319,81 +2094,133 @@ export const StaffPWAView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          MODAL BOTTOM SHEET: QUICK RESTOCK (+)
+          MODAL LAPOR BAHAN RUSAK (STOCK LOSS)
           ───────────────────────────────────────────────────────────── */}
-      {adjustModal.open && adjustModal.ingredient && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-[2.5rem] sm:rounded-3xl w-full max-w-md p-6 border border-slate-100 shadow-2xl space-y-4 animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                  <Plus size={22} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">Tambah / Restock Bahan</h3>
-                  <p className="text-[10px] text-slate-400">
-                    {adjustModal.ingredient.name} (Sisa: {adjustModal.ingredient.stock} {adjustModal.ingredient.unit})
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setAdjustModal({ open: false, ingredient: null })} className="text-slate-400 p-1.5 rounded-full bg-slate-100">
+      {showLossModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-2.5">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5 text-rose-600">
+                <TrendingDown size={16} /> Lapor Bahan Rusak / Basi
+              </h3>
+              <button onClick={() => setShowLossModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitAdjust} className="space-y-4">
+            <form onSubmit={handleSubmitStockLoss} className="space-y-3">
               <div>
-                <label className="text-[11px] font-black text-slate-700 block mb-1">
-                  Jumlah Tambahan (+ {adjustModal.ingredient.unit})
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Pilih Bahan Baku:</label>
+                <select
+                  value={lossForm.ingredientId}
+                  onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                  required
+                >
+                  <option value="">-- Pilih Bahan --</option>
+                  {ingredients.map(i => (
+                    <option key={i.id} value={i.id}>
+                      {i.name} (Sisa: {i.stock} {i.unit})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Jumlah Rusak / Terbuang:</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={lossForm.qtyLoss}
+                  onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
+                  placeholder="Misal: 250"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">Penyebab Kerusakan:</label>
+                <select
+                  value={lossForm.reason}
+                  onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                >
+                  <option value="Busuk / Kadaluarsa">Busuk / Kadaluarsa</option>
+                  <option value="Tumpah / Rusak">Tumpah / Rusak</option>
+                  <option value="Kesalahan Masak / Gosong">Kesalahan Masak / Gosong</option>
+                  <option value="Sisa Trimming / Kupas">Sisa Trimming / Kupas</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLossModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingLoss}
+                  className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-black shadow-md"
+                >
+                  {submittingLoss ? 'Menyimpan...' : 'Simpan Laporan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL QUICK RESTOCK BAHAN
+          ───────────────────────────────────────────────────────────── */}
+      {adjustModal.open && adjustModal.ingredient && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-2.5">
+              <h3 className="text-sm font-black text-slate-900">
+                Restock: {adjustModal.ingredient.name}
+              </h3>
+              <button
+                onClick={() => setAdjustModal({ open: false, ingredient: null })}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickAdjust} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                  Jumlah Masuk ({adjustModal.ingredient.unit}):
                 </label>
                 <input
                   type="number"
                   step="any"
                   value={adjustForm.change}
                   onChange={e => setAdjustForm({ ...adjustForm, change: e.target.value })}
-                  placeholder="Ketik jumlah masuk (misal: 10)"
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black text-slate-800"
+                  placeholder="Misal: 10"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                   required
                 />
-
-                {/* PRESET BUTTONS */}
-                <div className="flex gap-1.5 mt-2">
-                  {['1', '5', '10', '25', '50'].map(val => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setAdjustForm(prev => ({ ...prev, change: val }))}
-                      className="flex-1 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-black text-slate-700 transition-all"
-                    >
-                      +{val}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              <div>
-                <label className="text-[11px] font-black text-slate-700 block mb-1">Keterangan / Sumber Barang</label>
-                <input
-                  type="text"
-                  value={adjustForm.description}
-                  onChange={e => setAdjustForm({ ...adjustForm, description: e.target.value })}
-                  placeholder="Misal: Kiriman pasar pagi / supplier"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                />
-              </div>
-
-              <div className="pt-2 flex gap-2">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setAdjustModal({ open: false, ingredient: null })}
-                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold"
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submittingAdjust}
-                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black shadow-lg shadow-indigo-500/20"
+                  className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
                 >
                   {submittingAdjust ? 'Menyimpan...' : 'Simpan Restock'}
                 </button>
