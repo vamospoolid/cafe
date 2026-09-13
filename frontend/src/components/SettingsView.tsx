@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -44,33 +44,76 @@ const SettingsView = () => {
     toast(`Mode Presisi Tinggi ${checked ? 'diaktifkan' : 'dinonaktifkan'} untuk perangkat ini.`, 'success');
   };
 
-  const handleTestPrint = async () => {
+  const [testingTarget, setTestingTarget] = useState<string | null>(null);
+  const [categories, setCategories] = useState<any[]>([]);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch categories in settings:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'struk') {
+      fetchCategories();
+    }
+  }, [activeTab]);
+
+  const handleUpdateCategoryTarget = async (catId: number, target: string) => {
+    try {
+      const res = await fetch(`/api/categories/${catId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ printerTarget: target })
+      });
+      if (res.ok) {
+        setCategories(prev => prev.map(c => c.id === catId ? { ...c, printerTarget: target } : c));
+        toast('Target printer kategori berhasil diperbarui!', 'success');
+      }
+    } catch (e) {
+      toast('Gagal memperbarui kategori', 'error');
+    }
+  };
+
+  const handleTestSpecificPrint = async (roleName: 'KASIR' | 'DAPUR' | 'BAR', ip?: string, port?: number) => {
     const win = window as any;
     if (win.electronPOS && win.electronPOS.printer) {
       if (!formData.windowsPrinterName) {
         toast('Pilih printer Windows terlebih dahulu!', 'error');
         return;
       }
-      setTestLoading(true);
+      setTestingTarget(roleName);
       try {
         await win.electronPOS.printer.testPrint(formData.windowsPrinterName, formData.storeName);
-        toast('Halaman uji berhasil dikirim ke printer lokal!', 'success');
+        toast(`Halaman uji ${roleName} berhasil dikirim ke printer lokal!`, 'success');
       } catch (err: any) {
         toast('Gagal mencetak: ' + err.message, 'error');
       } finally {
-        setTestLoading(false);
+        setTestingTarget(null);
       }
       return;
     }
 
-    const ip = formData.printerIp;
-    const port = formData.printerPort || 9100;
-    if (!ip) {
-      toast('IP Printer wajib diisi untuk melakukan tes', 'error');
+    const targetIp = ip || (roleName === 'DAPUR' ? formData.kitchenPrinterIp : (roleName === 'BAR' ? formData.barPrinterIp : formData.printerIp));
+    const targetPort = port || (roleName === 'DAPUR' ? formData.kitchenPrinterPort : (roleName === 'BAR' ? formData.barPrinterPort : formData.printerPort)) || 9100;
+
+    if (!targetIp) {
+      toast(`IP Printer untuk ${roleName} belum diisi!`, 'error');
       return;
     }
 
-    setTestLoading(true);
+    setTestingTarget(roleName);
     try {
       const res = await fetch('/api/printer/test', {
         method: 'POST',
@@ -78,23 +121,23 @@ const SettingsView = () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${posContext?.token}`
         },
-        body: JSON.stringify({ ip, port })
+        body: JSON.stringify({ ip: targetIp, port: targetPort, roleName })
       });
       const data = await res.json();
       if (res.ok) {
-        toast('Halaman uji berhasil dikirim ke printer!', 'success');
+        toast(`✓ Halaman uji Printer ${roleName} (${targetIp}) berhasil dicetak!`, 'success');
       } else {
-        toast(data.error || 'Gagal terhubung ke printer', 'error');
+        toast(data.error || `Gagal terhubung ke printer ${roleName}`, 'error');
       }
     } catch (err: any) {
       toast(err.message || 'Terjadi kesalahan koneksi', 'error');
     } finally {
-      setTestLoading(false);
+      setTestingTarget(null);
     }
   };
 
   const [formData, setFormData] = useState({
-    storeName: 'SOL CAFE',
+    storeName: 'MUKI RAMEN',
     phone: '',
     address: '',
     logoUrl: '',
@@ -117,12 +160,49 @@ const SettingsView = () => {
     loyaltySilverMultiplier: 1.2,
     loyaltyGoldMultiplier: 1.5,
     ingredientTrackingEnabled: false,
+    // Printer Kasir
     printerIp: '',
     printerPort: 9100,
     windowsPrinterName: '',
     autoPrintKDS: false,
     autoPrintReceipt: false,
+    // Printer Dapur
+    kitchenPrinterIp: '',
+    kitchenPrinterPort: 9100,
+    autoPrintKitchen: false,
+    // Printer Bar
+    barPrinterIp: '',
+    barPrinterPort: 9100,
+    autoPrintBar: false,
+    // KDS
+    enableKDS: true,
+    autoCompleteKDSOnPay: true,
+    // Absensi & GPS Geofencing
+    storeLatitude: -6.200000,
+    storeLongitude: 106.816666,
+    gpsRadiusMeters: 100,
+    enableGpsValidation: true,
+    enableCameraPhoto: true,
+    workShifts: '',
+    // Reward & Punishment Karyawan
+    enableZeroLateBonus: true,
+    zeroLateBonusAmount: 200000,
+    zeroLateMinAttendance: 20,
+    zeroLateMaxLateAllowed: 0,
+    enableLatePenalty: false,
+    latePenaltyType: 'FLAT',
+    latePenaltyAmount: 10000,
+    enableAlphaPenalty: false,
+    alphaPenaltyAmount: 50000,
   });
+
+  const [shiftsList, setShiftsList] = useState<Array<{ id: string; name: string; start: string; end: string; lateTolerance: number }>>([
+    { id: 'pagi', name: 'Shift Pagi', start: '08:00', end: '16:00', lateTolerance: 15 },
+    { id: 'siang', name: 'Shift Siang / Sore', start: '14:00', end: '22:00', lateTolerance: 15 },
+    { id: 'full', name: 'Shift Full / Normal', start: '09:00', end: '18:00', lateTolerance: 15 }
+  ]);
+
+  const [newShift, setNewShift] = useState({ name: '', start: '08:00', end: '16:00', lateTolerance: 15 });
 
   useEffect(() => {
     if (posContext?.settings) {
@@ -130,8 +210,53 @@ const SettingsView = () => {
         ...formData,
         ...posContext.settings
       });
+      if (posContext.settings.workShifts) {
+        try {
+          const parsed = JSON.parse(posContext.settings.workShifts);
+          if (Array.isArray(parsed) && parsed.length > 0) setShiftsList(parsed);
+        } catch {}
+      }
     }
   }, [posContext?.settings]);
+
+  const handleGetDeviceCoordinates = () => {
+    if (!navigator.geolocation) {
+      return toast('Browser tidak mendukung Geolocation', 'error');
+    }
+    toast('Mendeteksi koordinat GPS perangkat...', 'info');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setFormData(prev => ({
+          ...prev,
+          storeLatitude: pos.coords.latitude,
+          storeLongitude: pos.coords.longitude
+        }));
+        toast(`Koordinat berhasil diambil: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`, 'success');
+      },
+      err => {
+        toast('Gagal mengambil koordinat GPS: ' + err.message, 'error');
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
+  const handleAddShift = () => {
+    if (!newShift.name.trim()) return toast('Nama shift harus diisi', 'warning');
+    const id = 'shift_' + Date.now();
+    const updated = [...shiftsList, { ...newShift, id, lateTolerance: Number(newShift.lateTolerance) || 15 }];
+    setShiftsList(updated);
+    setFormData(prev => ({ ...prev, workShifts: JSON.stringify(updated) }));
+    setNewShift({ name: '', start: '08:00', end: '16:00', lateTolerance: 15 });
+    toast('Shift baru berhasil ditambahkan!', 'success');
+  };
+
+  const handleDeleteShift = (id: string) => {
+    if (shiftsList.length <= 1) return toast('Minimal harus menyisakan 1 shift kerja', 'warning');
+    const updated = shiftsList.filter(s => s.id !== id);
+    setShiftsList(updated);
+    setFormData(prev => ({ ...prev, workShifts: JSON.stringify(updated) }));
+    toast('Shift berhasil dihapus', 'info');
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
@@ -288,6 +413,16 @@ const SettingsView = () => {
           </button>
           <button 
             className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
+              activeTab === 'absensi_gps' 
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
+                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
+            }`}
+            onClick={() => setActiveTab('absensi_gps')}
+          >
+            <MapPin size={18} className={activeTab === 'absensi_gps' ? 'text-white' : 'text-slate-400'} /> Absensi & GPS Toko
+          </button>
+          <button 
+            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
               activeTab === 'koneksi_server' 
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
                 : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
@@ -408,128 +543,325 @@ const SettingsView = () => {
 
           {activeTab === 'struk' && (
             <div className="space-y-8 animate-fade-in">
-              <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                  <Receipt size={18} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">Format Struk Printer Thermal</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Personalisasikan teks sambutan pembuka dan penutup di struk belanja pelanggan.</p>
+              <div className="border-b border-slate-100 pb-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Printer size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-800">Multi-Printer, Split Struk & KDS</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Pengaturan cetak struk otomatis (Payment-First) dan kontrol fitur Layar Dapur (KDS).</p>
+                  </div>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <div className="space-y-5">
-                  {/* Konfigurasi Koneksi Printer Termal */}
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-4 shadow-sm">
-                    {isElectronApp ? (
-                      <>
-                        <div className="font-bold text-xs text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <Printer size={16} className="text-indigo-600" />
-                          <span>Koneksi Printer Lokal (Windows)</span>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Pilih Printer Thermal</label>
-                          <select 
-                            name="windowsPrinterName" 
-                            className="form-control text-sm" 
-                            value={formData.windowsPrinterName || ''} 
-                            onChange={handleChange}
-                          >
-                            <option value="">-- Pilih Printer --</option>
-                            {availablePrinters.map((printer, idx) => (
-                              <option key={idx} value={printer.name}>{printer.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="font-bold text-xs text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                          <Printer size={16} className="text-indigo-600" />
-                          <span>Koneksi Printer Jaringan (TCP/IP Direct)</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="col-span-2">
-                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer</label>
-                            <input 
-                              type="text" 
-                              name="printerIp" 
-                              className="form-control text-sm" 
-                              value={formData.printerIp || ''} 
-                              onChange={handleChange}
-                              placeholder="Contoh: 192.168.1.100"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port</label>
-                            <input 
-                              type="number" 
-                              name="printerPort" 
-                              className="form-control text-sm" 
-                              value={formData.printerPort || 9100} 
-                              onChange={handleChange}
-                              placeholder="9100"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    
-                    <button
-                      type="button"
-                      className="btn btn-secondary text-xs py-2 w-full flex items-center justify-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm"
-                      onClick={handleTestPrint}
-                      disabled={testLoading}
-                    >
-                      <Printer size={14} />
-                      {testLoading ? 'Menguji Koneksi...' : 'Uji Cetak Printer (Test Print)'}
-                    </button>
-                    <div className="border-t border-slate-200/80 pt-3 space-y-2">
-                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                        <input 
-                          type="checkbox" 
-                          name="autoPrintReceipt" 
-                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20" 
-                          checked={formData.autoPrintReceipt || false} 
-                          onChange={handleChange}
-                        />
-                        <span className="text-xs font-bold text-slate-600">Cetak Struk Otomatis (Saat Pembayaran Sukses)</span>
-                      </label>
-                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                        <input 
-                          type="checkbox" 
-                          name="autoPrintKDS" 
-                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20" 
-                          checked={formData.autoPrintKDS || false} 
-                          onChange={handleChange}
-                        />
-                        <span className="text-xs font-bold text-slate-600">Cetak Tiket Dapur Otomatis (Saat Simpan Bill)</span>
-                      </label>
+
+              {/* PENGATURAN KDS (KITCHEN DISPLAY SYSTEM) */}
+              <div className="bg-gradient-to-r from-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+                      <ChefHat size={22} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-black text-sm text-white">Layar Dapur (Kitchen Display System / KDS)</h4>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${formData.enableKDS ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
+                          {formData.enableKDS ? 'KDS Aktif' : 'KDS Dinonaktifkan'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                        Jika Anda ingin operasional 100% menggunakan tiket fisik cetak tanpa layar monitor dapur, Anda dapat menonaktifkan KDS agar kasir tidak terbebani proses manual di dapur.
+                      </p>
                     </div>
                   </div>
 
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-white/5 p-3.5 rounded-xl border border-white/10 shrink-0">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        name="enableKDS" 
+                        className="w-4 h-4 rounded border-slate-400 text-indigo-500 focus:ring-indigo-400" 
+                        checked={formData.enableKDS ?? true} 
+                        onChange={handleChange}
+                      />
+                      <span className="text-xs font-bold text-white">Tampilkan Menu KDS</span>
+                    </label>
+
+                    <div className="hidden sm:block w-px h-6 bg-white/20"></div>
+
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        name="autoCompleteKDSOnPay" 
+                        className="w-4 h-4 rounded border-slate-400 text-amber-400 focus:ring-amber-400" 
+                        checked={formData.autoCompleteKDSOnPay ?? true} 
+                        onChange={handleChange}
+                      />
+                      <span className="text-xs font-bold text-amber-300">Auto Selesaikan saat Bayar</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              
+              {/* 3 PRINTER CARDS: KASIR, DAPUR, BAR */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                
+                {/* 1. PRINTER KASIR */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                        <Receipt size={16} />
+                      </div>
+                      <div>
+                        <div className="font-black text-xs text-slate-800">PRINTER KASIR</div>
+                        <div className="text-[10px] text-slate-400">Struk Tagihan Pelanggan</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer Kasir</label>
+                      <input 
+                        type="text" 
+                        name="printerIp" 
+                        className="form-control text-xs font-mono" 
+                        value={formData.printerIp || ''} 
+                        onChange={handleChange}
+                        placeholder="192.168.1.200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port ESC/POS</label>
+                      <input 
+                        type="number" 
+                        name="printerPort" 
+                        className="form-control text-xs font-mono" 
+                        value={formData.printerPort || 9100} 
+                        onChange={handleChange}
+                        placeholder="9100"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="w-full py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    onClick={() => handleTestSpecificPrint('KASIR', formData.printerIp, formData.printerPort)}
+                    disabled={testingTarget === 'KASIR'}
+                  >
+                    <Printer size={14} />
+                    {testingTarget === 'KASIR' ? 'Menguji...' : 'Uji Cetak Kasir'}
+                  </button>
+
+                  <div className="pt-2 border-t border-slate-100">
+                    <label className="flex items-start gap-2 cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        name="autoPrintReceipt" 
+                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 mt-0.5" 
+                        checked={formData.autoPrintReceipt || false} 
+                        onChange={handleChange}
+                      />
+                      <span className="text-[11px] font-bold text-slate-600">Auto-Print saat Pembayaran Sukses</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 2. PRINTER DAPUR (FOOD) */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                        <Utensils size={16} />
+                      </div>
+                      <div>
+                        <div className="font-black text-xs text-slate-800">PRINTER DAPUR (KOT)</div>
+                        <div className="text-[10px] text-slate-400">Tiket Makanan & Ramen</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer Dapur</label>
+                      <input 
+                        type="text" 
+                        name="kitchenPrinterIp" 
+                        className="form-control text-xs font-mono" 
+                        value={formData.kitchenPrinterIp || ''} 
+                        onChange={handleChange}
+                        placeholder="192.168.1.201"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port ESC/POS</label>
+                      <input 
+                        type="number" 
+                        name="kitchenPrinterPort" 
+                        className="form-control text-xs font-mono" 
+                        value={formData.kitchenPrinterPort || 9100} 
+                        onChange={handleChange}
+                        placeholder="9100"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    onClick={() => handleTestSpecificPrint('DAPUR', formData.kitchenPrinterIp, formData.kitchenPrinterPort)}
+                    disabled={testingTarget === 'DAPUR'}
+                  >
+                    <Printer size={14} />
+                    {testingTarget === 'DAPUR' ? 'Menguji...' : 'Uji Cetak Dapur'}
+                  </button>
+
+                  <div className="pt-2 border-t border-slate-100">
+                    <label className="flex items-start gap-2 cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        name="autoPrintKitchen" 
+                        className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/20 mt-0.5" 
+                        checked={formData.autoPrintKitchen || false} 
+                        onChange={handleChange}
+                      />
+                      <span className="text-[11px] font-bold text-slate-600">Auto-Print saat Simpan Bill / Order Baru</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* 3. PRINTER BAR (DRINKS) */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        <Coffee size={16} />
+                      </div>
+                      <div>
+                        <div className="font-black text-xs text-slate-800">PRINTER BAR (BOT)</div>
+                        <div className="text-[10px] text-slate-400">Tiket Minuman & Barista</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer Bar</label>
+                      <input 
+                        type="text" 
+                        name="barPrinterIp" 
+                        className="form-control text-xs font-mono" 
+                        value={formData.barPrinterIp || ''} 
+                        onChange={handleChange}
+                        placeholder="192.168.1.202"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port ESC/POS</label>
+                      <input 
+                        type="number" 
+                        name="barPrinterPort" 
+                        className="form-control text-xs font-mono" 
+                        value={formData.barPrinterPort || 9100} 
+                        onChange={handleChange}
+                        placeholder="9100"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    onClick={() => handleTestSpecificPrint('BAR', formData.barPrinterIp, formData.barPrinterPort)}
+                    disabled={testingTarget === 'BAR'}
+                  >
+                    <Printer size={14} />
+                    {testingTarget === 'BAR' ? 'Menguji...' : 'Uji Cetak Bar'}
+                  </button>
+
+                  <div className="pt-2 border-t border-slate-100">
+                    <label className="flex items-start gap-2 cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        name="autoPrintBar" 
+                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20 mt-0.5" 
+                        checked={formData.autoPrintBar || false} 
+                        onChange={handleChange}
+                      />
+                      <span className="text-[11px] font-bold text-slate-600">Auto-Print saat Simpan Bill / Order Baru</span>
+                    </label>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* MAPPING KATEGORI MENU KE TARGET PRINTER */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Pembuka (Header)</label>
+                    <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                      <Layers size={18} className="text-indigo-600" />
+                      Routing Kategori Menu ke Printer Tujuan
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">Tentukan kemana struk pesanan per kategori menu akan otomatis diarahkan.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {categories.map((cat) => {
+                    const target = cat.printerTarget || 'KITCHEN';
+                    return (
+                      <div key={cat.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3">
+                        <div className="font-bold text-xs text-slate-800">{cat.name}</div>
+                        <select 
+                          className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border cursor-pointer outline-none transition-all ${
+                            target === 'KITCHEN' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                            (target === 'BAR' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-300')
+                          }`}
+                          value={target}
+                          onChange={(e) => handleUpdateCategoryTarget(cat.id, e.target.value)}
+                        >
+                          <option value="KITCHEN">🍳 Dapur (Makanan)</option>
+                          <option value="BAR">🍹 Bar (Minuman Racikan)</option>
+                          <option value="NONE">🥤 Showcase / Kasir Saja</option>
+                        </select>
+                      </div>
+                    );
+                  })}
+                  {categories.length === 0 && (
+                    <div className="col-span-full text-center py-4 text-xs text-slate-400">
+                      Memuat daftar kategori menu...
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* HEADER & FOOTER FORMAT STRUK */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div className="space-y-5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Pembuka Struk (Header)</label>
                     <textarea 
                       name="receiptHeader" 
                       rows={3} 
                       className="form-control text-sm" 
                       value={formData.receiptHeader} 
                       onChange={handleChange}
-                      placeholder="Contoh: Selamat Datang di Cafe Kami! Jangan lupa tag Instagram kami @kopi.cafe"
+                      placeholder="Contoh: Selamat Datang di MUKI RAMEN! Nikmati hidangan autentik kami."
                     ></textarea>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris teratas struk printer setelah nama kafe.</p>
+                    <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris teratas struk printer setelah nama restoran.</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Penutup (Footer)</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Penutup Struk (Footer)</label>
                     <textarea 
                       name="receiptFooter" 
                       rows={3} 
                       className="form-control text-sm" 
                       value={formData.receiptFooter} 
                       onChange={handleChange}
-                      placeholder="Contoh: Terima kasih atas kunjungan Anda. Struk ini merupakan bukti pembayaran sah."
+                      placeholder="Contoh: Arigatou Gozaimasu! Follow Instagram @mukiramen.id"
                     ></textarea>
                     <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris paling bawah struk belanja setelah rincian total bayar.</p>
                   </div>
@@ -538,20 +870,13 @@ const SettingsView = () => {
                 {/* Preview Struk Premium */}
                 <div className="flex flex-col items-center justify-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-inner">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-amber-500 animate-pulse" /> Live Preview Struk
+                    <Sparkles size={12} className="text-amber-500 animate-pulse" /> Live Preview Struk Kasir
                   </div>
                   
-                  {/* Mock Receipt Container with classic paper roll effect */}
+                  {/* Mock Receipt Container */}
                   <div className="bg-white w-64 p-5 font-mono text-[10px] text-slate-700 shadow-lg border border-slate-200 relative">
-                    {/* Top serrated edge or decorative line */}
-                    <div className="w-full flex justify-between absolute -top-1 left-0 right-0 px-2 overflow-hidden opacity-30 select-none">
-                      {Array.from({ length: 12 }).map((_, i) => (
-                        <span key={i} className="text-slate-400" style={{ transform: 'scale(1.5)', display: 'inline-block' }}>^</span>
-                      ))}
-                    </div>
-
-                    <div className="font-black text-center text-xs text-slate-800 uppercase tracking-wide mb-1">{formData.storeName || 'SOL CAFE'}</div>
-                    <div className="text-center text-[8px] text-slate-400 mb-2 leading-tight whitespace-pre-wrap">{formData.address || 'Alamat Kafe Belum Ditentukan'}</div>
+                    <div className="font-black text-center text-xs text-slate-800 uppercase tracking-wide mb-1">{formData.storeName || 'MUKI RAMEN'}</div>
+                    <div className="text-center text-[8px] text-slate-400 mb-2 leading-tight whitespace-pre-wrap">{formData.address || 'Jl. Senopati No. 88, Jakarta Selatan'}</div>
                     
                     {formData.receiptHeader && (
                       <div className="border-b border-dashed border-slate-300 text-center mb-2 pb-2 text-[8px] text-slate-500 italic whitespace-pre-wrap">
@@ -560,18 +885,20 @@ const SettingsView = () => {
                     )}
                     
                     <div className="text-left space-y-1 my-3">
-                      <div className="flex justify-between"><span>1x Caramel Macchiato</span><span>32.000</span></div>
-                      <div className="flex justify-between"><span>2x Croissant Almond</span><span>38.000</span></div>
-                      <div className="flex justify-between"><span>1x Iced Jasmine Tea</span><span>12.000</span></div>
+                      <div className="flex justify-between"><span>2x Tori Paitan Ramen</span><span>116.000</span></div>
+                      <div className="flex justify-between"><span>1x Gyoza Panggang</span><span>28.000</span></div>
+                      <div className="flex justify-between"><span>2x Ocha Dingin</span><span>24.000</span></div>
                     </div>
                     
                     <div className="border-t border-dashed border-slate-300 mt-2 pt-2 text-right font-black text-slate-800 text-[11px]">
-                      TOTAL BAYAR: Rp 82.000
+                      TOTAL: Rp 184.800
                     </div>
 
-                    <div className="border-t border-dashed border-slate-300 mt-3 pt-3 text-center text-[8px] text-slate-400 leading-tight whitespace-pre-wrap">
-                      {formData.receiptFooter || 'Terima Kasih Atas Kunjungan Anda'}
-                    </div>
+                    {formData.receiptFooter && (
+                      <div className="border-t border-dashed border-slate-300 mt-3 pt-2 text-center text-[8px] text-slate-500 italic whitespace-pre-wrap">
+                        {formData.receiptFooter}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1100,6 +1427,408 @@ const SettingsView = () => {
                 </div>
               </div>
               <DatabaseSettingsPanel token={posContext?.token} />
+            </div>
+          )}
+
+          {activeTab === 'absensi_gps' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <MapPin size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Pengaturan Absensi, GPS, & Shift Kerja</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Konfigurasi radius geofencing lokasi toko, validasi kamera selfie, dan master shift kerja staf.
+                  </p>
+                </div>
+              </div>
+
+              {/* PWA SHORTCUT BANNER */}
+              <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="text-amber-600" size={18} />
+                    <h4 className="text-sm font-black text-slate-900">Aplikasi PWA Staf & Dapur</h4>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Staf dapat membuka <strong>{window.location.origin}/staff</strong> di browser smartphone untuk melakukan absensi selfie & input stok dapur.
+                  </p>
+                </div>
+                <a
+                  href="/staff"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black shadow-md shadow-amber-500/20 whitespace-nowrap"
+                >
+                  Buka PWA Staf
+                </a>
+              </div>
+
+              {/* GEOFENCING GPS FORM */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4 p-5 rounded-2xl border border-slate-200 bg-white">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin size={14} className="text-rose-500" /> Koordinat & Radius Toko
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Latitude Toko</label>
+                      <input
+                        type="number"
+                        step="any"
+                        name="storeLatitude"
+                        value={formData.storeLatitude}
+                        onChange={handleChange}
+                        className="form-control text-xs font-mono"
+                        placeholder="-6.200000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Longitude Toko</label>
+                      <input
+                        type="number"
+                        step="any"
+                        name="storeLongitude"
+                        value={formData.storeLongitude}
+                        onChange={handleChange}
+                        className="form-control text-xs font-mono"
+                        placeholder="106.816666"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Radius Toleransi Kehadiran (Meter)
+                    </label>
+                    <input
+                      type="number"
+                      name="gpsRadiusMeters"
+                      value={formData.gpsRadiusMeters}
+                      onChange={handleChange}
+                      className="form-control text-xs"
+                      placeholder="100"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Karyawan harus berada maksimal dalam radius ini dari koordinat toko agar absensi berstatus <strong>Hadir</strong>.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGetDeviceCoordinates}
+                    className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-slate-200"
+                  >
+                    <MapPin size={14} className="text-indigo-600" /> Gunakan Koordinat GPS Perangkat Ini
+                  </button>
+                </div>
+
+                {/* TOGGLES */}
+                <div className="space-y-4 p-5 rounded-2xl border border-slate-200 bg-white">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldAlert size={14} className="text-indigo-600" /> Validasi & Keamanan Absensi
+                  </h4>
+
+                  <div className="space-y-3">
+                    <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        name="enableGpsValidation"
+                        checked={formData.enableGpsValidation}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-indigo-600 rounded mt-0.5"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Wajibkan Validasi Radius GPS</span>
+                        <span className="text-[11px] text-slate-400 block mt-0.5">
+                          Tolak Clock In jika karyawan berada di luar radius meter toko yang ditentukan.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
+                      <input
+                        type="checkbox"
+                        name="enableCameraPhoto"
+                        checked={formData.enableCameraPhoto}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-indigo-600 rounded mt-0.5"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Wajibkan Foto Selfie Kamera</span>
+                        <span className="text-[11px] text-slate-400 block mt-0.5">
+                          Karyawan wajib mengambil foto selfie wajah saat menekan tombol Clock In.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* MASTER SHIFT KERJA */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Clock size={14} className="text-indigo-600" /> Master Shift Operasional Toko
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Shift kerja yang dapat dipilih oleh staf sebelum melakukan Clock In.
+                    </p>
+                  </div>
+                </div>
+
+                {/* SHIFT LIST */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {shiftsList.map(shift => (
+                    <div key={shift.id} className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2 relative group">
+                      <div className="flex justify-between items-start">
+                        <h5 className="text-xs font-black text-slate-900">{shift.name}</h5>
+                        {shiftsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShift(shift.id)}
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded-lg"
+                            title="Hapus Shift"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-600 font-semibold space-y-0.5">
+                        <p>Jam: <strong>{shift.start} - {shift.end}</strong></p>
+                        <p>Toleransi: <strong>{shift.lateTolerance} Menit</strong></p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* FORM TAMBAH SHIFT */}
+                <div className="pt-3 border-t border-slate-100 flex flex-col md:flex-row items-end gap-3">
+                  <div className="flex-1 w-full">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Shift Baru</label>
+                    <input
+                      type="text"
+                      value={newShift.name}
+                      onChange={e => setNewShift({ ...newShift, name: e.target.value })}
+                      placeholder="Misal: Shift Malam (22:00 - 06:00)"
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="w-full md:w-32">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Jam Mulai</label>
+                    <input
+                      type="time"
+                      value={newShift.start}
+                      onChange={e => setNewShift({ ...newShift, start: e.target.value })}
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="w-full md:w-32">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Jam Selesai</label>
+                    <input
+                      type="time"
+                      value={newShift.end}
+                      onChange={e => setNewShift({ ...newShift, end: e.target.value })}
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="w-full md:w-32">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Toleransi (Mnt)</label>
+                    <input
+                      type="number"
+                      value={newShift.lateTolerance}
+                      onChange={e => setNewShift({ ...newShift, lateTolerance: Number(e.target.value) })}
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddShift}
+                    className="w-full md:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold whitespace-nowrap shadow-sm"
+                  >
+                    + Tambah Shift
+                  </button>
+                </div>
+              </div>
+
+              {/* REWARD & PUNISHMENT KARYAWAN */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* KARTU REWARD: BONUS ZERO LATE */}
+                <div className="p-5 rounded-2xl border border-emerald-100 bg-emerald-50/30 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">
+                        🎁
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                          Reward: Bonus Zero Late
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Insentif bulanan staf tanpa keterlambatan.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="enableZeroLateBonus"
+                        checked={formData.enableZeroLateBonus}
+                        onChange={handleChange}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {formData.enableZeroLateBonus && (
+                    <div className="space-y-3 pt-2 border-t border-emerald-100/60 animate-fade-in">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          Nominal Bonus Bulanan (Rp)
+                        </label>
+                        <input
+                          type="number"
+                          name="zeroLateBonusAmount"
+                          value={formData.zeroLateBonusAmount}
+                          onChange={handleChange}
+                          className="form-control text-xs font-bold text-emerald-700"
+                          placeholder="200000"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Bonus yang diperoleh karyawan jika 0 kali terlambat.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                            Min. Hadir (Hari/Bln)
+                          </label>
+                          <input
+                            type="number"
+                            name="zeroLateMinAttendance"
+                            value={formData.zeroLateMinAttendance}
+                            onChange={handleChange}
+                            className="form-control text-xs"
+                            placeholder="20"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                            Maks. Telat Ditoleransi
+                          </label>
+                          <input
+                            type="number"
+                            name="zeroLateMaxLateAllowed"
+                            value={formData.zeroLateMaxLateAllowed}
+                            onChange={handleChange}
+                            className="form-control text-xs"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* KARTU PUNISHMENT: POTONGAN TELAT & ALPA */}
+                <div className="p-5 rounded-2xl border border-rose-100 bg-rose-50/30 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center text-rose-700 font-bold">
+                        ⚖️
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                          Punishment: Potongan Telat
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Denda atas keterlambatan & ketidakhadiran.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="enableLatePenalty"
+                        checked={formData.enableLatePenalty}
+                        onChange={handleChange}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-600"></div>
+                    </label>
+                  </div>
+
+                  {formData.enableLatePenalty && (
+                    <div className="space-y-3 pt-2 border-t border-rose-100/60 animate-fade-in">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          Metode Hitung Potongan
+                        </label>
+                        <select
+                          name="latePenaltyType"
+                          value={formData.latePenaltyType}
+                          onChange={handleChange}
+                          className="form-control text-xs"
+                        >
+                          <option value="FLAT">Flat per Kejadian Telat (Rp / Kejadian)</option>
+                          <option value="PER_MINUTE">Per Menit Keterlambatan (Rp / Menit)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          Nominal Potongan {formData.latePenaltyType === 'PER_MINUTE' ? '(Rp / Menit)' : '(Rp / Kejadian)'}
+                        </label>
+                        <input
+                          type="number"
+                          name="latePenaltyAmount"
+                          value={formData.latePenaltyAmount}
+                          onChange={handleChange}
+                          className="form-control text-xs font-bold text-rose-700"
+                          placeholder={formData.latePenaltyType === 'PER_MINUTE' ? '1000' : '10000'}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SUB: POTONGAN ALPA */}
+                  <div className="pt-3 border-t border-rose-100/60">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-slate-700">Potongan Alpa (Tanpa Izin)</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="enableAlphaPenalty"
+                          checked={formData.enableAlphaPenalty}
+                          onChange={handleChange}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-500"></div>
+                      </label>
+                    </div>
+                    {formData.enableAlphaPenalty && (
+                      <div>
+                        <input
+                          type="number"
+                          name="alphaPenaltyAmount"
+                          value={formData.alphaPenaltyAmount}
+                          onChange={handleChange}
+                          className="form-control text-xs font-bold text-rose-700"
+                          placeholder="50000"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Nominal potongan per hari alpa.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

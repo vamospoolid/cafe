@@ -3,7 +3,7 @@ import { History, Clock, FileText, CheckCircle, AlertTriangle, Play, Square } fr
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 const ShiftHistoryView = () => {
   const [shifts, setShifts] = useState<any[]>([]);
@@ -77,7 +77,7 @@ const ShiftHistoryView = () => {
       ]);
     });
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 28,

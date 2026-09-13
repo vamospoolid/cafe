@@ -235,12 +235,27 @@ router.post('/dinein', async (req: Request, res: Response) => {
     }
     const userId = defaultUser.id;
 
+    let resolvedTableId: number | null = null;
     if (tableId) {
-      const tableExists = await prisma.table.findUnique({
-        where: { id: Number(tableId) }
-      });
+      const numId = Number(tableId);
+      let tableExists = null;
+      if (!isNaN(numId)) {
+        tableExists = await prisma.table.findUnique({
+          where: { id: numId }
+        });
+      }
       if (!tableExists) {
-        return res.status(400).json({ error: 'Meja tidak ditemukan atau nomor meja tidak valid' });
+        const tableStr = String(tableId);
+        tableExists = await prisma.table.findFirst({
+          where: { tableNo: tableStr }
+        });
+        if (!tableExists) {
+          const allTables = await prisma.table.findMany();
+          tableExists = allTables.find(t => t.tableNo.toLowerCase() === tableStr.toLowerCase()) || null;
+        }
+      }
+      if (tableExists) {
+        resolvedTableId = tableExists.id;
       }
     }
 
@@ -254,6 +269,11 @@ router.post('/dinein', async (req: Request, res: Response) => {
       });
       const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
 
+      // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
+      const settings = await tx.settings.findFirst();
+      const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
+      const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
+
       // Buat Order Induk
       const order = await tx.order.create({
         data: {
@@ -261,7 +281,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
           customerName: customerName || `Pelanggan`,
           customerPhone,
           customerId: customerId ? Number(customerId) : null,
-          tableId: tableId ? Number(tableId) : null,
+          tableId: resolvedTableId,
           userId,
           subtotal: Number(subtotal),
           discount: 0,
@@ -270,7 +290,8 @@ router.post('/dinein', async (req: Request, res: Response) => {
           total: Number(total),
           paymentMethod: null,
           status: 'Pending',
-          kdsStatus: 'Pending',
+          kdsStatus: shouldAutoServe ? 'Served' : 'Pending',
+          servedAt: shouldAutoServe ? new Date() : null,
           
           items: {
             create: items.map((item: any) => ({
@@ -285,10 +306,6 @@ router.post('/dinein', async (req: Request, res: Response) => {
         },
         include: { items: true, table: true }
       });
-
-      // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
-      const settings = await tx.settings.findFirst();
-      const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
 
       for (const item of items) {
         await tx.product.update({
@@ -418,6 +435,11 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         const dateCreated = createdAt ? new Date(createdAt) : new Date();
         const datePaid = paidAt ? new Date(paidAt) : (isPaid ? new Date() : null);
 
+        // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
+        const settings = await tx.settings.findFirst();
+        const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
+        const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
+
         // Buat Order Induk
         const createdOrder = await tx.order.create({
           data: {
@@ -435,7 +457,8 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
             total: Number(total),
             paymentMethod: isPaid ? paymentMethod : null,
             status: isPaid ? 'Paid' : 'Pending',
-            kdsStatus: 'Pending',
+            kdsStatus: (isPaid && shouldAutoServe) ? 'Served' : 'Pending',
+            servedAt: (isPaid && shouldAutoServe) ? datePaid : null,
             createdAt: dateCreated,
             paidAt: datePaid,
             
@@ -452,10 +475,6 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
           },
           include: { items: true, table: true }
         });
-
-        // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
-        const settings = await tx.settings.findFirst();
-        const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
 
         for (const item of items) {
           await tx.product.update({
@@ -703,6 +722,12 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
       }
 
+      // Cek settings toko
+      const settings = await tx.settings.findFirst();
+      const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
+      const isActuallyPaid = Boolean(isPaid);
+      const nowPaid = isActuallyPaid ? new Date() : null;
+
       // 1. Buat Order Induk
       const order = await tx.order.create({
         data: {
@@ -717,10 +742,11 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           tax: Number(tax),
           serviceCharge: Number(serviceCharge),
           total: Number(total),
-          paymentMethod: isPaid ? paymentMethod : null,
-          status: isPaid ? 'Paid' : 'Pending',
-          kdsStatus: 'Pending', // Selalu dikirim ke dapur sebagai pending
-          paidAt: isPaid ? new Date() : null, // Fix #1: Catat waktu pembayaran untuk rekonsiliasi shift akurat
+          paymentMethod: isActuallyPaid ? paymentMethod : null,
+          status: isActuallyPaid ? 'Paid' : 'Pending',
+          kdsStatus: (isActuallyPaid && shouldAutoServe) ? 'Served' : 'Pending',
+          servedAt: (isActuallyPaid && shouldAutoServe) ? nowPaid : null,
+          paidAt: nowPaid, // Catat waktu pembayaran untuk rekonsiliasi shift akurat
           
           items: {
             create: items.map((item: any) => ({
@@ -738,7 +764,6 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
       // 2. Kurangi Stok Produk (Fix #6: validasi stok sebelum decrement)
       // Cek mode inventaris untuk menentukan apakah perlu decrement bahan baku juga
-      const settings = await tx.settings.findFirst();
       const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
 
       for (const item of items) {
@@ -816,14 +841,21 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       tableNo: (result as any).table?.tableNo || null
     });
 
-    // Auto-print tiket dapur (fire-and-forget)
+    // Auto-print tiket dapur & bar (fire-and-forget)
     const settingsPrint = await prisma.settings.findFirst();
-    if (settingsPrint?.autoPrintKDS) {
+    if (settingsPrint && (settingsPrint.autoPrintKitchen || settingsPrint.autoPrintKDS || settingsPrint.autoPrintBar)) {
       const fullOrder = await prisma.order.findUnique({
         where: { id: result.id },
-        include: { items: { include: { product: true } }, table: true }
+        include: { items: { include: { product: { include: { category: true } } } }, table: true, user: { select: { name: true, username: true } } }
       });
-      if (fullOrder) PrinterService.printKitchenTicket(fullOrder, settingsPrint).catch(e => console.error('[Printer KDS]', e.message));
+      if (fullOrder) {
+        if (settingsPrint.autoPrintKitchen || settingsPrint.autoPrintKDS) {
+          PrinterService.printKitchenTicket(fullOrder, settingsPrint).catch(e => console.error('[Printer KDS Kitchen]', e.message));
+        }
+        if (settingsPrint.autoPrintBar) {
+          PrinterService.printBarTicket(fullOrder, settingsPrint).catch(e => console.error('[Printer Bar]', e.message));
+        }
+      }
     }
 
     res.status(201).json({ message: 'Order berhasil dibuat', order: result });
@@ -862,6 +894,8 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 
       const updatedOrders = [];
       const paidNow = new Date(); // Fix #1: timestamp tunggal untuk semua order yang dibayar bersamaan
+      const settings = await tx.settings.findFirst();
+      const shouldAutoServe = !settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false;
       
       if (ids.length === 1) {
         const order = orders[0];
@@ -874,6 +908,10 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
           paymentMethod,
           paidAt: paidNow // Fix #1: rekam waktu bayar
         };
+        if (shouldAutoServe) {
+          updateData.kdsStatus = 'Served';
+          updateData.servedAt = paidNow;
+        }
         if (passedDiscount !== undefined) updateData.discount = passedDiscount;
         if (passedTotal !== undefined) updateData.total = passedTotal;
         if (finalCustomerId) updateData.customerId = finalCustomerId;
@@ -933,6 +971,10 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
             paymentMethod,
             paidAt: paidNow // Fix #1: rekam waktu bayar
           };
+          if (shouldAutoServe) {
+            updateData.kdsStatus = 'Served';
+            updateData.servedAt = paidNow;
+          }
           if (finalCustomerId) updateData.customerId = finalCustomerId;
 
           // Fix #2: Hitung porsi diskon proporsional per order

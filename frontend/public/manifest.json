@@ -1,16 +1,48 @@
 {
-  "short_name": "POS Cafe",
-  "name": "POS Cafe Codenusa",
+  "short_name": "SOL POS",
+  "name": "SOL Cafe - Point of Sale & KDS",
+  "description": "Sistem Kasir & Operasional Cafe Modern Offline-First untuk Tablet Android & Desktop",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#7C3AED",
+  "background_color": "#0F172A",
+  "categories": ["business", "productivity", "food"],
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-sol-cafe.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-sol-cafe.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": "/",
-  "background_color": "#ffffff",
-  "theme_color": "#4f46e5",
-  "display": "standalone",
-  "orientation": "portrait"
+  "shortcuts": [
+    {
+      "name": "Buka Kasir (POS)",
+      "short_name": "Kasir",
+      "description": "Buka langsung layar Kasir POS Penjualan",
+      "url": "/",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Kitchen Display (KDS)",
+      "short_name": "Dapur",
+      "description": "Buka layar antrean pesanan dapur",
+      "url": "/",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
+    }
+  ]
 }

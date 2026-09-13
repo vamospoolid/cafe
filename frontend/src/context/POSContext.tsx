@@ -21,11 +21,14 @@ interface POSContextType {
   settings: any;
   activeShift: any | null;
   isOnline: boolean;
+  offlineQueueCount: number;
   login: (userData: User, token: string) => void;
   logout: () => void;
   fetchSettings: () => Promise<void>;
   fetchActiveShift: () => Promise<void>;
-  syncOfflineOrders: (authToken: string) => Promise<void>;
+  syncOfflineOrders: (authToken?: string) => Promise<void>;
+  refreshOfflineQueueCount: () => Promise<void>;
+  triggerHaptic: (duration?: number) => void;
 }
 
 export const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -36,6 +39,24 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<any>(null);
   const [activeShift, setActiveShift] = useState<any>(null);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
+
+  const triggerHaptic = (duration = 35) => {
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(duration);
+      } catch (e) {}
+    }
+  };
+
+  const refreshOfflineQueueCount = async () => {
+    try {
+      const queue = await offlineDB.getOfflineQueue();
+      setOfflineQueueCount(queue.length);
+    } catch (e) {
+      console.error('Error getting offline queue count:', e);
+    }
+  };
 
   const fetchActiveShift = async () => {
     if (!token) return;
@@ -78,29 +99,37 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const syncOfflineOrders = async (authToken: string) => {
+  const syncOfflineOrders = async (authToken?: string) => {
+    const activeToken = authToken || token;
     try {
       const queue = await offlineDB.getOfflineQueue();
+      setOfflineQueueCount(queue.length);
       if (queue.length === 0) return;
 
-      console.log(`Menyinkronisasikan ${queue.length} transaksi offline ke server...`);
+      if (!activeToken) {
+        console.log('Belum login / tidak ada token untuk sinkronisasi pesanan offline.');
+        return;
+      }
+
+      console.log(`[PWA Sync] Menyinkronisasikan ${queue.length} transaksi offline ke server...`);
       const res = await fetch('/api/orders/sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`
+          Authorization: `Bearer ${activeToken}`
         },
         body: JSON.stringify({ orders: queue })
       });
 
       if (res.ok) {
-        // Hapus dari antrean lokal setelah sukses sinkronisasi
         for (const order of queue) {
           await offlineDB.removeOfflineOrder(order.offlineId);
         }
-        toast(`${queue.length} transaksi offline berhasil disinkronisasikan!`, 'success');
+        await refreshOfflineQueueCount();
+        triggerHaptic(60);
+        toast(`✅ ${queue.length} transaksi offline berhasil disinkronisasikan ke server!`, 'success');
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         console.error('Gagal melakukan sinkronisasi offline:', err.error);
         toast(err.error || 'Sinkronisasi offline gagal.', 'error');
       }
@@ -110,15 +139,16 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    refreshOfflineQueueCount();
+
     const handleOnline = () => {
       setIsOnline(true);
-      if (token) {
-        syncOfflineOrders(token);
-      }
+      toast('🌐 Koneksi internet tersambung kembali.', 'success');
+      syncOfflineOrders();
     };
     const handleOffline = () => {
       setIsOnline(false);
-      toast('Koneksi terputus. Mode Offline aktif.', 'warning');
+      toast('⚠️ Mode Offline Aktif. Transaksi disimpan di tablet.', 'warning');
     };
 
     window.addEventListener('online', handleOnline);
@@ -167,7 +197,21 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <POSContext.Provider value={{ user, token, settings, activeShift, isOnline, login, logout, fetchSettings, fetchActiveShift, syncOfflineOrders }}>
+    <POSContext.Provider value={{
+      user,
+      token,
+      settings,
+      activeShift,
+      isOnline,
+      offlineQueueCount,
+      login,
+      logout,
+      fetchSettings,
+      fetchActiveShift,
+      syncOfflineOrders,
+      refreshOfflineQueueCount,
+      triggerHaptic
+    }}>
       {children}
     </POSContext.Provider>
   );

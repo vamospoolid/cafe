@@ -9,14 +9,34 @@ const prisma = new PrismaClient();
 router.get('/public/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const table = await prisma.table.findUnique({
-      where: { id: Number(id) }
-    });
+    const numId = Number(id);
+    let table = null;
+
+    if (!isNaN(numId)) {
+      table = await prisma.table.findUnique({
+        where: { id: numId }
+      });
+    }
+
+    const paramId = String(id);
+    if (!table) {
+      table = await prisma.table.findFirst({
+        where: { tableNo: paramId }
+      });
+    }
+
+    if (!table) {
+      const allTables = await prisma.table.findMany();
+      table = allTables.find(t => t.tableNo.toLowerCase() === paramId.toLowerCase()) || null;
+    }
+
+    // Fallback: If still not found, check if there's any table at all
     if (!table) {
       return res.status(404).json({ error: 'Meja tidak ditemukan' });
     }
     res.json(table);
   } catch (error) {
+    console.error('Error fetching public table:', error);
     res.status(500).json({ error: 'Failed to fetch table details' });
   }
 });

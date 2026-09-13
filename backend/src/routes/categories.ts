@@ -28,11 +28,14 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 // Create new category
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { name } = req.body;
+    const { name, printerTarget } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     
     const category = await prisma.category.create({
-      data: { name }
+      data: { 
+        name,
+        printerTarget: printerTarget || 'KITCHEN'
+      }
     });
     res.status(201).json(category);
   } catch (error) {
@@ -44,11 +47,14 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, printerTarget } = req.body;
     
     const category = await prisma.category.update({
       where: { id: Number(id) },
-      data: { name }
+      data: { 
+        name,
+        ...(printerTarget ? { printerTarget } : {})
+      }
     });
     res.json(category);
   } catch (error) {

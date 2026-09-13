@@ -1,42 +1,58 @@
-import { useState, useEffect, useContext } from 'react';
-import { Calendar, DollarSign, TrendingUp, ShoppingBag, Layers, PieChart as PieChartIcon, Printer, User, Award, ListFilter, AlertTriangle, ArrowUpRight, ArrowDownRight, BookOpen, CreditCard, ChevronRight, RefreshCw, Download, Check, Search } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import React, { useState, useEffect, useContext } from 'react';
+import { 
+  Calendar, DollarSign, TrendingUp, ShoppingBag, Layers, PieChart as PieChartIcon, 
+  Printer, User, Award, ListFilter, AlertTriangle, ArrowUpRight, ArrowDownRight, 
+  BookOpen, CreditCard, ChevronRight, RefreshCw, Download, Check, Search, 
+  FileText, Utensils, Coffee, CheckCircle2, X, Sparkles, SlidersHorizontal, BarChart3, Clock,
+  Boxes, Users, Receipt, Package, Flame, Percent
+} from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { exportFinancialPDF } from '../utils/pdfGenerator';
 
-const COLORS = ['#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#3b82f6'];
-
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-type TabType = 'dashboard' | 'products' | 'product_details' | 'shifts' | 'inventory' | 'transactions' | 'accounting';
-type AccountingSubTabType = 'pl' | 'cashflow' | 'ledger';
+type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory' | 'accounting';
 
-const ReportView = () => {
+export const ReportView: React.FC = () => {
+  const posContext = useContext(POSContext);
+  const token = posContext?.token;
+
+  // Date Filters
   const [quickFilter, setQuickFilter] = useState<QuickFilterType>('month');
   const [startDate, setStartDate] = useState(() => {
-    // Default to last 30 days
     const d = new Date();
     d.setDate(d.getDate() - 30);
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-  const [accountingSubTab, setAccountingSubTab] = useState<AccountingSubTabType>('pl');
+
+  // Main Tabs Navigation
+  const [activeTab, setActiveTab] = useState<MainTabType>('dashboard');
+  
+  // Sub-tabs
+  const [shiftTxSubTab, setShiftTxSubTab] = useState<'shifts' | 'transactions'>('shifts');
+  const [accountingSubTab, setAccountingSubTab] = useState<'pl' | 'cashflow' | 'ledger'>('pl');
+  const [chartViewMode, setChartViewMode] = useState<'all' | 'revenue' | 'profit' | 'hpp' | 'category'>('all');
+
+  // Loading state
   const [loading, setLoading] = useState(true);
 
-  // Search & Sort States
+  // PDF Export Modal State
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  // Product Report Search & Sorting
   const [productSearch, setProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('Semua');
   const [productSortKey, setProductSortKey] = useState<'qty' | 'revenue' | 'profit' | 'margin'>('qty');
   const [productSortOrder, setProductSortOrder] = useState<'asc' | 'desc'>('desc');
-  
-  const [productDetailSearch, setProductDetailSearch] = useState('');
-  const [transactionSearch, setTransactionSearch] = useState('');
-  
-  const [inventorySearch, setInventorySearch] = useState('');
-  const [inventorySortKey, setInventorySortKey] = useState<'stockAwal' | 'masuk' | 'keluarProduksi' | 'stockAkhir' | 'totalValuation'>('totalValuation');
-  const [inventorySortOrder, setInventorySortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Laporan Data
+  // Transaction & Inventory Search
+  const [txSearch, setTxSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
+
+  // Data States
   const [reportData, setReportData] = useState<any>({
     summary: { revenue: 0, profit: 0, hpp: 0, transactionsCount: 0, discounts: 0, tax: 0, serviceCharge: 0 },
     paymentMethods: { Tunai: { count: 0, amount: 0 }, QRIS: { count: 0, amount: 0 }, Kartu: { count: 0, amount: 0 }, Split: { count: 0, amount: 0 } },
@@ -48,1541 +64,1570 @@ const ReportView = () => {
     dailyTimeline: []
   });
 
-  // Product Details & Transactions State
-  const [productDetailsData, setProductDetailsData] = useState<any>({
-    summary: { totalAssetValuation: 0, totalPotentialSales: 0, criticalProductsCount: 0 },
-    products: []
-  });
-  const [transactionsData, setTransactionsData] = useState<any[]>([]);
-
-  // Accounting Data
   const [accountingData, setAccountingData] = useState<any>({
     profitLoss: { operatingRevenue: 0, salesRevenue: 0, otherRevenue: 0, shiftOverage: 0, cogs: 0, grossProfit: 0, operatingExpenses: 0, opexAmount: 0, shiftShortage: 0, netIncome: 0 },
     cashFlow: { inflow: { salesReceipts: 0, otherReceipts: 0, overages: 0, total: 0 }, outflow: { opexPayments: 0, shortages: 0, total: 0 }, netCashFlow: 0 },
     journals: []
   });
 
-  // Inventory Report Data
   const [inventoryData, setInventoryData] = useState<any>({
     summary: { totalAssetValuation: 0, criticalItemsCount: 0, totalMutationsCount: 0 },
     inventory: []
   });
 
-  const posContext = useContext(POSContext);
+  const [transactionsData, setTransactionsData] = useState<any[]>([]);
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
-  const downloadCSVFile = (filename: string, content: string) => {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const exportCSV = () => {
-    if (activeTab === 'inventory') {
-      const headers = ['Nama Bahan Baku', 'Satuan', 'Supplier', 'Stok Awal', 'Masuk (Restock/PO)', 'Keluar (Produksi)', 'Keluar (Rusak)', 'Penyesuaian', 'Stok Akhir', 'Estimasi Nilai Aset'];
-      const data = inventoryData.inventory?.map((item: any) => [
-        item.name,
-        item.unit,
-        item.supplierName,
-        item.stockAwal,
-        item.masuk,
-        item.keluarProduksi,
-        item.keluarRusak,
-        item.penyesuaian,
-        item.stockAkhir,
-        item.totalValuation
-      ]) || [];
-
-      const csvRows = [headers.join(',')];
-      data.forEach((row: any) => {
-        csvRows.push(row.map((val: any) => `"${String(val).replace(/"/g, '""')}"`).join(','));
-      });
-      downloadCSVFile(`Laporan_Stok_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
-    } else if (activeTab === 'products') {
-      const headers = ['Nama Menu', 'Kategori', 'Terjual (Qty)', 'Omzet Kotor', 'Total HPP', 'Keuntungan', 'Margin Laba (%)'];
-      const data = reportData.products?.map((p: any) => [
-        p.name,
-        p.category,
-        p.qty,
-        p.revenue,
-        p.cost,
-        p.profit,
-        p.margin
-      ]) || [];
-
-      const csvRows = [headers.join(',')];
-      data.forEach((row: any) => {
-        csvRows.push(row.map((val: any) => `"${String(val).replace(/"/g, '""')}"`).join(','));
-      });
-      downloadCSVFile(`Laporan_Penjualan_Menu_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
-    } else if (activeTab === 'accounting') {
-      if (accountingSubTab === 'pl') {
-        const headers = ['Keterangan', 'Nominal'];
-        const data = [
-          ['1. PENDAPATAN OPERASIONAL', ''],
-          ['Penjualan Bersih Kasir', accountingData.profitLoss?.salesRevenue || 0],
-          ['Pendapatan Lain-lain (Petty Cash Masuk)', accountingData.profitLoss?.otherRevenue || 0],
-          ['Kelebihan Uang Kasir (Overage)', accountingData.profitLoss?.shiftOverage || 0],
-          ['Total Pendapatan Operasional', accountingData.profitLoss?.operatingRevenue || 0],
-          ['', ''],
-          ['2. HARGA POKOK PENJUALAN (HPP)', ''],
-          ['Beban Pokok Persediaan Bahan Baku (HPP)', -(accountingData.profitLoss?.cogs || 0)],
-          ['Total Beban HPP', -(accountingData.profitLoss?.cogs || 0)],
-          ['', ''],
-          ['LABA KOTOR (GROSS PROFIT)', accountingData.profitLoss?.grossProfit || 0],
-          ['', ''],
-          ['3. BEBAN OPERASIONAL (OPEX)', ''],
-          ['Beban Kas Operasional (Petty Cash Keluar)', -(accountingData.profitLoss?.opexAmount || 0)],
-          ['Kekurangan Uang Kasir (Shortage)', -(accountingData.profitLoss?.shiftShortage || 0)],
-          ['Total Beban Operasional', -(accountingData.profitLoss?.operatingExpenses || 0)],
-          ['', ''],
-          ['LABA BERSIH OPERASIONAL (NET INCOME)', accountingData.profitLoss?.netIncome || 0]
-        ];
-        
-        const csvRows = [headers.join(',')];
-        data.forEach(row => {
-          csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
-        });
-        
-        downloadCSVFile(`Laba_Rugi_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
-      } else if (accountingSubTab === 'cashflow') {
-        const headers = ['Kategori / Keterangan', 'Kas Masuk', 'Kas Keluar'];
-        const data = [
-          ['ARUS KAS MASUK (INFLOW)', '', ''],
-          ['Penerimaan Uang dari Pelanggan (Omzet)', accountingData.cashFlow?.inflow?.salesReceipts || 0, ''],
-          ['Penerimaan Petty Cash', accountingData.cashFlow?.inflow?.otherReceipts || 0, ''],
-          ['Akumulasi Kelebihan Uang Laci Shift', accountingData.cashFlow?.inflow?.overages || 0, ''],
-          ['Total Kas Masuk', accountingData.cashFlow?.inflow?.total || 0, ''],
-          ['', '', ''],
-          ['ARUS KAS KELUAR (OUTFLOW)', '', ''],
-          ['Pembayaran Biaya Petty Cash', '', -(accountingData.cashFlow?.outflow?.opexPayments || 0)],
-          ['Akumulasi Kekurangan Uang Laci Shift', '', -(accountingData.cashFlow?.outflow?.shortages || 0)],
-          ['Total Kas Keluar', '', -(accountingData.cashFlow?.outflow?.total || 0)],
-          ['', '', ''],
-          ['KENAIKAN/(PENURUNAN) KAS BERSIH', accountingData.cashFlow?.netCashFlow || 0, '']
-        ];
-        
-        const csvRows = [headers.join(',')];
-        data.forEach(row => {
-          csvRows.push(row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
-        });
-        
-        downloadCSVFile(`Arus_Kas_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
-      } else if (accountingSubTab === 'ledger') {
-        const headers = ['Tanggal', 'Referensi', 'Keterangan Transaksi', 'Nama Akun', 'Debit', 'Kredit'];
-        const csvRows = [headers.join(',')];
-        
-        accountingData.journals?.forEach((j: any) => {
-          j.lines?.forEach((l: any, idx: number) => {
-            const dateStr = new Date(j.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            csvRows.push([
-              idx === 0 ? dateStr : '',
-              idx === 0 ? j.reference : '',
-              idx === 0 ? j.description : '',
-              l.account,
-              l.debit > 0 ? l.debit : 0,
-              l.credit > 0 ? l.credit : 0
-            ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
-          });
-        });
-        
-        downloadCSVFile(`Buku_Besar_${startDate}_to_${endDate}.csv`, csvRows.join('\n'));
-      }
-    }
-  };
-
-  const fetchReport = async () => {
+  const fetchAllReportData = async () => {
     setLoading(true);
     try {
-      const headers = { Authorization: `Bearer ${posContext?.token}` };
-      const [resReports, resAccounting, resInventory, resProductDetails, resTransactions] = await Promise.all([
+      const headers = { Authorization: `Bearer ${token}` };
+      const [resReports, resAccounting, resInventory, resTransactions] = await Promise.all([
         fetch(`/api/analytics/reports?startDate=${startDate}&endDate=${endDate}`, { headers }),
         fetch(`/api/analytics/accounting?startDate=${startDate}&endDate=${endDate}`, { headers }),
         fetch(`/api/analytics/inventory?startDate=${startDate}&endDate=${endDate}`, { headers }),
-        fetch(`/api/analytics/product-details`, { headers }),
         fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}`, { headers })
       ]);
 
-      if (resReports.ok) {
-        setReportData(await resReports.json());
-      }
-      if (resAccounting.ok) {
-        setAccountingData(await resAccounting.json());
-      }
-      if (resInventory.ok) {
-        setInventoryData(await resInventory.json());
-      }
-      if (resProductDetails.ok) {
-        setProductDetailsData(await resProductDetails.json());
-      }
-      if (resTransactions.ok) {
-        setTransactionsData(await resTransactions.json());
-      }
+      if (resReports.ok) setReportData(await resReports.json());
+      if (resAccounting.ok) setAccountingData(await resAccounting.json());
+      if (resInventory.ok) setInventoryData(await resInventory.json());
+      if (resTransactions.ok) setTransactionsData(await resTransactions.json());
     } catch (err) {
       console.error(err);
-      toast('Terjadi kesalahan jaringan', 'error');
+      toast('Terjadi kesalahan saat memuat data laporan', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle Quick Filter presets
   useEffect(() => {
+    if (token) fetchAllReportData();
+  }, [token, startDate, endDate]);
+
+  // Quick Filter preset handler
+  const handleQuickFilter = (type: QuickFilterType) => {
+    setQuickFilter(type);
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
 
-    if (quickFilter === 'today') {
+    if (type === 'today') {
       setStartDate(todayStr);
       setEndDate(todayStr);
-    } else if (quickFilter === 'yesterday') {
+    } else if (type === 'yesterday') {
       const yesterday = new Date();
       yesterday.setDate(today.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
       setStartDate(yesterdayStr);
       setEndDate(yesterdayStr);
-    } else if (quickFilter === 'week') {
+    } else if (type === 'week') {
       const weekAgo = new Date();
-      weekAgo.setDate(today.getDate() - 6);
+      weekAgo.setDate(today.getDate() - 7);
       setStartDate(weekAgo.toISOString().split('T')[0]);
       setEndDate(todayStr);
-    } else if (quickFilter === 'month') {
-      const lastMonth = new Date();
-      lastMonth.setDate(today.getDate() - 30);
-      setStartDate(lastMonth.toISOString().split('T')[0]);
+    } else if (type === 'month') {
+      const monthAgo = new Date();
+      monthAgo.setDate(today.getDate() - 30);
+      setStartDate(monthAgo.toISOString().split('T')[0]);
       setEndDate(todayStr);
     }
-  }, [quickFilter]);
+  };
 
-  // Fetch when range changes
-  useEffect(() => {
-    if (posContext?.token) {
-      fetchReport();
-    }
-  }, [posContext?.token, startDate, endDate]);
+  // PDF Export Handler
+  const handleGeneratePdf = async (type: string) => {
+    setExportingPdf(true);
+    try {
+      let dataToPass: any = null;
+      if (type === 'products') dataToPass = reportData.products || [];
+      else if (type === 'pl') dataToPass = accountingData.profitLoss;
+      else if (type === 'cashflow') dataToPass = accountingData.cashFlow;
+      else if (type === 'ledger') dataToPass = accountingData;
+      else if (type === 'shifts') dataToPass = reportData.shifts || [];
+      else if (type === 'inventory') dataToPass = inventoryData;
+      else if (type === 'dashboard') dataToPass = reportData;
 
-  const handlePrint = async () => {
-    if (activeTab === 'accounting') {
       await exportFinancialPDF(
-        accountingSubTab,
-        posContext?.settings || {},
-        accountingData,
+        type,
+        posContext?.settings || { storeName: 'MUKI RAMEN' },
+        dataToPass,
         startDate,
         endDate,
-        (posContext?.user as any)?.name || 'Admin'
+        posContext?.user?.username || 'Admin'
       );
+      toast('✅ Dokumen PDF berhasil diunduh!', 'success');
+      setShowPdfModal(false);
+    } catch (e: any) {
+      console.error(e);
+      toast('Gagal mencetak PDF laporan', 'error');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  // CSV Export Helper
+  const downloadCSVFile = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportCSV = () => {
+    if (activeTab === 'products') {
+      const headers = ['Nama Menu', 'Kategori', 'Terjual (Qty)', 'Omzet Kotor', 'Total HPP', 'Keuntungan', 'Margin (%)'];
+      const rows = (reportData.products || []).map((p: any) => [
+        `"${p.name}"`, `"${p.category}"`, p.qty, p.revenue, p.cost, p.profit, `${p.margin}%`
+      ]);
+      downloadCSVFile(`Laporan_Penjualan_Menu_${startDate}_sd_${endDate}.csv`, [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n'));
+      toast('File CSV Penjualan Menu berhasil diunduh', 'success');
     } else if (activeTab === 'inventory') {
-      await exportFinancialPDF(
-        'inventory',
-        posContext?.settings || {},
-        inventoryData,
-        startDate,
-        endDate,
-        (posContext?.user as any)?.name || 'Admin'
-      );
-    } else if (activeTab === 'product_details') {
-      // Find filtered product details to export
-      const query = productDetailSearch.toLowerCase();
-      const filteredDetails = (productDetailsData.products || []).filter((p: any) =>
-        p.name.toLowerCase().includes(query) || p.barcode.toLowerCase().includes(query) || p.categoryName.toLowerCase().includes(query)
-      );
-      await exportFinancialPDF(
-        'product_details',
-        posContext?.settings || {},
-        { ...productDetailsData, products: filteredDetails },
-        startDate,
-        endDate,
-        (posContext?.user as any)?.name || 'Admin'
-      );
-    } else if (activeTab === 'transactions') {
-      // Find filtered transactions to export
-      const query = transactionSearch.toLowerCase();
-      const filteredTransactions = transactionsData.filter((o: any) =>
-        o.orderNumber.toLowerCase().includes(query) || o.customerName.toLowerCase().includes(query)
-      );
-      await exportFinancialPDF(
-        'transactions',
-        posContext?.settings || {},
-        filteredTransactions,
-        startDate,
-        endDate,
-        (posContext?.user as any)?.name || 'Admin'
-      );
-    } else if (activeTab === 'products') {
-      // Find filtered products to export the exact view
-      const query = productSearch.toLowerCase();
-      const filteredProducts = (reportData.products || [])
-        .filter((p: any) => p.name.toLowerCase().includes(query) || p.category.toLowerCase().includes(query))
-        .sort((a: any, b: any) => {
-          let valA = a[productSortKey];
-          let valB = b[productSortKey];
-          if (productSortOrder === 'asc') return valA > valB ? 1 : -1;
-          return valA < valB ? 1 : -1;
-        });
-      await exportFinancialPDF(
-        'products',
-        posContext?.settings || {},
-        filteredProducts,
-        startDate,
-        endDate,
-        (posContext?.user as any)?.name || 'Admin'
-      );
-    } else if (activeTab === 'shifts') {
-      await exportFinancialPDF(
-        'shifts',
-        posContext?.settings || {},
-        reportData.shifts || [],
-        startDate,
-        endDate,
-        (posContext?.user as any)?.name || 'Admin'
-      );
-    } else if (activeTab === 'dashboard') {
-      await exportFinancialPDF(
-        'dashboard',
-        posContext?.settings || {},
-        reportData,
-        startDate,
-        endDate,
-        (posContext?.user as any)?.name || 'Admin'
-      );
+      const headers = ['Nama Bahan', 'Satuan', 'Stok Awal', 'Masuk', 'Keluar', 'Stok Akhir', 'Nilai Aset'];
+      const rows = (inventoryData.inventory || []).map((i: any) => [
+        `"${i.name}"`, `"${i.unit}"`, i.stockAwal, i.masuk, i.keluarProduksi, i.stockAkhir, i.totalValuation
+      ]);
+      downloadCSVFile(`Laporan_Stok_Bahan_${startDate}_sd_${endDate}.csv`, [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n'));
+      toast('File CSV Stok Bahan berhasil diunduh', 'success');
+    } else {
+      toast('Pilih tab Penjualan Menu atau Stok untuk export CSV', 'info');
     }
   };
 
-  const getMarginBadgeStyle = (margin: number) => {
-    if (margin >= 60) return { bg: 'rgba(16,185,129,0.1)', text: '#10b981', label: 'Tinggi' };
-    if (margin >= 40) return { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6', label: 'Sedang' };
-    return { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b', label: 'Rendah' };
-  };
+  // Products Data Processing
+  const rawProducts = reportData.products || [];
+  const productCategories: string[] = ['Semua', ...(Array.from(new Set(rawProducts.map((p: any) => String(p.category || 'Lainnya')))) as string[])];
+  
+  const filteredProducts = rawProducts
+    .filter((p: any) => {
+      const matchSearch = p.name.toLowerCase().includes(productSearch.toLowerCase());
+      const matchCat = productCategoryFilter === 'Semua' || p.category === productCategoryFilter;
+      return matchSearch && matchCat;
+    })
+    .sort((a: any, b: any) => {
+      let valA = a[productSortKey] || 0;
+      let valB = b[productSortKey] || 0;
+      return productSortOrder === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+    });
+
+  // Top 3 Best Sellers
+  const topSellers = [...rawProducts].sort((a: any, b: any) => (b.qty || 0) - (a.qty || 0)).slice(0, 3);
+  const totalQtySold = rawProducts.reduce((sum: number, p: any) => sum + (p.qty || 0), 0);
+  const totalMenuRevenue = rawProducts.reduce((sum: number, p: any) => sum + (p.revenue || 0), 0);
+  const totalMenuProfit = rawProducts.reduce((sum: number, p: any) => sum + (p.profit || 0), 0);
+  const avgMargin = totalMenuRevenue > 0 ? Math.round((totalMenuProfit / totalMenuRevenue) * 100) : 0;
 
   return (
-    <div className="report-container" style={{ padding: '1.5rem', height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc', color: '#1e293b', overflowY: 'auto', gap: '1.5rem', boxSizing: 'border-box', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       
-      {/* CSS Print Styles */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .report-container, .report-container * {
-            visibility: visible;
-          }
-          .report-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background: white !important;
-            color: black !important;
-            padding: 0 !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-          .card {
-            border: 1px solid #cbd5e1 !important;
-            box-shadow: none !important;
-            background: white !important;
-            color: black !important;
-          }
-        }
-        
-        .card-premium {
-          background: white;
-          border: 1px solid rgba(226, 232, 240, 0.8);
-          border-radius: 1.25rem;
-          padding: 1.25rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.35rem;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .card-premium:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 12px 20px -3px rgba(0, 0, 0, 0.08), 0 4px 8px -2px rgba(0, 0, 0, 0.04);
-          border-color: rgba(16, 185, 129, 0.3);
-        }
-        
-        .badge-premium {
-          font-size: 0.72rem;
-          font-weight: 800;
-          padding: 0.25rem 0.6rem;
-          border-radius: 9999px;
-          display: inline-flex;
-          align-items: center;
-          gap: 0.25rem;
-        }
-        
-        .table-premium {
-          width: 100%;
-          border-collapse: separate;
-          border-spacing: 0;
-        }
-        .table-premium th {
-          background: #f8fafc;
-          border-bottom: 2px solid #e2e8f0;
-          padding: 0.875rem 1.25rem;
-          text-align: left;
-          font-size: 0.7rem;
-          font-weight: 800;
-          color: #64748b;
-          letter-spacing: 0.05em;
-          text-transform: uppercase;
-        }
-        .table-premium td {
-          padding: 1rem 1.25rem;
-          font-size: 0.82rem;
-          color: #334155;
-          border-bottom: 1px solid #e2e8f0;
-        }
-        .table-premium tr {
-          transition: background 0.15s ease;
-        }
-        .table-premium tr:hover td {
-          background: #f8fafc !important;
-        }
-        .table-premium tr:last-child td {
-          border-bottom: none;
-        }
-        
-        .paper-report-container {
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 1.5rem;
-          padding: 2.5rem;
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
-          max-width: 780px;
-          margin: 0 auto;
-          width: 100%;
-          box-sizing: border-box;
-        }
-        
-        .glow-pulse {
-          animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        @keyframes pulse-glow {
-          0%, 100% {
-            opacity: 1;
-            transform: scale(1);
-          }
-          50% {
-            opacity: 0.85;
-            transform: scale(1.02);
-          }
-        }
-        
-        .grid-7-cards {
-          display: grid;
-          grid-template-columns: repeat(7, 1fr);
-          gap: 0.75rem;
-        }
-        @media (max-width: 1200px) {
-          .grid-7-cards {
-            grid-template-columns: repeat(4, 1fr);
-          }
-        }
-        @media (max-width: 768px) {
-          .grid-7-cards {
-            grid-template-columns: repeat(2, 1fr);
-          }
-        }
-      `}</style>
-
-      {/* ─── Top Info Bar ─── */}
-      <div style={{ background: 'rgba(16,185,129,0.08)', borderLeft: '4px solid #10b981', padding: '0.65rem 1rem', borderRadius: '0.5rem', fontSize: '0.78rem', color: '#10b981', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#10b981', animation: 'pulse 1.5s infinite' }} />
-        INFO: REKAP HARIAN DIHITUNG PER SIKLUS OPERASIONAL KAFE (09:00 - SELESAI)
-      </div>
-
-      {/* ─── Header & Print Button (no-print) ─── */}
-      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.4rem', color: '#1e293b', margin: 0 }}>
-            <TrendingUp color="#10b981" size={24} /> Laporan Penjualan & Keuangan Cafe
-          </h2>
-          <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0.25rem 0 0' }}>Pantau perkembangan omzet, P&L, arus kas, dan kinerja porsi menu terjual</p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button
-            onClick={fetchReport}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.75rem', cursor: 'pointer', color: '#64748b', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button
-            onClick={handlePrint}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.65rem 1.1rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem', boxShadow: '0 4px 14px rgba(16,185,129,0.2)' }}
-          >
-            <Printer size={16} /> Unduh Laporan PDF
-          </button>
-        </div>
-      </div>
-
-      {/* ─── Today's Summary Grid (Rekap Hari Ini - 7 Cards) ─── */}
-      <div>
-        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#475569', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ringkasan Operasional Hari Ini</div>
-        <div className="grid-7-cards">
-          
-          {/* Revenue Hari Ini */}
-          <div className="card-premium">
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Revenue Hari Ini</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.todayRecap?.revenue)}</span>
-            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Pendapatan hari ini</span>
+      {/* ─────────────────────────────────────────────────────────────
+          1. STICKY TOP BAR: JUDUL, QUICK FILTER TANGGAL & ACTION BUTTONS
+      ────────────────────────────────────────────────────────────── */}
+      <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+              <span style={{ padding: '.25rem .6rem', background: '#ede9fe', color: '#7c3aed', borderRadius: '.5rem', fontSize: '.75rem', fontWeight: 800 }}>
+                {posContext?.settings?.storeName || 'MUKI RAMEN'}
+              </span>
+              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.4rem', color: '#0f172a' }}>
+                Laporan & Analisis Bisnis
+              </h2>
+            </div>
+            <p style={{ margin: '.25rem 0 0', fontSize: '.82rem', color: '#64748b' }}>
+              Pantau omzet, laba kotor per menu, rekap shift kasir, dan laporan keuangan formal
+            </p>
           </div>
 
-          {/* Tagihan Pending */}
-          <div className="card-premium">
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Tagihan Pending</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f59e0b' }}>{formatCurrency(reportData.todayRecap?.pendingAmount)}</span>
-            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>{reportData.todayRecap?.pendingCount} tagihan belum lunas</span>
-          </div>
-
-          {/* Total Pengeluaran */}
-          <div className="card-premium">
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Pengeluaran</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#ef4444' }}>{formatCurrency(reportData.todayRecap?.expenses)}</span>
-            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Operasional & petty cash</span>
-          </div>
-
-          {/* Total Cash Hari Ini */}
-          <div className="card-premium">
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Cash Hari Ini</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f59e0b' }}>{formatCurrency(reportData.todayRecap?.cashInDrawer)}</span>
-            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Est. uang laci + modal awal</span>
-          </div>
-
-          {/* Total Porsi Terjual */}
-          <div className="card-premium">
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Porsi Terjual</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#3b82f6' }}>{reportData.todayRecap?.qtySold} Qty</span>
-            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Makanan & minuman</span>
-          </div>
-
-          {/* Pemasukan Lain */}
-          <div className="card-premium">
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Pemasukan Lain</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.todayRecap?.otherIncomes)}</span>
-            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Pemasukan manual kas</span>
-          </div>
-
-          {/* Transaksi QRIS */}
-          <div className="card-premium">
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Transaksi QRIS</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#7c3aed' }}>{formatCurrency(reportData.todayRecap?.qris)}</span>
-            <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Pembayaran non-tunai</span>
-          </div>
-
-        </div>
-      </div>
-
-      {/* ─── Period Date Filter Bar (no-print) ─── */}
-      <div className="no-print" style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '0.85rem 1.25rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-        
-        {/* Date pickers */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Dari</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => {
-                setStartDate(e.target.value);
-                setQuickFilter('custom');
-              }}
-              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.4rem 0.65rem', color: '#334155', fontSize: '0.8rem', fontWeight: 600 }}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Ke</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={e => {
-                setEndDate(e.target.value);
-                setQuickFilter('custom');
-              }}
-              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.4rem 0.65rem', color: '#334155', fontSize: '0.8rem', fontWeight: 600 }}
-            />
-          </div>
-          <button
-            onClick={fetchReport}
-            style={{ background: '#10b981', border: 'none', borderRadius: '0.5rem', color: 'white', padding: '0.45rem 1rem', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 2px 4px rgba(16,185,129,0.1)' }}
-          >
-            Terapkan Filter
-          </button>
-        </div>
-
-        {/* Quick filter selector */}
-        <div style={{ display: 'flex', background: '#f1f5f9', padding: '0.25rem', borderRadius: '0.625rem', gap: '0.15rem' }}>
-          {[
-            { key: 'today', label: 'Hari Ini' },
-            { key: 'yesterday', label: 'Kemarin' },
-            { key: 'week', label: 'Mingguan' },
-            { key: 'month', label: 'Bulanan' },
-            { key: 'custom', label: 'Kustom' }
-          ].map(f => (
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', flexWrap: 'wrap' }}>
             <button
-              key={f.key}
-              onClick={() => setQuickFilter(f.key as QuickFilterType)}
-              style={{ border: 'none', background: quickFilter === f.key ? '#10b981' : 'transparent', color: quickFilter === f.key ? 'white' : '#64748b', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.12s' }}
+              onClick={() => setShowPdfModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1.15rem',
+                background: 'linear-gradient(135deg, #7c3aed, #6366f1)', color: 'white',
+                border: 'none', borderRadius: '.75rem', fontWeight: 800, fontSize: '.85rem',
+                cursor: 'pointer', boxShadow: '0 4px 12px rgba(124,58,237,0.3)', transition: 'all 0.15s'
+              }}
             >
-              {f.label}
+              <Printer size={16} /> Unduh PDF Resmi
             </button>
-          ))}
-        </div>
 
-      </div>
+            <button
+              onClick={handleExportCSV}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1rem',
+                background: 'white', color: '#334155', border: '1px solid #cbd5e1',
+                borderRadius: '.75rem', fontWeight: 700, fontSize: '.82rem', cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <Download size={15} /> Export CSV
+            </button>
 
-      {/* ─── Period Performance Cards (Based on Date Filter) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.75rem' }}>
-        
-        {/* Period Net Income */}
-        <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
-          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Net Income</span>
-          <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.periodRecap?.netIncome)}</span>
-          <span style={{ fontSize: '0.62rem', color: '#64748b' }}>Rev: {formatCurrency(reportData.periodRecap?.revenue)} - Exp: {formatCurrency(reportData.periodRecap?.expenses)}</span>
-        </div>
-
-        {/* Period Total Revenue */}
-        <div className="card-premium">
-          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Total Revenue</span>
-          <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(reportData.periodRecap?.revenue)}</span>
-          <span style={{ fontSize: '0.58rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Mkn: {formatCurrency(reportData.periodRecap?.revenueBreakdown?.makanan)} - Mnm: {formatCurrency(reportData.periodRecap?.revenueBreakdown?.minuman)}
-          </span>
-        </div>
-
-        {/* Trend vs Yesterday / Previous Period */}
-        <div className="card-premium">
-          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Trend vs Previous Period</span>
-          <span style={{ fontSize: '1.2rem', fontWeight: 900, color: reportData.periodRecap?.growth >= 0 ? '#10b981' : '#ef4444' }}>
-            {reportData.periodRecap?.growth >= 0 ? '+' : ''}{reportData.periodRecap?.growth?.toFixed(1)}%
-          </span>
-          <span style={{ fontSize: '0.62rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
-            {reportData.periodRecap?.growth >= 0 ? (
-              <span style={{ color: '#10b981', display: 'flex', alignItems: 'center' }}><ArrowUpRight size={12} /> growth</span>
-            ) : (
-              <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center' }}><ArrowDownRight size={12} /> decline</span>
-            )}
-          </span>
-        </div>
-
-        {/* Period Dine-In Revenue */}
-        <div className="card-premium">
-          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Dine-In Bill</span>
-          <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#3b82f6' }}>{formatCurrency(reportData.periodRecap?.dineIn)}</span>
-          <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Penjualan makan di tempat</span>
-        </div>
-
-        {/* Period Takeaway Revenue */}
-        <div className="card-premium">
-          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Takeaway Bill</span>
-          <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#f59e0b' }}>{formatCurrency(reportData.periodRecap?.takeaway)}</span>
-          <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Penjualan bungkus / ojek online</span>
-        </div>
-
-        {/* Period Trx QRIS */}
-        <div className="card-premium">
-          <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Period Trx QRIS</span>
-          <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#7c3aed' }}>{formatCurrency(reportData.periodRecap?.qrisTotal)}</span>
-          <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total dari {reportData.periodRecap?.qrisCount} transaksi QRIS</span>
-        </div>
-
-      </div>
-
-      {/* ─── Navigation Tabs (no-print) ─── */}
-      <div className="no-print" style={{ 
-        display: 'flex', 
-        gap: '0.75rem', 
-        borderBottom: '1px solid #e2e8f0', 
-        paddingBottom: '0.5rem', 
-        overflowX: 'auto',
-        position: 'sticky',
-        top: '-1.5rem',
-        background: '#f8fafc',
-        zIndex: 40,
-        paddingTop: '1.5rem',
-        marginTop: '-0.5rem'
-      }}>
-        {[
-          { key: 'dashboard', label: 'Dashboard Laporan', icon: <PieChartIcon size={16} /> },
-          { key: 'products', label: 'Penjualan Per-Menu (Margin)', icon: <Award size={16} /> },
-          { key: 'product_details', label: 'Detail Menu & Valuasi', icon: <ShoppingBag size={16} /> },
-          { key: 'shifts', label: 'Laporan Audit Shift', icon: <User size={16} /> },
-          { key: 'inventory', label: 'Laporan Stok & Mutasi', icon: <Layers size={16} /> },
-          { key: 'transactions', label: 'Riwayat Transaksi', icon: <ListFilter size={16} /> },
-          { key: 'accounting', label: 'Laba Rugi & Arus Kas', icon: <BookOpen size={16} /> }
-        ].map(t => (
-          <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key as TabType)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: 'transparent', borderBottom: activeTab === t.key ? '3px solid #10b981' : '3px solid transparent', color: activeTab === t.key ? '#10b981' : '#64748b', fontWeight: 700, fontSize: '0.85rem', padding: '0.5rem 1rem', cursor: 'pointer', transition: 'all 0.12s', whiteSpace: 'nowrap' }}
-          >
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ─── TAB CONTENT 1: DASHBOARD LAPORAN (Vamos Pool Style) ─── */}
-      {activeTab === 'dashboard' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          
-          {/* Revenue Trend Chart */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>Revenue Trend (Selected Period)</h3>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Financial trajectory and growth over the selected period</span>
-              </div>
-              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.7rem', fontWeight: 700 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#f59e0b' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} /> Minuman
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#10b981' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} /> Makanan
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#7c3aed' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7c3aed' }} /> Total Omzet
-                </span>
-              </div>
-            </div>
-
-            <div style={{ height: 260 }}>
-              {reportData.dailyTimeline?.length === 0 ? (
-                <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '0.8rem' }}>
-                  Tidak ada data untuk grafik pada rentang tanggal ini.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={reportData.dailyTimeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.15}/>
-                        <stop offset="95%" stopColor="#7c3aed" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorMakanan" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorMinuman" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="dateLabel" stroke="#64748b" fontSize={10} tickLine={false} />
-                    <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `Rp ${val / 1000}k`} />
-                    <Tooltip
-                      contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', color: '#334155', fontSize: '0.75rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-                      formatter={(val: any) => [formatCurrency(Number(val)), '']}
-                    />
-                    <Area type="monotone" dataKey="total" stroke="#7c3aed" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
-                    <Area type="monotone" dataKey="makanan" stroke="#10b981" strokeWidth={1.5} fillOpacity={1} fill="url(#colorMakanan)" />
-                    <Area type="monotone" dataKey="minuman" stroke="#f59e0b" strokeWidth={1.5} fillOpacity={1} fill="url(#colorMinuman)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+            <button
+              onClick={fetchAllReportData}
+              title="Perbarui Data"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38,
+                background: 'white', border: '1px solid #cbd5e1', borderRadius: '.75rem',
+                color: '#475569', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+            >
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            </button>
           </div>
-
-          {/* Detailed Revenue Log (Table) */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#1e293b' }}>Detailed Revenue Log</h3>
-                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Daily breakdown of F&B operations, expenses, and net profit</span>
-              </div>
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10b981', background: 'rgba(16,185,129,0.08)', padding: '0.2rem 0.5rem', borderRadius: '0.25rem' }}>
-                {reportData.dailyTimeline?.length || 0} records found
-              </span>
-            </div>
-
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                  {['DATE', 'PENDAPATAN MAKANAN', 'PENDAPATAN MINUMAN', 'TOTAL (OMZET)', 'EXPENSES', 'NET PROFIT', 'TRANSAKSI'].map(h => (
-                    <th key={h} style={{ padding: '0.75rem 1.25rem', textAlign: 'left', fontSize: '0.65rem', fontWeight: 800, color: '#475569', letterSpacing: '0.04em' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {reportData.dailyTimeline?.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#4b5563', fontSize: '0.8rem' }}>No data records found</td>
-                  </tr>
-                ) : (
-                  [...reportData.dailyTimeline].reverse().map((row: any, idx: number) => (
-                    <tr key={row.dateRaw} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? 'transparent' : '#f8fafc' }}>
-                      <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b' }}>{row.dateLabel}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>{formatCurrency(row.makanan)}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600 }}>{formatCurrency(row.minuman)}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', fontWeight: 800, color: '#1e293b' }}>{formatCurrency(row.total)}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', fontWeight: 800, color: row.profit >= 0 ? '#10b981' : '#ef4444' }}>{formatCurrency(row.profit)}</td>
-                      <td style={{ padding: '0.85rem 1.25rem', fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>{row.count} trx</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
         </div>
-      )}
 
-      {/* ─── TAB CONTENT 2: PENJUALAN PER-MENU ─── */}
-      {activeTab === 'products' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {/* Search & Filter bar (no-print) */}
-          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center' }}>
-            <Search size={16} color="#94a3b8" />
-            <input
-              type="text"
-              placeholder="Cari nama menu atau kategori..."
-              value={productSearch}
-              onChange={e => setProductSearch(e.target.value)}
-              style={{ border: 'none', outline: 'none', flex: 1, fontSize: '0.85rem', color: '#1e293b' }}
-            />
-            <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
-              Urutkan: 
-              <select 
-                value={productSortKey} 
-                onChange={e => setProductSortKey(e.target.value as any)}
-                style={{ marginLeft: '0.35rem', border: '1px solid #e2e8f0', borderRadius: '0.35rem', padding: '0.2rem', background: '#f8fafc', fontWeight: 700 }}
+        {/* Date Filter Bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem', paddingTop: '.75rem', borderTop: '1px solid #f1f5f9' }}>
+          {/* Quick Filter Pills */}
+          <div style={{ display: 'flex', gap: '.35rem', background: '#f1f5f9', padding: '.25rem', borderRadius: '.6rem' }}>
+            {[
+              { id: 'today', label: 'Hari Ini' },
+              { id: 'yesterday', label: 'Kemarin' },
+              { id: 'week', label: '7 Hari Terakhir' },
+              { id: 'month', label: '30 Hari Terakhir' },
+              { id: 'custom', label: 'Kustom Tanggal' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => handleQuickFilter(f.id as any)}
+                style={{
+                  padding: '.4rem .75rem', borderRadius: '.45rem', border: 'none',
+                  background: quickFilter === f.id ? 'white' : 'transparent',
+                  color: quickFilter === f.id ? '#7c3aed' : '#64748b',
+                  fontWeight: quickFilter === f.id ? 800 : 600, fontSize: '.75rem',
+                  cursor: 'pointer', boxShadow: quickFilter === f.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  transition: 'all 0.1s'
+                }}
               >
-                <option value="qty">Terjual (Qty)</option>
-                <option value="revenue">Omzet Kotor</option>
-                <option value="profit">Keuntungan</option>
-                <option value="margin">Margin Laba</option>
-              </select>
-              <select 
-                value={productSortOrder} 
-                onChange={e => setProductSortOrder(e.target.value as any)}
-                style={{ marginLeft: '0.25rem', border: '1px solid #e2e8f0', borderRadius: '0.35rem', padding: '0.2rem', background: '#f8fafc', fontWeight: 700 }}
-              >
-                <option value="desc">Terbesar</option>
-                <option value="asc">Terkecil</option>
-              </select>
-            </div>
+                {f.label}
+              </button>
+            ))}
           </div>
 
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <table className="table-premium">
-              <thead>
-                <tr>
-                  {['Nama Menu', 'Kategori', 'Terjual (Qty)', 'Omzet Kotor', 'Total HPP', 'Keuntungan', 'Margin Laba', 'Ambang'].map(h => (
-                    <th key={h}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(reportData.products || [])
-                  .filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.category.toLowerCase().includes(productSearch.toLowerCase()))
-                  .sort((a: any, b: any) => {
-                    let valA = a[productSortKey] || 0;
-                    let valB = b[productSortKey] || 0;
-                    if (productSortOrder === 'asc') return valA > valB ? 1 : -1;
-                    return valA < valB ? 1 : -1;
-                  })
-                  .length === 0 ? (
-                  <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Belum ada data penjualan produk</td>
-                  </tr>
-                ) : (
-                  (reportData.products || [])
-                    .filter((p: any) => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.category.toLowerCase().includes(productSearch.toLowerCase()))
-                    .sort((a: any, b: any) => {
-                      let valA = a[productSortKey] || 0;
-                      let valB = b[productSortKey] || 0;
-                      if (productSortOrder === 'asc') return valA > valB ? 1 : -1;
-                      return valA < valB ? 1 : -1;
-                    })
-                    .map((p: any, idx: number) => {
-                      const ms = getMarginBadgeStyle(p.margin);
-                      return (
-                        <tr key={p.id}>
-                          <td style={{ fontWeight: 700, color: '#1e293b' }}>{p.name}</td>
-                          <td style={{ color: '#64748b', fontWeight: 600 }}>{p.category}</td>
-                          <td style={{ fontWeight: 800, color: '#3b82f6' }}>{p.qty} porsi</td>
-                          <td style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(p.revenue)}</td>
-                          <td style={{ color: '#64748b', fontWeight: 500 }}>{formatCurrency(p.cost)}</td>
-                          <td style={{ fontWeight: 700, color: '#10b981' }}>{formatCurrency(p.profit)}</td>
-                          
-                          {/* Margin % */}
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                              <span style={{ fontWeight: 800, color: '#1e293b' }}>{p.margin}%</span>
-                              <div style={{ width: 45, height: 6, borderRadius: 3, background: '#e2e8f0', overflow: 'hidden' }}>
-                                <div style={{ width: `${Math.min(100, p.margin)}%`, background: p.margin >= 60 ? '#10b981' : p.margin >= 40 ? '#3b82f6' : '#f97316', height: '100%' }} />
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Ambang Margin Tag */}
-                          <td>
-                            <span className="badge-premium" style={{ background: ms.bg, color: ms.text }}>
-                              {ms.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ─── TAB CONTENT 3: LAPORAN AUDIT SHIFT ─── */}
-      {activeTab === 'shifts' && (
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-          <table className="table-premium">
-            <thead>
-              <tr>
-                {['Waktu Tutup', 'Staf Kasir', 'Saldo Awal', 'Sistem (POS)', 'Fisik Laci', 'Selisih Kas', 'Audit Status'].map(h => (
-                  <th key={h}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {reportData.shifts?.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Belum ada shift ditutup dalam rentang tanggal ini</td>
-                </tr>
-              ) : (
-                reportData.shifts.map((s: any) => {
-                  const hasDiscrepancy = s.selisih !== 0;
-                  const isNegative = s.selisih < 0;
-                  return (
-                    <tr key={s.id}>
-                      <td style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 700 }}>
-                        {s.waktuTutup ? new Date(s.waktuTutup).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
-                      </td>
-                      <td style={{ fontWeight: 700, color: '#1e293b' }}>{s.user?.name}</td>
-                      <td style={{ color: '#64748b', fontWeight: 600 }}>{formatCurrency(s.saldoAwal)}</td>
-                      <td style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(s.saldoSistem || 0)}</td>
-                      <td style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(s.saldoFisikLaci || 0)}</td>
-                      <td style={{ fontWeight: 800 }}>
-                        {s.selisih === 0 ? (
-                          <span style={{ color: '#10b981' }}>Rp 0</span>
-                        ) : isNegative ? (
-                          <span style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
-                            <ArrowDownRight size={14} /> {formatCurrency(s.selisih)}
-                          </span>
-                        ) : (
-                          <span style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
-                            <ArrowUpRight size={14} /> +{formatCurrency(s.selisih)}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {!hasDiscrepancy ? (
-                          <span className="badge-premium" style={{ background: 'rgba(16,185,129,0.08)', color: '#10b981' }}>
-                            <Check size={12} /> Cocok (OK)
-                          </span>
-                        ) : (
-                          <span className="badge-premium" style={{ background: isNegative ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)', color: isNegative ? '#ef4444' : '#f59e0b' }}>
-                            <AlertTriangle size={11} /> {isNegative ? 'Selisih Minus' : 'Selisih Plus'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ─── TAB CONTENT 4: LAPORAN MUTASI & VALUASI STOK ─── */}
-      {activeTab === 'inventory' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
-          {/* Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-            <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Valuasi Aset Persediaan</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(inventoryData.summary?.totalAssetValuation)}</span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total nilai stok dikali harga beli</span>
-            </div>
-            
-            <div className="card-premium" style={{ borderLeft: '4px solid #ef4444' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Bahan Baku Kritis (Stok Menipis)</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }} className={inventoryData.summary?.criticalItemsCount > 0 ? 'glow-pulse' : ''}>
-                {inventoryData.summary?.criticalItemsCount} Item
-              </span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Bahan dengan stok di bawah batas minimum</span>
-            </div>
-
-            <div className="card-premium" style={{ borderLeft: '4px solid #3b82f6' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Aktivitas Mutasi Stok</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#3b82f6' }}>{inventoryData.summary?.totalMutationsCount} Log</span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total mutasi tercatat dalam periode ini</span>
-            </div>
-          </div>
-
-          {/* Search bar & Export */}
-          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flex: 1 }}>
-              <Search size={16} color="#94a3b8" />
+          {/* Date Picker Range */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem', background: '#f8fafc', padding: '.35rem .65rem', borderRadius: '.5rem', border: '1px solid #e2e8f0' }}>
+              <Calendar size={14} color="#64748b" />
               <input
-                type="text"
-                placeholder="Cari bahan baku..."
-                value={inventorySearch}
-                onChange={e => setInventorySearch(e.target.value)}
-                style={{ border: 'none', outline: 'none', width: '100%', maxWidth: '300px', fontSize: '0.85rem', color: '#1e293b' }}
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setQuickFilter('custom');
+                }}
+                style={{ border: 'none', background: 'transparent', fontSize: '.78rem', fontWeight: 700, color: '#1e293b', outline: 'none' }}
               />
             </div>
-            
+            <span style={{ fontSize: '.75rem', color: '#94a3b8', fontWeight: 700 }}>s/d</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem', background: '#f8fafc', padding: '.35rem .65rem', borderRadius: '.5rem', border: '1px solid #e2e8f0' }}>
+              <Calendar size={14} color="#64748b" />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setQuickFilter('custom');
+                }}
+                style={{ border: 'none', background: 'transparent', fontSize: '.78rem', fontWeight: 700, color: '#1e293b', outline: 'none' }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          2. NAVIGASI 5 TAB UTAMA LAPORAN
+      ────────────────────────────────────────────────────────────── */}
+      <div 
+        style={{ 
+          background: 'white', 
+          borderRadius: '1.15rem', 
+          padding: '.5rem', 
+          border: '1px solid #e2e8f0', 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '.5rem', 
+          flexShrink: 0
+        }}
+      >
+        {[
+          { 
+            id: 'dashboard', 
+            title: 'Ringkasan Eksekutif', 
+            subtitle: 'Grafik & KPI Utama', 
+            icon: BarChart3,
+            badge: null
+          },
+          { 
+            id: 'products', 
+            title: 'Penjualan Menu', 
+            subtitle: 'Best Seller & Laba', 
+            icon: Utensils, 
+            badge: totalQtySold > 0 ? `${totalQtySold} Porsi` : null
+          },
+          { 
+            id: 'shifts_transactions', 
+            title: 'Shift & Kasir', 
+            subtitle: 'Audit Kas & Invoice', 
+            icon: Users,
+            badge: (reportData.shifts?.length || 0) > 0 ? `${reportData.shifts?.length} Shift` : null
+          },
+          { 
+            id: 'inventory', 
+            title: 'Mutasi & Stok', 
+            subtitle: 'Valuasi HPP & Kritis', 
+            icon: Boxes,
+            badge: (inventoryData.inventory?.length || 0) > 0 ? `${inventoryData.inventory?.length} Bahan` : null
+          },
+          { 
+            id: 'accounting', 
+            title: 'Keuangan (P&L)', 
+            subtitle: 'Laba Rugi & Arus Kas', 
+            icon: Receipt,
+            badge: null
+          },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isSelected = activeTab === tab.id;
+          return (
             <button
-              onClick={exportCSV}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.75rem', cursor: 'pointer', color: '#10b981', fontWeight: 800, fontSize: '0.78rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.75rem',
+                padding: '.75rem 1rem',
+                background: isSelected 
+                  ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' 
+                  : '#f8fafc',
+                color: isSelected ? '#ffffff' : '#334155',
+                border: isSelected ? '1px solid #7c3aed' : '1px solid #e2e8f0',
+                borderRadius: '.85rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                textAlign: 'left',
+                boxShadow: isSelected ? '0 4px 12px rgba(124, 58, 237, 0.25)' : 'none',
+              }}
             >
-              <Download size={14} /> Ekspor CSV (Excel)
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '.65rem',
+                  background: isSelected ? 'rgba(255,255,255,0.2)' : '#ede9fe',
+                  color: isSelected ? '#ffffff' : '#7c3aed',
+                  flexShrink: 0
+                }}
+              >
+                <Icon size={18} />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.25rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '.85rem', color: isSelected ? '#ffffff' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {tab.title}
+                  </span>
+                  {tab.badge && (
+                    <span 
+                      style={{ 
+                        fontSize: '.62rem', 
+                        padding: '.12rem .4rem', 
+                        background: isSelected ? 'rgba(255,255,255,0.25)' : '#ede9fe', 
+                        color: isSelected ? '#ffffff' : '#7c3aed', 
+                        borderRadius: '9999px', 
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: '.7rem', fontWeight: 500, color: isSelected ? 'rgba(255,255,255,0.85)' : '#64748b', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tab.subtitle}
+                </span>
+              </div>
             </button>
-          </div>
+          );
+        })}
+      </div>
 
-          {/* Mutation Table */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <table className="table-premium">
-              <thead>
-                <tr>
-                  {['Nama Bahan', 'Satuan', 'Supplier', 'Stok Awal', 'Masuk (+)', 'Keluar (Prod)', 'Rusak (-)', 'Penyesuaian', 'Stok Akhir', 'Nilai Aset'].map(h => (
-                    <th key={h} style={{ textAlign: ['Nama Bahan', 'Satuan', 'Supplier'].includes(h) ? 'left' : 'right' }}>{h}</th>
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 1: RINGKASAN EKSEKUTIF (DASHBOARD)
+      ────────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 1: RINGKASAN EKSEKUTIF (DASHBOARD)
+      ────────────────────────────────────────────────────────────── */}
+      {activeTab === 'dashboard' && (() => {
+        const totalRev = reportData.summary?.revenue || 0;
+        const totalHpp = reportData.summary?.hpp || accountingData.profitLoss?.cogs || 0;
+        const grossProf = totalRev - totalHpp;
+        const netProf = accountingData.profitLoss?.netIncome ?? reportData.summary?.netIncome ?? grossProf;
+        const grossMarginPct = totalRev > 0 ? Math.round((grossProf / totalRev) * 100) : 0;
+        const netMarginPct = totalRev > 0 ? Math.round((netProf / totalRev) * 100) : 0;
+        const hppRatioPct = totalRev > 0 ? Math.round((totalHpp / totalRev) * 100) : 0;
+
+        // Fallback or loaded category breakdown
+        const catBreakdown = reportData.categoryBreakdown || (() => {
+          let fRev = 0, fQty = 0, fCost = 0;
+          let dRev = 0, dQty = 0, dCost = 0;
+          rawProducts.forEach((p: any) => {
+            const cat = (p.category || '').toLowerCase();
+            const name = (p.name || '').toLowerCase();
+            const isDrink = cat.includes('minum') || cat.includes('drink') || cat.includes('beverage') || cat.includes('bevvies') || cat.includes('kopi') || cat.includes('coffee') || cat.includes('tea') || cat.includes('teh') || cat.includes('jus') || cat.includes('juice') || cat.includes('latte') || cat.includes('ice') || cat.includes('es ') || name.includes('kopi') || name.includes('tea') || name.includes('jus') || name.includes('drink');
+            if (isDrink) {
+              dRev += p.revenue || 0;
+              dQty += p.qty || 0;
+              dCost += p.cost || 0;
+            } else {
+              fRev += p.revenue || 0;
+              fQty += p.qty || 0;
+              fCost += p.cost || 0;
+            }
+          });
+          const combined = fRev + dRev;
+          return {
+            food: {
+              revenue: fRev,
+              qty: fQty,
+              cost: fCost,
+              profit: fRev - fCost,
+              margin: fRev > 0 ? Math.round(((fRev - fCost) / fRev) * 100) : 0,
+              percentage: combined > 0 ? Math.round((fRev / combined) * 100) : 0
+            },
+            drink: {
+              revenue: dRev,
+              qty: dQty,
+              cost: dCost,
+              profit: dRev - dCost,
+              margin: dRev > 0 ? Math.round(((dRev - dCost) / dRev) * 100) : 0,
+              percentage: combined > 0 ? Math.round((dRev / combined) * 100) : 0
+            },
+            other: { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 }
+          };
+        })();
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* Top 4 KPI Metrics with Margins & HPP Ratio */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem' }}>
+              
+              {/* Card 1: Total Omzet Gross */}
+              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Total Omzet (Gross)</span>
+                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
+                    <DollarSign size={18} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', marginTop: '.35rem' }}>
+                  {formatCurrency(totalRev)}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#64748b', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #f1f5f9' }}>
+                  <span>{reportData.summary?.transactionsCount || 0} Total Transaksi</span>
+                  <span style={{ fontWeight: 800, color: '#7c3aed', background: '#f5f3ff', padding: '.1rem .4rem', borderRadius: '.35rem' }}>100% Basis</span>
+                </div>
+              </div>
+
+              {/* Card 2: Laba Bersih Operasional + Net Margin % */}
+              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #bbf7d0', boxShadow: '0 2px 4px rgba(16,185,129,0.06)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '.03em' }}>Laba Bersih Operasional</span>
+                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a' }}>
+                    <TrendingUp size={18} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#16a34a', marginTop: '.35rem' }}>
+                  {formatCurrency(netProf)}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#166534', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #dcfce7' }}>
+                  <span>Setelah HPP & Biaya Kas</span>
+                  <span style={{ fontWeight: 900, color: '#15803d', background: '#dcfce7', padding: '.12rem .5rem', borderRadius: '.35rem', border: '1px solid #86efac' }}>
+                    Margin Bersih {netMarginPct}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 3: Total HPP Bahan Baku + HPP Ratio % */}
+              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #fecdd3', boxShadow: '0 2px 4px rgba(239,68,68,0.04)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Total HPP Bahan Baku</span>
+                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
+                    <ShoppingBag size={18} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', marginTop: '.35rem' }}>
+                  {formatCurrency(totalHpp)}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#991b1b', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #fee2e2' }}>
+                  <span>Biaya Bahan Terpakai</span>
+                  <span style={{ fontWeight: 800, color: '#b91c1c', background: '#fee2e2', padding: '.12rem .5rem', borderRadius: '.35rem' }}>
+                    Rasio HPP {hppRatioPct}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 4: Laba Kotor & Gross Margin % */}
+              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Laba Kotor (Gross Profit)</span>
+                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+                    <Percent size={18} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0284c7', marginTop: '.35rem' }}>
+                  {formatCurrency(grossProf)}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#0369a1', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #f1f5f9' }}>
+                  <span>Omzet - HPP Bahan</span>
+                  <span style={{ fontWeight: 900, color: '#0284c7', background: '#e0f2fe', padding: '.12rem .5rem', borderRadius: '.35rem' }}>
+                    Gross Margin {grossMarginPct}%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                SECTION BARU: ANALISIS OMZET & MARGIN MAKANAN VS MINUMAN
+            ────────────────────────────────────────────────────────────── */}
+            <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.5rem' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+                    <Sparkles size={17} color="#7c3aed" />
+                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}>
+                      Laporan Omzet & Margin: Makanan vs Minuman
+                    </h3>
+                  </div>
+                  <span style={{ fontSize: '.75rem', color: '#64748b' }}>
+                    Perbandingan kontribusi omzet penjualan, porsi terjual, HPP bahan, dan persentase margin laba bersih per kategori
+                  </span>
+                </div>
+              </div>
+
+              {/* Visual Contribution Ratio Bar */}
+              <div style={{ background: '#f8fafc', padding: '.85rem 1rem', borderRadius: '.85rem', border: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', fontWeight: 800, marginBottom: '.45rem' }}>
+                  <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '.3rem' }}>
+                    <Utensils size={13} /> Makanan: {catBreakdown.food.percentage}% ({formatCurrency(catBreakdown.food.revenue)})
+                  </span>
+                  <span style={{ color: '#0891b2', display: 'flex', alignItems: 'center', gap: '.3rem' }}>
+                    <Coffee size={13} /> Minuman: {catBreakdown.drink.percentage}% ({formatCurrency(catBreakdown.drink.revenue)})
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden', display: 'flex' }}>
+                  <div style={{ width: `${Math.max(0, catBreakdown.food.percentage)}%`, background: 'linear-gradient(90deg, #f59e0b, #d97706)', transition: 'width 0.4s ease' }} title={`Makanan: ${catBreakdown.food.percentage}%`} />
+                  <div style={{ width: `${Math.max(0, catBreakdown.drink.percentage)}%`, background: 'linear-gradient(90deg, #06b6d4, #0891b2)', transition: 'width 0.4s ease' }} title={`Minuman: ${catBreakdown.drink.percentage}%`} />
+                </div>
+              </div>
+
+              {/* Side-by-Side Comparison Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+                
+                {/* 1. Makanan Card */}
+                <div style={{ background: '#fffbeb', borderRadius: '1rem', border: '1px solid #fde68a', padding: '1.15rem', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Utensils size={18} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 900, fontSize: '.95rem', color: '#92400e' }}>Kategori Makanan (Food)</div>
+                        <div style={{ fontSize: '.7rem', color: '#b45309' }}>Ramen, Nasi, Bento & Snack</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '.75rem', fontWeight: 900, color: '#b45309', background: '#fef3c7', padding: '.2rem .5rem', borderRadius: '.4rem', border: '1px solid #fde68a' }}>
+                      Porsi: {catBreakdown.food.qty}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '.25rem' }}>
+                    <div>
+                      <div style={{ fontSize: '.7rem', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Total Omzet Makanan</div>
+                      <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#78350f' }}>{formatCurrency(catBreakdown.food.revenue)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '.7rem', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Laba Kotor</div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#16a34a' }}>{formatCurrency(catBreakdown.food.profit)}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.5rem', background: 'white', padding: '.65rem .85rem', borderRadius: '.65rem', border: '1px solid #fde68a' }}>
+                    <div>
+                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>HPP Bahan Makanan:</span>
+                      <strong style={{ fontSize: '.82rem', color: '#dc2626' }}>{formatCurrency(catBreakdown.food.cost)}</strong>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>Margin Laba Makanan:</span>
+                      <strong style={{ fontSize: '.85rem', color: '#d97706', fontWeight: 900 }}>{catBreakdown.food.margin}%</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Minuman Card */}
+                <div style={{ background: '#ecfeff', borderRadius: '1rem', border: '1px solid #a5f3fc', padding: '1.15rem', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#cffafe', color: '#0891b2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Coffee size={18} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 900, fontSize: '.95rem', color: '#155e75' }}>Kategori Minuman (Beverages)</div>
+                        <div style={{ fontSize: '.7rem', color: '#0e7490' }}>Kopi, Teh, Jus & Mocktail</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '.75rem', fontWeight: 900, color: '#0e7490', background: '#cffafe', padding: '.2rem .5rem', borderRadius: '.4rem', border: '1px solid #a5f3fc' }}>
+                      Cup: {catBreakdown.drink.qty}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '.25rem' }}>
+                    <div>
+                      <div style={{ fontSize: '.7rem', color: '#155e75', fontWeight: 700, textTransform: 'uppercase' }}>Total Omzet Minuman</div>
+                      <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#164e63' }}>{formatCurrency(catBreakdown.drink.revenue)}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '.7rem', color: '#155e75', fontWeight: 700, textTransform: 'uppercase' }}>Laba Kotor</div>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#16a34a' }}>{formatCurrency(catBreakdown.drink.profit)}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.5rem', background: 'white', padding: '.65rem .85rem', borderRadius: '.65rem', border: '1px solid #a5f3fc' }}>
+                    <div>
+                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>HPP Bahan Minuman:</span>
+                      <strong style={{ fontSize: '.82rem', color: '#dc2626' }}>{formatCurrency(catBreakdown.drink.cost)}</strong>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>Margin Laba Minuman:</span>
+                      <strong style={{ fontSize: '.85rem', color: '#0891b2', fontWeight: 900 }}>{catBreakdown.drink.margin}%</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Chart & Payment Breakdown Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+              
+              {/* Daily Multi-Series Chart with Mode Selector */}
+              <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', gridColumn: 'span 2' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.5rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.05rem', color: '#0f172a' }}>
+                      Tren Omzet, HPP & Laba Bersih Harian
+                    </h3>
+                    <span style={{ fontSize: '.75rem', color: '#64748b' }}>
+                      Visualisasi perkembangan finansial dan perbandingan kategori per hari
+                    </span>
+                  </div>
+
+                  {/* Chart View Selector Pills */}
+                  <div style={{ display: 'flex', gap: '.3rem', background: '#f1f5f9', padding: '.25rem', borderRadius: '.6rem' }}>
+                    {[
+                      { id: 'all', label: '📊 Semua' },
+                      { id: 'revenue', label: '📈 Omzet' },
+                      { id: 'profit', label: '💰 Laba Bersih' },
+                      { id: 'hpp', label: '📦 HPP' },
+                      { id: 'category', label: '🍜 Makanan vs 🥤 Minuman' },
+                    ].map(btn => (
+                      <button
+                        key={btn.id}
+                        onClick={() => setChartViewMode(btn.id as any)}
+                        style={{
+                          padding: '.35rem .65rem', borderRadius: '.45rem', border: 'none',
+                          background: chartViewMode === btn.id ? 'white' : 'transparent',
+                          color: chartViewMode === btn.id ? '#7c3aed' : '#64748b',
+                          fontWeight: chartViewMode === btn.id ? 800 : 600, fontSize: '.72rem',
+                          cursor: 'pointer', boxShadow: chartViewMode === btn.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 0.1s'
+                        }}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ height: 280 }}>
+                  {reportData.dailyTimeline?.length === 0 ? (
+                    <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '.85rem' }}>
+                      Belum ada data transaksi pada rentang tanggal ini
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={reportData.dailyTimeline} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#7c3aed" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorHpp" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorMakanan" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorMinuman" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="dateLabel" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                        <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `Rp ${val / 1000}k`} />
+                        <Tooltip
+                          contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '.75rem', color: '#0f172a', fontSize: '.8rem', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                          formatter={(val: any, name: any) => {
+                            const labelMap: Record<string, string> = {
+                              total: '📈 Omzet Kotor',
+                              profit: '💰 Laba Bersih',
+                              hpp: '📦 HPP Bahan',
+                              makanan: '🍜 Omzet Makanan',
+                              minuman: '🥤 Omzet Minuman'
+                            };
+                            return [formatCurrency(Number(val)), labelMap[name] || name];
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '.75rem', paddingTop: '8px' }} />
+
+                        {/* Conditional Series rendering according to chartViewMode */}
+                        {(chartViewMode === 'all' || chartViewMode === 'revenue') && (
+                          <Area type="monotone" name="total" dataKey="total" stroke="#7c3aed" strokeWidth={3} fillOpacity={1} fill="url(#colorTotal)" />
+                        )}
+                        {(chartViewMode === 'all' || chartViewMode === 'profit') && (
+                          <Area type="monotone" name="profit" dataKey="profit" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorProfit)" />
+                        )}
+                        {(chartViewMode === 'all' || chartViewMode === 'hpp') && (
+                          <Area type="monotone" name="hpp" dataKey="hpp" stroke="#ef4444" strokeWidth={2} strokeDasharray="4 4" fillOpacity={1} fill="url(#colorHpp)" />
+                        )}
+                        {chartViewMode === 'category' && (
+                          <>
+                            <Area type="monotone" name="makanan" dataKey="makanan" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorMakanan)" />
+                            <Area type="monotone" name="minuman" dataKey="minuman" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorMinuman)" />
+                          </>
+                        )}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
+
+              {/* Payment Method Distribution */}
+              <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.05rem', color: '#0f172a' }}>Metode Pembayaran</h3>
+                  <span style={{ fontSize: '.75rem', color: '#64748b' }}>Distribusi penerimaan kasir</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.65rem' }}>
+                  {[
+                    { name: 'QRIS', icon: '📱', color: '#7c3aed', bg: '#f5f3ff', count: reportData.paymentMethods?.QRIS?.count || 0, amount: reportData.paymentMethods?.QRIS?.amount || 0 },
+                    { name: 'Tunai (Cash)', icon: '💵', color: '#10b981', bg: '#f0fdf4', count: reportData.paymentMethods?.Tunai?.count || 0, amount: reportData.paymentMethods?.Tunai?.amount || 0 },
+                    { name: 'Kartu Debit/Kredit', icon: '💳', color: '#0284c7', bg: '#f0f9ff', count: reportData.paymentMethods?.Kartu?.count || 0, amount: reportData.paymentMethods?.Kartu?.amount || 0 },
+                    { name: 'Split Payment', icon: '✂️', color: '#f59e0b', bg: '#fffbeb', count: reportData.paymentMethods?.Split?.count || 0, amount: reportData.paymentMethods?.Split?.amount || 0 },
+                  ].map((pm) => (
+                    <div key={pm.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.75rem 1rem', borderRadius: '.75rem', background: pm.bg, border: `1px solid ${pm.color}22` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                        <span style={{ fontSize: '1.2rem' }}>{pm.icon}</span>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#0f172a' }}>{pm.name}</div>
+                          <div style={{ fontSize: '.72rem', color: '#64748b' }}>{pm.count} Transaksi</div>
+                        </div>
+                      </div>
+                      <div style={{ fontWeight: 900, fontSize: '.95rem', color: pm.color }}>
+                        {formatCurrency(pm.amount)}
+                      </div>
+                    </div>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(inventoryData.inventory || [])
-                  .filter((item: any) => item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
-                  .length === 0 ? (
-                  <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Tidak ada data mutasi stok</td>
-                  </tr>
-                ) : (
-                  (inventoryData.inventory || [])
-                    .filter((item: any) => item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
-                    .map((item: any) => {
-                      const isLow = item.stockAkhir <= item.minStock;
-                      return (
-                        <tr key={item.id} style={{ background: isLow ? 'rgba(239,68,68,0.02)' : 'transparent' }}>
-                          <td style={{ fontWeight: 700, color: isLow ? '#dc2626' : '#1e293b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            {isLow && <AlertTriangle size={14} color="#dc2626" />}
-                            {item.name}
-                          </td>
-                          <td style={{ color: '#64748b' }}>{item.unit}</td>
-                          <td style={{ color: '#64748b', fontSize: '0.78rem' }}>{item.supplierName}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{item.stockAwal.toLocaleString('id-ID')}</td>
-                          <td style={{ textAlign: 'right', color: '#166534', fontWeight: 600 }}>{item.masuk > 0 ? `+${item.masuk.toLocaleString('id-ID')}` : '0'}</td>
-                          <td style={{ textAlign: 'right', color: '#475569' }}>{item.keluarProduksi > 0 ? `-${item.keluarProduksi.toLocaleString('id-ID')}` : '0'}</td>
-                          <td style={{ textAlign: 'right', color: '#dc2626' }}>{item.keluarRusak > 0 ? `-${item.keluarRusak.toLocaleString('id-ID')}` : '0'}</td>
-                          <td style={{ textAlign: 'right', color: item.penyesuaian > 0 ? '#166534' : item.penyesuaian < 0 ? '#dc2626' : '#475569' }}>
-                            {item.penyesuaian === 0 ? '0' : `${item.penyesuaian > 0 ? '+' : ''}${item.penyesuaian.toLocaleString('id-ID')}`}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: isLow ? '#dc2626' : '#1e293b' }}>
-                            {item.stockAkhir.toLocaleString('id-ID')}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#10b981' }}>{formatCurrency(item.totalValuation)}</td>
-                        </tr>
-                      );
-                    })
-                )}
-              </tbody>
-            </table>
+                </div>
+              </div>
+            </div>
           </div>
- 
-         </div>
-       )}
+        );
+      })()}
 
-      {/* ─── TAB CONTENT 6: DETAIL MENU & VALUASI BARANG JADI (BARU) ─── */}
-      {activeTab === 'product_details' && (
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 2: LAPORAN PENJUALAN MENU & BEST SELLER
+      ────────────────────────────────────────────────────────────── */}
+      {activeTab === 'products' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           
-          {/* Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-            <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Valuasi Aset Barang Jadi (HPP)</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#10b981' }}>{formatCurrency(productDetailsData.summary?.totalAssetValuation)}</span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Investasi stok produk jadi siap jual</span>
-            </div>
-            
-            <div className="card-premium" style={{ borderLeft: '4px solid #3b82f6' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Potensi Omzet Penjualan</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#3b82f6' }}>{formatCurrency(productDetailsData.summary?.totalPotentialSales)}</span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Estimasi nilai jual seluruh stok barang jadi</span>
+          {/* Top 3 Best Sellers Podium Cards */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', marginBottom: '.75rem' }}>
+              <Sparkles size={18} color="#f59e0b" />
+              <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}>Top 3 Menu Terlaris (Best Seller)</h3>
             </div>
 
-            <div className="card-premium" style={{ borderLeft: '4px solid #ef4444' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Produk Jadi Stok Kritis</span>
-              <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                {productDetailsData.summary?.criticalProductsCount} Menu
-              </span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Produk dengan stok di bawah batas minimum</span>
-            </div>
-          </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+              {topSellers.map((seller: any, idx: number) => {
+                const badgeColor = idx === 0 ? '#fbbf24' : (idx === 1 ? '#94a3b8' : '#cd7f32');
+                const badgeText = idx === 0 ? '🥇 #1 Terlaris' : (idx === 1 ? '🥈 #2 Terlaris' : '🥉 #3 Terlaris');
 
-          {/* Search bar (no-print) */}
-          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center' }}>
-            <Search size={16} color="#94a3b8" />
-            <input
-              type="text"
-              placeholder="Cari barcode, nama produk, atau kategori..."
-              value={productDetailSearch}
-              onChange={e => setProductDetailSearch(e.target.value)}
-              style={{ border: 'none', outline: 'none', flex: 1, fontSize: '0.85rem', color: '#1e293b' }}
-            />
-          </div>
+                return (
+                  <div
+                    key={seller.name}
+                    style={{
+                      background: 'white', borderRadius: '1.25rem', border: `2px solid ${idx === 0 ? '#fbbf24' : '#e2e8f0'}`,
+                      padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.75rem',
+                      boxShadow: idx === 0 ? '0 8px 20px -4px rgba(251,191,36,0.25)' : '0 2px 4px rgba(0,0,0,0.02)',
+                      position: 'relative'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ padding: '.25rem .6rem', background: idx === 0 ? '#fffbeb' : '#f8fafc', color: idx === 0 ? '#b45309' : '#475569', borderRadius: '.5rem', fontSize: '.75rem', fontWeight: 900, border: `1px solid ${badgeColor}` }}>
+                        {badgeText}
+                      </span>
+                      <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
+                        {seller.category}
+                      </span>
+                    </div>
 
-          {/* Table */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <table className="table-premium">
-              <thead>
-                <tr>
-                  {['Barcode', 'Nama Produk', 'Kategori', 'Stok', 'Min Stok', 'Harga Beli (HPP)', 'Harga Jual', 'Margin (Rp / %)', 'Nilai Aset', 'Potensi Omzet', 'Status'].map(h => (
-                    <th key={h} style={{ textAlign: ['Barcode', 'Nama Produk', 'Kategori', 'Status'].includes(h) ? 'left' : 'right' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(productDetailsData.products || [])
-                  .filter((p: any) =>
-                    p.name.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
-                    p.barcode.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
-                    p.categoryName.toLowerCase().includes(productDetailSearch.toLowerCase())
-                  )
-                  .length === 0 ? (
-                  <tr>
-                    <td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Tidak ada data produk</td>
-                  </tr>
-                ) : (
-                  (productDetailsData.products || [])
-                    .filter((p: any) =>
-                      p.name.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
-                      p.barcode.toLowerCase().includes(productDetailSearch.toLowerCase()) ||
-                      p.categoryName.toLowerCase().includes(productDetailSearch.toLowerCase())
-                    )
-                    .map((p: any) => {
-                      const isLow = p.stock <= p.minStock;
-                      return (
-                        <tr key={p.id} style={{ background: isLow ? 'rgba(239,68,68,0.02)' : 'transparent' }}>
-                          <td style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.78rem' }}>{p.barcode}</td>
-                          <td style={{ fontWeight: 700, color: isLow ? '#dc2626' : '#1e293b' }}>{p.name}</td>
-                          <td style={{ color: '#64748b' }}>{p.categoryName}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 700, color: isLow ? '#dc2626' : '#1e293b' }}>{p.stock} unit</td>
-                          <td style={{ textAlign: 'right', color: '#64748b' }}>{p.minStock} unit</td>
-                          <td style={{ textAlign: 'right' }}>{formatCurrency(p.buyPrice)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(p.sellPrice)}</td>
-                          <td style={{ textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
-                            {formatCurrency(p.marginNominal)} ({p.marginPercent}%)
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#475569' }}>{formatCurrency(p.totalAssetValuation)}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#10b981' }}>{formatCurrency(p.totalPotentialSales)}</td>
-                          <td>
-                            {isLow ? (
-                              <span className="badge-premium" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>
-                                <AlertTriangle size={11} /> Kritis
-                              </span>
-                            ) : (
-                              <span className="badge-premium" style={{ background: 'rgba(16,185,129,0.08)', color: '#10b981' }}>
-                                <Check size={11} /> Aman
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>{seller.name}</h4>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '.35rem' }}>
+                        <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#7c3aed' }}>
+                          {seller.qty} <span style={{ fontSize: '.8rem', fontWeight: 600, color: '#64748b' }}>porsi</span>
+                        </span>
+                        <span style={{ fontSize: '.85rem', fontWeight: 800, color: '#10b981' }}>
+                          {formatCurrency(seller.revenue)}
+                        </span>
+                      </div>
+                    </div>
 
-      {/* ─── TAB CONTENT 7: LAPORAN RIWAYAT TRANSAKSI PENJUALAN (BARU) ─── */}
-      {activeTab === 'transactions' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
-          {/* Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-            <div className="card-premium" style={{ borderLeft: '4px solid #10b981' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Omzet Sah (Bersih)</span>
-              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#10b981' }}>
-                {formatCurrency(transactionsData.filter(o => o.status !== 'Void').reduce((sum, o) => sum + o.total, 0))}
-              </span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Total penjualan bersih dikurangi diskon</span>
-            </div>
-            
-            <div className="card-premium" style={{ borderLeft: '4px solid #3b82f6' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Volume Penjualan</span>
-              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#3b82f6' }}>
-                {transactionsData.filter(o => o.status !== 'Void').length} Transaksi
-              </span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Jumlah pesanan diselesaikan (non-Void)</span>
-            </div>
-
-            <div className="card-premium" style={{ borderLeft: '4px solid #f59e0b' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Rata-rata Keranjang Belanja</span>
-              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#f59e0b' }}>
-                {(() => {
-                  const valids = transactionsData.filter(o => o.status !== 'Void');
-                  const total = valids.reduce((sum, o) => sum + o.total, 0);
-                  const avg = valids.length > 0 ? total / valids.length : 0;
-                  return formatCurrency(avg);
-                })()}
-              </span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Rata-rata nilai belanja per transaksi</span>
-            </div>
-
-            <div className="card-premium" style={{ borderLeft: '4px solid #ef4444' }}>
-              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Transaksi Void (Batal)</span>
-              <span style={{ fontSize: '1.3rem', fontWeight: 900, color: '#ef4444' }}>
-                {transactionsData.filter(o => o.status === 'Void').length} Void
-              </span>
-              <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>Transaksi dibatalkan & stok direfund</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', background: '#f8fafc', padding: '.5rem .75rem', borderRadius: '.5rem', border: '1px solid #f1f5f9' }}>
+                      <span style={{ color: '#64748b' }}>Laba Kotor: <strong>{formatCurrency(seller.profit)}</strong></span>
+                      <span style={{ color: '#7c3aed', fontWeight: 800 }}>Margin: {seller.margin}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {topSellers.length === 0 && (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', background: 'white', borderRadius: '1rem', gridColumn: 'span 3' }}>
+                  Belum ada transaksi penjualan menu.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Search bar (no-print) */}
-          <div className="no-print" style={{ display: 'flex', gap: '1rem', background: 'white', padding: '1rem', borderRadius: '1rem', border: '1px solid #e2e8f0', alignItems: 'center' }}>
-            <Search size={16} color="#94a3b8" />
-            <input
-              type="text"
-              placeholder="Cari berdasarkan No. Order atau nama pelanggan..."
-              value={transactionSearch}
-              onChange={e => setTransactionSearch(e.target.value)}
-              style={{ border: 'none', outline: 'none', flex: 1, fontSize: '0.85rem', color: '#1e293b' }}
-            />
-          </div>
+          {/* Summary & Category Sub-Recap Cards */}
+          {(() => {
+            let fRev = 0, fCost = 0, fQty = 0;
+            let dRev = 0, dCost = 0, dQty = 0;
+            rawProducts.forEach((p: any) => {
+              const cat = (p.category || '').toLowerCase();
+              const name = (p.name || '').toLowerCase();
+              const isDrink = cat.includes('minum') || cat.includes('drink') || cat.includes('beverage') || cat.includes('bevvies') || cat.includes('kopi') || cat.includes('coffee') || cat.includes('tea') || cat.includes('teh') || cat.includes('jus') || cat.includes('juice') || cat.includes('latte') || cat.includes('ice') || cat.includes('es ') || name.includes('kopi') || name.includes('tea') || name.includes('jus') || name.includes('drink');
+              if (isDrink) {
+                dRev += p.revenue || 0;
+                dCost += p.cost || 0;
+                dQty += p.qty || 0;
+              } else {
+                fRev += p.revenue || 0;
+                fCost += p.cost || 0;
+                fQty += p.qty || 0;
+              }
+            });
+            const fProfit = fRev - fCost;
+            const dProfit = dRev - dCost;
+            const fMargin = fRev > 0 ? Math.round((fProfit / fRev) * 100) : 0;
+            const dMargin = dRev > 0 ? Math.round((dProfit / dRev) * 100) : 0;
 
-          {/* Table */}
-          <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-            <table className="table-premium">
-              <thead>
-                <tr>
-                  {['Tanggal/Waktu', 'No. Order', 'Pelanggan', 'Kasir', 'Metode Bayar', 'Status', 'Total Bersih'].map(h => (
-                    <th key={h} style={{ textAlign: ['Tanggal/Waktu', 'No. Order', 'Pelanggan', 'Kasir', 'Metode Bayar', 'Status'].includes(h) ? 'left' : 'right' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {transactionsData.filter((o: any) =>
-                  o.orderNumber.toLowerCase().includes(transactionSearch.toLowerCase()) ||
-                  o.customerName.toLowerCase().includes(transactionSearch.toLowerCase())
-                ).length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Tidak ada transaksi ditemukan</td>
-                  </tr>
-                ) : (
-                  transactionsData
-                    .filter((o: any) =>
-                      o.orderNumber.toLowerCase().includes(transactionSearch.toLowerCase()) ||
-                      o.customerName.toLowerCase().includes(transactionSearch.toLowerCase())
-                    )
-                    .map((o: any) => {
-                      const isVoid = o.status === 'Void';
-                      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString('id-ID', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      }) : '—';
-                      return (
-                        <tr key={o.id} style={{ background: isVoid ? 'rgba(239,68,68,0.02)' : 'transparent' }}>
-                          <td style={{ color: '#64748b', fontSize: '0.78rem' }}>{dateStr}</td>
-                          <td style={{ fontWeight: 800, color: '#1e293b' }}>{o.orderNumber}</td>
-                          <td style={{ fontWeight: 600, color: '#334155' }}>{o.customerName || 'Walk-in'}</td>
-                          <td style={{ color: '#64748b' }}>{o.user?.name || 'Kasir'}</td>
-                          <td style={{ color: '#334155', fontWeight: 600 }}>{o.paymentMethod || 'Tunai'}</td>
-                          <td>
-                            {isVoid ? (
-                              <span className="badge-premium" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>
-                                Void
-                              </span>
-                            ) : (
-                              <span className="badge-premium" style={{ background: 'rgba(16,185,129,0.08)', color: '#10b981' }}>
-                                Paid
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800, color: isVoid ? '#94a3b8' : '#1e293b' }}>
-                            {formatCurrency(o.total)}
-                          </td>
-                        </tr>
-                      );
-                    })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.875rem' }}>
+                <div style={{ background: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#64748b' }}>Total Porsi Terjual</span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', marginTop: '.2rem' }}>{totalQtySold} Porsi</div>
+                  <div style={{ fontSize: '.7rem', color: '#64748b', marginTop: '.2rem' }}>Rata-rata Margin: <strong style={{ color: '#7c3aed' }}>{avgMargin}%</strong></div>
+                </div>
 
-      {/* ─── TAB CONTENT 5: LABA RUGI & ARUS KAS (AKUNTANSI) ─── */}
-      {activeTab === 'accounting' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
-          {/* Sub Tab Navigation (no-print) */}
-          <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', background: '#f1f5f9', padding: '0.35rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
-              {[
-                { key: 'pl', label: 'Laporan Laba Rugi (P&L)', icon: <TrendingUp size={14} /> },
-                { key: 'cashflow', label: 'Laporan Arus Kas', icon: <CreditCard size={14} /> },
-                { key: 'ledger', label: 'Jurnal Ledger Umum', icon: <BookOpen size={14} /> }
-              ].map(sub => (
-                <button
-                  key={sub.key}
-                  onClick={() => setAccountingSubTab(sub.key as AccountingSubTabType)}
-                  style={{ border: 'none', background: accountingSubTab === sub.key ? 'white' : 'transparent', color: accountingSubTab === sub.key ? '#10b981' : '#64748b', padding: '0.45rem 1rem', borderRadius: '0.5rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', transition: 'all 0.12s', boxShadow: accountingSubTab === sub.key ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}
+                {/* Sub-Card Makanan */}
+                <div style={{ background: '#fffbeb', borderRadius: '1rem', padding: '1rem', border: '1px solid #fde68a' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '.72rem', fontWeight: 800, color: '#92400e', display: 'flex', alignItems: 'center', gap: '.25rem' }}>
+                      <Utensils size={13} /> Omzet Makanan
+                    </span>
+                    <span style={{ fontSize: '.68rem', fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '.1rem .35rem', borderRadius: '.3rem' }}>
+                      Margin {fMargin}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#78350f', marginTop: '.2rem' }}>{formatCurrency(fRev)}</div>
+                  <div style={{ fontSize: '.7rem', color: '#b45309', marginTop: '.2rem' }}>{fQty} porsi • Laba {formatCurrency(fProfit)}</div>
+                </div>
+
+                {/* Sub-Card Minuman */}
+                <div style={{ background: '#ecfeff', borderRadius: '1rem', padding: '1rem', border: '1px solid #a5f3fc' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '.72rem', fontWeight: 800, color: '#155e75', display: 'flex', alignItems: 'center', gap: '.25rem' }}>
+                      <Coffee size={13} /> Omzet Minuman
+                    </span>
+                    <span style={{ fontSize: '.68rem', fontWeight: 800, color: '#0891b2', background: '#cffafe', padding: '.1rem .35rem', borderRadius: '.3rem' }}>
+                      Margin {dMargin}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#164e63', marginTop: '.2rem' }}>{formatCurrency(dRev)}</div>
+                  <div style={{ fontSize: '.7rem', color: '#0e7490', marginTop: '.2rem' }}>{dQty} cup • Laba {formatCurrency(dProfit)}</div>
+                </div>
+
+                <div style={{ background: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#64748b' }}>Total Laba Kotor Menu</span>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#10b981', marginTop: '.2rem' }}>{formatCurrency(totalMenuProfit)}</div>
+                  <div style={{ fontSize: '.7rem', color: '#64748b', marginTop: '.2rem' }}>Total Omzet: {formatCurrency(totalMenuRevenue)}</div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Search, Filter & Sort Bar */}
+          <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '.85rem' }}>
+            <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: '220px', background: '#f8fafc', borderRadius: '.75rem', padding: '.55rem .85rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                <Search size={15} color="#94a3b8" />
+                <input
+                  type="text"
+                  placeholder="Cari nama menu..."
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '.85rem', color: '#0f172a', width: '100%' }}
+                />
+              </div>
+
+              {/* Sort Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.8rem', color: '#64748b' }}>
+                <SlidersHorizontal size={15} />
+                <span>Urutkan:</span>
+                <select
+                  value={productSortKey}
+                  onChange={(e) => setProductSortKey(e.target.value as any)}
+                  style={{ padding: '.45rem .75rem', borderRadius: '.5rem', border: '1px solid #cbd5e1', fontSize: '.78rem', fontWeight: 700, background: 'white', outline: 'none' }}
                 >
-                  {sub.icon} {sub.label}
+                  <option value="qty">Porsi Terjual</option>
+                  <option value="revenue">Omzet Kotor</option>
+                  <option value="profit">Keuntungan</option>
+                  <option value="margin">Margin %</option>
+                </select>
+                <select
+                  value={productSortOrder}
+                  onChange={(e) => setProductSortOrder(e.target.value as any)}
+                  style={{ padding: '.45rem .75rem', borderRadius: '.5rem', border: '1px solid #cbd5e1', fontSize: '.78rem', fontWeight: 700, background: 'white', outline: 'none' }}
+                >
+                  <option value="desc">Tertinggi</option>
+                  <option value="asc">Terendah</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div style={{ display: 'flex', gap: '.35rem', overflowX: 'auto', paddingBottom: '.25rem' }}>
+              {productCategories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setProductCategoryFilter(cat)}
+                  style={{
+                    padding: '.4rem .85rem', borderRadius: '.5rem', border: '1px solid',
+                    borderColor: productCategoryFilter === cat ? '#7c3aed' : '#e2e8f0',
+                    background: productCategoryFilter === cat ? '#f5f3ff' : 'white',
+                    color: productCategoryFilter === cat ? '#7c3aed' : '#64748b',
+                    fontWeight: 700, fontSize: '.75rem', cursor: 'pointer', whiteSpace: 'nowrap'
+                  }}
+                >
+                  {cat}
                 </button>
               ))}
             </div>
-            
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                onClick={exportCSV}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1rem', background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.75rem', cursor: 'pointer', color: '#10b981', fontWeight: 800, fontSize: '0.78rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.12s' }}
-                onMouseOver={(e) => e.currentTarget.style.background = '#f8fafc'}
-                onMouseOut={(e) => e.currentTarget.style.background = 'white'}
-              >
-                <Download size={14} /> Ekspor CSV (Excel)
-              </button>
-              <button
-                onClick={handlePrint}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1rem', background: '#10b981', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', color: 'white', fontWeight: 800, fontSize: '0.78rem', boxShadow: '0 1px 2px rgba(16,185,129,0.15)', transition: 'all 0.12s' }}
-                onMouseOver={(e) => e.currentTarget.style.background = '#0d9488'}
-                onMouseOut={(e) => e.currentTarget.style.background = '#10b981'}
-              >
-                <Printer size={14} /> Unduh Laporan PDF (Eksklusif)
-              </button>
-            </div>
           </div>
 
-          {/* Laba Rugi (P&L) */}
-          {accountingSubTab === 'pl' && (
-            <div className="paper-report-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#1e293b', letterSpacing: '0.05em' }}>LAPORAN LABA RUGI</h3>
-                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700, marginTop: '0.2rem' }}>
-                  Periode: {new Date(startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} s/d {new Date(endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </div>
-              </div>
+          {/* Products Sales Table */}
+          <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                  {['RANK', 'NAMA MENU', 'KATEGORI', 'TERJUAL (QTY)', 'KONTRIBUSI OMZET', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN (%)'].map((h) => (
+                    <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((prod: any, idx: number) => {
+                  const percentOfTotal = totalMenuRevenue > 0 ? ((prod.revenue || 0) / totalMenuRevenue) * 100 : 0;
+                  return (
+                    <tr key={prod.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#94a3b8', fontSize: '.8rem' }}>
+                        #{idx + 1}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.875rem' }}>
+                        {prod.name}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem' }}>
+                        <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
+                          {prod.category}
+                        </span>
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.9rem' }}>
+                        {prod.qty} <span style={{ fontSize: '.75rem', fontWeight: 500, color: '#64748b' }}>porsi</span>
+                      </td>
+                      <td style={{ padding: '.85rem 1rem' }}>
+                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{formatCurrency(prod.revenue)}</div>
+                        <div style={{ width: 100, height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.min(percentOfTotal, 100)}%`, height: '100%', background: '#7c3aed' }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', color: '#dc2626', fontWeight: 700, fontSize: '.85rem' }}>
+                        {formatCurrency(prod.cost)}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', color: '#10b981', fontWeight: 800, fontSize: '.85rem' }}>
+                        {formatCurrency(prod.profit)}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem' }}>
+                        <span style={{
+                          padding: '.2rem .5rem', borderRadius: '.35rem', fontWeight: 800, fontSize: '.75rem',
+                          background: prod.margin >= 60 ? '#f0fdf4' : (prod.margin >= 40 ? '#f5f3ff' : '#fffbeb'),
+                          color: prod.margin >= 60 ? '#166534' : (prod.margin >= 40 ? '#7c3aed' : '#b45309')
+                        }}>
+                          {prod.margin}%
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredProducts.length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                      Tidak ada data penjualan menu untuk filter yang dipilih.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '650px', margin: '0 auto', width: '100%' }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>1. PENDAPATAN OPERASIONAL</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Penjualan Bersih Kasir</span>
-                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(accountingData.profitLoss?.salesRevenue)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Pendapatan Lain-lain (Petty Cash Masuk)</span>
-                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(accountingData.profitLoss?.otherRevenue)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Kelebihan Uang Kasir (Overage)</span>
-                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(accountingData.profitLoss?.shiftOverage)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 800, borderTop: '1px dashed #e2e8f0', paddingTop: '0.4rem', marginTop: '0.25rem' }}>
-                      <span style={{ color: '#1e293b' }}>Total Pendapatan Operasional</span>
-                      <span style={{ color: '#1e293b' }}>{formatCurrency(accountingData.profitLoss?.operatingRevenue)}</span>
-                    </div>
-                  </div>
-                </div>
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 3: SHIFT & TRANSAKSI KASIR
+      ────────────────────────────────────────────────────────────── */}
+      {activeTab === 'shifts_transactions' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Sub-toggle: Shifts vs Transactions */}
+          <div style={{ display: 'flex', gap: '.4rem', background: 'white', padding: '.4rem', borderRadius: '1rem', border: '1px solid #e2e8f0', width: 'fit-content', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <button
+              onClick={() => setShiftTxSubTab('shifts')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '.45rem',
+                padding: '.55rem 1.15rem', borderRadius: '.65rem', border: 'none',
+                background: shiftTxSubTab === 'shifts' ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
+                color: shiftTxSubTab === 'shifts' ? 'white' : '#475569',
+                fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
+                boxShadow: shiftTxSubTab === 'shifts' ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
+                transition: 'all 0.15s'
+              }}
+            >
+              <User size={15} /> Rekapitulasi Shift Kasir ({reportData.shifts?.length || 0})
+            </button>
+            <button
+              onClick={() => setShiftTxSubTab('transactions')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '.45rem',
+                padding: '.55rem 1.15rem', borderRadius: '.65rem', border: 'none',
+                background: shiftTxSubTab === 'transactions' ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
+                color: shiftTxSubTab === 'transactions' ? 'white' : '#475569',
+                fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
+                boxShadow: shiftTxSubTab === 'transactions' ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
+                transition: 'all 0.15s'
+              }}
+            >
+              <FileText size={15} /> Riwayat Invoice Transaksi ({transactionsData.length})
+            </button>
+          </div>
 
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>2. HARGA POKOK PENJUALAN (HPP)</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Beban Pokok Persediaan Bahan Baku (HPP)</span>
-                      <span style={{ fontWeight: 700, color: '#ef4444' }}>-{formatCurrency(accountingData.profitLoss?.cogs)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 800, borderTop: '1px dashed #e2e8f0', paddingTop: '0.4rem', marginTop: '0.25rem' }}>
-                      <span style={{ color: '#1e293b' }}>Total Beban HPP</span>
-                      <span style={{ color: '#ef4444' }}>-{formatCurrency(accountingData.profitLoss?.cogs)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', fontWeight: 900, background: '#f8fafc', padding: '0.6rem 1rem', borderRadius: '0.5rem', borderLeft: '4px solid #10b981', margin: '0.5rem 0' }}>
-                  <span style={{ color: '#10b981' }}>LABA KOTOR (GROSS PROFIT)</span>
-                  <span style={{ color: '#10b981' }}>{formatCurrency(accountingData.profitLoss?.grossProfit)}</span>
-                </div>
-
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>3. BEBAN OPERASIONAL (OPEX)</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Beban Kas Operasional (Petty Cash Keluar)</span>
-                      <span style={{ fontWeight: 700, color: '#ef4444' }}>-{formatCurrency(accountingData.profitLoss?.opexAmount)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Kekurangan Uang Kasir (Shortage)</span>
-                      <span style={{ fontWeight: 700, color: '#ef4444' }}>-{formatCurrency(accountingData.profitLoss?.shiftShortage)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 800, borderTop: '1px dashed #e2e8f0', paddingTop: '0.4rem', marginTop: '0.25rem' }}>
-                      <span style={{ color: '#1e293b' }}>Total Beban Operasional</span>
-                      <span style={{ color: '#ef4444' }}>-{formatCurrency(accountingData.profitLoss?.operatingExpenses)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.05rem', fontWeight: 950, background: 'rgba(16,185,129,0.08)', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1.5px solid #10b981', marginTop: '0.5rem' }}>
-                  <span style={{ color: '#10b981' }}>LABA BERSIH OPERASIONAL (NET INCOME)</span>
-                  <span style={{ color: '#10b981', borderBottom: '3px double #10b981', paddingBottom: '2px' }}>{formatCurrency(accountingData.profitLoss?.netIncome)}</span>
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {/* Arus Kas */}
-          {accountingSubTab === 'cashflow' && (
-            <div className="paper-report-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: '#1e293b', letterSpacing: '0.05em' }}>LAPORAN ARUS KAS (METODE LANGSUNG)</h3>
-                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700, marginTop: '0.2rem' }}>
-                  Periode: {new Date(startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })} s/d {new Date(endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: '650px', margin: '0 auto', width: '100%' }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#10b981', borderBottom: '1.5px solid #a7f3d0', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>ARUS KAS MASUK (INFLOW)</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Penerimaan Uang dari Pelanggan (Omzet)</span>
-                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(accountingData.cashFlow?.inflow?.salesReceipts)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Penerimaan Petty Cash</span>
-                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(accountingData.cashFlow?.inflow?.otherReceipts)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Akumulasi Kelebihan Uang Laci Shift</span>
-                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{formatCurrency(accountingData.cashFlow?.inflow?.overages)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 800, borderTop: '1px dashed #e2e8f0', paddingTop: '0.4rem', marginTop: '0.25rem' }}>
-                      <span style={{ color: '#10b981' }}>Total Kas Masuk</span>
-                      <span style={{ color: '#10b981' }}>{formatCurrency(accountingData.cashFlow?.inflow?.total)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#ef4444', borderBottom: '1.5px solid #fca5a5', paddingBottom: '0.25rem', marginBottom: '0.5rem' }}>ARUS KAS KELUAR (OUTFLOW)</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingLeft: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Pembayaran Biaya Petty Cash (Bahan & Operasional)</span>
-                      <span style={{ fontWeight: 700, color: '#ef4444' }}>-{formatCurrency(accountingData.cashFlow?.outflow?.opexPayments)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                      <span style={{ color: '#64748b', fontWeight: 600 }}>Akumulasi Kekurangan Uang Laci Shift</span>
-                      <span style={{ fontWeight: 700, color: '#ef4444' }}>-{formatCurrency(accountingData.cashFlow?.outflow?.shortages)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', fontWeight: 800, borderTop: '1px dashed #e2e8f0', paddingTop: '0.4rem', marginTop: '0.25rem' }}>
-                      <span style={{ color: '#ef4444' }}>Total Kas Keluar</span>
-                      <span style={{ color: '#ef4444' }}>-{formatCurrency(accountingData.cashFlow?.outflow?.total)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.05rem', fontWeight: 950, background: 'rgba(16,185,129,0.08)', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1.5px solid #10b981', marginTop: '0.5rem' }}>
-                  <span style={{ color: '#10b981' }}>KENAIKAN/(PENURUNAN) KAS BERSIH</span>
-                  <span style={{ color: '#10b981', borderBottom: '3px double #10b981', paddingBottom: '2px' }}>{formatCurrency(accountingData.cashFlow?.netCashFlow)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Jurnal Ledger */}
-          {accountingSubTab === 'ledger' && (
-            <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '1.25rem', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-              <div style={{ background: '#f8fafc', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0' }}>
-                <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#1e293b' }}>BUKU JURNAL UMUM (DOUBLE ENTRY LEDGER)</h3>
-                <p style={{ margin: '0.15rem 0 0', color: '#64748b', fontSize: '0.72rem', fontWeight: 600 }}>Daftar entri jurnal penyeimbang otomatis yang digenerate oleh sistem POS</p>
-              </div>
-
+          {shiftTxSubTab === 'shifts' ? (
+            <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '1.5px solid #e2e8f0' }}>
-                    {['TANGGAL / REF', 'DESKRIPSI TRANSAKSI & AKUN', 'DEBIT', 'KREDIT'].map((h, i) => (
-                      <th key={h} style={{ padding: '0.65rem 1.25rem', textAlign: i >= 2 ? 'right' : 'left', fontSize: '0.65rem', fontWeight: 800, color: '#475569', letterSpacing: '0.04em' }}>{h}</th>
+                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    {['WAKTU TUTUP SHIFT', 'NAMA KASIR', 'SALDO AWAL LACI', 'TOTAL OMZET KAS', 'SALDO FISIK LACI', 'SELISIH KAS (AUDIT)', 'STATUS'].map((h) => (
+                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {accountingData.journals?.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', padding: '3rem', color: '#64748b', fontSize: '0.85rem' }}>Belum ada entri jurnal dalam rentang tanggal ini</td>
-                    </tr>
-                  ) : (
-                    accountingData.journals.map((j: any) => (
-                      <tr key={j.reference} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '1rem 1.25rem', verticalAlign: 'top', width: '20%' }}>
-                          <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#1e293b' }}>
-                            {new Date(j.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                          <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 800, background: 'rgba(16,185,129,0.08)', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', marginTop: '0.2rem', display: 'inline-block' }}>
-                            {j.reference}
+                  {(reportData.shifts || []).map((s: any) => {
+                    const isBalanced = (s.selisih || 0) === 0;
+                    const isShort = (s.selisih || 0) < 0;
+                    return (
+                      <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                          {s.waktuTutup ? new Date(s.waktuTutup).toLocaleString('id-ID') : 'Masih Berjalan'}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.85rem' }}>
+                          {s.user?.name || s.user?.username || 'Kasir'}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.82rem' }}>
+                          {formatCurrency(s.saldoAwal)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                          {formatCurrency(s.saldoSistem || 0)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>
+                          {formatCurrency(s.saldoFisikLaci || 0)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, fontSize: '.85rem', color: isBalanced ? '#10b981' : (isShort ? '#ef4444' : '#f59e0b') }}>
+                          {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{
+                            padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
+                            background: isBalanced ? '#f0fdf4' : (isShort ? '#fee2e2' : '#fffbeb'),
+                            color: isBalanced ? '#166534' : (isShort ? '#991b1b' : '#b45309')
+                          }}>
+                            {isBalanced ? '✅ Seimbang' : (isShort ? '❌ Minus (Shortage)' : '⚠️ Lebih (Overage)')}
                           </span>
                         </td>
-
-                        <td colSpan={3} style={{ padding: 0 }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <tbody>
-                              <tr style={{ background: 'rgba(248,250,252,0.6)' }}>
-                                <td colSpan={3} style={{ padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic', borderBottom: '1px solid #e2e8f0' }}>
-                                  {j.description}
-                                </td>
-                              </tr>
-                              {j.lines?.map((l: any, idx: number) => {
-                                const isCredit = l.credit > 0;
-                                return (
-                                  <tr key={idx} style={{ borderBottom: idx === j.lines.length - 1 ? 'none' : '1px dashed #e2e8f0' }}>
-                                    <td style={{ padding: '0.55rem 1.25rem', fontSize: '0.8rem', color: isCredit ? '#475569' : '#1e293b', fontWeight: isCredit ? 500 : 700, paddingLeft: isCredit ? '2.5rem' : '1.25rem', width: '50%' }}>
-                                      {l.account}
-                                    </td>
-                                    <td style={{ padding: '0.55rem 1.25rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', width: '25%' }}>
-                                      {l.debit > 0 ? formatCurrency(l.debit) : ''}
-                                    </td>
-                                    <td style={{ padding: '0.55rem 1.25rem', textAlign: 'right', fontSize: '0.8rem', fontWeight: 700, color: '#64748b', width: '25%' }}>
-                                      {l.credit > 0 ? formatCurrency(l.credit) : ''}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </td>
                       </tr>
-                    ))
+                    );
+                  })}
+                  {(reportData.shifts || []).length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                        Belum ada shift kasir yang tercatat pada periode ini.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    {['NO. ORDER', 'WAKTU', 'PELANGGAN', 'TIPE ORDER', 'METODE BAYAR', 'TOTAL BAYAR', 'STATUS'].map((h) => (
+                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactionsData.slice(0, 100).map((tx: any) => (
+                    <tr key={tx.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.82rem' }}>
+                        {tx.orderNumber || `#${tx.id}`}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.78rem' }}>
+                        {new Date(tx.createdAt).toLocaleString('id-ID')}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                        {tx.customerName || 'Pelanggan Umum'}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem' }}>
+                        <span style={{ fontSize: '.72rem', fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
+                          {tx.orderType || 'Dine In'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0284c7', fontSize: '.82rem' }}>
+                        {tx.paymentMethod || 'Tunai'}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.85rem' }}>
+                        {formatCurrency(tx.total)}
+                      </td>
+                      <td style={{ padding: '.85rem 1rem' }}>
+                        <span style={{ fontSize: '.7rem', fontWeight: 800, background: '#f0fdf4', color: '#166534', padding: '.2rem .5rem', borderRadius: '.35rem' }}>
+                          Lunas
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {transactionsData.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                        Belum ada riwayat transaksi pada rentang tanggal ini.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
             </div>
           )}
-
         </div>
       )}
 
-      {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', color: '#64748b', fontSize: '0.78rem', borderTop: '1px solid #e2e8f0', marginTop: 'auto' }}>
-        <span>{posContext?.settings?.storeName || 'SOL Cafe'} POS System — Modul Laporan Akuntansi Versi 1.3</span>
-        <span>Filter Aktif: {startDate} s/d {endDate}</span>
-      </div>
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 4: LAPORAN MUTASI & VALUASI STOK
+      ────────────────────────────────────────────────────────────── */}
+      {activeTab === 'inventory' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* KPI Summary Header Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Valuasi Aset Stok</span>
+                <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
+                  <Boxes size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', marginTop: '.35rem' }}>
+                {formatCurrency(inventoryData.summary?.totalAssetValuation)}
+              </div>
+              <div style={{ fontSize: '.72rem', color: '#64748b', marginTop: '.2rem' }}>
+                Total nilai rupiah seluruh persediaan bahan baku
+              </div>
+            </div>
 
+            <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #fee2e2', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' }}>Bahan Mendekati Kritis</span>
+                <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
+                  <AlertTriangle size={18} />
+                </div>
+              </div>
+              <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', marginTop: '.35rem' }}>
+                {inventoryData.summary?.criticalItemsCount || 0} Bahan
+              </div>
+              <div style={{ fontSize: '.72rem', color: '#b91c1c', marginTop: '.2rem' }}>
+                Segera restock sebelum operasional dapur terganggu
+              </div>
+            </div>
+          </div>
+
+          {/* Search Box Bar */}
+          <div style={{ background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', padding: '.75rem 1rem', display: 'flex', alignItems: 'center', gap: '.65rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <Search size={16} color="#64748b" />
+            <input
+              type="text"
+              placeholder="Cari nama bahan baku (misal: Ayam, Kaldu, Shoyu, Nori)..."
+              value={inventorySearch}
+              onChange={(e) => setInventorySearch(e.target.value)}
+              style={{
+                border: 'none', outline: 'none', background: 'transparent',
+                width: '100%', fontSize: '.85rem', fontWeight: 600, color: '#0f172a'
+              }}
+            />
+            {inventorySearch && (
+              <button
+                onClick={() => setInventorySearch('')}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+          {/* Inventory Table */}
+          <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                  {['NAMA BAHAN BAKU', 'SATUAN', 'STOK AWAL', 'MASUK (RESTOCK/PO)', 'KELUAR (PRODUKSI)', 'STOK AKHIR', 'STATUS', 'NILAI ASET'].map((h) => (
+                    <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(inventoryData.inventory || [])
+                  .filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                  .map((item: any) => {
+                    const isCritical = item.stockAkhir <= item.minStock;
+                    return (
+                      <tr key={item.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{item.name}</td>
+                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.8rem' }}>{item.unit}</td>
+                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem' }}>{item.stockAwal?.toLocaleString('id-ID')}</td>
+                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#10b981', fontWeight: 700 }}>+{item.masuk?.toLocaleString('id-ID')}</td>
+                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#ef4444', fontWeight: 700 }}>-{item.keluarProduksi?.toLocaleString('id-ID')}</td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: isCritical ? '#dc2626' : '#0f172a', fontSize: '.85rem' }}>
+                          {item.stockAkhir?.toLocaleString('id-ID')}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{
+                            padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
+                            background: isCritical ? '#fee2e2' : '#f0fdf4',
+                            color: isCritical ? '#991b1b' : '#166534'
+                          }}>
+                            {isCritical ? '⚠️ Kritis' : '🟢 Aman'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#10b981', fontSize: '.85rem' }}>
+                          {formatCurrency(item.totalValuation)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                {(inventoryData.inventory || []).filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase())).length === 0 && (
+                  <tr>
+                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                      Tidak ada bahan baku yang sesuai pencarian.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 5: KEUANGAN & LABA RUGI (P&L)
+      ────────────────────────────────────────────────────────────── */}
+      {activeTab === 'accounting' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'center' }}>
+          {/* Sub-tabs: P&L, Cashflow, Ledger */}
+          <div style={{ display: 'flex', gap: '.4rem', background: 'white', padding: '.4rem', borderRadius: '1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            {[
+              { id: 'pl', label: '📊 Laporan Laba Rugi (P&L)' },
+              { id: 'cashflow', label: '💵 Laporan Arus Kas' },
+              { id: 'ledger', label: '📖 Buku Jurnal Umum' }
+            ].map((st) => (
+              <button
+                key={st.id}
+                onClick={() => setAccountingSubTab(st.id as any)}
+                style={{
+                  padding: '.55rem 1.25rem', borderRadius: '.65rem', border: 'none',
+                  background: accountingSubTab === st.id ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
+                  color: accountingSubTab === st.id ? 'white' : '#475569',
+                  fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
+                  boxShadow: accountingSubTab === st.id ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Paper Style Financial Report Container */}
+          <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '2rem', width: '100%', maxWidth: '780px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+            {accountingSubTab === 'pl' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
+                  <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#7c3aed' }}>LAPORAN LABA RUGI OPERASIONAL</h4>
+                  <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
+                </div>
+
+                {/* 1. Pendapatan */}
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                    1. PENDAPATAN OPERASIONAL
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0' }}>
+                    <span>Penjualan Bersih Kasir</span>
+                    <span style={{ fontWeight: 700 }}>{formatCurrency(accountingData.profitLoss?.salesRevenue)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0' }}>
+                    <span>Pendapatan Lain-lain (Petty Cash Masuk)</span>
+                    <span style={{ fontWeight: 700 }}>{formatCurrency(accountingData.profitLoss?.otherRevenue)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#7c3aed', borderTop: '1px dashed #e2e8f0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                    <span>Total Pendapatan Operasional</span>
+                    <span>{formatCurrency(accountingData.profitLoss?.operatingRevenue)}</span>
+                  </div>
+                </div>
+
+                {/* 2. HPP */}
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                    2. HARGA POKOK PENJUALAN (HPP)
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0', color: '#dc2626' }}>
+                    <span>Beban Pokok Persediaan Bahan Baku (HPP)</span>
+                    <span style={{ fontWeight: 700 }}>-{formatCurrency(accountingData.profitLoss?.cogs)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#dc2626', borderTop: '1px dashed #e2e8f0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                    <span>Total Beban HPP</span>
+                    <span>-{formatCurrency(accountingData.profitLoss?.cogs)}</span>
+                  </div>
+                </div>
+
+                {/* Laba Kotor */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.95rem', fontWeight: 900, background: '#f8fafc', padding: '.75rem 1rem', borderRadius: '.5rem', border: '1px solid #e2e8f0' }}>
+                  <span>LABA KOTOR (GROSS PROFIT)</span>
+                  <span style={{ color: '#10b981' }}>{formatCurrency(accountingData.profitLoss?.grossProfit)}</span>
+                </div>
+
+                {/* 3. Beban OPEX */}
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                    3. BEBAN OPERASIONAL (OPEX)
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0', color: '#dc2626' }}>
+                    <span>Beban Kas Operasional & Petty Cash Keluar</span>
+                    <span style={{ fontWeight: 700 }}>-{formatCurrency(accountingData.profitLoss?.opexAmount)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#dc2626', borderTop: '1px dashed #e2e8f0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                    <span>Total Beban Operasional</span>
+                    <span>-{formatCurrency(accountingData.profitLoss?.operatingExpenses)}</span>
+                  </div>
+                </div>
+
+                {/* Laba Bersih */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 900, background: '#f0fdf4', padding: '1rem', borderRadius: '.75rem', border: '2px solid #bbf7d0', color: '#166534' }}>
+                  <span>LABA BERSIH OPERASIONAL (NET INCOME)</span>
+                  <span>{formatCurrency(accountingData.profitLoss?.netIncome)}</span>
+                </div>
+              </div>
+            )}
+
+            {accountingSubTab === 'cashflow' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
+                  <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#10b981' }}>LAPORAN ARUS KAS (CASH FLOW)</h4>
+                  <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#166534', borderBottom: '1px solid #bbf7d0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                    ARUS KAS MASUK (INFLOW)
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0' }}>
+                    <span>Penerimaan Kas Penjualan Kasir</span>
+                    <span style={{ fontWeight: 700 }}>{formatCurrency(accountingData.cashFlow?.inflow?.salesReceipts)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#166534', borderTop: '1px dashed #bbf7d0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                    <span>Total Kas Masuk</span>
+                    <span>{formatCurrency(accountingData.cashFlow?.inflow?.total)}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#b91c1c', borderBottom: '1px solid #fecdd3', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                    ARUS KAS KELUAR (OUTFLOW)
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0', color: '#dc2626' }}>
+                    <span>Pengeluaran Petty Cash & Operasional</span>
+                    <span style={{ fontWeight: 700 }}>-{formatCurrency(accountingData.cashFlow?.outflow?.opexPayments)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#dc2626', borderTop: '1px dashed #fecdd3', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                    <span>Total Kas Keluar</span>
+                    <span>-{formatCurrency(accountingData.cashFlow?.outflow?.total)}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 900, background: '#f0fdf4', padding: '1rem', borderRadius: '.75rem', border: '2px solid #bbf7d0', color: '#166534' }}>
+                  <span>KENAIKAN / (PENURUNAN) KAS BERSIH</span>
+                  <span>{formatCurrency(accountingData.cashFlow?.netCashFlow)}</span>
+                </div>
+              </div>
+            )}
+
+            {accountingSubTab === 'ledger' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
+                  <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#0284c7' }}>BUKU JURNAL UMUM (DOUBLE ENTRY)</h4>
+                  <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem', maxHeight: 450, overflowY: 'auto' }}>
+                  {(accountingData.journals || []).slice(0, 30).map((j: any, idx: number) => (
+                    <div key={idx} style={{ background: '#f8fafc', borderRadius: '.75rem', border: '1px solid #e2e8f0', padding: '.85rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', fontWeight: 700, color: '#64748b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                        <span>{new Date(j.date).toLocaleString('id-ID')} • Ref: {j.reference}</span>
+                        <span style={{ color: '#0f172a' }}>{j.description}</span>
+                      </div>
+                      {j.lines?.map((line: any, lidx: number) => (
+                        <div key={lidx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.8rem', padding: '.15rem 0' }}>
+                          <span style={{ paddingLeft: line.credit > 0 ? '1.5rem' : '0', color: line.credit > 0 ? '#64748b' : '#0f172a', fontWeight: line.credit > 0 ? 500 : 700 }}>
+                            {line.account}
+                          </span>
+                          <span style={{ fontWeight: 800 }}>
+                            {line.debit > 0 ? formatCurrency(line.debit) : formatCurrency(line.credit)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {(accountingData.journals || []).length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Belum ada catatan jurnal pada periode ini.</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL PILIHAN CETAK PDF RESMI
+      ────────────────────────────────────────────────────────────── */}
+      {showPdfModal && (
+        <div className="modal-overlay">
+          <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.2rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                  <Printer size={20} color="#7c3aed" /> Pilih Dokumen Laporan PDF
+                </h3>
+                <p style={{ margin: '.2rem 0 0', fontSize: '.8rem', color: '#64748b' }}>
+                  Format resmi siap cetak A4 untuk periode {startDate} s/d {endDate}
+                </p>
+              </div>
+              <button onClick={() => setShowPdfModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '.6rem' }}>
+              {[
+                { type: 'products', title: '🍜 Laporan Penjualan Menu & Margin (Best Seller)', desc: 'Ranking menu terlaris, kuantitas terjual, total omzet, HPP, laba dan margin' },
+                { type: 'pl', title: '📊 Laporan Laba Rugi (Profit & Loss)', desc: 'Format standar akuntansi: Pendapatan, HPP, OPEX, dan Laba Bersih' },
+                { type: 'cashflow', title: '💵 Laporan Arus Kas (Cash Flow)', desc: 'Rincian kas masuk penjualan dan kas keluar operasional' },
+                { type: 'shifts', title: '👥 Laporan Rekapitulasi Audit Shift Kasir', desc: 'Detail saldo awal, kas sistem, fisik laci, dan selisih kas per shift' },
+                { type: 'inventory', title: '📦 Laporan Mutasi & Valuasi Stok Bahan Baku', desc: 'Pergerakan stok awal, masuk restock, keluar masak, dan nilai aset' },
+                { type: 'dashboard', title: '📈 Laporan Ringkasan Performa Operasional', desc: 'Executive overview, ringkasan harian, dan breakdown metode pembayaran' },
+              ].map((doc) => (
+                <button
+                  key={doc.type}
+                  onClick={() => handleGeneratePdf(doc.type)}
+                  disabled={exportingPdf}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                    padding: '.85rem 1rem', borderRadius: '.75rem', border: '1px solid #e2e8f0',
+                    background: '#f8fafc', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#7c3aed';
+                    e.currentTarget.style.background = '#f5f3ff';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e2e8f0';
+                    e.currentTarget.style.background = '#f8fafc';
+                  }}
+                >
+                  <div style={{ fontWeight: 800, fontSize: '.875rem', color: '#0f172a' }}>{doc.title}</div>
+                  <div style={{ fontSize: '.75rem', color: '#64748b', marginTop: '.15rem' }}>{doc.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowPdfModal(false)}
+                style={{ padding: '.65rem 1.25rem', borderRadius: '.6rem', border: '1px solid #cbd5e1', background: 'white', color: '#475569', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
 export default ReportView;

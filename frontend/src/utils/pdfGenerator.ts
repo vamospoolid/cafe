@@ -926,3 +926,776 @@ export const exportFinancialPDF = async (
   const fileNameTitle = currentTitle.replace(/\s+/g, '_');
   doc.save(`${fileNameTitle}_${startDate}_to_${endDate}.pdf`);
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. LAPORAN VALUASI & POSISI ASET PERSEDIAAN (INVENTORY VALUATION REPORT)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportIngredientValuationPDF = async (
+  settings: VenueSettings,
+  ingredients: any[],
+  userName?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+  const currentTitle = 'LAPORAN VALUASI POSISI ASET PERSEDIAAN';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(245, 158, 11); // amber-500
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(10);
+    pdfDoc.setTextColor(217, 119, 6); // amber-600
+    pdfDoc.text(currentTitle, pageWidth - margin, 17, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Status Posisi: Realtime Closing`, pageWidth - margin, 21, { align: 'right' });
+    pdfDoc.text(`Dicetak Oleh: ${userName || 'Cost Controller / Finance'}`, pageWidth - margin, 25, { align: 'right' });
+    pdfDoc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 29, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 33, pageWidth - margin, 33);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text(
+      `Sistem Akuntansi Persediaan ${settings?.storeName || 'SOL CAFE'} — Dokumen Aset Lancar Resmi.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  };
+
+  const addThreeSignatureBlock = (pdfDoc: jsPDF, startY: number) => {
+    let signatureY = startY + 14;
+    if (signatureY + 32 > pageHeight - 15) {
+      pdfDoc.addPage();
+      signatureY = 40;
+    }
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(71, 85, 105);
+
+    // Left
+    pdfDoc.text('Dibuat Oleh (PIC Dapur/Gudang),', margin + 6, signatureY);
+    pdfDoc.setDrawColor(203, 213, 225);
+    pdfDoc.line(margin + 6, signatureY + 18, margin + 50, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text(userName || 'Head Chef / Barista', margin + 6, signatureY + 22);
+
+    // Middle
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Diperiksa Oleh (Cost Control),', (pageWidth / 2) - 22, signatureY);
+    pdfDoc.line((pageWidth / 2) - 22, signatureY + 18, (pageWidth / 2) + 22, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Finance / Accounting', (pageWidth / 2) - 22, signatureY + 22);
+
+    // Right
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Disetujui Oleh (Owner/GM),', pageWidth - margin - 50, signatureY);
+    pdfDoc.line(pageWidth - margin - 50, signatureY + 18, pageWidth - margin - 6, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Owner / General Manager', pageWidth - margin - 50, signatureY + 22);
+  };
+
+  // Calculations
+  const totalValuation = ingredients.reduce((acc, i) => acc + ((i.stock || 0) * (i.buyPrice || 0)), 0);
+  const totalItems = ingredients.length;
+  const lowStockCount = ingredients.filter(i => i.stock <= i.minStock && i.stock > 0).length;
+  const outOfStockCount = ingredients.filter(i => i.stock <= 0).length;
+
+  const foodVal = ingredients.filter(i => (i.category || 'FOOD') === 'FOOD').reduce((acc, i) => acc + (i.stock * i.buyPrice), 0);
+  const drinkVal = ingredients.filter(i => i.category === 'DRINK').reduce((acc, i) => acc + (i.stock * i.buyPrice), 0);
+  const packVal = ingredients.filter(i => i.category === 'PACKAGING').reduce((acc, i) => acc + (i.stock * i.buyPrice), 0);
+
+  // Summary Metrics Table
+  autoTable(doc, {
+    head: [['RINGKASAN VALUASI ASET PERSEDIAAN', 'NILAI']],
+    body: [
+      ['TOTAL VALUASI NILAI ASET GUDANG & DAPUR', formatCurrency(totalValuation)],
+      ['Total Variasi Bahan Baku', `${totalItems} Macam`],
+      ['Valuasi Kategori Bahan Makanan (Food)', formatCurrency(foodVal)],
+      ['Valuasi Kategori Bahan Minuman (Drink)', formatCurrency(drinkVal)],
+      ['Valuasi Kategori Kemasan (Packaging)', formatCurrency(packVal)],
+      ['Status Stok Kritis / Di Bawah Buffer Stock', `${lowStockCount} Item Menipis, ${outOfStockCount} Item Habis`]
+    ],
+    startY: 38,
+    margin: { top: 38, bottom: 20 },
+    theme: 'grid',
+    styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } }
+  });
+
+  const nextY = (doc as any).lastAutoTable?.finalY || 85;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text('RINCIAN VALUASI DETAIL PER-ITEM BAHAN BAKU', margin, nextY + 8);
+
+  // Detail Table
+  const tableColumns = ['NO', 'NAMA BAHAN', 'KAT', 'STOK', 'SATUAN', 'HARGA BELI', 'NILAI ASET (RP)', 'MIN', 'STATUS'];
+  const tableRows = ingredients.map((item, idx) => {
+    const itemValuation = (item.stock || 0) * (item.buyPrice || 0);
+    let statusText = 'Aman';
+    if (item.stock <= 0) statusText = 'HABIS';
+    else if (item.stock <= item.minStock) statusText = 'MENIPIS';
+
+    return [
+      idx + 1,
+      item.name,
+      item.category || 'FOOD',
+      item.stock,
+      item.unit,
+      formatCurrency(item.buyPrice),
+      formatCurrency(itemValuation),
+      item.minStock,
+      statusText
+    ];
+  });
+
+  autoTable(doc, {
+    head: [tableColumns],
+    body: tableRows,
+    startY: nextY + 12,
+    margin: { top: 38, bottom: 20 },
+    theme: 'striped',
+    styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'center' },
+      3: { halign: 'right', fontStyle: 'bold' },
+      4: { halign: 'center' },
+      5: { halign: 'right' },
+      6: { halign: 'right', fontStyle: 'bold' },
+      7: { halign: 'right' },
+      8: { halign: 'center', fontStyle: 'bold' }
+    }
+  });
+
+  addThreeSignatureBlock(doc, (doc as any).lastAutoTable?.finalY || 180);
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Valuasi_Aset_Persediaan_${new Date().toISOString().split('T')[0]}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. LAPORAN AUDIT STOCK LOSS & KERUSAKAN BAHAN (WASTE AUDIT REPORT)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportStockLossAuditPDF = async (
+  settings: VenueSettings,
+  lossData: any,
+  userName?: string,
+  startDate?: string,
+  endDate?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+  const currentTitle = 'LAPORAN AUDIT KERUSAKAN & STOCK LOSS (FOOD WASTE)';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(225, 29, 72); // rose-600
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(9.5);
+    pdfDoc.setTextColor(225, 29, 72);
+    pdfDoc.text(currentTitle, pageWidth - margin, 17, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Periode: ${startDate ? formatDateID(startDate) : 'Bulan Berjalan'} s/d ${endDate ? formatDateID(endDate) : 'Hari Ini'}`, pageWidth - margin, 21, { align: 'right' });
+    pdfDoc.text(`Dicetak Oleh: ${userName || 'Auditor Dapur / Finance'}`, pageWidth - margin, 25, { align: 'right' });
+    pdfDoc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 29, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 33, pageWidth - margin, 33);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text(
+      `Sistem Audit HPP & Kerusakan Bahan ${settings?.storeName || 'SOL CAFE'} — Dokumen Pengawasan Biaya.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  };
+
+  const addThreeSignatureBlock = (pdfDoc: jsPDF, startY: number) => {
+    let signatureY = startY + 14;
+    if (signatureY + 32 > pageHeight - 15) {
+      pdfDoc.addPage();
+      signatureY = 40;
+    }
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(71, 85, 105);
+
+    pdfDoc.text('Dilaporkan Oleh (Head Chef/Barista),', margin + 6, signatureY);
+    pdfDoc.setDrawColor(203, 213, 225);
+    pdfDoc.line(margin + 6, signatureY + 18, margin + 50, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text(userName || 'Kepala Dapur', margin + 6, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Diaudit Oleh (Cost Controller),', (pageWidth / 2) - 22, signatureY);
+    pdfDoc.line((pageWidth / 2) - 22, signatureY + 18, (pageWidth / 2) + 22, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Finance & Accounting', (pageWidth / 2) - 22, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Mengetahui (Owner/GM),', pageWidth - margin - 50, signatureY);
+    pdfDoc.line(pageWidth - margin - 50, signatureY + 18, pageWidth - margin - 6, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Owner / Manajer', pageWidth - margin - 50, signatureY + 22);
+  };
+
+  const totalLossRp = lossData?.totalLossRupiah || 0;
+  const totalIncidents = lossData?.totalLossIncidents || 0;
+  const lossRate = lossData?.lossRatePercentage || 0;
+  const efficiencyRate = lossData?.efficiencyRate || 100;
+  const productionValue = lossData?.totalProductionValue || 0;
+
+  // Key KPI Cards
+  autoTable(doc, {
+    head: [['KEY PERFORMANCE INDICATOR (KPI) LOSS & EFISIENSI', 'HASIL EVALUASI']],
+    body: [
+      ['TOTAL VALUASI KERUGIAN BAHAN BAKU (STOCK LOSS)', `Rp ${totalLossRp.toLocaleString('id-ID')}`],
+      ['Total Insiden Kerusakan Dicatat', `${totalIncidents} Kejadian Insiden`],
+      ['Tingkat Kerugian Bahan (% Loss Rate)', `${lossRate}% dari total pengeluaran`],
+      ['Tingkat Efisiensi Bahan (% Yield Rate)', `${efficiencyRate}% sukses diproduksi/terjual`],
+      ['Total Nilai Produksi Sukses Terjual (POS)', `Rp ${productionValue.toLocaleString('id-ID')}`]
+    ],
+    startY: 38,
+    margin: { top: 38, bottom: 20 },
+    theme: 'grid',
+    styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [190, 18, 60], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } }
+  });
+
+  let nextY = (doc as any).lastAutoTable?.finalY || 85;
+
+  // Top 5 Loss Items
+  if (lossData?.topLossItems && lossData.topLossItems.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('TOP 5 BAHAN PENYUMBANG KERUGIAN TERBESAR (PARETO 80/20)', margin, nextY + 8);
+
+    const topColumns = ['PERINGKAT', 'NAMA BAHAN BAKU', 'TOTAL QTY RUSAK', 'TOTAL VALUASI RUGI (RP)'];
+    const topRows = lossData.topLossItems.map((t: any, idx: number) => [
+      `Peringkat #${idx + 1}`,
+      t.name,
+      `${t.totalQty} ${t.unit}`,
+      formatCurrency(t.totalRupiah)
+    ]);
+
+    autoTable(doc, {
+      head: [topColumns],
+      body: topRows,
+      startY: nextY + 11,
+      margin: { top: 38, bottom: 20 },
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [159, 18, 57], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+      columnStyles: {
+        0: { halign: 'center', fontStyle: 'bold' },
+        1: { fontStyle: 'bold' },
+        2: { halign: 'right' },
+        3: { halign: 'right', fontStyle: 'bold', textColor: [225, 29, 72] }
+      }
+    });
+
+    nextY = (doc as any).lastAutoTable?.finalY || nextY + 30;
+  }
+
+  // Full Log Table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text('RIWAYAT LENGKAP PENCATATAN INSIDEN STOCK LOSS & WASTE', margin, nextY + 8);
+
+  const logColumns = ['TANGGAL/WAKTU', 'BAHAN BAKU', 'QTY RUSAK', 'VALUASI (RP)', 'ALASAN', 'DICATAT OLEH'];
+  const logRows = (lossData?.lossLogs || []).map((l: any) => [
+    new Date(l.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+    l.ingredient?.name || '-',
+    `${l.qtyLoss} ${l.ingredient?.unit || ''}`,
+    formatCurrency(l.costLoss),
+    l.reason || 'Lainnya',
+    l.recordedBy || 'Staf Dapur'
+  ]);
+
+  autoTable(doc, {
+    head: [logColumns],
+    body: logRows.length > 0 ? logRows : [['-', 'Belum ada data insiden kerusakan tercatat', '-', '-', '-', '-']],
+    startY: nextY + 11,
+    margin: { top: 38, bottom: 20 },
+    theme: 'striped',
+    styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { cellWidth: 30 },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'right' },
+      3: { halign: 'right', fontStyle: 'bold' },
+      4: { halign: 'center' },
+      5: { halign: 'left' }
+    }
+  });
+
+  addThreeSignatureBlock(doc, (doc as any).lastAutoTable?.finalY || 180);
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Audit_Stock_Loss_${new Date().toISOString().split('T')[0]}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. LAPORAN RENCANA ANGGARAN & PROYEKSI BELANJA BAHAN (PROCUREMENT FORECAST)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportProcurementForecastPDF = async (
+  settings: VenueSettings,
+  shoppingData: any,
+  userName?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+  const currentTitle = 'LAPORAN RENCANA ANGGARAN & PROYEKSI BELANJA BAHAN';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(79, 70, 229); // indigo-600
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(9.5);
+    pdfDoc.setTextColor(79, 70, 229);
+    pdfDoc.text(currentTitle, pageWidth - margin, 17, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Status: Kebutuhan Belanja / Restock`, pageWidth - margin, 21, { align: 'right' });
+    pdfDoc.text(`Dibuat Oleh: ${userName || 'Purchasing / Dapur'}`, pageWidth - margin, 25, { align: 'right' });
+    pdfDoc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 29, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 33, pageWidth - margin, 33);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text(
+      `Sistem Perencanaan Pengadaan ${settings?.storeName || 'SOL CAFE'} — Dokumen Proyeksi Arus Kas Keluar.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  };
+
+  const addThreeSignatureBlock = (pdfDoc: jsPDF, startY: number) => {
+    let signatureY = startY + 14;
+    if (signatureY + 32 > pageHeight - 15) {
+      pdfDoc.addPage();
+      signatureY = 40;
+    }
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(71, 85, 105);
+
+    pdfDoc.text('Diajukan Oleh (Purchasing/Dapur),', margin + 6, signatureY);
+    pdfDoc.setDrawColor(203, 213, 225);
+    pdfDoc.line(margin + 6, signatureY + 18, margin + 50, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text(userName || 'Petugas Pembelian', margin + 6, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Disiapkan Kas (Finance),', (pageWidth / 2) - 22, signatureY);
+    pdfDoc.line((pageWidth / 2) - 22, signatureY + 18, (pageWidth / 2) + 22, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Finance / Kasir Kas', (pageWidth / 2) - 22, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Disetujui Oleh (Owner/GM),', pageWidth - margin - 50, signatureY);
+    pdfDoc.line(pageWidth - margin - 50, signatureY + 18, pageWidth - margin - 6, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Owner / General Manager', pageWidth - margin - 50, signatureY + 22);
+  };
+
+  const totalEstimatedCost = shoppingData?.totalEstimatedCost || 0;
+  const criticalCount = shoppingData?.criticalItems?.length || 0;
+
+  // Summary Metrics
+  autoTable(doc, {
+    head: [['RINGKASAN ESTIMASI ANGGARAN BELANJA RESTOCK', 'NOMINAL']],
+    body: [
+      ['TOTAL ESTIMASI DANA KAS YANG DIBUTUHKAN', formatCurrency(totalEstimatedCost)],
+      ['Total Item Bahan Perlu Segera Dibeli', `${criticalCount} Bahan Kritis/Habis`],
+      ['Status Kesiapan Arus Kas', 'Siap Dicairkan Via Petty Cash / Transfer Supplier']
+    ],
+    startY: 38,
+    margin: { top: 38, bottom: 20 },
+    theme: 'grid',
+    styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [67, 56, 202], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } }
+  });
+
+  const nextY = (doc as any).lastAutoTable?.finalY || 85;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text('DAFTAR BAHAN BAKU YANG PERLU DIBELI / DIREORDER', margin, nextY + 8);
+
+  const planColumns = ['NO', 'BAHAN BAKU', 'SISA STOK', 'BUFFER MIN', 'SARAN ORDER', 'EST. HARGA', 'EST. ANGGARAN (RP)', 'SUPPLIER'];
+  const planRows = (shoppingData?.criticalItems || []).map((item: any, idx: number) => [
+    idx + 1,
+    item.name,
+    `${item.currentStock} ${item.unit}`,
+    `${item.minStock} ${item.unit}`,
+    `${item.recommendedBuyQty} ${item.unit}`,
+    formatCurrency(item.buyPrice),
+    formatCurrency(item.estimatedCost),
+    item.supplierName || 'Umum / Pasar'
+  ]);
+
+  autoTable(doc, {
+    head: [planColumns],
+    body: planRows.length > 0 ? planRows : [['-', 'Semua bahan baku dalam kondisi aman (Stok Cukup)', '-', '-', '-', '-', '-', '-']],
+    startY: nextY + 11,
+    margin: { top: 38, bottom: 20 },
+    theme: 'striped',
+    styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+      4: { halign: 'right', fontStyle: 'bold', textColor: [79, 70, 229] },
+      5: { halign: 'right' },
+      6: { halign: 'right', fontStyle: 'bold' },
+      7: { halign: 'left' }
+    }
+  });
+
+  addThreeSignatureBlock(doc, (doc as any).lastAutoTable?.finalY || 180);
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Rencana_Belanja_Bahan_${new Date().toISOString().split('T')[0]}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. LAPORAN REKONSILIASI STOCK OPNAME FISIK (VARIANCE / DISCREPANCY REPORT)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportStockOpnameVariancePDF = async (
+  settings: VenueSettings,
+  opnameItems: any[],
+  userName?: string,
+  generalNotes?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+  const currentTitle = 'BERITA ACARA & HASIL AUDIT STOCK OPNAME FISIK';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(14, 165, 233); // sky-500
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(9.5);
+    pdfDoc.setTextColor(2, 132, 199);
+    pdfDoc.text(currentTitle, pageWidth - margin, 17, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Status: Rekonsiliasi Fisik vs Sistem Buku`, pageWidth - margin, 21, { align: 'right' });
+    pdfDoc.text(`Auditor / Petugas: ${userName || 'Auditor Tim Dapur'}`, pageWidth - margin, 25, { align: 'right' });
+    pdfDoc.text(`Tanggal Audit: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 29, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 33, pageWidth - margin, 33);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text(
+      `Sistem Audit Persediaan Fisik ${settings?.storeName || 'SOL CAFE'} — Berita Acara Rekonsiliasi Resmi.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  };
+
+  const addThreeSignatureBlock = (pdfDoc: jsPDF, startY: number) => {
+    let signatureY = startY + 14;
+    if (signatureY + 32 > pageHeight - 15) {
+      pdfDoc.addPage();
+      signatureY = 40;
+    }
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(71, 85, 105);
+
+    pdfDoc.text('Petugas Penghitung Fisik,', margin + 6, signatureY);
+    pdfDoc.setDrawColor(203, 213, 225);
+    pdfDoc.line(margin + 6, signatureY + 18, margin + 50, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text(userName || 'Tim Opname', margin + 6, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Diverifikasi (Cost Controller),', (pageWidth / 2) - 22, signatureY);
+    pdfDoc.line((pageWidth / 2) - 22, signatureY + 18, (pageWidth / 2) + 22, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Finance / Accounting', (pageWidth / 2) - 22, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Disetujui (Owner / Manager),', pageWidth - margin - 50, signatureY);
+    pdfDoc.line(pageWidth - margin - 50, signatureY + 18, pageWidth - margin - 6, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Owner / General Manager', pageWidth - margin - 50, signatureY + 22);
+  };
+
+  // Calculations
+  let totalDiscrepancyPlus = 0;
+  let totalDiscrepancyMinus = 0;
+  let matchedItems = 0;
+
+  const tableRows = opnameItems.map((item, idx) => {
+    const sys = Number(item.systemStock) || 0;
+    const phys = item.physicalStock === '' ? sys : (Number(item.physicalStock) || 0);
+    const diff = phys - sys;
+    const diffRp = diff * (item.buyPrice || 0);
+
+    if (diff > 0) totalDiscrepancyPlus += diffRp;
+    else if (diff < 0) totalDiscrepancyMinus += Math.abs(diffRp);
+    else matchedItems++;
+
+    return [
+      idx + 1,
+      item.name,
+      item.unit,
+      sys,
+      phys,
+      diff > 0 ? `+${diff}` : diff,
+      formatCurrency(item.buyPrice),
+      diff > 0 ? `+${formatCurrency(diffRp)}` : formatCurrency(diffRp),
+      item.reason || item.notes || '-'
+    ];
+  });
+
+  const accuracyRate = opnameItems.length > 0 ? Math.round((matchedItems / opnameItems.length) * 100) : 100;
+  const netVarianceRp = totalDiscrepancyPlus - totalDiscrepancyMinus;
+
+  // Summary Metrics Table
+  autoTable(doc, {
+    head: [['HASIL REKONSILIASI OPNAME FISIK', 'NILAI AUDIT']],
+    body: [
+      ['Total Item Bahan Baku Diaudit', `${opnameItems.length} Item`],
+      ['Tingkat Akurasi Stok Fisik vs Sistem', `${accuracyRate}% Cocok`],
+      ['Total Selisih Lebih Fisik (+)', `+${formatCurrency(totalDiscrepancyPlus)}`],
+      ['Total Selisih Kurang Fisik (-)', `-${formatCurrency(totalDiscrepancyMinus)}`],
+      ['NET SELISIH PERSIMPANGAN (NET VARIANCE)', `${netVarianceRp >= 0 ? '+' : ''}${formatCurrency(netVarianceRp)}`]
+    ],
+    startY: 38,
+    margin: { top: 38, bottom: 20 },
+    theme: 'grid',
+    styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [2, 132, 199], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } }
+  });
+
+  const nextY = (doc as any).lastAutoTable?.finalY || 85;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text('LEMBAR KERJA DETAIL REKONSILIASI STOK OPNAME', margin, nextY + 8);
+
+  const opnameColumns = ['NO', 'BAHAN BAKU', 'SATUAN', 'SISTEM', 'FISIK', 'SELISIH', 'HARGA', 'VARIANCE (RP)', 'CATATAN'];
+
+  autoTable(doc, {
+    head: [opnameColumns],
+    body: tableRows,
+    startY: nextY + 11,
+    margin: { top: 38, bottom: 20 },
+    theme: 'striped',
+    styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'center' },
+      3: { halign: 'right' },
+      4: { halign: 'right', fontStyle: 'bold' },
+      5: { halign: 'right', fontStyle: 'bold' },
+      6: { halign: 'right' },
+      7: { halign: 'right', fontStyle: 'bold' },
+      8: { halign: 'left' }
+    }
+  });
+
+  addThreeSignatureBlock(doc, (doc as any).lastAutoTable?.finalY || 180);
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Berita_Acara_Stock_Opname_${new Date().toISOString().split('T')[0]}.pdf`);
+};
+

@@ -46,8 +46,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const isKDSEnabled = posContext?.settings?.enableKDS !== false;
+
   const fetchKdsCount = async () => {
-    if (!posContext?.token) return;
+    if (!posContext?.token || !isKDSEnabled) {
+      setKdsCount(0);
+      return;
+    }
     try {
       const res = await fetch('/api/kds/active', {
         headers: { Authorization: `Bearer ${posContext?.token}` }
@@ -62,10 +67,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    if (posContext?.token) {
+    if (posContext?.token && isKDSEnabled) {
       fetchKdsCount();
+    } else {
+      setKdsCount(0);
     }
-  }, [posContext?.token]);
+  }, [posContext?.token, isKDSEnabled]);
 
   useEffect(() => {
     if (!posContext?.token) return;
@@ -184,7 +191,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <span>POS / Penjualan</span>
             </NavLink>
           )}
-          {checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+          {isKDSEnabled && checkAccess(['Admin', 'Dapur']) && (
             <NavLink to="/kds" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
               <ChefHat size={20} />
               <span>Dapur (KDS)</span>
@@ -544,7 +551,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </NavLink>
               )}
 
-              {checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+              {isKDSEnabled && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
                 <NavLink 
                   to="/kds" 
                   onClick={() => setIsMoreMenuOpen(false)}

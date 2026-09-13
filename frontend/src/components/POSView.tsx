@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Camera, Plus, Trash2, Minus, Search, CreditCard, User, Edit2, ShoppingCart, Package, ArrowRight, X, Save, Lock, Play } from 'lucide-react';
+import { 
+  Camera, Plus, Trash2, Minus, Search, CreditCard, User, Edit2, 
+  ShoppingCart, Package, ArrowRight, X, Save, Lock, Play,
+  Maximize2, Minimize2, Download, RefreshCw, Wifi, WifiOff, Smartphone
+} from 'lucide-react';
 import CheckoutModal from './CheckoutModal';
 import CustomerModal from './CustomerModal';
 import DrinkCustomizationModal from './DrinkCustomizationModal';
@@ -9,6 +13,7 @@ import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
 import { isNativePlatform, startNativeBarcodeScan } from '../utils/barcodeScannerNative';
+import useSocket from '../hooks/useSocket';
 
 export interface CartItem {
   product: any;
@@ -17,6 +22,7 @@ export interface CartItem {
 }
 
 export const POSView = () => {
+  const socket = useSocket();
   const [activeCategory, setActiveCategory] = useState<number | 'Semua'>('Semua');
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -37,12 +43,36 @@ export const POSView = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
+  // PWA & Tablet Kiosk States
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
     };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    // Fullscreen state listener
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    // PWA beforeinstallprompt listener
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      console.log('[PWA] beforeinstallprompt event captured');
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
   
   const posContext = useContext(POSContext);
@@ -55,6 +85,45 @@ export const POSView = () => {
       fetchTables();
     }
   }, [posContext?.token]);
+
+  // Real-time Live Kitchen Stock Sync & Auto Sold-Out Lock
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStockSync = (data: any) => {
+      console.log('[POS Socket] menu:stock_sync received:', data);
+      if (data?.soldOutProductIds) {
+        setProducts(prev => prev.map(p => {
+          if (data.soldOutProductIds.includes(p.id)) {
+            return { ...p, isSoldOut: true, stock: 0 };
+          }
+          if (data.availableProductIds && data.availableProductIds.includes(p.id)) {
+            return { ...p, isSoldOut: false };
+          }
+          return p;
+        }));
+      } else {
+        // Full refresh if needed
+        fetchProducts();
+      }
+    };
+
+    const handleProductSoldOut = (data: any) => {
+      console.log('[POS Socket] product:sold_out received:', data);
+      if (data?.productId) {
+        setProducts(prev => prev.map(p => p.id === data.productId ? { ...p, isSoldOut: true, stock: 0 } : p));
+        toast(`⚠️ Dapur: Menu "${data.productName}" telah habis & dikunci otomatis!`, 'warning');
+      }
+    };
+
+    socket.on('menu:stock_sync', handleStockSync);
+    socket.on('product:sold_out', handleProductSoldOut);
+
+    return () => {
+      socket.off('menu:stock_sync', handleStockSync);
+      socket.off('product:sold_out', handleProductSoldOut);
+    };
+  }, [socket]);
 
   const fetchTables = async () => {
     try {
@@ -114,7 +183,51 @@ export const POSView = () => {
 
   const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
 
+  const toggleFullscreen = () => {
+    posContext?.triggerHaptic(20);
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error('Error attempting to enable fullscreen:', err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(err => {
+          console.error('Error attempting to exit fullscreen:', err);
+        });
+      }
+    }
+  };
+
+  const handleInstallPWA = async () => {
+    if (!installPrompt) {
+      toast('Aplikasi sudah terpasang atau gunakan menu browser "Tambahkan ke Layar Utama"', 'info');
+      return;
+    }
+    posContext?.triggerHaptic(30);
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      toast('Aplikasi SOL POS berhasil dipasang!', 'success');
+      setInstallPrompt(null);
+    }
+  };
+
+  const handleManualSync = async () => {
+    if (!navigator.onLine) {
+      toast('Koneksi masih offline. Sambungkan Wi-Fi/Internet terlebih dahulu.', 'warning');
+      return;
+    }
+    setIsSyncing(true);
+    posContext?.triggerHaptic(25);
+    try {
+      await posContext?.syncOfflineOrders();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const addToCart = (product: any, customization?: DrinkCustomization) => {
+    posContext?.triggerHaptic(25);
     const notesStr = customization
       ? [customization.temperature, customization.sugar, customization.ice, customization.notes].filter(Boolean).join(' • ')
       : '';
@@ -129,6 +242,11 @@ export const POSView = () => {
   };
 
   const handleProductClick = (product: any) => {
+    if (product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe)) {
+      toast(`Menu "${product.name}" sudah habis di dapur!`, 'warning');
+      return;
+    }
+
     // Determine if product is a drink (category name contains minuman or bevvies)
     const categoryName = categories.find((c: any) => c.id === product.categoryId)?.name?.toLowerCase() || '';
     const isDrink = categoryName.includes('minum') || categoryName.includes('bev');
@@ -141,6 +259,7 @@ export const POSView = () => {
   };
 
   const decreaseQty = (productId: number) => {
+    posContext?.triggerHaptic(20);
     setCart(prev => {
       const existing = prev.find(item => item.product.id === productId);
       if (existing && existing.qty > 1) {
@@ -151,6 +270,7 @@ export const POSView = () => {
   };
 
   const removeFromCart = (productId: number) => {
+    posContext?.triggerHaptic(30);
     setCart(prev => prev.filter(item => item.product.id !== productId));
   };
 
@@ -304,6 +424,70 @@ export const POSView = () => {
     <div className="pos-layout" style={{ flexDirection: isMobile ? 'column' : 'row', height: '100%', overflow: 'hidden' }}>
       {/* Kiri: Daftar Produk */}
       <div className="pos-main">
+        {/* PWA & Tablet Kiosk Actions Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-1">
+          <div className="flex items-center gap-2">
+            {/* Status Online/Offline */}
+            {posContext?.isOnline ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Online</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-300 rounded-lg shadow-sm">
+                <WifiOff size={13} className="text-amber-600" />
+                <span>Mode Offline (Tersimpan Lokal)</span>
+              </span>
+            )}
+
+            {/* Offline Queue Sync Indicator */}
+            {(posContext?.offlineQueueCount ?? 0) > 0 && (
+              <button 
+                onClick={handleManualSync} 
+                disabled={isSyncing}
+                title="Klik untuk menyinkronkan transaksi offline ke server"
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 bg-violet-600 hover:bg-violet-700 text-white rounded-lg shadow-md transition-all active:scale-95"
+              >
+                <RefreshCw size={13} className={isSyncing ? 'animate-spin' : ''} />
+                <span>Sinkron ({posContext?.offlineQueueCount} Tertunda)</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Install PWA Button */}
+            {installPrompt && (
+              <button
+                onClick={handleInstallPWA}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-lg shadow-md hover:opacity-90 active:scale-95 transition-all"
+                title="Pasang aplikasi POS di Tablet Android"
+              >
+                <Download size={13} />
+                <span>Pasang Aplikasi POS</span>
+              </button>
+            )}
+
+            {/* Kiosk Fullscreen Toggle */}
+            <button
+              onClick={toggleFullscreen}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-white text-slate-700 border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 active:scale-95 transition-all"
+              title={isFullscreen ? 'Keluar dari Layar Penuh' : 'Mode Layar Penuh Kiosk Tablet'}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 size={13} className="text-violet-600" />
+                  <span className="hidden sm:inline">Keluar Fullscreen</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 size={13} className="text-violet-600" />
+                  <span className="hidden sm:inline">Layar Penuh (Kiosk)</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
         {/* Scanner & Filter */}
         <div className="pos-toolbar" style={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '0.75rem' : '1.5rem', alignItems: 'stretch' }}>
           <div className="scanner-box" style={{ width: '100%' }}>
@@ -343,27 +527,55 @@ export const POSView = () => {
 
         {/* Grid Produk */}
         <div className="product-grid overflow-y-auto">
-          {filteredProducts.map(product => (
-            <div key={product.id} className="product-card cursor-pointer group" onClick={() => handleProductClick(product)}>
-              <div className="product-img-wrapper bg-gray-100 flex items-center justify-center relative overflow-hidden">
-                {product.imageUrl ? (
-                  <img src={product.imageUrl} alt={product.name} className="product-img group-hover:scale-105 transition-transform" />
-                ) : (
-                  <Package size={40} className="text-gray-300" />
-                )}
-                <div className="absolute inset-0 bg-black bg-opacity-10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              </div>
-              <div className="product-info">
-                <div>
-                  <div className="product-name truncate" title={product.name}>{product.name}</div>
-                  <div className="product-price">{formatCurrency(product.sellPrice)}</div>
-                  <div className="product-stock flex justify-between items-center mt-1">
-                    <span className={`text-xs font-semibold ${product.stock <= product.minStock ? 'text-red-500' : 'text-gray-500'}`}>Stok: {product.stock}</span>
+          {filteredProducts.map(product => {
+            const isSoldOut = Boolean(product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe));
+            return (
+              <div 
+                key={product.id} 
+                className={`product-card group relative transition-all ${
+                  isSoldOut 
+                    ? 'opacity-60 grayscale cursor-not-allowed border-rose-200/50 bg-slate-50' 
+                    : 'cursor-pointer hover:border-amber-400/80 hover:shadow-md'
+                }`} 
+                onClick={() => handleProductClick(product)}
+              >
+                <div className="product-img-wrapper bg-gray-100 flex items-center justify-center relative overflow-hidden">
+                  {product.imageUrl ? (
+                    <img src={product.imageUrl} alt={product.name} className={`product-img ${!isSoldOut ? 'group-hover:scale-105' : ''} transition-transform`} />
+                  ) : (
+                    <Package size={40} className="text-gray-300" />
+                  )}
+                  
+                  {/* Sold Out Badge Overlay */}
+                  {isSoldOut ? (
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10">
+                      <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg border border-white/20 animate-pulse">
+                        HABIS / SOLD OUT
+                      </span>
+                      <span className="text-[9px] text-white/90 font-medium mt-1">Dapur Kehabisan Bahan</span>
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 bg-black bg-opacity-10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  )}
+                </div>
+                <div className="product-info">
+                  <div>
+                    <div className="product-name truncate" title={product.name}>{product.name}</div>
+                    <div className="product-price">{formatCurrency(product.sellPrice)}</div>
+                    <div className="product-stock flex justify-between items-center mt-1">
+                      {isSoldOut ? (
+                        <span className="text-[10px] font-black text-rose-500 uppercase">Stok Habis</span>
+                      ) : (
+                        <span className={`text-xs font-semibold ${product.stock <= product.minStock ? 'text-red-500' : 'text-gray-500'}`}>
+                          Stok: {product.stock}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {filteredProducts.length === 0 && (
             <div className="col-span-full text-center p-12 text-gray-400">
               <Package size={48} className="mx-auto mb-4 opacity-50" />

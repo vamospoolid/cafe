@@ -26,15 +26,17 @@ model User {
   shifts         Shift[]
   purchaseOrders PurchaseOrder[]
   debtPayments   DebtPayment[]
+  ingredientLogs IngredientLog[]
   
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
 
 model Category {
-  id       Int       @id @default(autoincrement())
-  name     String
-  products Product[]
+  id            Int       @id @default(autoincrement())
+  name          String
+  printerTarget String    @default("KITCHEN") // KITCHEN, BAR, NONE
+  products      Product[]
 }
 
 model Product {
@@ -177,13 +179,24 @@ model CashFlow {
 }
 
 model Attendance {
-  id       Int      @id @default(autoincrement())
-  user     User     @relation(fields: [userId], references: [id])
-  userId   Int
-  clockIn  DateTime @default(now())
-  clockOut DateTime?
-  date     String   // YYYY-MM-DD
-  status   String   @default("Hadir") // Hadir, Terlambat
+  id             Int      @id @default(autoincrement())
+  user           User     @relation(fields: [userId], references: [id])
+  userId         Int
+  clockIn        DateTime @default(now())
+  clockOut       DateTime?
+  date           String   // YYYY-MM-DD
+  shiftName      String?  // e.g. "Shift Pagi (08:00 - 16:00)"
+  photoIn        String?  // Data URL / Base64 foto selfie saat masuk
+  photoOut       String?  // Data URL / Base64 foto selfie saat pulang
+  latitudeIn     Float?
+  longitudeIn    Float?
+  latitudeOut    Float?
+  longitudeOut   Float?
+  distanceIn     Float?   // Jarak dalam meter dari toko saat clock in
+  isWithinRadius Boolean  @default(true)
+  status         String   @default("Hadir") // Hadir, Terlambat, Di Luar Radius
+  lateMinutes    Int      @default(0)       // Jumlah menit keterlambatan
+  notes          String?
 }
 
 model Settings {
@@ -215,12 +228,45 @@ model Settings {
   // Mode Inventaris: false = Simple (HPP manual), true = Advanced (HPP dari resep bahan baku)
   ingredientTrackingEnabled  Boolean  @default(false)
 
-  // Konfigurasi Printer Termal 80mm
-  printerIp          String   @default("")    // IP Address printer di jaringan
+  // Konfigurasi Printer Kasir 80mm
+  printerIp          String   @default("")    // IP Address printer kasir
   printerPort        Int      @default(9100)  // Port ESC/POS (default 9100)
   windowsPrinterName String   @default("")
-  autoPrintKDS       Boolean  @default(false) // Auto-print tiket dapur saat order masuk
+  autoPrintKDS       Boolean  @default(false) // Legacy toggle
   autoPrintReceipt   Boolean  @default(false) // Auto-print struk saat pembayaran selesai
+
+  // Konfigurasi Printer Dapur (Kitchen / KOT)
+  kitchenPrinterIp   String   @default("")
+  kitchenPrinterPort Int      @default(9100)
+  autoPrintKitchen   Boolean  @default(false)
+
+  // Konfigurasi Printer Bar (Drinks / BOT)
+  barPrinterIp       String   @default("")
+  barPrinterPort     Int      @default(9100)
+  autoPrintBar       Boolean  @default(false)
+
+  // Konfigurasi Layar Dapur (KDS)
+  enableKDS          Boolean  @default(true)
+  autoCompleteKDSOnPay Boolean @default(true)
+
+  // Konfigurasi Absensi & GPS Geofencing Toko
+  storeLatitude      Float    @default(-6.200000)  // Default koordinat Jakarta / lokasi toko
+  storeLongitude     Float    @default(106.816666)
+  gpsRadiusMeters    Float    @default(100)        // Radius toleransi kehadiran dalam meter
+  enableGpsValidation Boolean @default(true)       // Validasi radius GPS
+  enableCameraPhoto  Boolean  @default(true)       // Wajib foto selfie kamera saat absen
+  workShifts         String?                       // JSON list shift kerja [{ id, name, start, end, lateTolerance }]
+
+  // Konfigurasi Reward & Punishment Karyawan
+  enableZeroLateBonus     Boolean  @default(true)     // Aktifkan Bonus Zero Late
+  zeroLateBonusAmount     Float    @default(200000)   // Nominal bonus (Rp) jika 0 keterlambatan
+  zeroLateMinAttendance   Int      @default(20)       // Syarat minimal hari hadir dalam 1 bulan
+  zeroLateMaxLateAllowed  Int      @default(0)        // Maksimal frekuensi telat yang ditoleransi (0 = mutlak on-time)
+  enableLatePenalty       Boolean  @default(false)    // Aktifkan pemotongan keterlambatan
+  latePenaltyType         String   @default("FLAT")   // "FLAT" (per kejadian) atau "PER_MINUTE" (per menit telat)
+  latePenaltyAmount       Float    @default(10000)    // Nilai denda/potongan (Rp)
+  enableAlphaPenalty      Boolean  @default(false)    // Aktifkan potongan alpa
+  alphaPenaltyAmount      Float    @default(50000)    // Nilai denda per alpa (Rp)
 }
 
 model Shift {
@@ -258,6 +304,7 @@ model Supplier {
 model Ingredient {
   id           Int               @id @default(autoincrement())
   name         String
+  category     String            @default("FOOD") // FOOD (Dapur), DRINK (Bar), PACKAGING (Kemasan/Showcase)
   unit         String            // gram, ml, buah, liter, kg
   stock        Float             @default(0)
   minStock     Float             @default(0)  // Batas minimum → alert stok menipis
@@ -289,9 +336,13 @@ model IngredientLog {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   ingredientId Int
   change       Float      // (+) restock/refund, (-) produksi/rusak
-  type         String     // 'Produksi', 'Restock', 'Penyesuaian', 'Rusak', 'PO', 'Void'
+  cost         Float      @default(0) // Nilai rupiah mutasi / kerugian (change * buyPrice)
+  type         String     // 'Produksi', 'Restock', 'Penyesuaian', 'Rusak', 'PO', 'Void', 'Distribusi'
+  reason       String?    // 'Busuk / Kadaluarsa', 'Tumpah / Rusak', 'Sisa Trimming / Kupas', 'Kesalahan Masak', 'Lainnya'
   description  String?
   referenceId  String?    // Order number / PO number
+  user         User?      @relation(fields: [userId], references: [id])
+  userId       Int?
   createdAt    DateTime   @default(now())
 }
 

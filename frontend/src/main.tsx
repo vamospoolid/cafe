@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './tailwind-output.css'
 import App from './App.tsx'
 
 // Intercept fetch untuk handle URL dinamis & handle 401 (Unauthorized) secara global

@@ -1,10 +1,15 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, Printer } from 'lucide-react';
+import { 
+  X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, 
+  Printer, Utensils, Coffee, Layers, Sparkles, ArrowRight, Banknote, Calendar, 
+  FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck
+} from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
 import CustomerModal from './CustomerModal';
 import ReceiptPrinter from './ReceiptPrinter';
+import SplitPrintModal from './SplitPrintModal';
 import { 
   isNativeMobile, 
   connectBluetoothPrinter, 
@@ -25,7 +30,9 @@ interface CheckoutModalProps {
   orderId?: number | string;
 }
 
-const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSuccess, total, subtotal, tax, serviceCharge, cart, customer, orderId }) => {
+const CheckoutModal: React.FC<CheckoutModalProps> = ({ 
+  isOpen, onClose, onSuccess, total, subtotal, tax, serviceCharge, cart, customer, orderId 
+}) => {
   const [paymentMethod, setPaymentMethod] = useState<'tunai' | 'qris' | 'kartu' | 'split' | 'piutang'>('tunai');
   const [cashGiven, setCashGiven]         = useState<number>(0);
   const [manualDiscount, setManualDiscount] = useState<number>(0);
@@ -38,14 +45,63 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
   const [debtNotes, setDebtNotes]         = useState<string>('');
   const [isSuccess, setIsSuccess]         = useState(false);
   const [loading, setLoading]             = useState(false);
+  const [showItemsList, setShowItemsList] = useState(false);
+  const [showNumpad, setShowNumpad]       = useState(false);
+
   const posContext = useContext(POSContext);
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [printLoading, setPrintLoading] = useState(false);
   const [printOrderData, setPrintOrderData] = useState<any | null>(null);
 
+  const [currentCustomer, setCurrentCustomer] = useState<any>(customer || null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [showSplitPrintModal, setShowSplitPrintModal] = useState(false);
+  const [fetchedFullOrder, setFetchedFullOrder] = useState<any | null>(null);
+
+  useEffect(() => {
+    setCurrentCustomer(customer || null);
+  }, [customer]);
+
+  const fmt = (val: number) => `Rp ${Math.round(val || 0).toLocaleString('id-ID')}`;
+  
+  const parentDiscount = customer?.discountAmount || 0;
+  const currentDiscount = currentCustomer?.discountAmount || 0;
+  const finalTotal = Math.max(0, total + parentDiscount - currentDiscount - manualDiscount);
+  
+  // Initialize cashGiven with exact total when opening or changing method
+  useEffect(() => {
+    if (isOpen && paymentMethod === 'tunai' && cashGiven === 0) {
+      setCashGiven(finalTotal);
+    }
+  }, [isOpen, finalTotal, paymentMethod]);
+
+  if (!isOpen) return null;
+
+  const change = cashGiven - finalTotal;
+  const nonCash = Math.max(0, finalTotal - splitCash);
+  const isPayable =
+    paymentMethod === 'tunai' ? cashGiven >= finalTotal
+    : paymentMethod === 'split' ? splitCash > 0 && splitCash < finalTotal
+    : paymentMethod === 'piutang' ? !!currentCustomer?.id
+    : true;
+
+  // Smart quick preset amounts calculation
+  const getSmartPresets = (target: number) => {
+    if (target <= 0) return [0];
+    const list: number[] = [target];
+    if (target % 10000 !== 0) list.push(Math.ceil(target / 10000) * 10000);
+    if (target % 50000 !== 0) list.push(Math.ceil(target / 50000) * 50000);
+    if (target % 100000 !== 0) list.push(Math.ceil(target / 100000) * 100000);
+    [50000, 100000, 150000, 200000, 500000].forEach(v => {
+      if (v > target) list.push(v);
+    });
+    return Array.from(new Set(list)).sort((a, b) => a - b).slice(0, 4);
+  };
+
+  const quickAmounts = getSmartPresets(finalTotal);
+
   const handleDirectPrint = async (id: number) => {
     const isHighPrecision = localStorage.getItem('high_precision_mode') === 'true';
-    // Check if running on native mobile platform with Bluetooth printer configured and high precision mode is enabled
     if (isHighPrecision && isNativeMobile() && localStorage.getItem('bluetooth_printer_mac')) {
       const macAddress = localStorage.getItem('bluetooth_printer_mac')!;
       setPrintLoading(true);
@@ -72,9 +128,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       return;
     }
 
-    // ── ELECTRON RAW PRINT (prioritas tertinggi untuk desktop) ──
+    // ELECTRON RAW PRINT
     if ((window as any).electronPOS?.isElectron) {
-      console.log('handleDirectPrint: Electron detected, using raw ESC/POS print');
       setPrintLoading(true);
       try {
         const orderRes = await fetch(`/api/orders/${id}`, {
@@ -94,7 +149,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
           toast(`Gagal cetak: ${result.message}`, 'error');
         }
       } catch (err: any) {
-        console.error('handleDirectPrint: Electron print error:', err);
         toast(err.message || 'Gagal cetak via Electron', 'error');
       } finally {
         setPrintLoading(false);
@@ -103,8 +157,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
     }
 
     if (!posContext?.settings?.printerIp) {
-      // Fallback to browser standard print for USB connected printer on Web Desktop
-      console.log('handleDirectPrint: starting fallback browser print for order id:', id);
       setPrintLoading(true);
       try {
         const orderRes = await fetch(`/api/orders/${id}`, {
@@ -112,16 +164,15 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
         });
         if (!orderRes.ok) throw new Error('Gagal mengambil detail order');
         const orderData = await orderRes.json();
-        console.log('handleDirectPrint: fetched orderData successfully:', orderData);
         setPrintOrderData(orderData);
       } catch (err: any) {
-        console.error('handleDirectPrint: fallback print failed with error:', err);
         toast(err.message || 'Gagal menyiapkan cetak browser', 'error');
       } finally {
         setPrintLoading(false);
       }
       return;
     }
+
     setPrintLoading(true);
     try {
       const res = await fetch('/api/printer/receipt', {
@@ -145,30 +196,43 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
     }
   };
 
-  const [currentCustomer, setCurrentCustomer] = useState<any>(customer || null);
-  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const handleOpenSplitPrint = async (id: number) => {
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFetchedFullOrder(data);
+        setShowSplitPrintModal(true);
+      }
+    } catch (e) {
+      toast('Gagal mengambil rincian pesanan untuk cetak', 'error');
+    }
+  };
 
-  useEffect(() => {
-    setCurrentCustomer(customer || null);
-  }, [customer]);
-
-  if (!isOpen) return null;
-
-  const fmt = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
-  const parentDiscount = customer?.discountAmount || 0;
-  const currentDiscount = currentCustomer?.discountAmount || 0;
-  const finalTotal   = Math.max(0, total + parentDiscount - currentDiscount - manualDiscount);
-  
-  const change       = cashGiven - finalTotal;
-  const nonCash      = Math.max(0, finalTotal - splitCash);
-  const isPayable =
-    paymentMethod === 'tunai'  ? cashGiven >= finalTotal
-    : paymentMethod === 'split' ? splitCash > 0 && splitCash < finalTotal
-    : paymentMethod === 'piutang' ? !!currentCustomer?.id
-    : true;
-
-  const quickAmounts = Array.from(new Set([finalTotal, 50000, 100000, 150000, 200000]))
-    .filter(a => a >= finalTotal).sort((a, b) => a - b).slice(0, 4);
+  const handlePrintSpecificTarget = async (id: number, target: 'kitchen' | 'bar') => {
+    try {
+      setPrintLoading(true);
+      const res = await fetch(`/api/printer/${target}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ orderId: id })
+      });
+      if (res.ok) {
+        toast(`Tiket pesanan ${target === 'kitchen' ? 'Dapur (Makanan)' : 'Bar (Minuman)'} berhasil dicetak!`, 'success');
+      } else {
+        await handleOpenSplitPrint(id);
+      }
+    } catch (e) {
+      await handleOpenSplitPrint(id);
+    } finally {
+      setPrintLoading(false);
+    }
+  };
 
   const handleCheckout = async () => {
     setLoading(true);
@@ -178,6 +242,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       : paymentMethod === 'split' ? `Split (Tunai ${fmt(splitCash)} + Non-Tunai ${fmt(nonCash)})`
       : paymentMethod === 'piutang' ? 'Piutang'
       : 'Card';
+
     // Handler Mode Offline
     if (!navigator.onLine || !posContext?.isOnline) {
       try {
@@ -258,14 +323,18 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Gagal checkout'); }
       const data = await res.json();
       
-      // Ambil ID order yang baru dibuat dari respon backend
       const createdOrder = data.order || (data.orders && data.orders[0]) || data.orderItem?.order;
       if (createdOrder) {
         setCreatedOrderId(createdOrder.id);
         
-        // Auto-Print Struk jika fitur diaktifkan di pengaturan
         if (posContext?.settings?.autoPrintReceipt) {
           handleDirectPrint(createdOrder.id);
+        }
+        if (posContext?.settings?.autoPrintKitchen) {
+          handlePrintSpecificTarget(createdOrder.id, 'kitchen');
+        }
+        if (posContext?.settings?.autoPrintBar) {
+          handlePrintSpecificTarget(createdOrder.id, 'bar');
         }
       }
       
@@ -276,39 +345,64 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
     }
   };
 
+  // SUCCESS STATE VIEW
   if (isSuccess) {
     return (
-      <div className="modal-overlay">
-        <div style={{ background: 'var(--bg-card)', borderRadius: '1.5rem', padding: '2.5rem', textAlign: 'center', maxWidth: 400, width: '90%', animation: 'modalIn 0.3s ease-out' }}>
-          <div style={{ width: 72, height: 72, background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
-            <CheckCircle size={40} color="#16a34a" />
+      <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-3xl p-8 text-center max-w-md w-full shadow-2xl border border-slate-100 animate-scale-up">
+          <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-5 ring-8 ring-emerald-50/50">
+            <CheckCircle size={44} className="text-emerald-500 animate-bounce" />
           </div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>Pembayaran Berhasil!</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>Pesanan Anda telah diproses dan dikirim ke dapur.</p>
+          <h2 className="text-2xl font-black text-slate-900 mb-1 tracking-tight">Pembayaran Sukses!</h2>
+          <p className="text-slate-500 text-sm mb-6">Transaksi berhasil dicatat ke sistem POS.</p>
+
+          {/* Change pill if cash */}
+          {paymentMethod === 'tunai' && change > 0 && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 mb-6 text-emerald-800">
+              <span className="text-xs uppercase font-bold tracking-wider block text-emerald-600 mb-0.5">Kembalian Pelanggan</span>
+              <span className="text-2xl font-black">{fmt(change)}</span>
+            </div>
+          )}
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div className="flex flex-col gap-2.5">
             {createdOrderId && (
-              <button 
-                onClick={() => handleDirectPrint(createdOrderId)}
-                disabled={printLoading}
-                style={{ 
-                  width: '100%', 
-                  padding: '0.8rem', 
-                  fontWeight: 700, 
-                  borderRadius: '0.75rem', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  gap: '0.5rem',
-                  cursor: 'pointer',
-                  border: 'none',
-                  background: 'var(--primary)',
-                  color: 'white'
-                }}
-              >
-                <Printer size={16} />
-                <span>{printLoading ? 'Mencetak...' : 'Cetak Struk Termal'}</span>
-              </button>
+              <>
+                <button 
+                  onClick={() => handleDirectPrint(createdOrderId)}
+                  disabled={printLoading}
+                  className="w-full py-3 px-4 font-bold rounded-xl flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm shadow-md transition-all active:scale-[0.98]"
+                >
+                  <Printer size={18} />
+                  <span>{printLoading ? 'Mencetak...' : 'Cetak Struk Kasir'}</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handlePrintSpecificTarget(createdOrderId, 'kitchen')}
+                    disabled={printLoading}
+                    className="py-2.5 px-3 font-semibold rounded-xl flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 text-xs transition-all"
+                  >
+                    <Utensils size={15} />
+                    <span>Tiket Dapur</span>
+                  </button>
+                  <button
+                    onClick={() => handlePrintSpecificTarget(createdOrderId, 'bar')}
+                    disabled={printLoading}
+                    className="py-2.5 px-3 font-semibold rounded-xl flex items-center justify-center gap-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200/80 text-xs transition-all"
+                  >
+                    <Coffee size={15} />
+                    <span>Tiket Bar</span>
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => handleOpenSplitPrint(createdOrderId)}
+                  className="w-full py-2.5 px-3 font-semibold rounded-xl flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition-all"
+                >
+                  <Layers size={15} />
+                  <span>Pusat Multi-Print & Potong Tiket</span>
+                </button>
+              </>
             )}
             
             <button 
@@ -319,18 +413,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
                 onSuccess();
                 onClose();
               }}
-              style={{ 
-                width: '100%', 
-                padding: '0.8rem', 
-                fontWeight: 700, 
-                borderRadius: '0.75rem', 
-                cursor: 'pointer',
-                border: '1px solid var(--border-color)',
-                background: 'white',
-                color: 'var(--text-main)'
-              }}
+              className="w-full py-3 px-4 font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm shadow-lg mt-2 transition-all active:scale-[0.98]"
             >
-              Selesai & Tutup
+              Selesai & Transaksi Baru
             </button>
           </div>
         </div>
@@ -342,315 +427,490 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ isOpen, onClose, onSucces
             onClose={() => setPrintOrderData(null)} 
           />
         )}
+
+        {showSplitPrintModal && fetchedFullOrder && (
+          <SplitPrintModal
+            order={fetchedFullOrder}
+            isOpen={showSplitPrintModal}
+            onClose={() => {
+              setShowSplitPrintModal(false);
+              setFetchedFullOrder(null);
+            }}
+          />
+        )}
       </div>
     );
   }
 
-  const methods: { key: 'tunai' | 'qris' | 'kartu' | 'split' | 'piutang'; label: string; icon: React.ReactNode }[] = [
-    { key: 'tunai',  label: 'Tunai',  icon: <Wallet size={20} /> },
-    { key: 'qris',   label: 'QRIS',   icon: <QrCode size={20} /> },
-    { key: 'kartu',  label: 'Kartu',  icon: <CreditCard size={20} /> },
-    { key: 'split',  label: 'Split',  icon: <Scissors size={20} /> },
-    { key: 'piutang', label: 'Piutang', icon: <User size={20} /> },
+  const paymentTabs = [
+    { key: 'tunai', label: 'Tunai', icon: Banknote, color: 'text-emerald-600' },
+    { key: 'qris', label: 'QRIS', icon: QrCode, color: 'text-indigo-600' },
+    { key: 'kartu', label: 'Kartu', icon: CreditCard, color: 'text-blue-600' },
+    { key: 'split', label: 'Split', icon: Scissors, color: 'text-amber-600' },
+    { key: 'piutang', label: 'Piutang', icon: User, color: 'text-purple-600' },
   ];
 
   return (
-    <div className="modal-overlay">
-      {/* Landscape: max-w-3xl, flex-row */}
-      <div style={{
-        background: 'var(--bg-card)', borderRadius: '1.5rem', boxShadow: 'var(--shadow-lg)',
-        width: '100%', maxWidth: 820, display: 'flex', flexDirection: 'column',
-        animation: 'modalIn 0.3s ease-out', overflow: 'hidden',
-      }}>
-        {/* Header */}
-        <div style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <CreditCard size={20} color="var(--primary)" />
-            <span>Proses Pembayaran</span>
-          </h2>
-          <button className="icon-btn" onClick={onClose} disabled={loading}><X size={20} /></button>
-        </div>
+    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-slate-950/70 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div 
+        className="bg-white rounded-[28px] shadow-2xl border border-slate-100 w-full max-w-4xl flex flex-col md:flex-row overflow-hidden my-auto"
+        style={{ animation: 'modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}
+      >
+        {/* ================= LEFT COLUMN: ORDER HERO & BREAKDOWN ================= */}
+        <div className="w-full md:w-[42%] bg-slate-50/90 border-b md:border-b-0 md:border-r border-slate-200/80 p-5 md:p-6 flex flex-col justify-between">
+          <div className="flex flex-col gap-4">
+            {/* Header / Table tag */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
+                  <ShoppingBag size={13} />
+                  {orderId ? `Order #${orderId}` : (customer?.tableId ? `Meja ${customer.tableId}` : 'Pesanan Baru')}
+                </span>
+                <span className="text-xs font-semibold text-slate-400">
+                  {cart?.length || 0} Item
+                </span>
+              </div>
+              <button 
+                onClick={() => setShowItemsList(!showItemsList)}
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 md:hidden"
+              >
+                <span>{showItemsList ? 'Sembunyikan' : 'Rincian'}</span>
+                {showItemsList ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            </div>
 
-        {/* Body: 2 columns */}
-        <div style={{ display: 'flex', gap: 0, flex: 1 }}>
+            {/* HERO TOTAL TAGIHAN */}
+            <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-lg relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl pointer-events-none" />
+              <div className="text-indigo-200/80 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <Sparkles size={13} className="text-amber-300" />
+                <span>Total Pembayaran</span>
+              </div>
+              <div className="text-3xl font-black tracking-tight text-white">
+                {fmt(finalTotal)}
+              </div>
+            </div>
 
-          {/* LEFT COLUMN: Order Summary */}
-          <div style={{ width: '42%', borderRight: '1px solid var(--border-color)', padding: '1.5rem', background: 'var(--bg-input)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <p style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Ringkasan Pesanan</p>
-
-            {/* List Item yang Dipesan */}
-            {cart && cart.length > 0 && (
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '0.5rem', 
-                maxHeight: '130px', 
-                overflowY: 'auto', 
-                background: 'white',
-                border: '1px solid var(--border-color)',
-                borderRadius: '0.75rem',
-                padding: '0.75rem',
-                marginBottom: '0.25rem'
-              }} className="scrollbar-thin">
-                {cart.map((item: any, idx: number) => {
+            {/* Accordion / Item list */}
+            <div className={`flex flex-col gap-2 ${showItemsList ? 'block' : 'hidden md:flex'}`}>
+              <div className="max-h-36 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+                {cart && cart.map((item: any, idx: number) => {
                   const prod = item.product || item;
-                  const qty = item.qty;
-                  const notes = item.notes;
                   const price = prod.sellPrice || item.price || 0;
                   return (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.75rem', borderBottom: idx < cart.length - 1 ? '1px dashed var(--border-color)' : 'none', paddingBottom: idx < cart.length - 1 ? '0.375rem' : '0' }}>
-                      <div style={{ flex: 1, paddingRight: '0.5rem', textAlign: 'left' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{prod.name || 'Menu'}</div>
-                        {notes && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>* {notes}</div>}
+                    <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-slate-200/60 last:border-none">
+                      <div className="flex-1 pr-2">
+                        <div className="font-semibold text-slate-800 line-clamp-1">{prod.name}</div>
+                        {item.notes && <div className="text-[10px] text-slate-400 italic">*{item.notes}</div>}
                       </div>
-                      <div style={{ textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--text-main)' }}>
-                        <span style={{ color: 'var(--text-muted)', marginRight: '0.25rem', fontSize: '0.7rem' }}>{qty}x</span>
-                        <span style={{ fontWeight: 700 }}>{fmt(price * qty)}</span>
+                      <div className="text-right whitespace-nowrap">
+                        <span className="text-slate-400 mr-1.5">{item.qty}x</span>
+                        <span className="font-bold text-slate-700">{fmt(price * item.qty)}</span>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            )}
 
-            {/* Summary rows */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Subtotal</span>
-                <span style={{ fontWeight: 600 }}>{fmt(subtotal)}</span>
+              {/* Subtotal, Tax, Discounts Details */}
+              <div className="pt-2 border-t border-slate-200 text-xs space-y-1.5">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal</span>
+                  <span className="font-semibold text-slate-700">{fmt(subtotal)}</span>
+                </div>
+                {tax > 0 && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>PPN (Pajak)</span>
+                    <span className="font-semibold text-slate-700">+{fmt(tax)}</span>
+                  </div>
+                )}
+                {serviceCharge > 0 && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>Service Charge</span>
+                    <span className="font-semibold text-slate-700">+{fmt(serviceCharge)}</span>
+                  </div>
+                )}
+                {(manualDiscount > 0 || currentDiscount > 0) && (
+                  <div className="flex justify-between text-rose-600 font-semibold">
+                    <span>Diskon & Poin</span>
+                    <span>-{fmt(currentDiscount + manualDiscount)}</span>
+                  </div>
+                )}
               </div>
-              {tax > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>PPN</span>
-                  <span style={{ fontWeight: 600 }}>{fmt(tax)}</span>
-                </div>
-              )}
-              {serviceCharge > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Layanan</span>
-                  <span style={{ fontWeight: 600 }}>{fmt(serviceCharge)}</span>
-                </div>
-              )}
-              {(manualDiscount > 0 || currentDiscount > 0) && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                  <span style={{ color: '#dc2626' }}>Diskon</span>
-                  <span style={{ fontWeight: 600, color: '#dc2626' }}>-{fmt(currentDiscount + manualDiscount)}</span>
-                </div>
-              )}
-            </div>
 
-            {/* Discount input - tucked in bottom left */}
-            <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'white', borderRadius: '0.75rem', padding: '0.5rem 0.75rem', border: '1px solid var(--border-color)' }}>
-                <Tag size={14} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Diskon</span>
+              {/* Quick Discount Input */}
+              <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2 mt-1">
+                <Tag size={14} className="text-slate-400 shrink-0" />
+                <span className="text-xs font-medium text-slate-500 shrink-0">Diskon Khusus:</span>
                 <input
                   type="number"
-                  style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, textAlign: 'right', fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-main)' }}
-                  value={manualDiscount || ''}
-                  onChange={e => setManualDiscount(Number(e.target.value))}
                   placeholder="0"
+                  value={manualDiscount || ''}
+                  onChange={e => setManualDiscount(Math.max(0, Number(e.target.value)))}
+                  className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
                 />
               </div>
             </div>
+          </div>
 
-            {/* Big total */}
-            <div style={{ background: 'var(--primary)', borderRadius: '1rem', padding: '1.25rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', marginBottom: '0.25rem' }}>Total Bayar</div>
-              <div style={{ fontSize: '2rem', fontWeight: 900, color: 'white', lineHeight: 1 }}>{fmt(finalTotal)}</div>
-            </div>
-
-            {/* Customer / Member Info */}
-            {posContext?.settings?.loyaltyEnabled !== false && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
-                {currentCustomer?.name && currentCustomer?.name !== 'Pelanggan Umum' ? (
-                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#166534', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <User size={14} />
-                        <span>{currentCustomer.name}</span>
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#15803d', textAlign: 'left' }}>
-                        {currentCustomer.phone} {currentCustomer.points !== undefined ? `• ${currentCustomer.points} pts` : ''}
-                      </div>
-                      {currentCustomer.discountAmount > 0 && (
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#b91c1c', marginTop: '0.1rem', textAlign: 'left' }}>
-                          Redeem: -{fmt(currentCustomer.discountAmount)}
-                        </div>
-                      )}
+          {/* Member Loyalty Card */}
+          {posContext?.settings?.loyaltyEnabled !== false && (
+            <div className="mt-4 pt-3 border-t border-slate-200/80">
+              {currentCustomer?.name && currentCustomer?.name !== 'Pelanggan Umum' ? (
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs">
+                      {currentCustomer.name.charAt(0).toUpperCase()}
                     </div>
-                    <button 
-                      onClick={() => setIsCustomerModalOpen(true)}
-                      style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', background: 'white', border: '1px solid var(--border-color)', borderRadius: '0.5rem', padding: '0.25rem 0.5rem', cursor: 'pointer' }}
-                    >
-                      Ubah
-                    </button>
+                    <div>
+                      <div className="text-xs font-bold text-emerald-900 leading-tight flex items-center gap-1">
+                        <span>{currentCustomer.name}</span>
+                        <ShieldCheck size={12} className="text-emerald-600" />
+                      </div>
+                      <div className="text-[10px] text-emerald-700">
+                        {currentCustomer.points || 0} Poin Tersedia
+                        {currentCustomer.discountAmount > 0 && ` • Hemat ${fmt(currentCustomer.discountAmount)}`}
+                      </div>
+                    </div>
                   </div>
-                ) : (
                   <button 
                     onClick={() => setIsCustomerModalOpen(true)}
-                    style={{ width: '100%', padding: '0.75rem', background: 'white', border: '1px dashed var(--border-color)', borderRadius: '0.75rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer' }}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-white border border-emerald-200 px-2 py-1 rounded-lg shadow-sm"
                   >
-                    <UserPlus size={16} />
-                    <span>Hubungkan Member & Poin</span>
+                    Ganti
                   </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => setIsCustomerModalOpen(true)}
+                  className="w-full py-2 px-3 rounded-xl border border-dashed border-slate-300 hover:border-indigo-400 bg-white hover:bg-indigo-50/50 text-slate-600 hover:text-indigo-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <UserPlus size={14} />
+                  <span>Hubungkan Member & Poin</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ================= RIGHT COLUMN: PAYMENT SELECTION & INPUTS ================= */}
+        <div className="flex-1 p-5 md:p-6 flex flex-col justify-between bg-white">
+          <div>
+            {/* Top Modal Bar: Title & Close Button */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-base text-slate-800 flex items-center gap-2">
+                <span>Pilih Metode Pembayaran</span>
+              </h3>
+              <button 
+                onClick={onClose} 
+                disabled={loading}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* PAYMENT METHOD SELECTOR TABS */}
+            <div className="grid grid-cols-5 gap-1.5 p-1 bg-slate-100/90 rounded-2xl mb-5">
+              {paymentTabs.map(tab => {
+                const IconComponent = tab.icon;
+                const isSelected = paymentMethod === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => {
+                      posContext?.triggerHaptic(15);
+                      setPaymentMethod(tab.key as any);
+                    }}
+                    className={`py-2.5 px-1 rounded-xl flex flex-col items-center justify-center gap-1 font-bold text-xs transition-all relative ${
+                      isSelected 
+                        ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-black/5 scale-[1.02]' 
+                        : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
+                    }`}
+                  >
+                    <IconComponent size={18} className={isSelected ? 'text-indigo-600' : 'text-slate-400'} />
+                    <span className="text-[11px] tracking-tight">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* TAB CONTENT: TUNAI (CASH) */}
+            {paymentMethod === 'tunai' && (
+              <div className="space-y-4 animate-fade-in">
+                {/* 1. FAST TENDER CHIPS (1-TAP SELECTION) */}
+                <div>
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-2">
+                    <span>Pilihan Cepat Uang Diterima</span>
+                    <span className="text-[11px] text-indigo-600 font-medium">1-Tap Langsung Hitung</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {quickAmounts.map(amt => {
+                      const isSelected = cashGiven === amt;
+                      const returnVal = amt - finalTotal;
+                      const isExact = amt === finalTotal;
+
+                      return (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => {
+                            posContext?.triggerHaptic(20);
+                            setCashGiven(amt);
+                          }}
+                          className={`p-3 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                            isSelected 
+                              ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm' 
+                              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                          }`}
+                        >
+                          <div className={`text-xs font-black ${isSelected ? 'text-indigo-900' : 'text-slate-800'}`}>
+                            {isExact ? '⚡ Uang Pas' : fmt(amt)}
+                          </div>
+                          <div className={`text-[10px] mt-1 font-medium ${isExact ? 'text-slate-500' : (returnVal >= 0 ? 'text-emerald-600 font-semibold' : 'text-slate-400')}`}>
+                            {isExact ? 'Pas (Rp 0)' : `Kembali ${fmt(returnVal)}`}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. CUSTOM AMOUNT INPUT BAR */}
+                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-600">Nominal Tunai Manual</label>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        type="button"
+                        onClick={() => setShowNumpad(!showNumpad)}
+                        className="text-[11px] font-semibold text-indigo-600 hover:underline px-1.5 py-0.5"
+                      >
+                        {showNumpad ? 'Sembunyikan Keypad' : 'Tampilkan Keypad'}
+                      </button>
+                      {cashGiven > 0 && (
+                        <button 
+                          type="button"
+                          onClick={() => setCashGiven(0)}
+                          className="text-[11px] font-semibold text-slate-400 hover:text-rose-600 px-1.5 py-0.5"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3.5 text-base font-bold text-slate-400">Rp</span>
+                    <input
+                      type="number"
+                      value={cashGiven || ''}
+                      onChange={e => setCashGiven(Math.max(0, Number(e.target.value)))}
+                      placeholder="0"
+                      className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-xl text-xl font-black text-slate-900 text-right outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* Quick Add Pills */}
+                  <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5">
+                    {[10000, 20000, 50000, 100000].map(addVal => (
+                      <button
+                        key={addVal}
+                        type="button"
+                        onClick={() => {
+                          posContext?.triggerHaptic(15);
+                          setCashGiven((prev) => (prev || 0) + addVal);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 text-[11px] font-bold text-slate-600 hover:text-indigo-600 whitespace-nowrap shadow-2xl transition-all"
+                      >
+                        +{addVal / 1000}k
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Optional Compact Touch Numpad */}
+                  {showNumpad && (
+                    <div className="grid grid-cols-4 gap-1.5 mt-3 pt-3 border-t border-slate-200/80 animate-fade-in">
+                      {['1', '2', '3', '000', '4', '5', '6', '0', '7', '8', '9', '⌫'].map((k) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => {
+                            posContext?.triggerHaptic(15);
+                            if (k === '⌫') {
+                              const s = cashGiven.toString();
+                              setCashGiven(s.length > 1 ? Number(s.slice(0, -1)) : 0);
+                            } else if (k === '000') {
+                              if (cashGiven > 0) setCashGiven(Number(cashGiven.toString() + '000'));
+                            } else {
+                              const s = cashGiven > 0 ? cashGiven.toString() : '';
+                              setCashGiven(Number(s + k));
+                            }
+                          }}
+                          className="py-2 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 font-bold text-sm text-slate-700 shadow-sm active:scale-95 transition-all"
+                        >
+                          {k}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. DYNAMIC CHANGE BADGE */}
+                <div className={`p-3.5 rounded-2xl flex items-center justify-between transition-all ${
+                  change >= 0 
+                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-900' 
+                    : 'bg-rose-50 border border-rose-200 text-rose-900'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${change >= 0 ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                      {change >= 0 ? <Check size={16} /> : <AlertCircle size={16} />}
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-bold block uppercase tracking-wider opacity-80">
+                        {change >= 0 ? 'Kembalian' : 'Kekurangan Bayar'}
+                      </span>
+                      <span className="text-lg font-black leading-none">
+                        {change >= 0 ? fmt(change) : fmt(Math.abs(change))}
+                      </span>
+                    </div>
+                  </div>
+                  {change === 0 && (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-full">
+                      Uang Pas ✨
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: QRIS */}
+            {paymentMethod === 'qris' && (
+              <div className="flex flex-col items-center justify-center p-6 text-center bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3 animate-fade-in">
+                <div className="p-3.5 bg-white rounded-2xl shadow-sm border border-slate-200">
+                  <QrCode size={130} className="text-indigo-600" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">QRIS Standar Nasional</h4>
+                  <p className="text-xs text-slate-500 max-w-xs mt-0.5">
+                    Scan menggunakan BCA Mobile, GoPay, OVO, Dana, ShopeePay atau aplikasi e-wallet lainnya.
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span>Siap Terima Transaksi {fmt(finalTotal)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: KARTU (EDC) */}
+            {paymentMethod === 'kartu' && (
+              <div className="flex flex-col items-center justify-center p-6 text-center bg-slate-50 rounded-2xl border border-slate-200/80 space-y-3 animate-fade-in">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                  <CreditCard size={32} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">Mesin EDC Debit & Kredit</h4>
+                  <p className="text-xs text-slate-500 max-w-xs mt-0.5">
+                    Gesek atau Tap kartu pelanggan pada mesin EDC kasir untuk tagihan senilai <strong className="text-slate-800">{fmt(finalTotal)}</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: SPLIT */}
+            {paymentMethod === 'split' && (
+              <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 animate-fade-in">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 p-2.5 rounded-xl">
+                  <Scissors size={15} className="shrink-0 text-amber-600" />
+                  <span>Bagi pembayaran antara Tunai dan Non-Tunai (QRIS/EDC)</span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Nominal Tunai</label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-sm font-bold text-slate-400">Rp</span>
+                    <input
+                      type="number"
+                      value={splitCash || ''}
+                      onChange={e => setSplitCash(Math.max(0, Number(e.target.value)))}
+                      placeholder="0"
+                      className="w-full pl-10 pr-3 py-2 bg-white border border-slate-300 focus:border-indigo-500 rounded-xl text-base font-bold text-right outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex justify-between items-center">
+                  <span className="text-xs font-semibold text-indigo-900">Sisa Non-Tunai (QRIS/Kartu):</span>
+                  <span className="text-base font-black text-indigo-700">{fmt(nonCash)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: PIUTANG */}
+            {paymentMethod === 'piutang' && (
+              <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80 animate-fade-in">
+                {!currentCustomer?.id ? (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-semibold flex items-center gap-2">
+                    <AlertCircle size={16} className="shrink-0 text-rose-500" />
+                    <span>Pilih data pelanggan/member terlebih dahulu di panel kiri untuk mencatat piutang!</span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 font-semibold flex items-center gap-2">
+                    <User size={15} className="text-purple-600" />
+                    <span>Piutang atas nama: <strong>{currentCustomer.name}</strong></span>
+                  </div>
                 )}
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Jatuh Tempo Pembayaran</label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    disabled={!currentCustomer?.id}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Catatan Piutang</label>
+                  <textarea
+                    rows={2}
+                    value={debtNotes}
+                    onChange={e => setDebtNotes(e.target.value)}
+                    placeholder="Contoh: Tagihan kantor / pelunasan akhir bulan"
+                    disabled={!currentCustomer?.id}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs outline-none resize-none"
+                  />
+                </div>
               </div>
             )}
           </div>
 
-          {/* RIGHT COLUMN: Payment Input */}
-          <div style={{ flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Payment method tabs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
-              {methods.map(m => (
-                <button
-                  key={m.key}
-                  onClick={() => setPaymentMethod(m.key)}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem',
-                    padding: '0.75rem 0.25rem', borderRadius: '0.75rem', border: '2px solid',
-                    borderColor: paymentMethod === m.key ? 'var(--primary)' : 'var(--border-color)',
-                    background: paymentMethod === m.key ? 'var(--secondary)' : 'transparent',
-                    color: paymentMethod === m.key ? 'var(--primary)' : 'var(--text-muted)',
-                    cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', transition: 'all 0.15s',
-                  }}
-                >
-                  {m.icon}
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Payment inputs */}
-            <div style={{ flex: 1 }}>
-              {paymentMethod === 'tunai' && (
-                <>
-                  <p style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Uang Diterima</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.4rem', marginBottom: '0.75rem' }}>
-                    {quickAmounts.map(amt => (
-                      <button key={amt} onClick={() => setCashGiven(amt)} style={{
-                        padding: '0.6rem', border: '1px solid var(--border-color)', borderRadius: '0.6rem',
-                        background: cashGiven === amt ? 'var(--secondary)' : 'white',
-                        borderColor: cashGiven === amt ? 'var(--primary)' : 'var(--border-color)',
-                        color: cashGiven === amt ? 'var(--primary)' : 'var(--text-main)',
-                        fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.15s',
-                      }}>
-                        {amt === finalTotal ? 'Uang Pas' : fmt(amt)}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="number"
-                    style={{ width: '100%', padding: '0.875rem 1rem', border: '2px solid var(--border-color)', borderRadius: '0.75rem', fontSize: '1.25rem', fontWeight: 800, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }}
-                    value={cashGiven || ''}
-                    onChange={e => setCashGiven(Number(e.target.value))}
-                    placeholder="0"
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.875rem 0 0', borderTop: '1px dashed var(--border-color)', marginTop: '0.75rem' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Kembalian</span>
-                    <span style={{ fontWeight: 800, fontSize: '1.1rem', color: change < 0 ? '#dc2626' : '#16a34a' }}>
-                      {change < 0 ? 'Kurang bayar' : fmt(change)}
-                    </span>
-                  </div>
-                </>
-              )}
-
-              {paymentMethod === 'qris' && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem', padding: '1rem 0' }}>
-                  <div style={{ padding: '1rem', background: 'white', borderRadius: '1rem', border: '2px dashed var(--border-color)' }}>
-                    <QrCode size={120} color="var(--primary)" />
-                  </div>
-                  <p style={{ fontWeight: 700, color: 'var(--text-main)' }}>Scan QRIS via M-Banking / E-Wallet</p>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tunjukkan ke pelanggan atau cetak QR</p>
-                </div>
-              )}
-
-              {paymentMethod === 'kartu' && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '0.75rem', padding: '1rem 0' }}>
-                  <div style={{ width: 72, height: 72, background: '#ede9fe', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <CreditCard size={32} color="var(--primary)" />
-                  </div>
-                  <p style={{ fontWeight: 700, color: 'var(--text-main)' }}>Kartu Debit / Kredit</p>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>Minta pelanggan untuk tap atau gesek kartu pada mesin EDC</p>
-                </div>
-              )}
-
-              {paymentMethod === 'split' && (
-                <>
-                  <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
-                    <p style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Scissors size={14} />
-                      <span>Pembayaran dipisah antara Tunai dan Non-Tunai</span>
-                    </p>
-                  </div>
-                  <p style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Berapa yang dibayar Tunai?</p>
-                  <input
-                    type="number"
-                    style={{ width: '100%', padding: '0.875rem 1rem', border: '2px solid var(--border-color)', borderRadius: '0.75rem', fontSize: '1.25rem', fontWeight: 800, textAlign: 'right', outline: 'none', boxSizing: 'border-box', marginBottom: '0.75rem' }}
-                    value={splitCash || ''}
-                    onChange={e => setSplitCash(Number(e.target.value))}
-                    placeholder="0"
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.875rem 1rem', background: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #bfdbfe' }}>
-                    <span style={{ fontWeight: 600, color: '#1e40af', fontSize: '0.875rem' }}>Sisa Non-Tunai (QRIS/Kartu)</span>
-                    <span style={{ fontWeight: 900, color: '#2563eb' }}>{fmt(nonCash)}</span>
-                  </div>
-                </>
-              )}
-
-              {paymentMethod === 'piutang' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', textAlign: 'left' }}>
-                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '0.75rem', padding: '0.75rem 1rem' }}>
-                    <p style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem', margin: 0 }}>
-                      <User size={14} />
-                      <span>Metode Pembayaran Piutang / Kasbon</span>
-                    </p>
-                    {!currentCustomer?.id && (
-                      <p style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 700, margin: '0.25rem 0 0' }}>
-                        * Hubungkan member terlebih dahulu untuk menggunakan metode ini!
-                      </p>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Tanggal Jatuh Tempo</label>
-                    <input
-                      type="date"
-                      style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-color)', borderRadius: '0.5rem', fontSize: '0.85rem', outline: 'none', color: 'var(--text-main)', boxSizing: 'border-box' }}
-                      value={dueDate}
-                      onChange={e => setDueDate(e.target.value)}
-                      required
-                      disabled={!currentCustomer?.id}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Catatan Piutang (Opsional)</label>
-                    <textarea
-                      style={{ width: '100%', padding: '0.6rem', border: '1px solid var(--border-color)', borderRadius: '0.5rem', fontSize: '0.85rem', outline: 'none', height: '60px', resize: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: 'var(--text-main)' }}
-                      placeholder="Contoh: Dibayar oleh instansi / Kasbon mingguan"
-                      value={debtNotes}
-                      onChange={e => setDebtNotes(e.target.value)}
-                      disabled={!currentCustomer?.id}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Confirm button */}
+          {/* CONFIRMATION CHECKOUT BUTTON */}
+          <div className="mt-5 pt-3 border-t border-slate-100">
             <button
-              className="btn-checkout"
-              style={{ padding: '0.9rem' }}
-              disabled={!isPayable || loading}
               onClick={handleCheckout}
+              disabled={!isPayable || loading}
+              className={`w-full py-3.5 px-5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-all active:scale-[0.98] ${
+                isPayable && !loading
+                  ? 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 text-white hover:shadow-indigo-500/25 hover:from-indigo-500 hover:to-indigo-700 cursor-pointer'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
             >
-              {loading ? 'Memproses...' : (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  <span>Memproses Pembayaran...</span>
+                </>
+              ) : (
+                <>
                   <Check size={18} />
-                  <span>Konfirmasi Pembayaran</span>
-                </span>
+                  <span>Konfirmasi Pembayaran ({fmt(finalTotal)})</span>
+                  <ArrowRight size={16} className="opacity-70" />
+                </>
               )}
             </button>
           </div>

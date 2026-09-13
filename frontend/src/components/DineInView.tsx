@@ -19,8 +19,10 @@ import {
   Check
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import useSocket from '../hooks/useSocket';
 
 const DineInView = () => {
+  const socket = useSocket();
   const { tableId } = useParams();
   const [searchParams] = useSearchParams();
   const tableRef = searchParams.get('ref') || 'Dine-In';
@@ -71,6 +73,41 @@ const DineInView = () => {
     initData();
   }, [tableId]);
 
+  // Real-time Live Kitchen Stock Sync & Sold-Out Lock
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStockSync = (data: any) => {
+      console.log('[DineIn Socket] menu:stock_sync received:', data);
+      if (data?.soldOutProductIds) {
+        setProducts(prev => prev.map(p => {
+          if (data.soldOutProductIds.includes(p.id)) {
+            return { ...p, isSoldOut: true, stock: 0 };
+          }
+          if (data.availableProductIds && data.availableProductIds.includes(p.id)) {
+            return { ...p, isSoldOut: false };
+          }
+          return p;
+        }));
+      }
+    };
+
+    const handleProductSoldOut = (data: any) => {
+      console.log('[DineIn Socket] product:sold_out received:', data);
+      if (data?.productId) {
+        setProducts(prev => prev.map(p => p.id === data.productId ? { ...p, isSoldOut: true, stock: 0 } : p));
+      }
+    };
+
+    socket.on('menu:stock_sync', handleStockSync);
+    socket.on('product:sold_out', handleProductSoldOut);
+
+    return () => {
+      socket.off('menu:stock_sync', handleStockSync);
+      socket.off('product:sold_out', handleProductSoldOut);
+    };
+  }, [socket]);
+
   // Filter products
   const filteredProducts = products.filter(p => {
     const matchesCategory = selectedCategoryId === null || p.categoryId === selectedCategoryId;
@@ -80,6 +117,17 @@ const DineInView = () => {
 
   // Cart operations
   const addToCart = (product: any) => {
+    const isSoldOut = Boolean(product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe));
+    if (isSoldOut) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Menu Habis',
+        text: `Maaf, menu "${product.name}" baru saja habis di dapur!`,
+        confirmButtonColor: '#f59e0b'
+      });
+      return;
+    }
+
     setCart(prev => {
       const existing = prev.find(item => item.productId === product.id);
       if (existing) {
@@ -132,10 +180,11 @@ const DineInView = () => {
     }
 
     try {
+      const activeTableNo = tableInfo?.tableNo || tableRef || tableId;
       const orderPayload = {
-        customerName: `${customerName} (Meja ${tableRef})`,
+        customerName: `${customerName} (Meja ${activeTableNo})`,
         customerPhone,
-        tableId: Number(tableId),
+        tableId: tableInfo?.id || (isNaN(Number(tableId)) ? tableId : Number(tableId)),
         items: cart,
         subtotal: cartSubtotal,
         tax: taxAmount,
@@ -420,42 +469,68 @@ const DineInView = () => {
 
         {/* Product Grid */}
         <div className="grid grid-cols-2 gap-4">
-          {filteredProducts.map(prod => (
-            <div key={prod.id} className="bg-slate-900 rounded-3xl border border-slate-800/80 p-3 flex flex-col justify-between hover:border-slate-700 transition-all shadow-sm">
-              <div className="space-y-2">
-                <div 
-                  className="aspect-square w-full rounded-2xl bg-slate-950 overflow-hidden relative border border-slate-800/50 cursor-pointer active:scale-[0.98] transition-all hover:opacity-90"
-                  onClick={() => addToCart(prod)}
-                >
-                  <img 
-                    src={prod.imageUrl || '/assets/images/cafe_login_cover.png'} 
-                    alt={prod.name} 
-                    className="w-full h-full object-cover"
-                    onError={(e: any) => { e.target.src = '/assets/images/cafe_login_cover.png'; }}
-                  />
-                  {prod.stock <= 5 && (
-                    <span className="absolute top-2 left-2 bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase">
-                      Stok Menipis
+          {filteredProducts.map(prod => {
+            const isSoldOut = Boolean(prod.isSoldOut || (prod.stock !== undefined && prod.stock <= 0 && !prod.hasRecipe));
+            return (
+              <div 
+                key={prod.id} 
+                className={`bg-slate-900 rounded-3xl border p-3 flex flex-col justify-between transition-all shadow-sm ${
+                  isSoldOut 
+                    ? 'opacity-60 border-rose-900/40 grayscale' 
+                    : 'border-slate-800/80 hover:border-slate-700'
+                }`}
+              >
+                <div className="space-y-2">
+                  <div 
+                    className={`aspect-square w-full rounded-2xl bg-slate-950 overflow-hidden relative border border-slate-800/50 ${
+                      isSoldOut ? 'cursor-not-allowed' : 'cursor-pointer active:scale-[0.98] hover:opacity-90'
+                    }`}
+                    onClick={() => !isSoldOut && addToCart(prod)}
+                  >
+                    <img 
+                      src={prod.imageUrl || '/assets/images/cafe_login_cover.png'} 
+                      alt={prod.name} 
+                      className="w-full h-full object-cover"
+                      onError={(e: any) => { e.target.src = '/assets/images/cafe_login_cover.png'; }}
+                    />
+
+                    {/* Sold Out Overlay */}
+                    {isSoldOut ? (
+                      <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center">
+                        <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider rounded-md shadow-md">
+                          HABIS
+                        </span>
+                      </div>
+                    ) : prod.stock <= 5 ? (
+                      <span className="absolute top-2 left-2 bg-rose-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase">
+                        Stok Menipis
+                      </span>
+                    ) : null}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white line-clamp-1">{prod.name}</h4>
+                    <span className="text-[10px] text-slate-400 font-semibold">{prod.category?.name}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-800">
+                  <span className="text-xs font-black text-amber-400">{formatCurrency(prod.sellPrice)}</span>
+                  {isSoldOut ? (
+                    <span className="text-[10px] font-black text-rose-400 uppercase bg-rose-500/10 px-2 py-1 rounded-lg border border-rose-500/20">
+                      Habis
                     </span>
+                  ) : (
+                    <button 
+                      onClick={() => addToCart(prod)}
+                      className="w-7 h-7 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-955 flex items-center justify-center transition-colors active:scale-90"
+                    >
+                      <Plus size={14} />
+                    </button>
                   )}
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white line-clamp-1">{prod.name}</h4>
-                  <span className="text-[10px] text-slate-400 font-semibold">{prod.category?.name}</span>
-                </div>
               </div>
-
-              <div className="flex justify-between items-center mt-3 pt-2 border-t border-slate-800">
-                <span className="text-xs font-black text-amber-400">{formatCurrency(prod.sellPrice)}</span>
-                <button 
-                  onClick={() => addToCart(prod)}
-                  className="w-7 h-7 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-955 flex items-center justify-center transition-colors active:scale-90"
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </main>
 

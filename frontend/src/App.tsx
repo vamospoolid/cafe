@@ -21,12 +21,24 @@ import DineInView from './components/DineInView';
 import IngredientView from './components/IngredientView';
 import SupplierView from './components/SupplierView';
 import PurchaseOrderView from './components/PurchaseOrderView';
+import StaffPWAView from './components/StaffPWAView';
 import { POSProvider, POSContext } from './context/POSContext';
 
 
 const AppRoutes = () => {
   const context = useContext(POSContext);
   
+  // Jika ini rute staff PWA mandiri (bisa dibuka di HP staf/dapur), biarkan terbuka
+  const isStaffRoute = window.location.pathname.startsWith('/staff') || window.location.pathname.startsWith('/dapur-app');
+  if (isStaffRoute) {
+    return (
+      <Routes>
+        <Route path="/staff" element={<StaffPWAView />} />
+        <Route path="/dapur-app" element={<StaffPWAView />} />
+      </Routes>
+    );
+  }
+
   // Jika ini rute dine-in pelanggan mandiri, biarkan terbuka tanpa login
   const isDineInRoute = window.location.pathname.startsWith('/dinein/table/');
   

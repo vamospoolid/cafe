@@ -48,6 +48,32 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     if (updateData.loyaltyGoldThreshold !== undefined) updateData.loyaltyGoldThreshold = Number(updateData.loyaltyGoldThreshold);
     if (updateData.loyaltySilverMultiplier !== undefined) updateData.loyaltySilverMultiplier = Number(updateData.loyaltySilverMultiplier);
     if (updateData.loyaltyGoldMultiplier !== undefined) updateData.loyaltyGoldMultiplier = Number(updateData.loyaltyGoldMultiplier);
+    
+    if (updateData.enableKDS !== undefined) updateData.enableKDS = Boolean(updateData.enableKDS);
+    if (updateData.autoCompleteKDSOnPay !== undefined) updateData.autoCompleteKDSOnPay = Boolean(updateData.autoCompleteKDSOnPay);
+    if (updateData.autoPrintReceipt !== undefined) updateData.autoPrintReceipt = Boolean(updateData.autoPrintReceipt);
+    if (updateData.autoPrintKitchen !== undefined) updateData.autoPrintKitchen = Boolean(updateData.autoPrintKitchen);
+    if (updateData.autoPrintBar !== undefined) updateData.autoPrintBar = Boolean(updateData.autoPrintBar);
+
+    if (updateData.storeLatitude !== undefined) updateData.storeLatitude = Number(updateData.storeLatitude);
+    if (updateData.storeLongitude !== undefined) updateData.storeLongitude = Number(updateData.storeLongitude);
+    if (updateData.gpsRadiusMeters !== undefined) updateData.gpsRadiusMeters = Number(updateData.gpsRadiusMeters);
+    if (updateData.enableGpsValidation !== undefined) updateData.enableGpsValidation = Boolean(updateData.enableGpsValidation);
+    if (updateData.enableCameraPhoto !== undefined) updateData.enableCameraPhoto = Boolean(updateData.enableCameraPhoto);
+    if (updateData.workShifts !== undefined && typeof updateData.workShifts !== 'string') {
+      updateData.workShifts = JSON.stringify(updateData.workShifts);
+    }
+
+    // Reward & Punishment Karyawan
+    if (updateData.enableZeroLateBonus !== undefined) updateData.enableZeroLateBonus = Boolean(updateData.enableZeroLateBonus);
+    if (updateData.zeroLateBonusAmount !== undefined) updateData.zeroLateBonusAmount = Number(updateData.zeroLateBonusAmount);
+    if (updateData.zeroLateMinAttendance !== undefined) updateData.zeroLateMinAttendance = Number(updateData.zeroLateMinAttendance);
+    if (updateData.zeroLateMaxLateAllowed !== undefined) updateData.zeroLateMaxLateAllowed = Number(updateData.zeroLateMaxLateAllowed);
+    if (updateData.enableLatePenalty !== undefined) updateData.enableLatePenalty = Boolean(updateData.enableLatePenalty);
+    if (updateData.latePenaltyType !== undefined) updateData.latePenaltyType = String(updateData.latePenaltyType);
+    if (updateData.latePenaltyAmount !== undefined) updateData.latePenaltyAmount = Number(updateData.latePenaltyAmount);
+    if (updateData.enableAlphaPenalty !== undefined) updateData.enableAlphaPenalty = Boolean(updateData.enableAlphaPenalty);
+    if (updateData.alphaPenaltyAmount !== undefined) updateData.alphaPenaltyAmount = Number(updateData.alphaPenaltyAmount);
 
     let settings = await prisma.settings.findFirst();
     

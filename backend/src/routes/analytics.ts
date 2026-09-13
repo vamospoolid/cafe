@@ -320,6 +320,41 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     let periodQrisTotal = 0;
     let periodQrisCount = 0;
 
+    // Helper classifier for Food vs Drink
+    const getCategoryGroup = (prod: any): 'makanan' | 'minuman' | 'lainnya' => {
+      const target = (prod?.category?.printerTarget || '').toUpperCase();
+      const cat = (prod?.category?.name || '').toLowerCase();
+      const name = (prod?.name || '').toLowerCase();
+      if (target === 'BAR') return 'minuman';
+      if (target === 'KITCHEN') return 'makanan';
+      if (
+        cat.includes('minum') || cat.includes('drink') || cat.includes('beverage') ||
+        cat.includes('bevvies') || cat.includes('kopi') || cat.includes('coffee') ||
+        cat.includes('tea') || cat.includes('teh') || cat.includes('jus') ||
+        cat.includes('juice') || cat.includes('boba') || cat.includes('latte') ||
+        cat.includes('mocktail') || cat.includes('float') || cat.includes('es ')
+      ) return 'minuman';
+      if (
+        cat.includes('makan') || cat.includes('food') || cat.includes('ramen') ||
+        cat.includes('mie') || cat.includes('nasi') || cat.includes('salties') ||
+        cat.includes('rice') || cat.includes('soup') || cat.includes('snack') ||
+        cat.includes('dimsum') || cat.includes('bento') || cat.includes('dessert') ||
+        cat.includes('pastry') || cat.includes('sweeties') || cat.includes('roti')
+      ) return 'makanan';
+      if (
+        name.includes('kopi') || name.includes('coffee') || name.includes('tea') ||
+        name.includes('teh') || name.includes('jus') || name.includes('juice') ||
+        name.includes('latte') || name.includes('espresso') || name.includes('susu') ||
+        name.includes('ice') || name.includes('es ') || name.includes('drink')
+      ) return 'minuman';
+      return 'makanan';
+    };
+
+    // Food vs Drink tracking objects
+    const foodStats = { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 };
+    const drinkStats = { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 };
+    const otherStats = { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 };
+
     orders.forEach(order => {
       totalRevenue += order.total;
       totalDiscounts += order.discount;
@@ -357,9 +392,24 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
 
       // Items breakdown
       order.items.forEach(item => {
-        const buyPrice = item.buyPrice || 0;
+        const buyPrice = item.buyPrice || item.product?.buyPrice || 0;
         const itemCost = buyPrice * item.qty;
         totalHpp += itemCost;
+
+        const group = getCategoryGroup(item.product);
+        if (group === 'makanan') {
+          foodStats.revenue += item.subtotal;
+          foodStats.qty += item.qty;
+          foodStats.cost += itemCost;
+        } else if (group === 'minuman') {
+          drinkStats.revenue += item.subtotal;
+          drinkStats.qty += item.qty;
+          drinkStats.cost += itemCost;
+        } else {
+          otherStats.revenue += item.subtotal;
+          otherStats.qty += item.qty;
+          otherStats.cost += itemCost;
+        }
 
         // Category breakdown
         const catName = item.product?.category?.name || 'Lain-lain';
@@ -387,6 +437,25 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     });
 
     const totalProfit = totalRevenue - totalHpp;
+
+    // Calculate margins and percentages for Food vs Drink
+    foodStats.profit = foodStats.revenue - foodStats.cost;
+    foodStats.margin = foodStats.revenue > 0 ? Math.round((foodStats.profit / foodStats.revenue) * 100) : 0;
+    foodStats.percentage = totalRevenue > 0 ? Math.round((foodStats.revenue / totalRevenue) * 100) : 0;
+
+    drinkStats.profit = drinkStats.revenue - drinkStats.cost;
+    drinkStats.margin = drinkStats.revenue > 0 ? Math.round((drinkStats.profit / drinkStats.revenue) * 100) : 0;
+    drinkStats.percentage = totalRevenue > 0 ? Math.round((drinkStats.revenue / totalRevenue) * 100) : 0;
+
+    otherStats.profit = otherStats.revenue - otherStats.cost;
+    otherStats.margin = otherStats.revenue > 0 ? Math.round((otherStats.profit / otherStats.revenue) * 100) : 0;
+    otherStats.percentage = totalRevenue > 0 ? Math.round((otherStats.revenue / totalRevenue) * 100) : 0;
+
+    const categoryBreakdown = {
+      food: foodStats,
+      drink: drinkStats,
+      other: otherStats
+    };
 
     // Format category & product lists
     const categoriesReport = Object.entries(categoryMap).map(([name, data]) => ({
@@ -493,12 +562,10 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
 
     // Calculate revenue breakdown by category name
     const revenueBreakdown = {
-      makanan: (categoryMap['Makanan']?.revenue || 0) + (categoryMap['Salties']?.revenue || 0),
-      minuman: (categoryMap['Minuman']?.revenue || 0) + (categoryMap['Bevvies']?.revenue || 0),
+      makanan: foodStats.revenue,
+      minuman: drinkStats.revenue,
       dessert: (categoryMap['Dessert']?.revenue || 0) + (categoryMap['Pastry']?.revenue || 0) + (categoryMap['Sweeties']?.revenue || 0),
-      other: Object.entries(categoryMap)
-        .filter(([name]) => !['Makanan', 'Minuman', 'Dessert', 'Pastry', 'Salties', 'Sweeties', 'Bevvies'].includes(name))
-        .reduce((sum, [, d]) => sum + d.revenue, 0)
+      other: otherStats.revenue
     };
 
     // Calculate Growth vs previous period
@@ -546,48 +613,74 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       const dayExpenses = cashFlows.filter(cf => cf.type === 'Pengeluaran' && cf.date >= dayStart && cf.date <= dayEnd).reduce((sum, cf) => sum + cf.amount, 0);
 
       let dayMakanan = 0;
+      let dayMakananHpp = 0;
       let dayMinuman = 0;
+      let dayMinumanHpp = 0;
       let dayTotal = 0;
       let dayHpp = 0;
 
       dayOrders.forEach(o => {
         dayTotal += o.total;
         o.items.forEach(item => {
-          const buyPrice = item.product?.buyPrice || 0;
-          dayHpp += buyPrice * item.qty;
-          const cat = item.product?.category?.name || '';
-          if (cat === 'Makanan' || cat === 'Salties') {
+          const buyPrice = item.buyPrice || item.product?.buyPrice || 0;
+          const cost = buyPrice * item.qty;
+          dayHpp += cost;
+
+          const grp = getCategoryGroup(item.product);
+          if (grp === 'makanan') {
             dayMakanan += item.subtotal;
-          } else if (cat === 'Minuman' || cat === 'Bevvies') {
+            dayMakananHpp += cost;
+          } else if (grp === 'minuman') {
             dayMinuman += item.subtotal;
+            dayMinumanHpp += cost;
           }
         });
       });
+
+      const dayGrossProfit = dayTotal - dayHpp;
+      const dayNetProfit = dayTotal - dayHpp - dayExpenses;
+      const dayGrossMargin = dayTotal > 0 ? Math.round((dayGrossProfit / dayTotal) * 100) : 0;
+      const dayNetMargin = dayTotal > 0 ? Math.round((dayNetProfit / dayTotal) * 100) : 0;
 
       dailyTimeline.push({
         dateLabel: curr.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
         dateRaw: curr.toISOString().split('T')[0],
         makanan: dayMakanan,
+        makananHpp: dayMakananHpp,
         minuman: dayMinuman,
+        minumanHpp: dayMinumanHpp,
         total: dayTotal,
+        hpp: dayHpp,
         expenses: dayExpenses,
-        profit: dayTotal - dayHpp - dayExpenses,
+        grossProfit: dayGrossProfit,
+        profit: dayNetProfit,
+        margin: dayGrossMargin,
+        netMargin: dayNetMargin,
         count: dayOrders.length
       });
 
       curr.setDate(curr.getDate() + 1);
     }
 
+    const grossMargin = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
+    const netMargin = totalRevenue > 0 ? Math.round((periodNetIncome / totalRevenue) * 100) : 0;
+    const hppPercentage = totalRevenue > 0 ? Math.round((totalHpp / totalRevenue) * 100) : 0;
+
     res.json({
       summary: {
         revenue: totalRevenue,
         profit: totalProfit,
+        netIncome: periodNetIncome,
         hpp: totalHpp,
+        grossMargin,
+        netMargin,
+        hppPercentage,
         transactionsCount,
         discounts: totalDiscounts,
         tax: totalTax,
         serviceCharge: totalServiceCharge
       },
+      categoryBreakdown,
       paymentMethods,
       categories: categoriesReport,
       products: productsReport,

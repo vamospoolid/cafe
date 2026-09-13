@@ -2,7 +2,6 @@ import React, { useState, useEffect, useContext } from 'react';
 import { History, Search, RotateCcw, Printer, Filter, ShoppingCart, DollarSign, BarChart2, User, XCircle, Download, FileText, Zap } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import ReceiptPrinter from './ReceiptPrinter';
 import { exportFinancialPDF } from '../utils/pdfGenerator';

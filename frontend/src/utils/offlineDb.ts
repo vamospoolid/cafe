@@ -1,7 +1,7 @@
 // Database offline POS Cafe berbasis IndexedDB murni (tanpa dependensi luar)
 
 const DB_NAME = 'poscafe_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface OfflineOrder {
   offlineId: string;
@@ -45,6 +45,12 @@ class OfflineDB {
         }
         if (!db.objectStoreNames.contains('categories')) {
           db.createObjectStore('categories', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('tables')) {
+          db.createObjectStore('tables', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('customers')) {
+          db.createObjectStore('customers', { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'id' }); // id = 'current'
@@ -113,6 +119,24 @@ class OfflineDB {
 
   public async saveCategories(categories: any[]): Promise<void> {
     return this.saveStoreData<any>('categories', categories);
+  }
+
+  // --- Tables ---
+  public async getTables(): Promise<any[]> {
+    return this.getStoreData<any>('tables');
+  }
+
+  public async saveTables(tables: any[]): Promise<void> {
+    return this.saveStoreData<any>('tables', tables);
+  }
+
+  // --- Customers ---
+  public async getCustomers(): Promise<any[]> {
+    return this.getStoreData<any>('customers');
+  }
+
+  public async saveCustomers(customers: any[]): Promise<void> {
+    return this.saveStoreData<any>('customers', customers);
   }
 
   // --- Settings ---

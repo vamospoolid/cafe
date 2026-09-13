@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import multer from 'multer';
+const multer = require('multer');
 import path from 'path';
 import fs from 'fs';
 import { authenticateToken } from '../middlewares/authMiddleware';
@@ -7,17 +7,17 @@ import { authenticateToken } from '../middlewares/authMiddleware';
 const router = Router();
 
 // Pastikan direktori uploads ada
-const uploadDir = path.join(__dirname, '../../uploads');
+const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 // Konfigurasi penyimpanan Multer
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req: any, _file: any, cb: any) => {
     cb(null, uploadDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_req: any, file: any, cb: any) => {
     // Generate nama file unik: timestamp + ekstensi asli
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname);
@@ -26,7 +26,7 @@ const storage = multer.diskStorage({
 });
 
 // Filter jenis file (hanya gambar)
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+const fileFilter = (_req: any, file: any, cb: any) => {
   const allowedTypes = /jpeg|jpg|png|gif|webp/;
   const extName = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimeType = allowedTypes.test(file.mimetype);
@@ -46,19 +46,20 @@ const upload = multer({
 
 // POST /api/upload - Menerima satu file gambar dengan key 'image'
 router.post('/', authenticateToken, (req: Request, res: Response) => {
-  upload.single('image')(req, res, (err: any) => {
+  upload.single('image')(req as any, res as any, (err: any) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ error: `Multer Error: ${err.message}` });
     } else if (err) {
       return res.status(400).json({ error: err.message });
     }
 
-    if (!req.file) {
+    const file = (req as any).file;
+    if (!file) {
       return res.status(400).json({ error: 'Tidak ada file gambar yang diunggah' });
     }
 
     // Mengembalikan URL statis gambar
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const imageUrl = `/uploads/${file.filename}`;
     res.status(200).json({ 
       message: 'Gambar berhasil diunggah',
       imageUrl 
