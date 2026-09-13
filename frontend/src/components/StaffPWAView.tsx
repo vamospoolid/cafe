@@ -1021,288 +1021,301 @@ export const StaffPWAView: React.FC = () => {
   // RENDER AUTHENTICATED STAFF APP WITH STICKY BOTTOM DOCK
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col max-w-md mx-auto pb-28 shadow-2xl relative font-sans select-none">
-      {/* ─────────────────────────────────────────────────────────────
-          1. TOP APP BAR & STAFF BANNER
-          ───────────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-b from-[#0052cc] via-[#004bbd] to-[#003d99] text-white p-5 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
-        <div className="flex items-center justify-between relative z-10 pb-3 border-b border-white/15">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400" />
-            <span className="text-[11px] font-black uppercase tracking-wider text-blue-100">
-              {settings?.storeName || 'SOL CAFE'} • MOBILE STAFF
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-1.5 active:scale-95"
-          >
-            <LogOut size={13} />
-            <span>Keluar</span>
-          </button>
-        </div>
-
-        <div className="pt-3.5 flex items-center gap-3.5 relative z-10">
-          <div className="w-12 h-12 rounded-2xl bg-white/20 p-0.5 shadow-md border border-white/30 shrink-0">
-            <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center font-black text-base text-[#0052cc]">
-              {user.name.substring(0, 2).toUpperCase()}
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-0">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
+      {/* Mobile Device Simulation Shell on Desktop, Native Edge-to-Edge on Mobile */}
+      <div className="w-full sm:max-w-[450px] min-h-screen sm:min-h-[860px] bg-slate-100 sm:rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.6)] sm:border-[6px] sm:border-slate-800 flex flex-col relative overflow-hidden">
+        
+        {/* ─────────────────────────────────────────────────────────────
+            1. TOP APP BAR & STAFF BANNER
+            ───────────────────────────────────────────────────────────── */}
+        <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 text-white px-5 pt-5 pb-6 rounded-b-[2rem] shadow-xl relative overflow-hidden shrink-0">
+          <div className="flex items-center justify-between relative z-10 pb-3 border-b border-white/10">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-white truncate">{user.name}</h2>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-black border border-white/25">
-                {user.role}
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-md shadow-emerald-400/50" />
+              <span className="text-[11px] font-black uppercase tracking-wider text-blue-200">
+                {settings?.storeName || 'SOL CAFE'} • MOBILE STAFF
               </span>
-            </div>
-            <p className="text-[10px] text-blue-100/80 font-medium mt-0.5 flex items-center gap-1">
-              <Clock size={11} className="text-emerald-300" /> {currentTime} • {currentDateStr}
-            </p>
-          </div>
-        </div>
-
-        {/* Shift status banner */}
-        <div className="mt-3 pt-2.5 border-t border-white/15 flex items-center justify-between text-xs relative z-10">
-          <div className="flex items-center gap-2">
-            <span className="text-blue-100/90 text-[10px] font-semibold">Status Presensi:</span>
-            {mySummary?.todayStatus?.clockedIn ? (
-              mySummary?.todayStatus?.clockedOut ? (
-                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold">
-                  Selesai Shift
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-lg bg-emerald-400 text-slate-950 text-[10px] font-black flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-ping" /> Sedang Bertugas
-                </span>
-              )
-            ) : (
-              <span className="px-2 py-0.5 rounded-lg bg-amber-400 text-slate-950 text-[10px] font-black">
-                Belum Presensi
-              </span>
-            )}
-          </div>
-
-          {mySummary?.todayStatus?.todayLog?.shiftName && (
-            <span className="text-[10px] text-white font-bold bg-white/15 px-2 py-0.5 rounded-md border border-white/20">
-              {mySummary.todayStatus.todayLog.shiftName.split('(')[0]}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 1: ABSENSI GPS & BIOMETRIC SELFIE CAMERA
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'attendance' && (
-        <div className="p-4 space-y-4 max-w-md mx-auto animate-fade-in">
-          {/* GPS RADAR CARD */}
-          <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-bold shrink-0 ${
-                isWithinRadius ? 'bg-blue-50 text-[#0052cc] border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'
-              }`}>
-                <MapPin size={20} />
-              </div>
-              <div>
-                <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                  <span>{settings?.storeName || 'SOL CAFE'}</span>
-                  {isWithinRadius && <CheckCircle2 size={14} className="text-emerald-500" />}
-                </h4>
-                <p className="text-[11px] font-semibold mt-0.5">
-                  {gpsLoading ? (
-                    <span className="text-amber-600 flex items-center gap-1">
-                      <RefreshCw size={10} className="animate-spin" /> Mengunci koordinat GPS...
-                    </span>
-                  ) : isWithinRadius ? (
-                    <span className="text-emerald-600 font-bold flex items-center gap-1">
-                      <span>✓ GPS Valid</span>
-                      <span className="text-slate-400 font-normal font-mono">
-                        ({gpsDistance !== null ? `${gpsDistance}m` : '0m'})
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-rose-600 font-bold">
-                      Di Luar Radius ({gpsDistance !== null ? `${gpsDistance}m` : '-'})
-                    </span>
-                  )}
-                </p>
-              </div>
             </div>
 
             <button
               type="button"
-              onClick={requestGpsLocation}
-              disabled={gpsLoading}
-              className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 active:scale-95 shrink-0"
-              title="Perbarui GPS"
+              onClick={handleLogout}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/15 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
             >
-              <RefreshCw size={14} className={gpsLoading ? 'animate-spin text-[#0052cc]' : ''} />
+              <LogOut size={13} />
+              <span>Keluar</span>
             </button>
           </div>
 
-          {/* PILIHAN SHIFT (JIKA BELUM CLOCK IN) */}
-          {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
-            <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-2.5">
-              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Clock size={14} className="text-[#0052cc]" /> Jadwal Shift Kerja:
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {shifts.map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setSelectedShiftId(s.id)}
-                    className={`p-2.5 rounded-2xl border text-left transition-all ${
-                      selectedShiftId === s.id
-                        ? 'border-[#0052cc] bg-blue-50/50 shadow-sm ring-1 ring-[#0052cc]'
-                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="text-xs font-black text-slate-900 truncate">{s.name}</div>
-                    <div className="text-[10px] text-slate-500 font-semibold">{s.start} - {s.end}</div>
-                  </button>
-                ))}
+          <div className="pt-3.5 flex items-center gap-3.5 relative z-10">
+            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 p-0.5 shadow-lg border border-white/20 shrink-0">
+              <div className="w-12 h-12 bg-slate-900/60 rounded-[14px] flex items-center justify-center font-black text-base text-white">
+                {user.name.substring(0, 2).toUpperCase()}
               </div>
             </div>
-          )}
 
-          {/* FOTO SELFIE KAMERA CONTAINER */}
-          <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                <Camera size={14} className="text-[#0052cc]" />
-                <span>Foto Selfie Kehadiran</span>
-              </h4>
-              {capturedPhoto && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                  ✓ Foto Terpasang
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black text-white truncate">{user.name}</h2>
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 font-extrabold border border-indigo-400/30">
+                  {user.role}
+                </span>
+              </div>
+              <p className="text-[11px] text-blue-200/90 font-medium mt-0.5 flex items-center gap-1.5">
+                <Clock size={12} className="text-emerald-400" />
+                <span className="font-mono font-bold text-white">{currentTime}</span>
+                <span className="text-blue-300/60">•</span>
+                <span>{currentDateStr}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Shift status banner */}
+          <div className="mt-3.5 pt-2.5 border-t border-white/10 flex items-center justify-between relative z-10">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-200/80 text-[10px] font-bold uppercase tracking-wider">Status:</span>
+              {mySummary?.todayStatus?.clockedIn ? (
+                mySummary?.todayStatus?.clockedOut ? (
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-200 border border-blue-400/30 text-[10px] font-black">
+                    ✓ Selesai Shift
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Sedang Bertugas
+                  </span>
+                )
+              ) : (
+                <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-black flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Belum Presensi
                 </span>
               )}
             </div>
 
-            {/* Hidden native camera file input */}
-            <input
-              type="file"
-              accept="image/*"
-              capture="user"
-              ref={fileInputRef}
-              onChange={handleNativeCameraCapture}
-              className="hidden"
-            />
+            {mySummary?.todayStatus?.todayLog?.shiftName && (
+              <span className="text-[10px] text-blue-100 font-extrabold bg-white/10 px-2.5 py-1 rounded-lg border border-white/15">
+                {mySummary.todayStatus.todayLog.shiftName.split('(')[0]}
+              </span>
+            )}
+          </div>
+        </div>
 
-            {!capturedPhoto ? (
-              <div className="space-y-3">
-                {isCameraActive ? (
-                  <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[280px] mx-auto border-2 border-[#0052cc] shadow-inner">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover transform -scale-x-100"
-                    />
-                    <div className="absolute inset-0 pointer-events-none border-2 border-white/40 rounded-full m-8 border-dashed animate-pulse" />
-                    
-                    <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-3 px-4">
+        {/* ─────────────────────────────────────────────────────────────
+            SCROLLABLE CONTENT AREA
+            ───────────────────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto pb-28">
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 1: ABSENSI GPS & BIOMETRIC SELFIE CAMERA
+              ───────────────────────────────────────────────────────────── */}
+          {activeTab === 'attendance' && (
+            <div className="p-4 space-y-4 animate-fade-in">
+              {/* GPS RADAR CARD */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-bold shrink-0 ${
+                    isWithinRadius ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'
+                  }`}>
+                    <MapPin size={22} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>{settings?.storeName || 'SOL CAFE'}</span>
+                      {isWithinRadius && <CheckCircle2 size={14} className="text-emerald-500" />}
+                    </h4>
+                    <p className="text-[11px] font-semibold mt-0.5">
+                      {gpsLoading ? (
+                        <span className="text-amber-600 flex items-center gap-1">
+                          <RefreshCw size={11} className="animate-spin" /> Mengunci koordinat GPS...
+                        </span>
+                      ) : isWithinRadius ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-1">
+                          <span>✓ GPS Valid</span>
+                          <span className="text-slate-400 font-normal font-mono">
+                            ({gpsDistance !== null ? `${gpsDistance}m` : '0m'} / {settings?.gpsRadiusMeters || 150}m)
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-rose-600 font-bold">
+                          Di Luar Radius ({gpsDistance !== null ? `${gpsDistance}m` : '-'})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={requestGpsLocation}
+                  disabled={gpsLoading}
+                  className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 active:scale-95 shrink-0 transition-all shadow-sm"
+                  title="Perbarui GPS"
+                >
+                  <RefreshCw size={14} className={gpsLoading ? 'animate-spin text-[#0052cc]' : ''} />
+                </button>
+              </div>
+
+              {/* PILIHAN SHIFT (JIKA BELUM CLOCK IN) */}
+              {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
+                <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-2.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Clock size={14} className="text-[#0052cc]" /> Jadwal Shift Kerja:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {shifts.map(s => (
                       <button
+                        key={s.id}
                         type="button"
-                        onClick={capturePhoto}
-                        className="w-12 h-12 rounded-full bg-white text-slate-950 flex items-center justify-center shadow-lg active:scale-90 border-4 border-blue-500"
+                        onClick={() => setSelectedShiftId(s.id)}
+                        className={`p-3 rounded-2xl border text-left transition-all ${
+                          selectedShiftId === s.id
+                            ? 'border-[#0052cc] bg-blue-50/70 shadow-sm ring-2 ring-[#0052cc]/30'
+                            : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                        }`}
                       >
-                        <div className="w-8 h-8 rounded-full bg-[#0052cc]" />
+                        <div className="text-xs font-black text-slate-900 truncate flex items-center justify-between">
+                          <span>{s.name}</span>
+                          {selectedShiftId === s.id && <Check size={12} className="text-[#0052cc]" />}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-bold mt-0.5">{s.start} - {s.end}</div>
                       </button>
-                      <button
-                        type="button"
-                        onClick={stopCamera}
-                        className="px-3 py-1.5 rounded-xl bg-black/60 text-white text-[10px] font-bold backdrop-blur-sm"
-                      >
-                        Tutup
-                      </button>
-                    </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* FOTO SELFIE KAMERA CONTAINER */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                    <Camera size={15} className="text-[#0052cc]" />
+                    <span>Foto Selfie Kehadiran</span>
+                  </h4>
+                  {capturedPhoto && (
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                      ✓ Terverifikasi
+                    </span>
+                  )}
+                </div>
+
+                {/* Hidden native camera file input */}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  ref={fileInputRef}
+                  onChange={handleNativeCameraCapture}
+                  className="hidden"
+                />
+
+                {!capturedPhoto ? (
+                  <div className="space-y-3">
+                    {isCameraActive ? (
+                      <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[280px] mx-auto border-2 border-[#0052cc] shadow-inner">
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover transform -scale-x-100"
+                        />
+                        <div className="absolute inset-0 pointer-events-none border-2 border-white/50 rounded-full m-8 border-dashed animate-pulse" />
+                        
+                        <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-3 px-4">
+                          <button
+                            type="button"
+                            onClick={capturePhoto}
+                            className="w-13 h-13 rounded-full bg-white text-slate-950 flex items-center justify-center shadow-lg active:scale-90 border-4 border-blue-500"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-[#0052cc]" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopCamera}
+                            className="px-3 py-1.5 rounded-xl bg-black/60 text-white text-[10px] font-bold backdrop-blur-sm"
+                          >
+                            Tutup
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={startCamera}
+                          className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-95"
+                        >
+                          <Camera size={16} />
+                          <span>Buka Kamera Selfie Presensi</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                        >
+                          <Smartphone size={14} className="text-[#0052cc]" />
+                          <span>Ambil Foto via Kamera HP (Alternatif)</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={startCamera}
-                      className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 active:scale-95"
-                    >
-                      <Camera size={16} />
-                      <span>Buka Kamera Selfie Presensi</span>
-                    </button>
+                  <div className="space-y-2.5">
+                    <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[200px] mx-auto border-2 border-emerald-500 shadow-md">
+                      <img src={capturedPhoto} alt="Selfie" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setCapturedPhoto(null)}
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
 
                     <button
                       type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                      onClick={() => {
+                        setCapturedPhoto(null);
+                        startCamera();
+                      }}
+                      className="w-full py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      <Smartphone size={14} className="text-[#0052cc]" />
-                      <span>Ambil Foto via Kamera HP (Alternatif)</span>
+                      <RefreshCw size={12} />
+                      <span>Ambil Ulang Foto</span>
                     </button>
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[200px] mx-auto border-2 border-emerald-500 shadow-md">
-                  <img src={capturedPhoto} alt="Selfie" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setCapturedPhoto(null)}
-                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCapturedPhoto(null);
-                    startCamera();
-                  }}
-                  className="w-full py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  <RefreshCw size={12} />
-                  <span>Ambil Ulang Foto</span>
-                </button>
-              </div>
-            )}
-
-            {/* BUTTON ACTION CLOCK IN / OUT */}
-            <div className="pt-2">
-              {!mySummary?.todayStatus?.clockedIn ? (
-                <button
-                  type="button"
-                  disabled={clockLoading || !isWithinRadius}
-                  onClick={() => handleClockAction('IN')}
-                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95"
-                >
-                  <CheckCircle2 size={18} />
-                  <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK IN (MASUK KERJA)'}</span>
-                </button>
-              ) : !mySummary?.todayStatus?.clockedOut ? (
-                <button
-                  type="button"
-                  disabled={clockLoading}
-                  onClick={() => handleClockAction('OUT')}
-                  className="w-full py-4 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-95"
-                >
-                  <LogOut size={18} />
-                  <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK OUT (SELESAI SHIFT)'}</span>
-                </button>
-              ) : (
-                <div className="p-3.5 rounded-2xl bg-slate-100 text-center text-xs font-bold text-slate-600 border border-slate-200">
-                  ✓ Anda telah menyelesaikan shift hari ini. Terima kasih atas kerja keras Anda!
+                {/* BUTTON ACTION CLOCK IN / OUT */}
+                <div className="pt-2">
+                  {!mySummary?.todayStatus?.clockedIn ? (
+                    <button
+                      type="button"
+                      disabled={clockLoading || !isWithinRadius}
+                      onClick={() => handleClockAction('IN')}
+                      className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-400 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95"
+                    >
+                      <CheckCircle2 size={18} />
+                      <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK IN (MASUK KERJA)'}</span>
+                    </button>
+                  ) : !mySummary?.todayStatus?.clockedOut ? (
+                    <button
+                      type="button"
+                      disabled={clockLoading}
+                      onClick={() => handleClockAction('OUT')}
+                      className="w-full py-4 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 disabled:from-slate-300 disabled:to-slate-400 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25 active:scale-95"
+                    >
+                      <LogOut size={18} />
+                      <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK OUT (SELESAI SHIFT)'}</span>
+                    </button>
+                  ) : (
+                    <div className="p-3.5 rounded-2xl bg-slate-100 text-center text-xs font-bold text-slate-600 border border-slate-200">
+                      ✓ Anda telah menyelesaikan shift hari ini. Terima kasih atas kerja keras Anda!
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
       {/* ─────────────────────────────────────────────────────────────
           TAB 2: MOBILE KDS (DAPUR & BAR LIVE TICKET STATION)
@@ -1911,101 +1924,102 @@ export const StaffPWAView: React.FC = () => {
           )}
         </div>
       )}
+    </div>
 
-      {/* ─────────────────────────────────────────────────────────────
-          STICKY BOTTOM NAVIGATION BAR (PROFESSIONAL MOBILE APP DOCK)
-          ───────────────────────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-2 px-2 max-w-md mx-auto">
-        <div className="flex items-center justify-around">
-          {/* Tab 1: Presensi */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('attendance')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-              activeTab === 'attendance'
-                ? 'text-[#0052cc] font-black scale-105'
-                : 'text-slate-400 hover:text-slate-600 font-semibold'
-            }`}
-          >
-            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-              <Fingerprint size={19} />
-            </div>
-            <span className="text-[10px] tracking-tight mt-0.5">Presensi</span>
-          </button>
+        {/* ─────────────────────────────────────────────────────────────
+            STICKY BOTTOM NAVIGATION BAR (PROFESSIONAL MOBILE APP DOCK)
+            ───────────────────────────────────────────────────────────── */}
+        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[450px] mx-auto z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] py-2 px-2 sm:rounded-b-[2.2rem]">
+          <div className="flex items-center justify-around">
+            {/* Tab 1: Presensi */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('attendance')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activeTab === 'attendance'
+                  ? 'text-[#0052cc] font-black scale-105'
+                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+              }`}
+            >
+              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+                <Fingerprint size={19} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5">Presensi</span>
+            </button>
 
-          {/* Tab 2: Dapur KDS */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('kds')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
-              activeTab === 'kds'
-                ? 'text-[#0052cc] font-black scale-105'
-                : 'text-slate-400 hover:text-slate-600 font-semibold'
-            }`}
-          >
-            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'kds' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-              <ChefHat size={19} />
-            </div>
-            <span className="text-[10px] tracking-tight mt-0.5">Dapur KDS</span>
-            {kdsOrders.filter(o => o.kdsStatus !== 'Served').length > 0 && (
-              <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center shadow-sm">
-                {kdsOrders.filter(o => o.kdsStatus !== 'Served').length}
-              </span>
-            )}
-          </button>
+            {/* Tab 2: Dapur KDS */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('kds')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
+                activeTab === 'kds'
+                  ? 'text-[#0052cc] font-black scale-105'
+                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+              }`}
+            >
+              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'kds' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+                <ChefHat size={19} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5">Dapur KDS</span>
+              {kdsOrders.filter(o => o.kdsStatus !== 'Served').length > 0 && (
+                <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center shadow-sm">
+                  {kdsOrders.filter(o => o.kdsStatus !== 'Served').length}
+                </span>
+              )}
+            </button>
 
-          {/* Tab 3: Stok Bahan */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('stock')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
-              activeTab === 'stock'
-                ? 'text-[#0052cc] font-black scale-105'
-                : 'text-slate-400 hover:text-slate-600 font-semibold'
-            }`}
-          >
-            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'stock' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-              <Package size={19} />
-            </div>
-            <span className="text-[10px] tracking-tight mt-0.5">Stok</span>
-            {ingredients.filter(i => i.stock <= i.minStock).length > 0 && (
-              <span className="absolute top-1 right-5 w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-            )}
-          </button>
+            {/* Tab 3: Stok Bahan */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('stock')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
+                activeTab === 'stock'
+                  ? 'text-[#0052cc] font-black scale-105'
+                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+              }`}
+            >
+              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'stock' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+                <Package size={19} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5">Stok</span>
+              {ingredients.filter(i => i.stock <= i.minStock).length > 0 && (
+                <span className="absolute top-1 right-5 w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+              )}
+            </button>
 
-          {/* Tab 4: Izin / Cuti */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('leave')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
-              activeTab === 'leave'
-                ? 'text-[#0052cc] font-black scale-105'
-                : 'text-slate-400 hover:text-slate-600 font-semibold'
-            }`}
-          >
-            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'leave' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-              <FileText size={19} />
-            </div>
-            <span className="text-[10px] tracking-tight mt-0.5">Izin / Cuti</span>
-          </button>
+            {/* Tab 4: Izin / Cuti */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('leave')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
+                activeTab === 'leave'
+                  ? 'text-[#0052cc] font-black scale-105'
+                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+              }`}
+            >
+              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'leave' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+                <FileText size={19} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5">Izin / Cuti</span>
+            </button>
 
-          {/* Tab 5: Slip & SOP */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('profile')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-              activeTab === 'profile'
-                ? 'text-[#0052cc] font-black scale-105'
-                : 'text-slate-400 hover:text-slate-600 font-semibold'
-            }`}
-          >
-            <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'profile' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-              <UserCheck size={19} />
-            </div>
-            <span className="text-[10px] tracking-tight mt-0.5">Slip & SOP</span>
-          </button>
-        </div>
-      </nav>
+            {/* Tab 5: Slip & SOP */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('profile')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activeTab === 'profile'
+                  ? 'text-[#0052cc] font-black scale-105'
+                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+              }`}
+            >
+              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'profile' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+                <UserCheck size={19} />
+              </div>
+              <span className="text-[10px] tracking-tight mt-0.5">Slip & SOP</span>
+            </button>
+          </div>
+        </nav>
 
       {/* ─────────────────────────────────────────────────────────────
           MODAL BUAT PENGAJUAN IZIN
@@ -2228,6 +2242,7 @@ export const StaffPWAView: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
