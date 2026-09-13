@@ -278,11 +278,10 @@ export const StaffPWAView: React.FC = () => {
   // Fetch Staff List for Kiosk Login
   const fetchStaffList = async () => {
     try {
-      const res = await fetch('/api/users');
+      const res = await fetch('/api/auth/staff-list');
       if (res.ok) {
         const users = await res.json();
-        const activeStaff = users.filter((u: any) => u.status === 'Aktif' || !u.status);
-        setStaffList(activeStaff);
+        setStaffList(users);
       }
     } catch (e) {
       console.error(e);
