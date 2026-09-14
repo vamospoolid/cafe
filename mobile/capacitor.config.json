@@ -3,7 +3,7 @@
   "appName": "SOL Staff Portal",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "http://cafe.codenusa.id/staff",
-    "cleartext": true
+    "url": "https://cafe.codenusa.id/staff",
+    "cleartext": false
   }
 }
