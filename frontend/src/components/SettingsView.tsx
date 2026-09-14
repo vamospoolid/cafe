@@ -296,22 +296,19 @@ const SettingsView = () => {
   };
 
   return (
-    <div 
-      className="p-3 sm:p-6 lg:p-8 flex-1 min-h-0 w-full overflow-y-auto bg-slate-50/50 flex flex-col pb-52 sm:pb-20"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
-        <div>
+    <div className="p-3 sm:p-6 lg:p-8 w-full flex flex-col pb-52 sm:pb-20">
+      {/* Header Action Bar */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 mb-4 sm:mb-6 shrink-0">
+        <div className="hidden sm:block">
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800 tracking-tight">
             <Settings className="text-indigo-600" size={26} /> Pengaturan Sistem
           </h2>
-          <p className="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wider">
+          <p className="text-xs font-semibold text-slate-400 mt-0.5 uppercase tracking-wider">
             Konfigurasi profil toko, mode POS, format struk printer, & metode pembayaran.
           </p>
         </div>
         <button 
-          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl transition-all font-bold text-xs sm:text-sm hover:scale-[1.02] shrink-0" 
+          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl transition-all font-bold text-xs sm:text-sm active:scale-95 shrink-0 w-full sm:w-auto" 
           onClick={handleSave}
           disabled={loading}
         >

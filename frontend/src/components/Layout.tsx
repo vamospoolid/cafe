@@ -393,7 +393,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
         
-        <div className="page-content flex-1 min-h-0 w-full overflow-hidden">
+        <div className="page-content flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col" style={{ WebkitOverflowScrolling: 'touch' }}>
           {children}
         </div>
       </main>

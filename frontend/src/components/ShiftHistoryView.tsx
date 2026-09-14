@@ -102,18 +102,16 @@ const ShiftHistoryView = () => {
   };
 
   return (
-    <div 
-      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
-        <div>
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+      {/* HEADER / ACTION TOOLBAR */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
+        <div className="hidden sm:block">
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
-            <History className="text-primary" /> Riwayat &amp; Rekap Shift Kasir
+            <History className="text-primary" size={24} /> Riwayat &amp; Rekap Shift Kasir
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">Kelola pembukaan dan penutupan shift kasir setiap harinya</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button 
             className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2.5 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all" 
             onClick={exportPDF}

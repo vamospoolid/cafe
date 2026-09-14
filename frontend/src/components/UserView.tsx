@@ -76,24 +76,25 @@ const UserView = () => {
   });
 
   return (
-    <div 
-      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
-        <div>
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+      
+      {/* HEADER / ACTION TOOLBAR */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
+        <div className="hidden sm:block">
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
-            <Users className="text-primary" /> Pengguna &amp; Karyawan
+            <Users className="text-primary" size={24} /> Pengguna &amp; Karyawan
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">Kelola data staf dan atur izin hak akses masing-masing akun</p>
         </div>
-        <button 
-          className="btn btn-primary shadow-sm flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold w-full sm:w-auto transition-all active:scale-95" 
-          onClick={() => { setSelectedUser(null); setIsModalOpen(true); }}
-        >
-          <UserPlus size={16} /> Tambah Karyawan
-        </button>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button 
+            className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all active:scale-95" 
+            onClick={() => { setSelectedUser(null); setIsModalOpen(true); }}
+          >
+            <UserPlus size={16} /> + Tambah Karyawan
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}

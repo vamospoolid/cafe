@@ -168,90 +168,87 @@ const ProductView = () => {
   const activeCount = products.filter(p => p.status === 'Aktif').length;
 
   return (
-    <div 
-      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-5">
       
-      {/* HEADER SECTION */}
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <Package className="text-primary" /> Manajemen Produk
+      {/* HEADER ACTION TOOLBAR */}
+      <div className="flex flex-wrap justify-between items-center gap-2.5 sm:gap-4 shrink-0">
+        <div className="hidden sm:block">
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800">
+            <Package className="text-primary" size={24} /> Manajemen Produk
           </h2>
-          <p className="text-muted text-xs mt-1">Kelola katalog produk, harga jual, stok, dan klasifikasi kategori</p>
+          <p className="text-muted text-xs mt-0.5">Kelola katalog produk, harga jual, stok, dan klasifikasi kategori</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button 
-            className="btn bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-sm flex items-center gap-2 font-semibold text-xs py-2 px-3.5 rounded-xl transition-all"
+            className="flex-1 sm:flex-none btn bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs py-2.5 px-3.5 rounded-xl transition-all active:scale-95"
             onClick={() => setIsCategoryModalOpen(true)}
           >
-            <Layers size={16} className="text-indigo-600" /> Kelola Kategori
+            <Layers size={15} className="text-indigo-600" /> Kelola Kategori
           </button>
           <button 
-            className="btn btn-primary shadow-md hover:shadow-lg flex items-center gap-2 font-semibold text-xs py-2 px-4 rounded-xl transition-all" 
+            className="flex-1 sm:flex-none btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-1.5 font-bold text-xs py-2.5 px-4 rounded-xl transition-all active:scale-95" 
             onClick={openAddModal}
           >
-            <Plus size={16} /> Tambah Produk
+            <Plus size={15} /> + Tambah Produk
           </button>
         </div>
       </div>
 
-      {/* SUMMARY STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 mb-6 shrink-0">
-        <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
+      {/* SUMMARY STAT CARDS (Compact 2-col on Mobile, 5-col on Desktop) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3.5 shrink-0">
+        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold text-slate-800">{products.length}</div>
-            <div className="text-xs font-semibold text-slate-500">Total Produk</div>
+            <div className="text-lg sm:text-2xl font-black text-slate-800">{products.length}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Total Produk</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
-            <Package size={20} />
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
+            <Package size={18} />
           </div>
         </div>
 
-        <div className="card flex items-center justify-between p-4 border-l-4 border-rose-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
+        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-rose-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold text-rose-600">{outOfStockCount}</div>
-            <div className="text-xs font-semibold text-slate-500">Stok Habis (0)</div>
+            <div className="text-lg sm:text-2xl font-black text-rose-600">{outOfStockCount}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Stok Habis (0)</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
-            <XCircle size={20} />
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
+            <XCircle size={18} />
           </div>
         </div>
         
-        <div className="card flex items-center justify-between p-4 border-l-4 border-amber-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
+        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-amber-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold text-amber-600">{lowStockCount}</div>
-            <div className="text-xs font-semibold text-slate-500">Stok Menipis</div>
+            <div className="text-lg sm:text-2xl font-black text-amber-600">{lowStockCount}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Stok Menipis</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-            <AlertTriangle size={20} />
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+            <AlertTriangle size={18} />
           </div>
         </div>
 
-        <div className="card flex items-center justify-between p-4 border-l-4 border-emerald-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
+        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-emerald-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold text-emerald-600">{activeCount}</div>
-            <div className="text-xs font-semibold text-slate-500">Produk Aktif</div>
+            <div className="text-lg sm:text-2xl font-black text-emerald-600">{activeCount}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Produk Aktif</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <CheckCircle size={20} />
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <CheckCircle size={18} />
           </div>
         </div>
 
-        <div className="card flex items-center justify-between p-4 border-l-4 border-indigo-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
+        <div className="col-span-2 sm:col-span-1 card flex items-center justify-between p-3 sm:p-4 border-l-4 border-indigo-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-xl font-bold text-indigo-700">{formatCurrency(totalValue)}</div>
-            <div className="text-xs font-semibold text-slate-500">Nilai Stok (HPP)</div>
+            <div className="text-base sm:text-xl font-black text-indigo-700">{formatCurrency(totalValue)}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Nilai Stok (HPP)</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
-            <Wallet size={20} />
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
+            <Wallet size={18} />
           </div>
         </div>
       </div>
 
       {/* FILTER & DATA SECTION */}
-      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm bg-white rounded-2xl shrink-0">
+      <div className="card flex-1 flex flex-col p-0 border border-gray-200 shadow-sm bg-white rounded-2xl shrink-0">
         
         {/* FILTER BAR */}
         <div className="p-4 border-b border-gray-200 bg-white flex flex-wrap gap-3 items-center justify-between">

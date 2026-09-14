@@ -221,13 +221,10 @@ const CashFlowView = () => {
   };
 
   return (
-    <div 
-      className="p-3 sm:p-5 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-4" 
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      {/* 1. Header Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm shrink-0">
-        <div className="flex items-center gap-2.5">
+    <div className="p-3 sm:p-5 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+      {/* 1. Header Action Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm shrink-0">
+        <div className="hidden sm:flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-primary shadow-inner">
             <DollarSign size={22} className="text-indigo-600" />
           </div>
@@ -239,7 +236,7 @@ const CashFlowView = () => {
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button 
-            className="flex-1 sm:flex-none py-2 px-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all" 
+            className="flex-1 sm:flex-none py-2 px-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95" 
             onClick={exportPDF}
           >
             <FileText size={15} className="text-rose-500" /> 

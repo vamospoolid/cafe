@@ -110,34 +110,30 @@ const SupplierView: React.FC = () => {
   const totalBahan = suppliers.reduce((s, x) => s + (x._count?.ingredients || 0), 0);
 
   return (
-    <div 
-      className="h-full flex-1 overflow-y-auto w-full bg-slate-50/50"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto pb-52 sm:pb-24">
-        {/* HEADER UTAMA */}
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-sm">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
-              <Truck size={26} />
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                Manajemen Pemasok / Supplier
-              </h2>
-              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
-                Kelola data vendor, kontak pemesanan bahan baku kopi & dapur, serta riwayat purchase order.
-              </p>
-            </div>
+    <div className="p-3 sm:p-6 lg:p-8 space-y-3.5 sm:space-y-6 max-w-[1600px] mx-auto pb-52 sm:pb-24 w-full">
+      {/* HEADER UTAMA / ACTION TOOLBAR */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 bg-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm shrink-0">
+        <div className="hidden sm:flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+            <Truck size={26} />
           </div>
-
-          <button
-            onClick={openAdd}
-            className="w-full sm:w-auto justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2"
-          >
-            <Plus size={16} /> Tambah Supplier
-          </button>
+          <div>
+            <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+              Manajemen Pemasok / Supplier
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
+              Kelola data vendor, kontak pemesanan bahan baku kopi & dapur, serta riwayat purchase order.
+            </p>
+          </div>
         </div>
+
+        <button
+          onClick={openAdd}
+          className="w-full sm:w-auto justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all active:scale-95 flex items-center gap-2"
+        >
+          <Plus size={16} /> + Tambah Supplier
+        </button>
+      </div>
 
         {/* METRICS STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -428,7 +424,6 @@ const SupplierView: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
   );
 };
 

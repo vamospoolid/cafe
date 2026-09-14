@@ -413,19 +413,20 @@ const TableView = () => {
   });
 
   return (
-    <div 
-      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto gap-4"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-        <div>
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+      {/* HEADER / ACTION TOOLBAR */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 shrink-0">
+        <div className="hidden sm:block">
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800">
-            <Armchair className="text-primary" /> Manajemen Meja & Area
+            <Armchair className="text-primary" size={24} /> Manajemen Meja & Area
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">Pantau status pesanan, sisa bill meja, dan tata letak secara real-time.</p>
         </div>
-        <button className="btn btn-primary shadow-md hover:shadow-lg transition-all self-start sm:self-auto py-2.5 px-4 text-xs font-bold" onClick={() => { setSelectedTable(null); setIsModalOpen(true); }}>
-          <Plus size={16} /> Tambah Meja
+        <button 
+          className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg transition-all py-2.5 px-4 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95" 
+          onClick={() => { setSelectedTable(null); setIsModalOpen(true); }}
+        >
+          <Plus size={16} /> + Tambah Meja
         </button>
       </div>
 

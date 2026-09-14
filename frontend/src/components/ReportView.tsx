@@ -221,17 +221,14 @@ export const ReportView: React.FC = () => {
   const avgMargin = totalMenuRevenue > 0 ? Math.round((totalMenuProfit / totalMenuRevenue) * 100) : 0;
 
   return (
-    <div 
-      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-5"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-5">
       
       {/* ─────────────────────────────────────────────────────────────
-          1. STICKY TOP BAR: JUDUL, QUICK FILTER TANGGAL & ACTION BUTTONS
+          1. TOP BAR: QUICK FILTER TANGGAL & ACTION BUTTONS
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-3.5 sm:p-5 flex flex-col gap-3.5 shadow-sm shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
+          <div className="hidden sm:block">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-1 bg-purple-50 text-indigo-700 rounded-lg text-xs font-extrabold">
                 {posContext?.settings?.storeName || 'MUKI RAMEN'}
@@ -246,7 +243,7 @@ export const ReportView: React.FC = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setShowPdfModal(true)}
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all"

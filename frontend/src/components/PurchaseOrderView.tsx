@@ -164,13 +164,10 @@ const PurchaseOrderView: React.FC = () => {
   const totalDiterima = pos.filter(p => p.status === 'Diterima').length;
 
   return (
-    <div 
-      className="p-3.5 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
-      {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm">
-        <div>
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-6">
+      {/* Top Action Toolbar */}
+      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-4 bg-white p-3.5 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm shrink-0">
+        <div className="hidden sm:block">
           <h2 className="flex items-center gap-2.5 text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
             <div className="w-9 h-9 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-inner">
               <ClipboardList size={20} />
@@ -188,16 +185,25 @@ const PurchaseOrderView: React.FC = () => {
           </div>
         </div>
 
-        <button 
-          onClick={() => { 
-            setShowCreate(true); 
-            setNewPO({ supplierId: '', notes: '', items: [] }); 
-          }} 
-          className="w-full sm:w-auto flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-sm shadow-md shadow-purple-200 transition-all active:scale-95"
-        >
-          <Plus size={18} />
-          <span>Buat PO Baru</span>
-        </button>
+        <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+          <span className={`sm:hidden inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full ${
+            isAdvanced ? 'bg-purple-100 text-purple-800' : 'bg-sky-100 text-sky-800'
+          }`}>
+            {isAdvanced ? <Sliders size={12} /> : <Package size={12} />}
+            <span>{isAdvanced ? 'Bahan Baku' : 'Produk Jadi'}</span>
+          </span>
+
+          <button 
+            onClick={() => { 
+              setShowCreate(true); 
+              setNewPO({ supplierId: '', notes: '', items: [] }); 
+            }} 
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-purple-200 transition-all active:scale-95"
+          >
+            <Plus size={16} />
+            <span>+ Buat PO Baru</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Stats Cards (2 cols on mobile, 4 cols on desktop) */}

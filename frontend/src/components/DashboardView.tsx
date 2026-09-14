@@ -112,14 +112,11 @@ const DashboardView = () => {
   const serviceSpeed = getServiceStatus(summary.averageServiceTime);
 
   return (
-    <div 
-      className="p-3.5 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-6">
       
-      {/* ─── Header ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-        <div>
+      {/* ─── Header Action Toolbar ─── */}
+      <div className="flex justify-between items-center gap-3 shrink-0">
+        <div className="hidden sm:block">
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
             <Activity className="text-primary" size={24} /> Dashboard Executive
           </h2>
@@ -127,9 +124,9 @@ const DashboardView = () => {
         </div>
         <button
           onClick={fetchAnalytics}
-          className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 bg-white text-slate-600 hover:text-primary border border-slate-200 hover:border-primary/40 rounded-xl font-bold text-xs shadow-sm transition-all active:scale-95"
+          className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-white text-slate-700 hover:text-primary border border-slate-200 hover:border-primary/40 rounded-xl font-bold text-xs shadow-sm transition-all active:scale-95"
         >
-          <RefreshCw size={14} /> Refresh Data
+          <RefreshCw size={14} /> Refresh Data Realtime
         </button>
       </div>
 

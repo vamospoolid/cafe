@@ -780,40 +780,32 @@ export const IngredientView: React.FC = () => {
   const estimatedLossAmount = (parseFloat(lossForm.qtyLoss) || 0) * (selectedLossIngredient?.buyPrice || 0);
 
   return (
-    <div 
-      className="p-3.5 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
-      style={{ WebkitOverflowScrolling: 'touch' }}
-    >
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
       
       {/* ─────────────────────────────────────────────────────────────
-          1. STICKY TOP BAR: HEADER, BADGE, & ACTION BUTTONS
+          1. TOP ACTION BAR
       ────────────────────────────────────────────────────────────── */}
-      <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-              <span style={{ padding: '.25rem .6rem', background: '#ede9fe', color: '#7c3aed', borderRadius: '.5rem', fontSize: '.75rem', fontWeight: 800 }}>
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-3.5 sm:p-5 flex flex-col gap-3.5 shadow-sm shrink-0">
+        <div className="flex justify-between items-center flex-wrap gap-2.5 sm:gap-4">
+          <div className="hidden sm:block">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 bg-purple-50 text-indigo-700 rounded-lg text-xs font-extrabold">
                 {posContext?.settings?.storeName || 'SOL CAFE & EATERY'}
               </span>
-              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.4rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
                 Master Bahan Baku & Intelijen Stok
               </h2>
             </div>
-            <p style={{ margin: '.25rem 0 0', fontSize: '.82rem', color: '#64748b' }}>
+            <p className="text-xs text-slate-500 mt-1">
               Klasifikasi stok, audit potensi stock loss, mutasi distribusi, dan analisis rekomendasi belanja
             </p>
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', flexWrap: 'wrap' }}>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleOpenAdd}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1.15rem',
-                background: 'linear-gradient(135deg, #7c3aed, #6366f1)', color: 'white',
-                border: 'none', borderRadius: '.75rem', fontWeight: 800, fontSize: '.85rem',
-                cursor: 'pointer', boxShadow: '0 4px 12px rgba(124,58,237,0.3)', transition: 'all 0.15s'
-              }}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-purple-200 active:scale-95 transition-all"
             >
               <Plus size={16} /> Tambah Bahan Baku
             </button>

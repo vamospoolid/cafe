@@ -58,12 +58,12 @@ const QRCodeView = () => {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-50 overflow-y-auto">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <QrCode className="text-primary" /> Generate QR Code Nomor Meja
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-6">
+      <div className="hidden sm:block">
+        <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800">
+          <QrCode className="text-primary" size={24} /> Generate QR Code Nomor Meja
         </h2>
-        <p className="text-muted mt-1">Aktifkan QR Code untuk tiap meja. Pelanggan dapat scan untuk memesan sendiri (Dine In).</p>
+        <p className="text-xs text-slate-500 mt-0.5">Aktifkan QR Code untuk tiap meja. Pelanggan dapat scan untuk memesan sendiri (Dine In).</p>
       </div>
 
       {loading ? (
