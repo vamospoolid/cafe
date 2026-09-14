@@ -21,6 +21,16 @@ export interface CartItem {
   notes?: string;
 }
 
+export const getCategoryIcon = (name: string) => {
+  const lower = (name || '').toLowerCase();
+  if (lower.includes('drink') || lower.includes('beverage') || lower.includes('kopi') || lower.includes('minum') || lower.includes('tea') || lower.includes('coffee') || lower.includes('latte') || lower.includes('matcha')) return '🍵';
+  if (lower.includes('food') || lower.includes('savory') || lower.includes('makan') || lower.includes('ramen') || lower.includes('nasi') || lower.includes('mie') || lower.includes('sando') || lower.includes('pasta') || lower.includes('quiche')) return '🍜';
+  if (lower.includes('sweet') || lower.includes('dessert') || lower.includes('tart') || lower.includes('cake') || lower.includes('croissant') || lower.includes('snack') || lower.includes('pastry') || lower.includes('bread')) return '🍰';
+  if (lower.includes('topping') || lower.includes('extra') || lower.includes('tambahan')) return '🧂';
+  if (lower.includes('combo') || lower.includes('paket') || lower.includes('set')) return '🍱';
+  return '🍽️';
+};
+
 export const POSView = () => {
   const socket = useSocket();
   const [activeCategory, setActiveCategory] = useState<number | 'Semua'>('Semua');
@@ -535,12 +545,12 @@ export const POSView = () => {
           </div>
           
           {/* Category Filter Chips */}
-          <div className="category-filter flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <div className="category-filter flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-none">
             <button 
-              className={`category-chip shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
+              className={`category-chip shrink-0 text-xs font-bold px-3.5 py-2 rounded-xl border transition-all flex items-center gap-1.5 ${
                 activeCategory === 'Semua' 
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' 
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white border-indigo-600 shadow-md shadow-indigo-200 ring-2 ring-indigo-400/30' 
+                  : 'bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-sm'
               }`}
               onClick={() => {
                 setActiveCategory('Semua');
@@ -548,17 +558,22 @@ export const POSView = () => {
                 posContext?.triggerHaptic(10);
               }}
             >
-              Semua ({products.length})
+              <span className="text-sm">✨</span>
+              <span>Semua</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${activeCategory === 'Semua' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {products.length}
+              </span>
             </button>
             {categories.map(cat => {
               const catProductCount = products.filter(p => p.categoryId === cat.id).length;
+              const isSelected = activeCategory === cat.id;
               return (
                 <button 
                   key={cat.id}
-                  className={`category-chip shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
-                    activeCategory === cat.id 
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  className={`category-chip shrink-0 text-xs font-bold px-3.5 py-2 rounded-xl border transition-all flex items-center gap-1.5 ${
+                    isSelected 
+                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white border-indigo-600 shadow-md shadow-indigo-200 ring-2 ring-indigo-400/30' 
+                      : 'bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-sm'
                   }`}
                   onClick={() => {
                     setActiveCategory(cat.id);
@@ -566,7 +581,13 @@ export const POSView = () => {
                     posContext?.triggerHaptic(10);
                   }}
                 >
-                  {cat.name} {catProductCount > 0 ? `(${catProductCount})` : ''}
+                  <span className="text-sm">{getCategoryIcon(cat.name)}</span>
+                  <span>{cat.name}</span>
+                  {catProductCount > 0 && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                      {catProductCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -623,10 +644,12 @@ export const POSView = () => {
             return (
               <div 
                 key={product.id} 
-                className={`product-card group relative transition-all rounded-2xl overflow-hidden border border-slate-200/80 bg-white shadow-sm hover:shadow-md active:scale-95 flex flex-col justify-between ${
+                className={`product-card group relative transition-all rounded-2xl overflow-hidden border bg-white shadow-sm hover:shadow-md active:scale-95 flex flex-col justify-between ${
                   isSoldOut 
                     ? 'opacity-60 grayscale cursor-not-allowed border-rose-200/50 bg-slate-50' 
-                    : 'cursor-pointer hover:border-indigo-500'
+                    : cartQty > 0
+                      ? 'border-emerald-500 ring-2 ring-emerald-400/30 bg-emerald-50/15 shadow-emerald-100/50 cursor-pointer'
+                      : 'border-slate-200/80 cursor-pointer hover:border-indigo-500'
                 }`} 
                 onClick={() => {
                   if (!isSoldOut) {
@@ -644,8 +667,8 @@ export const POSView = () => {
 
                   {/* Quantity In-Cart Badge */}
                   {cartQty > 0 && !isSoldOut && (
-                    <div className="absolute top-2 right-2 bg-emerald-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-md border border-white/80 animate-in zoom-in-50 duration-200">
-                      {cartQty}x
+                    <div className="absolute top-2 right-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-lg border border-white/90 animate-in zoom-in-75 duration-200 flex items-center gap-1">
+                      <span>✓</span> {cartQty}x
                     </div>
                   )}
                   
@@ -802,16 +825,54 @@ export const POSView = () => {
               </div>
               
               {orderType === 'Dine In' && (
-                <select 
-                  className="form-control font-semibold bg-blue-50 border-blue-200 text-blue-900"
-                  value={selectedTableId || ''}
-                  onChange={e => setSelectedTableId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">-- Pilih Nomor Meja --</option>
-                  {tables.filter(t => t.status === 'Aktif').map(t => (
-                    <option key={t.id} value={t.id}>Meja {t.tableNo} (Kapasitas: {t.capacity})</option>
-                  ))}
-                </select>
+                <div className="space-y-2 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <span>Pilih Meja ({tables.length} Meja)</span>
+                    {selectedTableId && (
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedTableId(null)}
+                        className="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold lowercase underline"
+                      >
+                        batal pilih
+                      </button>
+                    )}
+                  </div>
+                  {tables.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50/80 rounded-xl border border-slate-200 scrollbar-none">
+                      {tables.map(t => {
+                        const isSelected = selectedTableId === t.id;
+                        const isOccupied = t.status === 'Terisi';
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTableId(isSelected ? null : t.id);
+                              posContext?.triggerHaptic(10);
+                            }}
+                            className={`py-1.5 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 ring-2 ring-indigo-400 scale-[1.03]'
+                                : isOccupied
+                                  ? 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+                                  : 'bg-white text-slate-700 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/30 shadow-sm'
+                            }`}
+                          >
+                            <span>#{t.tableNo}</span>
+                            <span className={`text-[9px] font-medium ${isSelected ? 'text-indigo-100' : isOccupied ? 'text-amber-700' : 'text-slate-400'}`}>
+                              {isOccupied ? 'Terisi' : `${t.capacity}p`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 text-center py-2 bg-slate-50 rounded-lg">
+                      Belum ada data meja
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -985,16 +1046,54 @@ export const POSView = () => {
               </div>
 
               {orderType === 'Dine In' && (
-                <select 
-                  className="form-control font-bold bg-blue-50/50 border-blue-150 text-blue-900 py-2 text-xs"
-                  value={selectedTableId || ''}
-                  onChange={e => setSelectedTableId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">-- Pilih Nomor Meja --</option>
-                  {tables.filter(t => t.status === 'Aktif').map(t => (
-                    <option key={t.id} value={t.id}>Meja {t.tableNo} (Kapasitas: {t.capacity})</option>
-                  ))}
-                </select>
+                <div className="space-y-1.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    <span>Pilih Meja ({tables.length})</span>
+                    {selectedTableId && (
+                      <button 
+                        type="button" 
+                        onClick={() => setSelectedTableId(null)}
+                        className="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold lowercase underline"
+                      >
+                        batal
+                      </button>
+                    )}
+                  </div>
+                  {tables.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-1 max-h-28 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200 scrollbar-none">
+                      {tables.map(t => {
+                        const isSelected = selectedTableId === t.id;
+                        const isOccupied = t.status === 'Terisi';
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTableId(isSelected ? null : t.id);
+                              posContext?.triggerHaptic(10);
+                            }}
+                            className={`py-1 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400'
+                                : isOccupied
+                                  ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                                  : 'bg-white text-slate-700 border border-slate-200'
+                            }`}
+                          >
+                            <span>#{t.tableNo}</span>
+                            <span className={`text-[8px] font-medium ${isSelected ? 'text-indigo-100' : isOccupied ? 'text-amber-700' : 'text-slate-400'}`}>
+                              {isOccupied ? 'Terisi' : `${t.capacity}p`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 text-center py-2 bg-slate-50 rounded-lg">
+                      Belum ada data meja
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="flex gap-2 pt-1">
