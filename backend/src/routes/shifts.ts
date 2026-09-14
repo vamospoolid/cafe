@@ -119,6 +119,19 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
     const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
     const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
+    // Hitung transaksi Void selama shift (untuk rekonsiliasi kas riil)
+    const voidOrders = await prisma.order.findMany({
+      where: {
+        status: 'Void',
+        OR: [
+          { paidAt: { gte: activeShift.waktuBuka } },
+          { createdAt: { gte: activeShift.waktuBuka } }
+        ]
+      }
+    });
+    const voidCashTotal = voidOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
+    const voidNonCashTotal = voidOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
+
     const cashFlows = await prisma.cashFlow.findMany({
       where: { date: { gte: activeShift.waktuBuka } }
     });
@@ -140,8 +153,8 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
 
-    const expectedCash = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
-    const expectedNonCash = nonCashSalesIncome + nonCashDebtIncome;
+    const expectedCash = activeShift.saldoAwal + cashSalesIncome - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut;
+    const expectedNonCash = nonCashSalesIncome - voidNonCashTotal + nonCashDebtIncome;
 
     res.json({
       activeShift,
@@ -149,6 +162,9 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       expectedNonCash,
       cashSales: cashSalesIncome,
       nonCashSales: nonCashSalesIncome,
+      voidCount: voidOrders.length,
+      voidCashTotal,
+      voidNonCashTotal,
       manualCashIn,
       manualCashOut,
       cashDebtIncome,
@@ -220,6 +236,19 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
     const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
+    // Hitung transaksi Void selama shift
+    const voidOrders = await prisma.order.findMany({
+      where: {
+        status: 'Void',
+        OR: [
+          { paidAt: { gte: activeShift.waktuBuka } },
+          { createdAt: { gte: activeShift.waktuBuka } }
+        ]
+      }
+    });
+    const voidCashTotal = voidOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
+    const voidNonCashTotal = voidOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
+
     // Hitung pengeluaran/pemasukan manual kas (CashFlow)
     const cashFlows = await prisma.cashFlow.findMany({
       where: {
@@ -244,8 +273,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
 
-    const saldoSistem = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
-    const saldoElektronik = nonCashSalesIncome + nonCashDebtIncome;
+    const saldoSistem = activeShift.saldoAwal + cashSalesIncome - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut;
+    const saldoElektronik = nonCashSalesIncome - voidNonCashTotal + nonCashDebtIncome;
     const fisikLaci = Number(saldoFisikLaci) || 0;
     const selisih = fisikLaci - saldoSistem;
 
@@ -261,7 +290,18 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       }
     });
 
-    res.json(closedShift);
+    res.json({
+      ...closedShift,
+      cashSales: cashSalesIncome,
+      nonCashSales: nonCashSalesIncome,
+      voidCount: voidOrders.length,
+      voidCashTotal,
+      voidNonCashTotal,
+      manualCashIn,
+      manualCashOut,
+      cashDebtIncome,
+      nonCashDebtIncome
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Gagal menutup shift' });

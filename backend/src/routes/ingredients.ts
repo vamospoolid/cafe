@@ -807,7 +807,7 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
 router.post('/:id/adjust', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { change, type, description } = req.body;
+    const { change, type, description, newBuyPrice } = req.body;
     // type: 'Restock' | 'Penyesuaian' | 'Rusak'
     const amount = Number(change);
     if (isNaN(amount) || amount === 0) {
@@ -815,16 +815,39 @@ router.post('/:id/adjust', authenticateToken, async (req: Request, res: Response
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      const current = await tx.ingredient.findUnique({ where: { id: Number(id) } });
+      if (!current) throw new Error('Bahan baku tidak ditemukan');
+
+      let nextBuyPrice = current.buyPrice;
+      if (type === 'Restock' && newBuyPrice !== undefined && newBuyPrice !== null) {
+        const incomingPrice = Number(newBuyPrice);
+        if (!isNaN(incomingPrice) && incomingPrice > 0) {
+          const currentStock = Math.max(0, current.stock);
+          const totalStock = currentStock + amount;
+          if (totalStock > 0) {
+            nextBuyPrice = Math.round(((currentStock * current.buyPrice) + (amount * incomingPrice)) / totalStock);
+          } else {
+            nextBuyPrice = incomingPrice;
+          }
+        }
+      }
+
       const ingredient = await tx.ingredient.update({
         where: { id: Number(id) },
-        data: { stock: { increment: amount } }
+        data: { 
+          stock: { increment: amount },
+          buyPrice: nextBuyPrice
+        }
       });
+
+      const wacNote = (nextBuyPrice !== current.buyPrice) ? ` [WAC Baru: Rp ${nextBuyPrice.toLocaleString('id-ID')}/${current.unit}]` : '';
+
       await tx.ingredientLog.create({
         data: {
           ingredientId: Number(id),
           change: amount,
           type: type || 'Penyesuaian',
-          description: description || null
+          description: (description || 'Penyesuaian stok') + wacNote
         }
       });
       return ingredient;

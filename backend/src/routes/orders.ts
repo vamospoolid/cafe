@@ -1187,10 +1187,30 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
           }
         }
       }
+
+      // 4. Auto-release status Meja jika tidak ada order aktif lain
+      if (orderData.tableId) {
+        const otherActiveOrders = await tx.order.count({
+          where: {
+            tableId: orderData.tableId,
+            status: 'Pending',
+            id: { not: Number(id) }
+          }
+        });
+        if (otherActiveOrders === 0) {
+          await tx.table.update({
+            where: { id: orderData.tableId },
+            data: { status: 'Kosong' }
+          });
+        }
+      }
     });
 
     // Emit real-time event
     io.emit('order:void', { orderId: Number(id), orderNumber: orderData.orderNumber });
+    if (orderData.tableId) {
+      io.emit('table:update', { tableId: orderData.tableId });
+    }
 
     res.json({ message: 'Order berhasil dibatalkan dan stok telah dikembalikan' });
   } catch (error) {
