@@ -273,6 +273,19 @@ export const AttendanceView: React.FC = () => {
   const totalLateCountMonth = summaries.reduce((acc, s) => acc + (s.stats?.totalTerlambat || 0), 0);
   const totalWorkHoursMonth = summaries.reduce((acc, s) => acc + (s.stats?.totalWorkHours || 0), 0);
 
+  // Role check: Only Admin can view attendance management dashboard
+  if (posContext?.user && posContext.user.role !== 'Admin') {
+    return (
+      <div className="p-8 text-center flex flex-col items-center justify-center gap-3 min-h-[50vh]">
+        <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+          <UserCheck size={28} />
+        </div>
+        <h3 className="text-base font-bold text-slate-800">Akses Terbatas</h3>
+        <p className="text-xs text-slate-500 max-w-sm">Halaman Rekapitulasi &amp; Absensi SDM hanya dapat diakses oleh Admin atau Manajemen.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
       {/* HEADER / ACTION TOOLBAR */}

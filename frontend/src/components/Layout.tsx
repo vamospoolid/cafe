@@ -296,7 +296,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <span>CRM & Member</span>
             </NavLink>
           )}
-          {checkAccess(['Admin', 'Kasir', 'Dapur', 'Waiter']) && (
+          {checkAccess(['Admin']) && (
             <NavLink to="/absensi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
               <Fingerprint size={20} />
               <span>Absensi Karyawan</span>
@@ -662,7 +662,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </NavLink>
               )}
 
-              {checkAccess(['Admin', 'Kasir', 'Dapur', 'Waiter']) && (
+              {checkAccess(['Admin']) && (
                 <NavLink 
                   to="/absensi" 
                   onClick={() => setIsMoreMenuOpen(false)}
