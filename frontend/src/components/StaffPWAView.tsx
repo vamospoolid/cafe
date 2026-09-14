@@ -6,7 +6,8 @@ import {
   Award, ShieldCheck, DollarSign, ChevronDown, CheckCircle,
   Zap, Info, Bell, Search, Filter, Trash2, CheckSquare,
   FileText, ClipboardList, Send, Upload, FileCheck, CheckCheck, RefreshCcw,
-  Smartphone, UserCheck, KeyRound, ArrowRight, CornerDownLeft, Sparkles, Activity
+  Smartphone, UserCheck, KeyRound, ArrowRight, CornerDownLeft, Sparkles, Activity,
+  Lock, Eye, EyeOff
 } from 'lucide-react';
 import { toast, confirmAlert } from '../utils/alert';
 
@@ -54,26 +55,15 @@ export const StaffPWAView: React.FC = () => {
     }
   });
 
-  // Login PIN & Fast Switch State
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState('');
-  const [pinLoading, setPinLoading] = useState(false);
-  const [staffList, setStaffList] = useState<any[]>([]);
-  const [selectedStaffUser, setSelectedStaffUser] = useState<any | null>(null);
+  // Individual Login Form State (Username & Password)
+  const [loginUsername, setLoginUsername] = useState<string>(() => localStorage.getItem('staff_saved_username') || '');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
-  // Device memory & search
-  const [savedDeviceStaff, setSavedDeviceStaff] = useState<any | null>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('staff_saved_user') || 'null');
-    } catch {
-      return null;
-    }
-  });
-  const [rememberDevice, setRememberDevice] = useState<boolean>(true);
-  const [staffSearchQuery, setStaffSearchQuery] = useState('');
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
-
-  // Solid avatar color (no gradient) tailored for role
+  // Solid avatar color based on role
   const getAvatarBg = (role: string = '') => {
     const r = role.toLowerCase();
     if (r.includes('barista') || r.includes('kopi')) return 'bg-[#3b82f6] text-white';
@@ -161,7 +151,7 @@ export const StaffPWAView: React.FC = () => {
   });
   const [submittingLeave, setSubmittingLeave] = useState(false);
 
-  // Calculate Distance (Haversine formula)
+  // Calculate Distance
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3; // meters
     const φ1 = (lat1 * Math.PI) / 180;
@@ -194,22 +184,8 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch Staff List
-  const fetchStaffList = async () => {
-    try {
-      const res = await fetch('/api/auth/staff-list');
-      if (res.ok) {
-        const users = await res.json();
-        setStaffList(users);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   useEffect(() => {
     fetchSettingsAndShifts();
-    fetchStaffList();
   }, []);
 
   // Request GPS
@@ -400,61 +376,49 @@ export const StaffPWAView: React.FC = () => {
     }
   }, [token, activeTab]);
 
-  // Submit Login PIN
-  const handlePinSubmit = async (pinValue: string) => {
-    setPinLoading(true);
-    setPinError('');
+  // INDIVIDUAL USERNAME + PASSWORD/PIN LOGIN HANDLER
+  const handleIndividualLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginUsername.trim()) {
+      return setLoginError('Harap masukkan Username Anda.');
+    }
+    if (!loginPassword) {
+      return setLoginError('Harap masukkan Password atau PIN Anda.');
+    }
+
+    setLoginLoading(true);
+    setLoginError('');
     try {
-      const targetUser = selectedStaffUser || savedDeviceStaff;
-      const payload: any = { pin: pinValue };
-      if (targetUser?.id) {
-        payload.userId = targetUser.id;
-      }
-      const res = await fetch('/api/auth/switch-pin', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          username: loginUsername.trim(),
+          password: loginPassword
+        })
       });
+
       const data = await res.json();
       if (res.ok) {
         localStorage.setItem('staff_token', data.token);
         localStorage.setItem('staff_user', JSON.stringify(data.user));
-        if (rememberDevice) {
-          localStorage.setItem('staff_saved_user', JSON.stringify(data.user));
-          setSavedDeviceStaff(data.user);
+        if (rememberMe) {
+          localStorage.setItem('staff_saved_username', loginUsername.trim());
+        } else {
+          localStorage.removeItem('staff_saved_username');
         }
         setToken(data.token);
         setUser(data.user);
-        setSelectedStaffUser(null);
-        setPinInput('');
+        setLoginPassword('');
         setCapturedPhoto(null);
-        toast(`Selamat bertugas, ${data.user.name}!`, 'success');
+        toast(`Selamat datang, ${data.user.name}!`, 'success');
       } else {
-        setPinError(data.error || 'PIN salah atau tidak valid.');
-        setPinInput('');
+        setLoginError(data.error || 'Username atau Password salah.');
       }
     } catch (e) {
-      setPinError('Terjadi kesalahan koneksi.');
+      setLoginError('Terjadi kesalahan koneksi ke server.');
     } finally {
-      setPinLoading(false);
-    }
-  };
-
-  const handleKeypadClick = (num: string) => {
-    setPinError('');
-    if (pinInput.length < 6) {
-      const newPin = pinInput + num;
-      setPinInput(newPin);
-      if (newPin.length === 6) {
-        setTimeout(() => handlePinSubmit(newPin), 120);
-      }
-    }
-  };
-
-  const handleKeypadBackspace = () => {
-    setPinError('');
-    if (pinInput.length > 0) {
-      setPinInput(pinInput.slice(0, -1));
+      setLoginLoading(false);
     }
   };
 
@@ -633,215 +597,139 @@ export const StaffPWAView: React.FC = () => {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // RENDER LOGIN SCREEN (INSPIRASI GAMBAR 2: NAVY & WHITE SHEET)
+  // RENDER INDIVIDUAL LOGIN SCREEN (GAMBAR 2 THEME: NAVY & WHITE SHEET)
   // ─────────────────────────────────────────────────────────────
   if (!token || !user) {
-    const activeStaffToLogin = selectedStaffUser || savedDeviceStaff;
-
-    const filteredStaffList = staffList.filter(st => {
-      const matchQuery = st.name.toLowerCase().includes(staffSearchQuery.toLowerCase()) ||
-                         (st.role && st.role.toLowerCase().includes(staffSearchQuery.toLowerCase()));
-      if (!matchQuery) return false;
-      if (selectedRoleFilter === 'ALL') return true;
-      const r = (st.role || '').toLowerCase();
-      if (selectedRoleFilter === 'BARISTA') return r.includes('barista') || r.includes('kopi');
-      if (selectedRoleFilter === 'KITCHEN') return r.includes('chef') || r.includes('dapur') || r.includes('cook');
-      if (selectedRoleFilter === 'CASHIER') return r.includes('kasir') || r.includes('cashier');
-      if (selectedRoleFilter === 'WAITER') return r.includes('waiter') || r.includes('server') || r.includes('pramusaji');
-      if (selectedRoleFilter === 'MANAGER') return r.includes('admin') || r.includes('manager') || r.includes('lead');
-      return true;
-    });
-
     return (
       <div className="min-h-screen bg-[#1c2e4a] flex flex-col justify-between sm:py-6 sm:px-4 max-w-md mx-auto relative select-none font-sans text-slate-800 antialiased">
         
         {/* Top Dark Navy Brand Header */}
-        <div className="px-6 pt-5 pb-6 text-center text-white space-y-1">
-          <div className="flex items-center justify-between text-xs text-blue-200/80 font-semibold mb-2">
-            <span>{currentTime}</span>
-            <span className="text-[11px] uppercase tracking-wider font-bold">{settings?.storeName || 'SOL CAFE'}</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+        <div className="px-6 pt-7 pb-8 text-center text-white space-y-1.5">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold mb-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono text-blue-100">{currentTime}</span>
+            <span>•</span>
+            <span className="uppercase tracking-wider">{settings?.storeName || 'SOL CAFE'}</span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-white">
-            Portal Karyawan
+          
+          <h1 className="text-xl font-bold tracking-tight text-white pt-1">
+            Portal Staf
           </h1>
-          <p className="text-xs text-blue-200/70 font-medium">Presensi Biometrik & Akses Shift Kerja</p>
+          <p className="text-xs text-blue-200/70">Silakan masuk dengan akun kerja pribadi Anda</p>
         </div>
 
         {/* White Rounded Sheet (Gambar 2 Inspired) */}
-        <div className="bg-white rounded-t-[36px] sm:rounded-3xl p-6 shadow-2xl space-y-5 flex-1 flex flex-col justify-between">
-          {activeStaffToLogin ? (
-            <div className="space-y-5 flex-1 flex flex-col justify-between">
-              {/* Profile Bar */}
-              <div className="text-center relative pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedStaffUser(null);
-                    setSavedDeviceStaff(null);
-                    setPinInput('');
-                    setPinError('');
-                  }}
-                  className="absolute left-0 top-0 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all"
-                  title="Kembali"
-                >
-                  <ArrowLeft size={16} />
-                </button>
-
-                {/* Floating Round Avatar */}
-                <div className="w-20 h-20 rounded-full bg-[#1c2e4a] text-white flex items-center justify-center font-bold text-2xl mx-auto shadow-md ring-4 ring-slate-100 mb-2">
-                  {activeStaffToLogin.name.substring(0, 2).toUpperCase()}
-                </div>
-
-                <h2 className="text-lg font-bold text-[#1c2e4a] tracking-tight">
-                  {activeStaffToLogin.name}
-                </h2>
-                <div className="inline-block mt-0.5">
-                  <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-3 py-0.5 rounded-full">
-                    {activeStaffToLogin.role}
-                  </span>
-                </div>
+        <div className="bg-white rounded-t-[36px] sm:rounded-3xl p-6 sm:p-7 shadow-2xl space-y-6 flex-1 flex flex-col justify-between">
+          
+          <form onSubmit={handleIndividualLogin} className="space-y-4 pt-1">
+            
+            <div className="text-center pb-1">
+              <div className="w-16 h-16 rounded-full bg-[#1c2e4a] text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md ring-4 ring-slate-100 mb-2">
+                <User size={26} className="text-blue-200" />
               </div>
-
-              {/* PIN Indicator Dots */}
-              <div className="space-y-2">
-                <p className="text-center text-xs text-slate-400 font-medium">
-                  Ketik 6-Digit PIN Anda
-                </p>
-                <div className="flex justify-center gap-3.5">
-                  {[0, 1, 2, 3, 4, 5].map(idx => (
-                    <div
-                      key={idx}
-                      className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                        pinInput.length > idx
-                          ? 'bg-[#1c2e4a] scale-125 shadow-sm'
-                          : 'bg-slate-200'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {pinError && (
-                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-center text-xs font-semibold text-rose-600">
-                  {pinError}
-                </div>
-              )}
-
-              {/* Number Keypad */}
-              <div className="grid grid-cols-3 gap-2.5 max-w-[250px] mx-auto py-1">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
-                  <button
-                    key={num}
-                    type="button"
-                    disabled={pinLoading}
-                    onClick={() => handleKeypadClick(num)}
-                    className="h-13 rounded-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-[#1c2e4a] font-bold text-xl flex items-center justify-center transition-all active:scale-95 border border-slate-100 shadow-sm"
-                  >
-                    {num}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setPinInput('')}
-                  className="h-13 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-400 font-semibold text-xs flex items-center justify-center active:scale-95"
-                >
-                  Reset
-                </button>
-                <button
-                  type="button"
-                  disabled={pinLoading}
-                  onClick={() => handleKeypadClick('0')}
-                  className="h-13 rounded-2xl bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-[#1c2e4a] font-bold text-xl flex items-center justify-center transition-all active:scale-95 border border-slate-100 shadow-sm"
-                >
-                  0
-                </button>
-                <button
-                  type="button"
-                  onClick={handleKeypadBackspace}
-                  className="h-13 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-400 font-semibold text-xs flex items-center justify-center active:scale-95"
-                >
-                  <ArrowLeft size={16} />
-                </button>
-              </div>
+              <h2 className="text-base font-bold text-[#1c2e4a]">Masuk Akun Staf</h2>
+              <p className="text-xs text-slate-400">Gunakan Username dan Password / PIN Anda</p>
             </div>
-          ) : (
-            /* Staff Selector List */
-            <div className="space-y-4">
-              <div className="text-center space-y-1">
-                <h2 className="text-base font-bold text-[#1c2e4a]">Pilih Staf Bertugas</h2>
-                <p className="text-xs text-slate-400">Pilih akun Anda untuk memasukkan PIN</p>
-              </div>
 
-              {/* Search Bar */}
+            {loginError && (
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-center text-xs font-semibold text-[#f43f5e] flex items-center justify-center gap-1.5">
+                <AlertCircle size={14} />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            {/* Username Input Field */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-[#1c2e4a] block px-0.5">
+                Username / ID Staf:
+              </label>
               <div className="relative">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  value={staffSearchQuery}
-                  onChange={e => setStaffSearchQuery(e.target.value)}
-                  placeholder="Cari nama karyawan..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#1c2e4a]"
+                  autoFocus
+                  required
+                  value={loginUsername}
+                  onChange={e => {
+                    setLoginUsername(e.target.value);
+                    setLoginError('');
+                  }}
+                  placeholder="Contoh: rian atau barista1"
+                  className="w-full pl-10 pr-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#1c2e4a] focus:bg-white transition-all shadow-sm"
                 />
               </div>
+            </div>
 
-              {/* Filter Tabs (Like All | Following in Gambar 2) */}
-              <div className="flex border-b border-slate-100 text-xs font-bold">
-                {['ALL', 'BARISTA', 'KITCHEN', 'CASHIER'].map(chip => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => setSelectedRoleFilter(chip)}
-                    className={`flex-1 py-2 text-center relative transition-all ${
-                      selectedRoleFilter === chip
-                        ? 'text-[#1c2e4a] font-bold'
-                        : 'text-slate-400 font-medium'
-                    }`}
-                  >
-                    <span>{chip === 'ALL' ? 'Semua' : chip}</span>
-                    {selectedRoleFilter === chip && (
-                      <span className="absolute bottom-0 inset-x-2 h-0.5 bg-[#f43f5e] rounded-full" />
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {/* Staff Cards List (Like Community in Gambar 2) */}
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {filteredStaffList.map(st => (
-                  <button
-                    key={st.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedStaffUser(st);
-                      setPinInput('');
-                      setPinError('');
-                    }}
-                    className="w-full p-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-100 flex items-center justify-between transition-all active:scale-98 shadow-sm"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full ${getAvatarBg(st.role)} flex items-center justify-center font-bold text-xs shadow-sm`}>
-                        {st.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div className="text-left">
-                        <div className="text-xs font-bold text-[#1c2e4a]">{st.name}</div>
-                        <div className="text-[11px] text-slate-400 font-medium">{st.role}</div>
-                      </div>
-                    </div>
-                    <ChevronRight size={15} className="text-slate-300" />
-                  </button>
-                ))}
+            {/* Password / PIN Input Field */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-[#1c2e4a] block px-0.5">
+                Password atau 6-Digit PIN:
+              </label>
+              <div className="relative">
+                <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={loginPassword}
+                  onChange={e => {
+                    setLoginPassword(e.target.value);
+                    setLoginError('');
+                  }}
+                  placeholder="Masukkan password atau PIN..."
+                  className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#1c2e4a] focus:bg-white transition-all shadow-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
-          )}
+
+            {/* Remember Me Checkbox */}
+            <div className="flex items-center justify-between text-xs pt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#1c2e4a] focus:ring-[#1c2e4a] border-slate-300"
+                />
+                <span>Ingat username di perangkat ini</span>
+              </label>
+            </div>
+
+            {/* Submit Login Button (Rounded Full Deep Navy like Gambar 2) */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full py-3.5 bg-[#1c2e4a] hover:bg-[#152338] active:bg-[#0f172a] disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#1c2e4a]/20 active:scale-98"
+              >
+                {loginLoading ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Memeriksa Akun...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound size={15} />
+                    <span>Masuk ke Portal Staf</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
 
           {/* Footer Return Link */}
-          <div className="text-center pt-2 border-t border-slate-100">
+          <div className="text-center pt-3 border-t border-slate-100">
             <a
               href="/"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-[#1c2e4a] transition-colors"
             >
-              <ArrowLeft size={13} /> Kembali ke Kasir POS
+              <ArrowLeft size={13} /> Kembali ke Kasir Utama POS
             </a>
           </div>
         </div>
@@ -927,7 +815,7 @@ export const StaffPWAView: React.FC = () => {
               </div>
             </div>
 
-            {/* 3-COLUMN STATS BAR (EXACT GAMBAR 2 INSPIRATION: 32 Followers | 78 Followings | 3 Projects) */}
+            {/* 3-COLUMN STATS BAR (EXACT GAMBAR 2 INSPIRATION) */}
             <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-100 text-center">
               <div>
                 <div className="text-sm font-bold text-[#1c2e4a]">
@@ -959,7 +847,7 @@ export const StaffPWAView: React.FC = () => {
             {activeTab === 'attendance' && (
               <div className="space-y-4">
                 
-                {/* Shift Tabs (Gambar 2 All | Following Segmented Style) */}
+                {/* Shift Tabs (Gambar 2 Segmented Style) */}
                 {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
                   <div className="bg-white rounded-2xl p-3 border border-slate-100 shadow-sm space-y-2">
                     <div className="flex items-center justify-between text-xs font-bold text-[#1c2e4a]">
@@ -1155,7 +1043,7 @@ export const StaffPWAView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* PRIMARY ACTION BUTTON (DEEP NAVY ROUNDED-FULL LIKE GAMBAR 2) */}
+                {/* PRIMARY ACTION BUTTON */}
                 <div>
                   {!mySummary?.todayStatus?.clockedIn ? (
                     <button
@@ -1188,7 +1076,7 @@ export const StaffPWAView: React.FC = () => {
             )}
 
             {/* ─────────────────────────────────────────────────────────────
-                TAB 2: IZIN & CUTI (GAMBAR 2 CARD LIST)
+                TAB 2: IZIN & CUTI
                ───────────────────────────────────────────────────────────── */}
             {activeTab === 'leave' && (
               <div className="space-y-3">
@@ -1382,7 +1270,7 @@ export const StaffPWAView: React.FC = () => {
             )}
 
             {/* ─────────────────────────────────────────────────────────────
-                TAB 4: PROFIL SAYA & RIWAYAT (GAMBAR 2 PROFILE STYLE)
+                TAB 4: PROFIL SAYA & RIWAYAT
                ───────────────────────────────────────────────────────────── */}
             {activeTab === 'profile' && (
               <div className="space-y-3">
@@ -1448,7 +1336,7 @@ export const StaffPWAView: React.FC = () => {
         </div>
 
         {/* ─────────────────────────────────────────────────────────────
-            STICKY BOTTOM 4 TABS DOCK (GAMBAR 2 INSPIRATION)
+            STICKY BOTTOM 4 TABS DOCK
            ───────────────────────────────────────────────────────────── */}
         <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[420px] mx-auto z-40 bg-white border-t border-slate-100 py-2.5 px-3 sm:rounded-b-3xl shadow-[0_-4px_20px_rgba(28,46,74,0.06)]">
           <div className="flex items-center justify-around">

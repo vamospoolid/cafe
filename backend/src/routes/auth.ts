@@ -27,10 +27,13 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Akun ini dinonaktifkan.' });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    let isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid && user.pin && user.pin === password) {
+      isPasswordValid = true;
+    }
     
     if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Password salah.' });
+      return res.status(401).json({ error: 'Password atau PIN salah.' });
     }
 
     // Buat JWT Token
