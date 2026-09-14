@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { 
   DollarSign, Plus, ArrowUpRight, ArrowDownRight, Wallet, 
-  FileText, Filter, Tag, Layers, Search, Utensils, Coffee, Box, Zap, Users, Wrench, User, RotateCcw, Eye
+  FileText, Tag, Layers, Search, Utensils, Coffee, Box, Zap, Users, Wrench, User, Calendar, Trash2
 } from 'lucide-react';
 import CashFlowModal from './CashFlowModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { toast, confirmAlert } from '../utils/alert';
 
 const CashFlowView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,10 +18,20 @@ const CashFlowView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const posContext = useContext(POSContext);
 
-  const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
-  const formatDate = (isoString: string) => {
-    const d = new Date(isoString);
-    return `${d.toLocaleDateString('id-ID')} ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+  const formatCurrency = (val: any) => {
+    const num = Number(val) || 0;
+    return `Rp ${num.toLocaleString('id-ID')}`;
+  };
+
+  const formatDate = (isoString?: string | null) => {
+    if (!isoString) return '-';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '-';
+      return `${d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })} ${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch {
+      return String(isoString);
+    }
   };
 
   const fetchCashflow = async () => {
@@ -31,9 +42,14 @@ const CashFlowView = () => {
 
       const res = await fetch(url, { headers: { Authorization: `Bearer ${posContext?.token}` } });
       const data = await res.json();
-      if (res.ok && Array.isArray(data)) setCashflows(data);
+      if (res.ok && Array.isArray(data)) {
+        setCashflows(data);
+      } else {
+        setCashflows([]);
+      }
     } catch (err) {
       console.error(err);
+      setCashflows([]);
     } finally {
       setLoading(false);
     }
@@ -51,15 +67,35 @@ const CashFlowView = () => {
         body: JSON.stringify(data)
       });
       if (res.ok) {
+        toast('Transaksi kas berhasil dicatat!', 'success');
         setIsModalOpen(false);
+        fetchCashflow();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal menyimpan transaksi kas', 'error');
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDelete = async (id: number) => {
+    const c = await confirmAlert('Hapus Catatan Kas', 'Apakah Anda yakin ingin menghapus catatan transaksi kas ini?');
+    if (!c.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/cashflow/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        toast('Catatan kas berhasil dihapus', 'success');
         fetchCashflow();
       }
     } catch (err) { console.error(err); }
   };
 
   // Helper to parse category string "Main Category - Sub Category" or just "Category"
-  const parseCategory = (catStr: string) => {
-    if (!catStr) return { main: 'Umum', sub: '' };
+  const parseCategory = (catStr: any) => {
+    if (!catStr || typeof catStr !== 'string') return { main: 'Umum', sub: '' };
     const parts = catStr.split(' - ');
     if (parts.length > 1) {
       return { main: parts[0].trim(), sub: parts.slice(1).join(' - ').trim() };
@@ -70,9 +106,9 @@ const CashFlowView = () => {
   // Filtered cashflows based on Main Category and Search Query
   const filteredCashflows = useMemo(() => {
     return cashflows.filter(cf => {
-      const { main, sub } = parseCategory(cf.category);
+      const { main } = parseCategory(cf.category);
       if (selectedMainCat !== 'ALL') {
-        const mainLower = main.toLowerCase();
+        const mainLower = (main || '').toLowerCase();
         const selLower = selectedMainCat.toLowerCase();
         if (!mainLower.includes(selLower) && !selLower.includes(mainLower)) {
           return false;
@@ -80,17 +116,17 @@ const CashFlowView = () => {
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchDesc = cf.description?.toLowerCase().includes(q);
-        const matchCat = cf.category?.toLowerCase().includes(q);
-        const matchUser = cf.user?.name?.toLowerCase().includes(q);
+        const matchDesc = (cf.description || '').toLowerCase().includes(q);
+        const matchCat = (cf.category || '').toLowerCase().includes(q);
+        const matchUser = (cf.user?.name || '').toLowerCase().includes(q);
         if (!matchDesc && !matchCat && !matchUser) return false;
       }
       return true;
     });
   }, [cashflows, selectedMainCat, searchQuery]);
 
-  const totalIn = cashflows.filter(c => c.type === 'Pemasukan').reduce((acc, c) => acc + c.amount, 0);
-  const totalOut = cashflows.filter(c => c.type === 'Pengeluaran').reduce((acc, c) => acc + c.amount, 0);
+  const totalIn = cashflows.filter(c => c.type === 'Pemasukan').reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+  const totalOut = cashflows.filter(c => c.type === 'Pengeluaran').reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
   const balance = totalIn - totalOut;
 
   // Summary Metrics Breakdown
@@ -106,12 +142,13 @@ const CashFlowView = () => {
 
     cashflows.filter(c => c.type === 'Pengeluaran').forEach(cf => {
       const { main } = parseCategory(cf.category);
-      if (main.includes('Makanan')) map['Bahan Makanan'] += cf.amount;
-      else if (main.includes('Minuman')) map['Bahan Minuman'] += cf.amount;
-      else if (main.includes('Kemasan')) map['Kemasan & Packaging'] += cf.amount;
-      else if (main.includes('Operasional')) map['Operasional Cafe'] += cf.amount;
-      else if (main.includes('SDM') || main.includes('Gaji') || main.includes('Karyawan')) map['SDM & Karyawan'] += cf.amount;
-      else map['Lainnya'] += cf.amount;
+      const amt = Number(cf.amount) || 0;
+      if (main.includes('Makanan')) map['Bahan Makanan'] += amt;
+      else if (main.includes('Minuman')) map['Bahan Minuman'] += amt;
+      else if (main.includes('Kemasan')) map['Kemasan & Packaging'] += amt;
+      else if (main.includes('Operasional')) map['Operasional Cafe'] += amt;
+      else if (main.includes('SDM') || main.includes('Gaji') || main.includes('Karyawan')) map['SDM & Karyawan'] += amt;
+      else map['Lainnya'] += amt;
     });
 
     return map;
@@ -135,13 +172,14 @@ const CashFlowView = () => {
 
     filteredCashflows.forEach((cf) => {
       const { main, sub } = parseCategory(cf.category);
+      const amt = Number(cf.amount) || 0;
       tableRows.push([
         formatDate(cf.date),
-        cf.type,
+        cf.type || 'Pengeluaran',
         main,
         sub || '-',
-        cf.description,
-        cf.type === 'Pemasukan' ? `+${formatCurrency(cf.amount)}` : `-${formatCurrency(cf.amount)}`,
+        cf.description || '-',
+        cf.type === 'Pemasukan' ? `+${formatCurrency(amt)}` : `-${formatCurrency(amt)}`,
         cf.user?.name || '-'
       ]);
     });
@@ -183,16 +221,16 @@ const CashFlowView = () => {
   };
 
   return (
-    <div className="p-3.5 sm:p-5 pb-32 sm:pb-8 h-full flex flex-col bg-slate-50 overflow-y-auto space-y-3.5 sm:space-y-4">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm shrink-0">
+    <div className="p-3 sm:p-5 pb-36 sm:pb-12 h-full flex-1 min-h-0 overflow-y-auto bg-slate-50 flex flex-col gap-3.5" style={{ WebkitOverflowScrolling: 'touch' }}>
+      {/* 1. Header Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-primary shadow-inner">
-            <DollarSign size={20} className="text-indigo-600" />
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-primary shadow-inner">
+            <DollarSign size={22} className="text-indigo-600" />
           </div>
           <div>
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Arus Kas & Pembelanjaan</h2>
-            <p className="text-[11px] text-gray-500">Pencatatan pembelanjaan bahan baku, operasional, & kas non-POS</p>
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Arus Kas & Pembelanjaan (Petty Cash)</h2>
+            <p className="text-[11px] text-gray-500">Pencatatan pembelanjaan bahan baku, operasional, & kas masuk luar POS</p>
           </div>
         </div>
 
@@ -214,31 +252,31 @@ const CashFlowView = () => {
         </div>
       </div>
 
-      {/* Main KPI Stats Cards - Compact Design */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
-        <div className="p-3 sm:p-3.5 rounded-xl border-l-4 border-emerald-500 shadow-sm bg-white flex items-center justify-between border border-gray-200/80">
+      {/* 2. Compact 3-KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+        <div className="p-3 sm:p-3.5 rounded-2xl border-l-4 border-emerald-500 shadow-sm bg-white flex items-center justify-between border border-gray-200/80">
           <div>
             <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Total Pemasukan (In)</div>
             <div className="text-lg sm:text-xl font-black text-emerald-600 tracking-tight">{formatCurrency(totalIn)}</div>
             <div className="text-[10px] text-gray-400">Modal & kas masuk luar POS</div>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-            <ArrowDownRight size={18} />
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+            <ArrowDownRight size={20} />
           </div>
         </div>
 
-        <div className="p-3 sm:p-3.5 rounded-xl border-l-4 border-rose-500 shadow-sm bg-white flex items-center justify-between border border-gray-200/80">
+        <div className="p-3 sm:p-3.5 rounded-2xl border-l-4 border-rose-500 shadow-sm bg-white flex items-center justify-between border border-gray-200/80">
           <div>
             <div className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Total Pengeluaran (Out)</div>
             <div className="text-lg sm:text-xl font-black text-rose-600 tracking-tight">{formatCurrency(totalOut)}</div>
             <div className="text-[10px] text-gray-400">Belanja bahan baku & operasional</div>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
-            <ArrowUpRight size={18} />
+          <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+            <ArrowUpRight size={20} />
           </div>
         </div>
 
-        <div className="p-3 sm:p-3.5 rounded-xl border-l-4 border-indigo-500 shadow-sm bg-indigo-50/70 border border-indigo-200 flex items-center justify-between">
+        <div className="p-3 sm:p-3.5 rounded-2xl border-l-4 border-indigo-500 shadow-sm bg-indigo-50/70 border border-indigo-200 flex items-center justify-between">
           <div>
             <div className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Saldo Kas Bersih</div>
             <div className={`text-lg sm:text-xl font-black tracking-tight ${balance >= 0 ? 'text-indigo-900' : 'text-rose-600'}`}>
@@ -246,21 +284,28 @@ const CashFlowView = () => {
             </div>
             <div className="text-[10px] text-indigo-600/80">Pemasukan dikurangi Pengeluaran</div>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
-            <Wallet size={18} />
+          <div className="w-10 h-10 rounded-xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0">
+            <Wallet size={20} />
           </div>
         </div>
       </div>
 
-      {/* Category Expense Breakdown Cards - Compact Filter Bar */}
-      <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-gray-200/80 shadow-sm space-y-2 shrink-0">
+      {/* 3. Category Filter Pills */}
+      <div className="bg-white p-3 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
             <Layers size={14} className="text-indigo-600" />
-            <span>Distribusi Belanja Kategori</span>
-            <span className="text-[10px] text-gray-400 font-normal">(Klik kategori untuk filter cepat)</span>
+            <span>Kategori Belanja</span>
+            <span className="text-[10px] text-gray-400 font-normal">(Klik untuk filter cepat)</span>
           </div>
-          <span className="text-xs text-gray-600 font-bold">Total Belanja: {formatCurrency(totalOut)}</span>
+          {selectedMainCat !== 'ALL' && (
+            <button 
+              onClick={() => setSelectedMainCat('ALL')}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline"
+            >
+              Reset Filter
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -291,30 +336,22 @@ const CashFlowView = () => {
         </div>
       </div>
 
-      {/* Main Table / Mobile Cards with Search & Filters */}
-      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm flex flex-col overflow-hidden">
-        {/* Table Title & Filter Toolbar */}
-        <div className="p-3.5 sm:p-4 border-b border-gray-200 bg-slate-50/70 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-3">
+      {/* 4. Main Transaction Section */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col">
+        {/* Table & Filter Header */}
+        <div className="p-3.5 sm:p-4 border-b border-gray-200 bg-slate-50/80 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-1.5">
-              <span>📋 Rincian Catatan Transaksi Kas</span>
+              <span>📋 Rincian Riwayat Transaksi Kas</span>
               <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
-                {filteredCashflows.length} Data
+                {filteredCashflows.length} Transaksi
               </span>
             </h3>
-            {selectedMainCat !== 'ALL' && (
-              <button 
-                onClick={() => setSelectedMainCat('ALL')}
-                className="text-[11px] text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 font-bold underline"
-              >
-                Reset Filter ({selectedMainCat})
-              </button>
-            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <select 
-              className="text-xs py-1.5 px-2.5 bg-white font-semibold text-gray-700 border border-gray-300 rounded-lg shadow-sm outline-none cursor-pointer"
+              className="text-xs py-1.5 px-2.5 bg-white font-semibold text-gray-700 border border-gray-300 rounded-lg shadow-sm outline-none cursor-pointer flex-1 sm:flex-none"
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
             >
@@ -324,7 +361,7 @@ const CashFlowView = () => {
             </select>
 
             <select
-              className="text-xs py-1.5 px-2.5 bg-white font-semibold text-gray-700 border border-gray-300 rounded-lg shadow-sm outline-none cursor-pointer"
+              className="text-xs py-1.5 px-2.5 bg-white font-semibold text-gray-700 border border-gray-300 rounded-lg shadow-sm outline-none cursor-pointer flex-1 sm:flex-none"
               value={selectedMainCat}
               onChange={e => setSelectedMainCat(e.target.value)}
             >
@@ -339,12 +376,12 @@ const CashFlowView = () => {
             </select>
 
             {/* Search Box */}
-            <div className="relative flex-1 sm:w-56">
+            <div className="relative w-full sm:w-48">
               <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
               <input
                 type="text"
                 className="w-full text-xs pl-8 pr-2.5 py-1.5 bg-white border border-gray-300 rounded-lg shadow-sm outline-none"
-                placeholder="Cari keterangan, kasir..."
+                placeholder="Cari keterangan / kasir..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
@@ -352,26 +389,28 @@ const CashFlowView = () => {
           </div>
         </div>
 
-        {/* Content Area */}
+        {/* Content Body */}
         {loading ? (
-          <div className="p-12 text-center text-gray-500">
-            <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-3"></div>
-            Memuat data arus kas...
+          <div className="p-10 text-center text-gray-500">
+            <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+            Memuat data kas...
           </div>
         ) : filteredCashflows.length === 0 ? (
-          <div className="p-12 text-center text-gray-400">
-            <FileText size={40} className="mx-auto text-gray-300 mb-2" />
-            <div className="font-bold text-gray-600 text-sm">Tidak Ada Catatan Kas Yang Sesuai Filter</div>
-            <p className="text-xs text-gray-400 mt-1">Coba ganti filter kategori atau klik tombol "+ Catat Kas" untuk menambah pengeluaran baru.</p>
+          <div className="p-10 text-center text-gray-400">
+            <FileText size={36} className="mx-auto text-gray-300 mb-2" />
+            <div className="font-bold text-gray-600 text-sm">Belum Ada Catatan Kas Yang Sesuai Filter</div>
+            <p className="text-xs text-gray-400 mt-1">Klik tombol "+ Catat Kas" di atas untuk menambah pengeluaran baru.</p>
           </div>
         ) : (
-          <>
-            {/* Mobile Cards List (< md) */}
-            <div className="md:hidden divide-y divide-gray-100">
-              {filteredCashflows.map((cf) => {
+          <div className="p-0">
+            {/* Mobile View: High-Contrast Card List */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {filteredCashflows.map((cf, idx) => {
                 const { main, sub } = parseCategory(cf.category);
+                const isIncome = cf.type === 'Pemasukan';
+                const amt = Number(cf.amount) || 0;
                 return (
-                  <div key={cf.id} className="p-3.5 space-y-2 hover:bg-slate-50 transition-colors">
+                  <div key={cf.id || idx} className="p-3.5 space-y-2 bg-white">
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-1.5">
@@ -385,55 +424,69 @@ const CashFlowView = () => {
                         )}
                       </div>
 
-                      <div className="text-right">
-                        <div className={`font-black text-sm ${cf.type === 'Pemasukan' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {cf.type === 'Pemasukan' ? '+' : '-'}{formatCurrency(cf.amount)}
+                      <div className="text-right shrink-0">
+                        <div className={`font-black text-sm ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {isIncome ? '+' : '-'}{formatCurrency(amt)}
                         </div>
-                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                          cf.type === 'Pemasukan' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          isIncome ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
                         }`}>
-                          {cf.type === 'Pemasukan' ? <ArrowDownRight size={11} /> : <ArrowUpRight size={11} />}
-                          {cf.type}
+                          {isIncome ? <ArrowDownRight size={10} /> : <ArrowUpRight size={10} />}
+                          {cf.type || 'Pengeluaran'}
                         </span>
                       </div>
                     </div>
 
-                    <p className="text-xs text-gray-700 font-medium line-clamp-2 bg-slate-50/90 p-2 rounded-lg border border-gray-100">
-                      {cf.description}
-                    </p>
+                    <div className="text-xs text-gray-700 font-medium bg-slate-50 p-2.5 rounded-xl border border-gray-100">
+                      {cf.description || '-'}
+                    </div>
 
                     <div className="flex items-center justify-between text-[11px] text-gray-400 pt-0.5">
-                      <span>{formatDate(cf.date)}</span>
-                      <span className="flex items-center gap-1 font-semibold text-gray-600">
-                        <User size={11} /> {cf.user?.name || 'Staff'}
+                      <span className="flex items-center gap-1">
+                        <Calendar size={11} /> {formatDate(cf.date)}
                       </span>
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-1 font-semibold text-gray-600">
+                          <User size={11} /> {cf.user?.name || 'Staff'}
+                        </span>
+                        <button 
+                          onClick={() => handleDelete(cf.id)}
+                          className="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50"
+                          title="Hapus"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Desktop Table (>= md) */}
-            <div className="hidden md:block overflow-x-auto">
+            {/* Desktop View: Full Data Table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-100/80 border-b border-gray-200 text-xs font-black text-gray-600 uppercase tracking-wider">
+                  <tr className="bg-slate-100/90 border-b border-gray-200 text-xs font-black text-gray-600 uppercase tracking-wider">
                     <th className="py-3 px-4">TANGGAL</th>
                     <th className="py-3 px-4">JENIS</th>
                     <th className="py-3 px-4">KATEGORI BELANJA</th>
                     <th className="py-3 px-4">RINCIAN KETERANGAN</th>
                     <th className="py-3 px-4 text-right">NOMINAL</th>
                     <th className="py-3 px-4 text-center">PENCATAT</th>
+                    <th className="py-3 px-4 text-center">AKSI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-sm">
                   {filteredCashflows.map((cf, idx) => {
                     const { main, sub } = parseCategory(cf.category);
+                    const isIncome = cf.type === 'Pemasukan';
+                    const amt = Number(cf.amount) || 0;
                     return (
-                      <tr key={cf.id} className={`hover:bg-indigo-50/30 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                      <tr key={cf.id || idx} className={`hover:bg-indigo-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
                         <td className="py-3 px-4 text-xs font-medium text-gray-600 whitespace-nowrap">{formatDate(cf.date)}</td>
                         <td className="py-3 px-4 whitespace-nowrap">
-                          {cf.type === 'Pemasukan' ? (
+                          {isIncome ? (
                             <span className="bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md">
                               <ArrowDownRight size={13} /> IN
                             </span>
@@ -455,15 +508,24 @@ const CashFlowView = () => {
                           )}
                         </td>
                         <td className="py-3 px-4 text-xs text-gray-800 font-medium max-w-[320px]">
-                          <p className="line-clamp-2" title={cf.description}>{cf.description}</p>
+                          <p className="line-clamp-2" title={cf.description}>{cf.description || '-'}</p>
                         </td>
-                        <td className={`py-3 px-4 text-right font-black text-sm tracking-tight whitespace-nowrap ${cf.type === 'Pemasukan' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {cf.type === 'Pemasukan' ? '+' : '-'}{formatCurrency(cf.amount)}
+                        <td className={`py-3 px-4 text-right font-black text-sm tracking-tight whitespace-nowrap ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {isIncome ? '+' : '-'}{formatCurrency(amt)}
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span className="text-xs bg-gray-100 text-gray-700 font-semibold px-2 py-1 rounded-md">
                             {cf.user?.name || 'Staff'}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <button 
+                            onClick={() => handleDelete(cf.id)}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Hapus Transaksi"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </td>
                       </tr>
                     );
@@ -471,7 +533,7 @@ const CashFlowView = () => {
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
       </div>
 
