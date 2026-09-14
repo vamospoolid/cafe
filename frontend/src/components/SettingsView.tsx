@@ -178,9 +178,9 @@ const SettingsView = () => {
     enableKDS: true,
     autoCompleteKDSOnPay: true,
     // Absensi & GPS Geofencing
-    storeLatitude: -6.200000,
-    storeLongitude: 106.816666,
-    gpsRadiusMeters: 100,
+    storeLatitude: -3.4026521,
+    storeLongitude: 119.2137757,
+    gpsRadiusMeters: 300,
     enableGpsValidation: true,
     enableCameraPhoto: true,
     workShifts: '',
