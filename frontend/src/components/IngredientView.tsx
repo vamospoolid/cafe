@@ -414,7 +414,7 @@ export const IngredientView: React.FC = () => {
     buyPrice: '', 
     supplierId: '' 
   });
-  const [adjustForm, setAdjustForm] = useState({ change: '', type: 'Restock', description: '' });
+  const [adjustForm, setAdjustForm] = useState<{ change: string; type: string; description: string; newBuyPrice?: string }>({ change: '', type: 'Restock', description: '', newBuyPrice: '' });
 
   const fetchData = async () => {
     setLoading(true);
@@ -2761,6 +2761,25 @@ export const IngredientView: React.FC = () => {
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
                 />
               </div>
+
+              {adjustForm.type === 'Restock' && (
+                <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 space-y-1 animate-fade-in">
+                  <label className="block text-xs font-bold text-indigo-900">
+                    Harga Beli Masuk per {adjustModal.ingredient.unit} (Opsional untuk WAC)
+                  </label>
+                  <p className="text-[10px] text-indigo-600">
+                    Harga sistem saat ini: Rp {adjustModal.ingredient.buyPrice.toLocaleString('id-ID')}/{adjustModal.ingredient.unit}. Masukkan jika harga nota baru berbeda untuk menghitung HPP rata-rata bergerak otomatis.
+                  </p>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder={`Default: ${adjustModal.ingredient.buyPrice}`}
+                    value={adjustForm.newBuyPrice || ''}
+                    onChange={e => setAdjustForm({ ...adjustForm, newBuyPrice: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-400"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Keterangan / Nomor Nota</label>

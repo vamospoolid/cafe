@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { History, Clock, FileText, CheckCircle, AlertTriangle, Play, Square } from 'lucide-react';
+import { History, Clock, FileText, CheckCircle, Play, Square, Download } from 'lucide-react';
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { exportShiftSettlementPDF } from '../utils/pdfGenerator';
+import { toast } from '../utils/alert';
 
 const ShiftHistoryView = () => {
   const [shifts, setShifts] = useState<any[]>([]);
@@ -55,6 +57,20 @@ const ShiftHistoryView = () => {
     setIsModalOpen(true);
   };
 
+  const handleDownloadShiftSlip = async (shift: any) => {
+    try {
+      await exportShiftSettlementPDF(
+        posContext?.settings || {},
+        shift,
+        shift.user?.name || 'Kasir'
+      );
+      toast(`Slip Berita Acara Shift #${shift.id} berhasil diunduh!`, 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengunduh Slip Shift', 'error');
+    }
+  };
+
   const exportPDF = () => {
     const doc = new jsPDF();
     doc.text('Laporan Riwayat Shift & Rekap Kasir', 14, 15);
@@ -95,8 +111,8 @@ const ShiftHistoryView = () => {
           <p className="text-muted mt-1">Kelola pembukaan dan penutupan shift kasir setiap harinya</p>
         </div>
         <div className="flex gap-3">
-          <button className="btn bg-white border border-gray-300 text-gray-700 hover:bg-gray-50" onClick={exportPDF}>
-            <FileText size={16} className="text-red-500" /> Export Laporan PDF
+          <button className="btn bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 flex items-center gap-1.5" onClick={exportPDF}>
+            <FileText size={16} className="text-red-500" /> Export Tabel Rekap
           </button>
           {!activeShift ? (
             <button className="btn btn-primary" onClick={handleOpenShift}>
@@ -137,12 +153,13 @@ const ShiftHistoryView = () => {
                   <th>SALDO FISIK</th>
                   <th>SELISIH (MINUS/LEBIH)</th>
                   <th>STATUS</th>
+                  <th>AKSI</th>
                 </tr>
               </thead>
               <tbody>
                 {shifts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-gray-500">Tidak ada riwayat shift ditemukan.</td>
+                    <td colSpan={8} className="text-center py-8 text-gray-500">Tidak ada riwayat shift ditemukan.</td>
                   </tr>
                 ) : shifts.map((shift) => (
                   <tr key={shift.id}>
@@ -181,6 +198,15 @@ const ShiftHistoryView = () => {
                         </span>
                       )}
                     </td>
+                    <td>
+                      <button
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1"
+                        onClick={() => handleDownloadShiftSlip(shift)}
+                        title="Unduh Dokumen Berita Acara Shift PDF"
+                      >
+                        <Download size={12} /> Slip PDF
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -189,14 +215,11 @@ const ShiftHistoryView = () => {
         </div>
       </div>
 
-      <OpenShiftModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSuccess={() => {
-          fetchData();
-          posContext?.fetchActiveShift();
-        }} 
-        mode={modalMode} 
+      <OpenShiftModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={fetchData}
+        mode={modalMode}
       />
     </div>
   );

@@ -2051,3 +2051,207 @@ export const exportSimplePurchaseOrderPDF = async (
   doc.save(`Purchase_Order_${poNumber}_${poData.supplierName.replace(/\s+/g, '_')}.pdf`);
 };
 
+export const exportShiftSettlementPDF = async (
+  settings: VenueSettings,
+  shiftData: any,
+  cashierName?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+  const margin = 14;
+
+  const formatDateTime = (iso: string) => {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  // 1. Header & Logo
+  let nextY = 16;
+  if (logoBase64) {
+    try {
+      doc.addImage(logoBase64, 'PNG', margin, nextY, 18, 18);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+      doc.text((settings?.storeName || 'SOL CAFE & EATERY').toUpperCase(), margin + 22, nextY + 6);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(settings?.address || 'Jl. Lokasi Toko Resmi, Indonesia', margin + 22, nextY + 11);
+      doc.text(`Telp/WA: ${settings?.phone || '-'} | Sistem Kasir POS`, margin + 22, nextY + 15);
+      nextY += 24;
+    } catch (e) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+      doc.text((settings?.storeName || 'SOL CAFE & EATERY').toUpperCase(), margin, nextY + 4);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`${settings?.address || 'Lokasi Toko'} | Telp: ${settings?.phone || '-'}`, margin, nextY + 9);
+      nextY += 15;
+    }
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text((settings?.storeName || 'SOL CAFE & EATERY').toUpperCase(), margin, nextY + 4);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`${settings?.address || 'Lokasi Toko'} | Telp: ${settings?.phone || '-'}`, margin, nextY + 9);
+    nextY += 15;
+  }
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(margin, nextY, pageWidth - margin, nextY);
+  nextY += 6;
+
+  // Title Box
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 16, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(30, 41, 59);
+  doc.text('BERITA ACARA SERAH TERIMA & PENUTUPAN SHIFT KASIR', margin + 4, nextY + 6.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`ID Shift: #${shiftData.id || '-'} | Kasir: ${cashierName || shiftData.user?.name || 'Kasir'} | Dicetak: ${new Date().toLocaleString('id-ID')}`, margin + 4, nextY + 12);
+  nextY += 21;
+
+  // Shift Meta Info Box
+  const colW = (pageWidth - (margin * 2)) / 2;
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 16, 1.5, 1.5, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 16, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('WAKTU BUKA SHIFT:', margin + 4, nextY + 5.5);
+  doc.text('WAKTU TUTUP SHIFT:', margin + colW + 4, nextY + 5.5);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(formatDateTime(shiftData.waktuBuka), margin + 4, nextY + 11.5);
+  doc.text(formatDateTime(shiftData.waktuTutup || new Date().toISOString()), margin + colW + 4, nextY + 11.5);
+  nextY += 21;
+
+  // Financial Summary Table
+  const saldoAwal = shiftData.saldoAwal || 0;
+  const cashSales = shiftData.cashSales || 0;
+  const nonCashSales = shiftData.nonCashSales || 0;
+  const voidCount = shiftData.voidCount || 0;
+  const voidCashTotal = shiftData.voidCashTotal || 0;
+  const manualCashIn = shiftData.manualCashIn || 0;
+  const manualCashOut = shiftData.manualCashOut || 0;
+  const cashDebtIncome = shiftData.cashDebtIncome || 0;
+  const saldoSistem = shiftData.saldoSistem || (saldoAwal + cashSales - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut);
+  const saldoFisikLaci = shiftData.saldoFisikLaci || 0;
+  const selisih = shiftData.selisih !== undefined ? shiftData.selisih : (saldoFisikLaci - saldoSistem);
+
+  const tableRows = [
+    ['1', 'Modal Awal Kasir (Starting Float Laci)', 'Kas Awal', formatCurrency(saldoAwal)],
+    ['2', 'Total Penjualan Tunai (Cash)', 'Omset Tunai (+)', formatCurrency(cashSales)],
+    ['3', 'Total Penjualan Non-Tunai (QRIS / EDC / Transfer)', 'Elektronik (Bank)', formatCurrency(nonCashSales)],
+    ['4', `Transaksi Batal / Void (${voidCount} Order)`, 'Koreksi Kas (-)', voidCashTotal > 0 ? `-${formatCurrency(voidCashTotal)}` : 'Rp 0'],
+    ['5', 'Pemasukan Kas Manual (Petty Cash In)', 'Kas Masuk (+)', formatCurrency(manualCashIn)],
+    ['6', 'Pengeluaran Kas Manual (Petty Cash Out)', 'Kas Keluar (-)', manualCashOut > 0 ? `-${formatCurrency(manualCashOut)}` : 'Rp 0'],
+    ['7', 'Pelunasan Piutang Kas (Debt Collection)', 'Kas Masuk (+)', formatCurrency(cashDebtIncome)],
+    ['8', 'TOTAL SALDO KAS SISTEM (Ekspektasi Uang Laci)', 'Saldo Sistem', formatCurrency(saldoSistem)],
+    ['9', 'UANG KAS FISIK DIHITUNG DI LACI (Actual Cash)', 'Fisik Laci', formatCurrency(saldoFisikLaci)],
+    ['10', 'SELISIH KAS (VARIANCE / DISCREPANCY)', selisih === 0 ? 'STATUS: PAS (BALANCE)' : selisih < 0 ? 'STATUS: KURANG (SHORT)' : 'STATUS: LEBIH (OVER)', formatCurrency(selisih)]
+  ];
+
+  autoTable(doc, {
+    head: [['No', 'Komponen Finansial Shift', 'Kategori', 'Nominal']],
+    body: tableRows,
+    startY: nextY,
+    margin: { left: margin, right: margin },
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 2.2, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 10 },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'center', fontStyle: 'normal' },
+      3: { halign: 'right', fontStyle: 'bold' }
+    },
+    didParseCell: (hookData) => {
+      if (hookData.section === 'body') {
+        const rowIdx = hookData.row.index;
+        if (rowIdx === 7) {
+          hookData.cell.styles.fillColor = [238, 242, 255]; // Indigo light
+          hookData.cell.styles.textColor = [67, 56, 202];
+          hookData.cell.styles.fontStyle = 'bold';
+        }
+        if (rowIdx === 8) {
+          hookData.cell.styles.fillColor = [240, 253, 244]; // Green light
+          hookData.cell.styles.textColor = [22, 101, 52];
+          hookData.cell.styles.fontStyle = 'bold';
+        }
+        if (rowIdx === 9) {
+          if (selisih === 0) {
+            hookData.cell.styles.fillColor = [240, 253, 244];
+            hookData.cell.styles.textColor = [22, 101, 52];
+          } else if (selisih < 0) {
+            hookData.cell.styles.fillColor = [254, 242, 242];
+            hookData.cell.styles.textColor = [153, 27, 27];
+          } else {
+            hookData.cell.styles.fillColor = [254, 252, 232];
+            hookData.cell.styles.textColor = [133, 77, 14];
+          }
+          hookData.cell.styles.fontStyle = 'bold';
+        }
+      }
+    }
+  });
+
+  const finalY = (doc as any).lastAutoTable?.finalY || 180;
+
+  // Catatan Rekonsiliasi & Tanda Tangan
+  const sigY = finalY + 12;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+
+  // Left - Kasir Bertugas
+  doc.text('Diserahkan Oleh (Kasir Bertugas),', margin + 12, sigY);
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin + 12, sigY + 18, margin + 65, sigY + 18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(cashierName || shiftData.user?.name || 'Kasir', margin + 12, sigY + 22);
+
+  // Right - Supervisor / Manager
+  doc.setFont('helvetica', 'normal');
+  doc.text('Diterima & Diverifikasi (Supervisor/Manager),', pageWidth - margin - 75, sigY);
+  doc.line(pageWidth - margin - 75, sigY + 18, pageWidth - margin - 12, sigY + 18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Supervisor / Store Lead', pageWidth - margin - 75, sigY + 22);
+
+  // Footer
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+  doc.text(`Dokumen resmi serah terima kasir ${settings?.storeName || 'MUKI RAMEN'}. Diotorisasi dan diarsip untuk rekonsiliasi audit keuangan.`, margin, pageHeight - 8);
+
+  doc.save(`Shift_Settlement_Shift${shiftData.id || Date.now()}_${(cashierName || 'Kasir').replace(/\s+/g, '_')}.pdf`);
+};
+
+
