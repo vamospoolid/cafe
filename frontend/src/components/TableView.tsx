@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { Plus, Edit, Trash2, Map, List, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard, X, Info, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Edit, Trash2, Map, List, LayoutGrid, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard, X, Info, RefreshCw } from 'lucide-react';
 import TableModal from './TableModal';
 import CheckoutModal from './CheckoutModal';
 import OpenShiftModal from './OpenShiftModal';
@@ -10,9 +11,10 @@ import useSocket from '../hooks/useSocket';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
 const TableView = () => {
+  const navigate = useNavigate();
   const [tables, setTables] = useState<any[]>([]);
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('map');
+  const [viewMode, setViewMode] = useState<'grid' | 'map' | 'list'>(window.innerWidth < 768 ? 'grid' : 'map');
   const [selectedArea, setSelectedArea] = useState<string>('Semua');
   const [loading, setLoading] = useState(true);
 
@@ -411,13 +413,16 @@ const TableView = () => {
   });
 
   return (
-    <div className="p-3 sm:p-6 pb-28 sm:pb-8 h-full flex flex-col bg-slate-50 overflow-y-auto gap-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div 
+      className="p-3 sm:p-6 pb-28 sm:pb-8 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto gap-4"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div>
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800">
             <Armchair className="text-primary" /> Manajemen Meja & Area
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">Kelola tata letak meja dan pantau status pesanan (pending bill/kds) secara real-time.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Pantau status pesanan, sisa bill meja, dan tata letak secara real-time.</p>
         </div>
         <button className="btn btn-primary shadow-md hover:shadow-lg transition-all self-start sm:self-auto py-2.5 px-4 text-xs font-bold" onClick={() => { setSelectedTable(null); setIsModalOpen(true); }}>
           <Plus size={16} /> Tambah Meja
@@ -482,16 +487,25 @@ const TableView = () => {
                 <Map size={14} className="text-indigo-600" /> <span className="hidden sm:inline">Atur Posisi Meja</span><span className="sm:hidden">Atur Posisi</span>
               </button>
             )}
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/60">
+            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
               <button
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs sm:text-sm font-semibold transition-colors ${viewMode === 'map' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                onClick={() => setViewMode('grid')}
+                title="Tampilan Grid Kartu Meja"
+              >
+                <LayoutGrid size={14} /> Grid
+              </button>
+              <button
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'map' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 onClick={() => setViewMode('map')}
+                title="Tampilan Denah Visual 2D"
               >
                 <Map size={14} /> Denah
               </button>
               <button
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs sm:text-sm font-semibold transition-colors ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 onClick={() => setViewMode('list')}
+                title="Tampilan Tabel Data"
               >
                 <List size={14} /> Tabel
               </button>
@@ -504,6 +518,220 @@ const TableView = () => {
           <div className="p-12 flex flex-col items-center justify-center text-gray-400">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
             <p className="font-semibold">Menyinkronkan status meja...</p>
+          </div>
+        ) : viewMode === 'grid' ? (
+          <div className="p-3 sm:p-5 bg-slate-50/70 flex-1 overflow-y-auto">
+            {filteredTables.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-400 w-full">
+                <Armchair size={48} className="text-slate-300 mb-3" />
+                <p className="font-semibold text-sm">Tidak ada meja di area "{selectedArea}"</p>
+                <p className="text-xs text-slate-400 mt-1">Anda bisa menambahkan meja baru ke area ini dengan tombol di atas.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {filteredTables.map(table => {
+                  const activeOrder = getTableActiveOrder(table.id);
+                  const tableStatus = getTableStatus(table.id);
+                  const isOccupied = tableStatus !== 'empty';
+                  const isPaid = activeOrder && activeOrder.status === 'Paid';
+                  const isServed = tableStatus === 'served';
+
+                  return (
+                    <div 
+                      key={table.id}
+                      className={`rounded-2xl border bg-white p-3.5 sm:p-4 flex flex-col justify-between gap-3 transition-all shadow-sm hover:shadow-md ${
+                        !isOccupied 
+                          ? 'border-slate-200/90 hover:border-indigo-300' 
+                          : isPaid
+                          ? 'border-emerald-300 bg-emerald-50/20'
+                          : isServed
+                          ? 'border-blue-300 bg-blue-50/20'
+                          : 'border-amber-300 bg-amber-50/20'
+                      }`}
+                    >
+                      {/* Card Header: Table No, Area, Capacity & Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center font-black shadow-inner shrink-0 ${
+                            !isOccupied 
+                              ? 'bg-slate-100 text-slate-800' 
+                              : isPaid 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                              : isServed 
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}>
+                            <span className="text-sm leading-none">{table.tableNo}</span>
+                            <span className="text-[9px] font-bold opacity-75 mt-0.5">{table.capacity}K</span>
+                          </div>
+                          <div>
+                            <h3 className="font-black text-sm sm:text-base text-slate-900 tracking-tight">Meja {table.tableNo}</h3>
+                            <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
+                              <span>{table.name || 'Area Umum'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          {!isOccupied ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> KOSONG
+                            </span>
+                          ) : isPaid ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">
+                              <Check size={11} className="text-emerald-600" /> LUNAS
+                            </span>
+                          ) : isServed ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> DISAJIKAN
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> DIPROSES
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Card Body: Info Pesanan Aktif / State Kosong */}
+                      {isOccupied && activeOrder ? (
+                        <div className="space-y-2">
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-slate-800 flex items-center gap-1 truncate max-w-[130px]">
+                                <Users size={12} className="text-slate-400 shrink-0" />
+                                {activeOrder.customerName || 'Tamu Dine-In'}
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-0.5 shrink-0">
+                                <Clock size={10} /> {getWaitTime(activeOrder.createdAt)}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/60">
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                {activeOrder.items?.length || 0} Menu pesanan
+                              </span>
+                              <div className="text-right">
+                                <span className="text-xs font-black text-indigo-700 tracking-tight">
+                                  {formatCurrency(activeOrder.total)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="py-3 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                          <span className="text-[11px] font-medium text-slate-500">Meja bersih & siap melayani</span>
+                        </div>
+                      )}
+
+                      {/* Card Actions Footer */}
+                      <div className="pt-2 border-t border-slate-100 flex flex-col gap-1.5">
+                        {!isOccupied ? (
+                          <div className="flex items-center gap-1.5">
+                            <button 
+                              type="button"
+                              onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                              className="flex-1 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200 transition-all active:scale-95"
+                            >
+                              <Plus size={14} />
+                              <span>Buka Pesanan</span>
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}
+                              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors"
+                              title="Edit Meja"
+                            >
+                              <Edit size={14} />
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => handleDelete(table.id)}
+                              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 text-rose-500 transition-colors"
+                              title="Hapus Meja"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              {/* Tombol Tambah Menu ke POS */}
+                              <button 
+                                type="button"
+                                onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                                className="flex-1 py-2 px-2.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95"
+                              >
+                                <Plus size={13} />
+                                <span>+ Menu</span>
+                              </button>
+
+                              {/* Tombol Checkout / Kosongkan */}
+                              {isPaid ? (
+                                <button 
+                                  type="button"
+                                  onClick={() => handleClearTable(table.id, table.tableNo)}
+                                  className="flex-1 py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-sm transition-all active:scale-95"
+                                >
+                                  <Check size={13} />
+                                  <span>Kosongkan</span>
+                                </button>
+                              ) : (
+                                <button 
+                                  type="button"
+                                  onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}
+                                  className="flex-1 py-2 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-md shadow-indigo-200 transition-all active:scale-95"
+                                >
+                                  <CreditCard size={13} />
+                                  <span>Checkout</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Secondary Actions: Detail, Pindah, Split */}
+                            <div className="flex items-center justify-between text-[11px] pt-1">
+                              <button 
+                                type="button"
+                                onClick={() => handleTableClick(table)}
+                                className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                              >
+                                <span>👁️ Rincian</span>
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    setMoveMergeSourceTable(table);
+                                    setIsMoveMergeOpen(true);
+                                  }}
+                                  className="text-slate-500 hover:text-slate-800 font-semibold flex items-center gap-0.5"
+                                >
+                                  <RefreshCw size={11} /> Pindah
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    const tableOrders = activeOrders.filter(o => o.tableId === table.id);
+                                    setSplitTableId(table.id);
+                                    setSplitTableName(`Meja ${table.tableNo}`);
+                                    setSplitActiveOrders(tableOrders);
+                                    setIsSplitOpen(true);
+                                  }}
+                                  className="text-slate-500 hover:text-slate-800 font-semibold flex items-center gap-0.5"
+                                >
+                                  <Scissors size={11} /> Split
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : viewMode === 'list' ? (
           <div className="p-0 overflow-x-auto bg-white">

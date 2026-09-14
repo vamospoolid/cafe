@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Camera, Plus, Trash2, Minus, Search, CreditCard, User, Edit2, 
   ShoppingCart, Package, ArrowRight, X, Save, Lock, Play,
@@ -53,6 +54,18 @@ export const POSView = () => {
   const [isOpenShiftOpen, setIsOpenShiftOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const paramTableId = searchParams.get('tableId');
+    if (paramTableId) {
+      const tId = Number(paramTableId);
+      if (!isNaN(tId)) {
+        setSelectedTableId(tId);
+        setOrderType('Dine In');
+      }
+    }
+  }, [searchParams]);
 
   // PWA & Tablet Kiosk States
   const [isFullscreen, setIsFullscreen] = useState(false);

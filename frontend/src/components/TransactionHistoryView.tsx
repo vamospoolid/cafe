@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { History, Search, RotateCcw, Printer, Filter, ShoppingCart, DollarSign, BarChart2, User, XCircle, Download, FileText, Zap } from 'lucide-react';
+import { History, Search, RotateCcw, Printer, Filter, ShoppingCart, DollarSign, BarChart2, User, XCircle, Download, FileText, Zap, Eye } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import ReceiptPrinter from './ReceiptPrinter';
+import OrderDetailModal from './OrderDetailModal';
 import { exportFinancialPDF } from '../utils/pdfGenerator';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -12,6 +13,7 @@ const TransactionHistoryView = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [printOrder, setPrintOrder] = useState<any>(null);
+  const [selectedDetailOrder, setSelectedDetailOrder] = useState<any>(null);
   
   // Filter States
   const [dateFilter, setDateFilter] = useState('');
@@ -288,10 +290,10 @@ const TransactionHistoryView = () => {
                   {/* Actions Footer */}
                   <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50">
                     <button 
-                      className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
-                      onClick={() => setPrintOrder(trx)}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                      onClick={() => setSelectedDetailOrder(trx)}
                     >
-                      <Printer size={14} /> Preview
+                      <Eye size={14} /> Rincian
                     </button>
                     <button 
                       className={`px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs flex items-center gap-1.5 transition-colors ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`}
@@ -355,7 +357,13 @@ const TransactionHistoryView = () => {
                       </td>
                       <td className="text-right">
                         <div className="flex justify-end gap-1">
-                          <button className="icon-btn text-blue-600 bg-blue-50" title="Preview / Cetak PDF" onClick={() => setPrintOrder(trx)}><Printer size={16}/></button>
+                          <button 
+                            className="icon-btn text-indigo-600 bg-indigo-50" 
+                            title="Lihat Rincian Pesanan" 
+                            onClick={() => setSelectedDetailOrder(trx)}
+                          >
+                            <Eye size={16}/>
+                          </button>
                           <button 
                             className={`icon-btn text-emerald-600 bg-emerald-50 ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`} 
                             title="Cetak Struk Termal Langsung" 
@@ -380,6 +388,20 @@ const TransactionHistoryView = () => {
         )}
       </div>
       
+      {/* Detailed Order Bottom Sheet / Modal */}
+      {selectedDetailOrder && (
+        <OrderDetailModal 
+          order={selectedDetailOrder}
+          isOpen={Boolean(selectedDetailOrder)}
+          onClose={() => setSelectedDetailOrder(null)}
+          onDirectPrint={handleDirectPrint}
+          onPreviewReceipt={(ord) => setPrintOrder(ord)}
+          onVoid={handleVoid}
+          canVoid={Boolean(posContext?.user?.permissions?.canVoid)}
+          printLoading={printLoading === selectedDetailOrder?.id}
+        />
+      )}
+
       {printOrder && <ReceiptPrinter order={printOrder} onClose={() => setPrintOrder(null)} />}
     </div>
   );
