@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { 
   Package, Plus, Search, RotateCcw, Edit, Copy, Trash2, 
-  AlertTriangle, CheckCircle, Wallet, Grid, List, Layers, Tag 
+  AlertTriangle, CheckCircle, XCircle, Wallet, Grid, List, Layers, Tag 
 } from 'lucide-react';
 import ProductModal from './ProductModal';
 import { CategoryModal } from './CategoryModal';
@@ -163,7 +163,8 @@ const ProductView = () => {
   }, [products, searchQuery, filterCategory, filterSubCategory, filterStock]);
 
   const totalValue = products.reduce((sum, p) => sum + (p.buyPrice * p.stock), 0);
-  const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
+  const outOfStockCount = products.filter(p => p.stock <= 0 || p.isSoldOut).length;
+  const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= p.minStock && !p.isSoldOut).length;
   const activeCount = products.filter(p => p.status === 'Aktif').length;
 
   return (
@@ -194,14 +195,24 @@ const ProductView = () => {
       </div>
 
       {/* SUMMARY STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 mb-6">
         <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
             <div className="text-2xl font-bold text-slate-800">{products.length}</div>
             <div className="text-xs font-semibold text-slate-500">Total Produk</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
-            <Package size={22} />
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
+            <Package size={20} />
+          </div>
+        </div>
+
+        <div className="card flex items-center justify-between p-4 border-l-4 border-rose-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
+          <div>
+            <div className="text-2xl font-bold text-rose-600">{outOfStockCount}</div>
+            <div className="text-xs font-semibold text-slate-500">Stok Habis (0)</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
+            <XCircle size={20} />
           </div>
         </div>
         
@@ -210,8 +221,8 @@ const ProductView = () => {
             <div className="text-2xl font-bold text-amber-600">{lowStockCount}</div>
             <div className="text-xs font-semibold text-slate-500">Stok Menipis</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-            <AlertTriangle size={22} />
+          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+            <AlertTriangle size={20} />
           </div>
         </div>
 
@@ -220,18 +231,18 @@ const ProductView = () => {
             <div className="text-2xl font-bold text-emerald-600">{activeCount}</div>
             <div className="text-xs font-semibold text-slate-500">Produk Aktif</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <CheckCircle size={22} />
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <CheckCircle size={20} />
           </div>
         </div>
 
         <div className="card flex items-center justify-between p-4 border-l-4 border-indigo-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
-            <div className="text-2xl font-bold text-indigo-700">{formatCurrency(totalValue)}</div>
+            <div className="text-xl font-bold text-indigo-700">{formatCurrency(totalValue)}</div>
             <div className="text-xs font-semibold text-slate-500">Nilai Stok (HPP)</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
-            <Wallet size={22} />
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
+            <Wallet size={20} />
           </div>
         </div>
       </div>
