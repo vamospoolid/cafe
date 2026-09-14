@@ -51,3 +51,23 @@ export function getLocalOrderDatePrefix(tzOffsetMinutes: number = -420): string 
   const day = String(localTime.getUTCDate()).padStart(2, '0');
   return `${year}${month}${day}`;
 }
+
+/**
+ * Returns today's date formatted as YYYY-MM-DD in the local timezone (default WIB UTC+7).
+ */
+export function getTodayDateStr(tzOffsetMinutes: number | string = -420): string {
+  let offset = -420;
+  if (tzOffsetMinutes !== undefined && tzOffsetMinutes !== null && tzOffsetMinutes !== '') {
+    const parsed = parseInt(String(tzOffsetMinutes), 10);
+    if (!isNaN(parsed)) {
+      offset = parsed;
+    }
+  }
+  const now = new Date();
+  const localTime = new Date(now.getTime() - (offset * 60 * 1000));
+  const year = localTime.getUTCFullYear();
+  const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(localTime.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+

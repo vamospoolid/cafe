@@ -2431,9 +2431,9 @@ export const exportShiftSettlementPDF = async (
   // Resilient fallback jika shiftData belum di-enrich oleh backend API
   const cashSales = shiftData.cashSales !== undefined 
     ? shiftData.cashSales 
-    : (shiftData.saldoSistem !== undefined ? Math.max(0, shiftData.saldoSistem - saldoAwal - manualCashIn - cashDebtIncome + voidCashTotal + manualCashOut) : 0);
+    : (shiftData.saldoSistem !== undefined ? Math.max(0, shiftData.saldoSistem - saldoAwal - manualCashIn - cashDebtIncome + manualCashOut) : 0);
 
-  const saldoSistem = shiftData.saldoSistem !== undefined ? shiftData.saldoSistem : (saldoAwal + cashSales - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut);
+  const saldoSistem = shiftData.saldoSistem !== undefined ? shiftData.saldoSistem : (saldoAwal + cashSales + cashDebtIncome + manualCashIn - manualCashOut);
   const saldoFisikLaci = shiftData.saldoFisikLaci !== undefined ? shiftData.saldoFisikLaci : 0;
   const selisih = shiftData.selisih !== undefined ? shiftData.selisih : (saldoFisikLaci - saldoSistem);
 
@@ -2441,7 +2441,7 @@ export const exportShiftSettlementPDF = async (
     ['1', 'Modal Awal Kasir (Starting Float Laci)', 'Kas Awal', formatCurrency(saldoAwal)],
     ['2', 'Total Penjualan Tunai (Cash)', 'Omset Tunai (+)', formatCurrency(cashSales)],
     ['3', 'Total Penjualan Non-Tunai (QRIS / EDC / Transfer)', 'Elektronik (Bank)', formatCurrency(nonCashSales)],
-    ['4', `Transaksi Batal / Void (${voidCount} Order)`, 'Koreksi Kas (-)', voidCashTotal > 0 ? `-${formatCurrency(voidCashTotal)}` : 'Rp 0'],
+    ['4', `Transaksi Batal / Void (${voidCount} Order)`, 'Info Pengawasan', voidCashTotal > 0 ? formatCurrency(voidCashTotal) : 'Rp 0'],
     ['5', 'Pemasukan Kas Manual (Petty Cash In)', 'Kas Masuk (+)', formatCurrency(manualCashIn)],
     ['6', 'Pengeluaran Kas Manual (Petty Cash Out)', 'Kas Keluar (-)', manualCashOut > 0 ? `-${formatCurrency(manualCashOut)}` : 'Rp 0'],
     ['7', 'Pelunasan Piutang Kas (Debt Collection)', 'Kas Masuk (+)', formatCurrency(cashDebtIncome)],

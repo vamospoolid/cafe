@@ -1,27 +1,49 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
+import { getLocalDateRange, getCustomDateRange, getTodayDateStr } from '../utils/dateHelper';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Helper to group by date
-function getPastDays(days: number) {
-  const dates = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    d.setHours(0, 0, 0, 0);
-    dates.push(d);
+// Helper to group by date in local timezone (default WIB UTC+7)
+function getPastDays(days: number, tzOffsetMinutes: number | string = -420) {
+  let offset = -420;
+  if (tzOffsetMinutes !== undefined && tzOffsetMinutes !== null && tzOffsetMinutes !== '') {
+    const parsed = parseInt(String(tzOffsetMinutes), 10);
+    if (!isNaN(parsed)) offset = parsed;
   }
-  return dates;
+  const result = [];
+  const now = new Date();
+  const localNow = new Date(now.getTime() - (offset * 60 * 1000));
+  
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(localNow.getTime() - (i * 24 * 60 * 60 * 1000));
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const { startUtc, endUtc } = getLocalDateRange(dateStr, offset);
+
+    const tempDate = new Date(Date.UTC(year, d.getUTCMonth(), d.getUTCDate(), 12, 0, 0));
+    const name = tempDate.toLocaleDateString('id-ID', { weekday: 'short', timeZone: 'UTC' });
+
+    result.push({
+      dateStr,
+      startUtc,
+      endUtc,
+      name
+    });
+  }
+  return result;
 }
 
 router.get('/sales-chart', authenticateToken, async (req: Request, res: Response) => {
   try {
     const days = Number(req.query.days) || 7;
-    const pastDates = getPastDays(days);
-    const startDate = pastDates[0];
+    const tzOffset = (req.query.tzOffset as string) || -420;
+    const pastDays = getPastDays(days, tzOffset);
+    const startDate = pastDays[0]?.startUtc || new Date();
 
     const orders = await prisma.order.findMany({
       where: {
@@ -31,19 +53,16 @@ router.get('/sales-chart', authenticateToken, async (req: Request, res: Response
       select: { total: true, createdAt: true }
     });
 
-    const chartData = pastDates.map(date => {
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
-
+    const chartData = pastDays.map(item => {
       const dailyOrders = orders.filter(o => 
-        o.createdAt >= date && o.createdAt < nextDate
+        o.createdAt >= item.startUtc && o.createdAt <= item.endUtc
       );
       
       const totalSales = dailyOrders.reduce((sum, o) => sum + o.total, 0);
       
       return {
-        name: date.toLocaleDateString('id-ID', { weekday: 'short' }),
-        date: date.toISOString().split('T')[0],
+        name: item.name,
+        date: item.dateStr,
         sales: totalSales
       };
     });
@@ -93,14 +112,15 @@ router.get('/best-sellers', authenticateToken, async (req: Request, res: Respons
 
 router.get('/summary', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const tzOffset = (req.query.tzOffset as string) || -420;
+    const todayStr = getTodayDateStr(tzOffset);
+    const { startUtc: todayStart, endUtc: todayEnd } = getLocalDateRange(todayStr, tzOffset);
 
     // 1. Fetch Today's Orders
     const todayOrders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: today }
+        createdAt: { gte: todayStart, lte: todayEnd }
       },
       include: {
         items: {
@@ -127,6 +147,12 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     for (let h = 0; h < 24; h++) {
       const label = `${h.toString().padStart(2, '0')}:00`;
       hourlySalesMap[label] = 0;
+    }
+
+    let parsedOffset = -420;
+    if (tzOffset !== undefined && tzOffset !== null && tzOffset !== '') {
+      const parsed = parseInt(String(tzOffset), 10);
+      if (!isNaN(parsed)) parsedOffset = parsed;
     }
 
     todayOrders.forEach(order => {
@@ -158,8 +184,9 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
         paymentMethods[pm] = (paymentMethods[pm] || 0) + order.total;
       }
 
-      // Hourly sales breakdown
-      const hour = new Date(order.createdAt).getHours();
+      // Hourly sales breakdown in local timezone
+      const orderLocalTime = new Date(order.createdAt.getTime() - (parsedOffset * 60 * 1000));
+      const hour = orderLocalTime.getUTCHours();
       const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
       hourlySalesMap[hourLabel] += order.total;
     });
@@ -262,14 +289,12 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 // GET Laporan Lengkap (Custom Date Range)
 router.get('/reports', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, tzOffset } = req.query;
     
-    const todayStr = new Date().toISOString().split('T')[0];
-    const start = new Date((startDate as string) || todayStr);
-    start.setHours(0, 0, 0, 0);
-    
-    const end = new Date((endDate as string) || todayStr);
-    end.setHours(23, 59, 59, 999);
+    const todayStr = getTodayDateStr(tzOffset as string || -420);
+    const sStr = (startDate as string) || todayStr;
+    const eStr = (endDate as string) || sStr;
+    const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
 
     // 1. Fetch Orders in range
     const orders = await prisma.order.findMany({
@@ -530,10 +555,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     });
 
     // 3. TODAY'S RECAP (Independent of filters)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const { startUtc: todayStart, endUtc: todayEnd } = getLocalDateRange(todayStr, tzOffset as string || -420);
 
     const todayOrders = await prisma.order.findMany({
       where: {
@@ -637,12 +659,17 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
 
     // 5. DAILY TIMELINE BREAKDOWN (For line charting and detailed table logs)
     const dailyTimeline: any[] = [];
-    let curr = new Date(start);
-    while (curr <= end) {
-      const dayStart = new Date(curr);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(curr);
-      dayEnd.setHours(23, 59, 59, 999);
+    const [sy, sm, sd] = sStr.split('-').map(Number);
+    const [ey, em, ed] = eStr.split('-').map(Number);
+    const iterDate = new Date(Date.UTC(sy, sm - 1, sd));
+    const endDateObj = new Date(Date.UTC(ey, em - 1, ed));
+
+    while (iterDate <= endDateObj) {
+      const iy = iterDate.getUTCFullYear();
+      const im = String(iterDate.getUTCMonth() + 1).padStart(2, '0');
+      const id = String(iterDate.getUTCDate()).padStart(2, '0');
+      const dayDateStr = `${iy}-${im}-${id}`;
+      const { startUtc: dayStart, endUtc: dayEnd } = getLocalDateRange(dayDateStr, tzOffset as string || -420);
 
       const dayOrders = orders.filter(o => o.createdAt >= dayStart && o.createdAt <= dayEnd);
       const dayExpenses = cashFlows.filter(cf => cf.type === 'Pengeluaran' && cf.date >= dayStart && cf.date <= dayEnd).reduce((sum, cf) => sum + cf.amount, 0);
@@ -678,8 +705,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       const dayNetMargin = dayTotal > 0 ? Math.round((dayNetProfit / dayTotal) * 100) : 0;
 
       dailyTimeline.push({
-        dateLabel: curr.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
-        dateRaw: curr.toISOString().split('T')[0],
+        dateLabel: iterDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', timeZone: 'UTC' }),
+        dateRaw: dayDateStr,
         makanan: dayMakanan,
         makananHpp: dayMakananHpp,
         minuman: dayMinuman,
@@ -694,7 +721,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
         count: dayOrders.length
       });
 
-      curr.setDate(curr.getDate() + 1);
+      iterDate.setUTCDate(iterDate.getUTCDate() + 1);
     }
 
     const grossMargin = totalRevenue > 0 ? Math.round((totalProfit / totalRevenue) * 100) : 0;
@@ -764,14 +791,12 @@ const getPettyCashAccount = (category: string, type: 'Pemasukan' | 'Pengeluaran'
 // GET Laporan Akuntansi General (Laba Rugi, Arus Kas, Jurnal Ledger)
 router.get('/accounting', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, tzOffset } = req.query;
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const start = new Date((startDate as string) || todayStr);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date((endDate as string) || todayStr);
-    end.setHours(23, 59, 59, 999);
+    const todayStr = getTodayDateStr(tzOffset as string || -420);
+    const sStr = (startDate as string) || todayStr;
+    const eStr = (endDate as string) || sStr;
+    const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
 
     // 1. Fetch Orders in range
     const orders = await prisma.order.findMany({
@@ -994,14 +1019,12 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
 // GET Laporan Mutasi & Valuasi Stok Bahan Baku
 router.get('/inventory', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, tzOffset } = req.query;
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const start = new Date((startDate as string) || todayStr);
-    start.setHours(0, 0, 0, 0);
-
-    const end = new Date((endDate as string) || todayStr);
-    end.setHours(23, 59, 59, 999);
+    const todayStr = getTodayDateStr(tzOffset as string || -420);
+    const sStr = (startDate as string) || todayStr;
+    const eStr = (endDate as string) || sStr;
+    const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
 
     // 1. Fetch all ingredients
     const ingredients = await prisma.ingredient.findMany({

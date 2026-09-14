@@ -1,23 +1,21 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
+import { getCustomDateRange } from '../utils/dateHelper';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { type, startDate, endDate } = req.query;
+    const { type, startDate, endDate, tzOffset } = req.query;
     
     const whereClause: any = {};
     if (type) whereClause.type = type;
     
     if (startDate && endDate) {
-      const start = new Date(startDate as string);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(endDate as string);
-      end.setHours(23, 59, 59, 999);
-      whereClause.date = { gte: start, lte: end };
+      const { startUtc, endUtc } = getCustomDateRange(startDate as string, endDate as string, tzOffset as string || -420);
+      whereClause.date = { gte: startUtc, lte: endUtc };
     }
 
     const cashflows = await prisma.cashFlow.findMany({

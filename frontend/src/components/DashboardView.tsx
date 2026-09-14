@@ -37,7 +37,8 @@ const DashboardView = () => {
   const fetchSalesChart = async (days: number) => {
     try {
       const headers = { Authorization: `Bearer ${posContext?.token}` };
-      const res = await fetch(`/api/analytics/sales-chart?days=${days}`, { headers });
+      const tzOffset = new Date().getTimezoneOffset();
+      const res = await fetch(`/api/analytics/sales-chart?days=${days}&tzOffset=${tzOffset}`, { headers });
       if (res.ok) setSalesChart(await res.json());
     } catch (e) {
       console.error('Failed to load sales chart', e);
@@ -48,9 +49,10 @@ const DashboardView = () => {
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${posContext?.token}` };
+      const tzOffset = new Date().getTimezoneOffset();
       
       const [summaryRes, bestSellersRes] = await Promise.all([
-        fetch('/api/analytics/summary', { headers }),
+        fetch(`/api/analytics/summary?tzOffset=${tzOffset}`, { headers }),
         fetch('/api/analytics/best-sellers', { headers })
       ]);
 

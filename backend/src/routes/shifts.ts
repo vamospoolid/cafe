@@ -232,8 +232,10 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
 
-    const expectedCash = activeShift.saldoAwal + cashSalesIncome - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut;
-    const expectedNonCash = nonCashSalesIncome - voidNonCashTotal + nonCashDebtIncome;
+    // Catatan: cashSalesIncome hanya menghitung pesanan berstatus 'Paid'.
+    // Pesanan 'Void' otomatis sudah tidak masuk ke cashSalesIncome, sehingga tidak dikurangkan ganda.
+    const expectedCash = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
+    const expectedNonCash = nonCashSalesIncome + nonCashDebtIncome;
 
     res.json({
       activeShift,
@@ -317,8 +319,9 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
 
-    const saldoSistem = activeShift.saldoAwal + cashSalesIncome - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut;
-    const saldoElektronik = nonCashSalesIncome - voidNonCashTotal + nonCashDebtIncome;
+    // Saldo sistem kas dihitung dari kas masuk bersih yang sah (Void otomatis sudah tidak masuk di cashSalesIncome)
+    const saldoSistem = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
+    const saldoElektronik = nonCashSalesIncome + nonCashDebtIncome;
     const fisikLaci = Number(saldoFisikLaci) || 0;
     const selisih = fisikLaci - saldoSistem;
 

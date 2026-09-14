@@ -83,11 +83,12 @@ export const ReportView: React.FC = () => {
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${token}` };
+      const tzOffset = new Date().getTimezoneOffset();
       const [resReports, resAccounting, resInventory, resTransactions] = await Promise.all([
-        fetch(`/api/analytics/reports?startDate=${startDate}&endDate=${endDate}`, { headers }),
-        fetch(`/api/analytics/accounting?startDate=${startDate}&endDate=${endDate}`, { headers }),
-        fetch(`/api/analytics/inventory?startDate=${startDate}&endDate=${endDate}`, { headers }),
-        fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}`, { headers })
+        fetch(`/api/analytics/reports?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
+        fetch(`/api/analytics/accounting?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
+        fetch(`/api/analytics/inventory?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
+        fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers })
       ]);
 
       if (resReports.ok) setReportData(await resReports.json());
