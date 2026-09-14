@@ -283,7 +283,7 @@ const CRMView = () => {
 
   return (
     <div 
-      className="p-3 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 relative"
+      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 relative"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       {/* Main CRM Workspace */}
@@ -582,7 +582,7 @@ const CRMView = () => {
           </div>
 
           {/* Drawer Content */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-32 sm:pb-6">
             {/* Stats Panel */}
             <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-blue-100/50 p-4 rounded-xl space-y-4 shadow-sm">
               <div className="flex justify-between items-start">

@@ -93,7 +93,7 @@ const ReservationView = () => {
 
   return (
     <div 
-      className="p-3.5 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
+      className="p-3.5 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
 

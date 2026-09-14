@@ -414,7 +414,7 @@ const TableView = () => {
 
   return (
     <div 
-      className="p-3 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto gap-4"
+      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto gap-4"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">

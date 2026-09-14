@@ -169,7 +169,7 @@ const ProductView = () => {
 
   return (
     <div 
-      className="p-3 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto"
+      className="p-3 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       
@@ -198,7 +198,7 @@ const ProductView = () => {
       </div>
 
       {/* SUMMARY STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 mb-6 shrink-0">
         <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
           <div>
             <div className="text-2xl font-bold text-slate-800">{products.length}</div>
@@ -251,7 +251,7 @@ const ProductView = () => {
       </div>
 
       {/* FILTER & DATA SECTION */}
-      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm bg-white rounded-2xl">
+      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm bg-white rounded-2xl shrink-0">
         
         {/* FILTER BAR */}
         <div className="p-4 border-b border-gray-200 bg-white flex flex-wrap gap-3 items-center justify-between">

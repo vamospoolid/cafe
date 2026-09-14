@@ -113,7 +113,7 @@ const DashboardView = () => {
 
   return (
     <div 
-      className="p-3.5 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6"
+      className="p-3.5 sm:p-6 pb-52 sm:pb-20 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       
@@ -410,7 +410,7 @@ const DashboardView = () => {
             <PieChartIcon size={18} className="text-amber-500" /> Menu Paling Laris
           </h3>
 
-          <div className="flex-1 flex flex-col gap-2.5 max-h-60 overflow-y-auto">
+          <div className="flex-1 flex flex-col gap-2.5 sm:max-h-60 max-h-none sm:overflow-y-auto">
             {bestSellers.map((item, index) => {
               const maxQty = bestSellers[0]?.qty || 1;
               const percent = (item.qty / maxQty) * 100;
@@ -457,7 +457,7 @@ const DashboardView = () => {
             <Activity size={18} className="text-primary" /> Transaksi Terbaru (POS)
           </h3>
           
-          <div className="flex-1 flex flex-col gap-2.5 max-h-72 overflow-y-auto">
+          <div className="flex-1 flex flex-col gap-2.5 sm:max-h-72 max-h-none sm:overflow-y-auto">
             {(summary.recentTransactions || []).length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6">
                 <span className="text-xs font-semibold">Belum ada transaksi</span>
@@ -496,7 +496,7 @@ const DashboardView = () => {
             <Layers size={18} className="text-primary" /> Aktivitas Mutasi Stok
           </h3>
           
-          <div className="flex-1 flex flex-col gap-2.5 max-h-72 overflow-y-auto">
+          <div className="flex-1 flex flex-col gap-2.5 sm:max-h-72 max-h-none sm:overflow-y-auto">
             {(summary.recentStockLogs || []).length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6">
                 <span className="text-xs font-semibold">Belum ada aktivitas stok</span>
