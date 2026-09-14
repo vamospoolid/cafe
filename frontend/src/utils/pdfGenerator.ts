@@ -1699,3 +1699,355 @@ export const exportStockOpnameVariancePDF = async (
   doc.save(`Berita_Acara_Stock_Opname_${new Date().toISOString().split('T')[0]}.pdf`);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. LAPORAN KONSUMSI & PEMAKAIAN BAHAN BAKU HARIAN (DAILY COGS REPORT)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportDailyMaterialConsumptionPDF = async (
+  settings: VenueSettings,
+  usageData: any,
+  userName?: string,
+  startDate?: string,
+  endDate?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+  const currentTitle = 'LAPORAN KONSUMSI & PEMAKAIAN BAHAN BAKU (DAILY COGS)';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(79, 70, 229); // indigo-600
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(9);
+    pdfDoc.setTextColor(79, 70, 229);
+    pdfDoc.text(currentTitle, pageWidth - margin, 17, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Periode: ${startDate ? formatDateID(startDate) : 'Hari Ini'} s/d ${endDate ? formatDateID(endDate) : 'Hari Ini'}`, pageWidth - margin, 21, { align: 'right' });
+    pdfDoc.text(`Dicetak Oleh: ${userName || 'Head Chef / Finance'}`, pageWidth - margin, 25, { align: 'right' });
+    pdfDoc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 29, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 33, pageWidth - margin, 33);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text(
+      `Laporan Analisis Konsumsi Bahan Baku ${settings?.storeName || 'SOL CAFE'} — Dokumen Pengawasan HPP & Bahan Baku.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  };
+
+  const addThreeSignatureBlock = (pdfDoc: jsPDF, startY: number) => {
+    let signatureY = startY + 14;
+    if (signatureY + 32 > pageHeight - 15) {
+      pdfDoc.addPage();
+      signatureY = 40;
+    }
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(71, 85, 105);
+
+    pdfDoc.text('Dibuat Oleh (PIC Dapur/Bar),', margin + 6, signatureY);
+    pdfDoc.setDrawColor(203, 213, 225);
+    pdfDoc.line(margin + 6, signatureY + 18, margin + 50, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text(userName || 'Head Chef / Barista', margin + 6, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Diperiksa Oleh (Cost Control),', (pageWidth / 2) - 22, signatureY);
+    pdfDoc.line((pageWidth / 2) - 22, signatureY + 18, (pageWidth / 2) + 22, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Finance / Accounting', (pageWidth / 2) - 22, signatureY + 22);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.text('Disetujui Oleh (Owner/GM),', pageWidth - margin - 50, signatureY);
+    pdfDoc.line(pageWidth - margin - 50, signatureY + 18, pageWidth - margin - 6, signatureY + 18);
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.text('Owner / General Manager', pageWidth - margin - 50, signatureY + 22);
+  };
+
+  const summary = usageData?.summary || {};
+  const items = usageData?.items || [];
+
+  // Summary Metrics Table
+  autoTable(doc, {
+    head: [['RINGKASAN KONSUMSI & BIAYA POKOK PENJUALAN (HPP/COGS)', 'NILAI']],
+    body: [
+      ['TOTAL ESTIMASI HPP BAHAN TERPAKAI (COGS)', formatCurrency(summary.totalCostUsage)],
+      ['Omzet Penjualan POS Pada Periode Ini', formatCurrency(summary.totalRevenue)],
+      ['Food & Beverage Cost Ratio (%)', `${summary.foodCostRatio || 0}% ${summary.foodCostRatio > 35 ? '(Tinggi / Waspada)' : '(Sehat)'}`],
+      ['Total Biaya Pemakaian Dapur (Food)', formatCurrency(summary.foodCost)],
+      ['Total Biaya Pemakaian Bar (Drink)', formatCurrency(summary.drinkCost)],
+      ['Total Biaya Kemasan (Packaging)', formatCurrency(summary.packagingCost)],
+      ['Total Kerugian Bahan Basi/Rusak (Loss)', formatCurrency(summary.totalLossCost)]
+    ],
+    startY: 38,
+    margin: { top: 38, bottom: 20 },
+    theme: 'grid',
+    styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } }
+  });
+
+  const nextY = (doc as any).lastAutoTable?.finalY || 85;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text('RINCIAN PEMAKAIAN PER-ITEM BAHAN BAKU', margin, nextY + 8);
+
+  const tableColumns = ['NO', 'NAMA BAHAN BAKU', 'KAT', 'TOTAL PAKAI', 'PRODUKSI POS', 'WASTE', 'HARGA SATUAN', 'TOTAL HPP (RP)', 'SISA STOK'];
+  const tableRows = items.map((item: any, idx: number) => {
+    return [
+      idx + 1,
+      item.name,
+      item.category || 'FOOD',
+      `${(item.totalQtyUsed || 0).toLocaleString('id-ID')} ${item.unit}`,
+      `${(item.productionQty || 0).toLocaleString('id-ID')} ${item.unit}`,
+      item.lossQty > 0 ? `${item.lossQty.toLocaleString('id-ID')} ${item.unit}` : '-',
+      formatCurrency(item.buyPrice),
+      formatCurrency(item.totalCost),
+      `${(item.currentStock || 0).toLocaleString('id-ID')} ${item.unit}`
+    ];
+  });
+
+  autoTable(doc, {
+    head: [tableColumns],
+    body: tableRows,
+    startY: nextY + 11,
+    margin: { top: 38, bottom: 20 },
+    theme: 'striped',
+    styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'center' },
+      3: { halign: 'right', fontStyle: 'bold' },
+      4: { halign: 'right' },
+      5: { halign: 'right', textColor: [225, 29, 72] },
+      6: { halign: 'right' },
+      7: { halign: 'right', fontStyle: 'bold' },
+      8: { halign: 'right' }
+    }
+  });
+
+  addThreeSignatureBlock(doc, (doc as any).lastAutoTable?.finalY || 180);
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Konsumsi_Bahan_Baku_${startDate || new Date().toISOString().split('T')[0]}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. SURAT PESANAN PEMBELIAN RESMI RINGKAS (SIMPLE PURCHASE ORDER PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportSimplePurchaseOrderPDF = async (
+  settings: VenueSettings,
+  poData: {
+    poNumber?: string;
+    supplierName: string;
+    supplierPhone?: string;
+    deliveryDate?: string;
+    items: Array<{ name: string; qty: number; unit: string; estimatedPrice?: number; notes?: string }>;
+    notes?: string;
+  },
+  userName?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+
+  const poNumber = poData.poNumber || `PO-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
+
+  // Header
+  let textXOffset = margin;
+  if (logoBase64) {
+    doc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+    textXOffset = margin + 18;
+  } else {
+    doc.setFillColor(16, 185, 129); // emerald-600
+    doc.rect(margin, 12, 4, 18, 'F');
+    textXOffset = margin + 7;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(30, 41, 59);
+  doc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+  doc.text(`Kontak Toko: ${settings?.phone || '-'}`, textXOffset, 25);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(16, 185, 129);
+  doc.text('SURAT PESANAN PEMBELIAN (PURCHASE ORDER)', pageWidth - margin, 17, { align: 'right' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`NO: ${poNumber}`, pageWidth - margin, 22, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Tanggal Order: ${formatDateID(new Date().toISOString())}`, pageWidth - margin, 26, { align: 'right' });
+  if (poData.deliveryDate) {
+    doc.text(`Target Kirim: ${formatDateID(poData.deliveryDate)}`, pageWidth - margin, 30, { align: 'right' });
+  }
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.4);
+  doc.line(margin, 34, pageWidth - margin, 34);
+
+  // Vendor & Delivery Box
+  autoTable(doc, {
+    head: [['KEPADA SUPPLIER / VENDOR', 'ALAMAT PENGIRIMAN & PENERIMA']],
+    body: [
+      [
+        `Nama Vendor: ${poData.supplierName}\nKontak / WA: ${poData.supplierPhone || '-'}\nStatus: Vendor Resmi Terdaftar`,
+        `Toko: ${settings?.storeName || 'SOL CAFE'}\nAlamat: ${settings?.address || 'Alamat Toko'}\nPIC Pemesan: ${userName || 'Bagian Purchasing'}`
+      ]
+    ],
+    startY: 38,
+    margin: { top: 38, bottom: 20 },
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 2.5, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 }
+  });
+
+  const nextY = (doc as any).lastAutoTable?.finalY || 65;
+
+  // Items Table
+  let totalEstimatedCost = 0;
+  const tableColumns = ['NO', 'NAMA BAHAN BAKU', 'JUMLAH (QTY)', 'SATUAN', 'EST. HARGA SATUAN', 'SUBTOTAL (RP)'];
+  const tableRows = poData.items.map((item, idx) => {
+    const subtotal = (item.qty || 0) * (item.estimatedPrice || 0);
+    totalEstimatedCost += subtotal;
+    return [
+      idx + 1,
+      item.name,
+      item.qty.toLocaleString('id-ID'),
+      item.unit,
+      item.estimatedPrice ? formatCurrency(item.estimatedPrice) : '-',
+      subtotal > 0 ? formatCurrency(subtotal) : '-'
+    ];
+  });
+
+  autoTable(doc, {
+    head: [tableColumns],
+    body: tableRows,
+    foot: [
+      ['', 'TOTAL ESTIMASI ANGGARAN PO', '', '', '', formatCurrency(totalEstimatedCost)]
+    ],
+    startY: nextY + 6,
+    margin: { top: 38, bottom: 20 },
+    theme: 'striped',
+    styles: { fontSize: 8, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    footStyles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 8.5 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 10 },
+      1: { fontStyle: 'bold' },
+      2: { halign: 'right', fontStyle: 'bold' },
+      3: { halign: 'center' },
+      4: { halign: 'right' },
+      5: { halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  const finalY = (doc as any).lastAutoTable?.finalY || 140;
+
+  // Notes & Signatures
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+  doc.text('CATATAN & KETENTUAN PENGIRIMAN:', margin, finalY + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(poData.notes || 'Mohon sertakan nota / surat jalan resmi saat pengiriman barang. Pastikan tanggal kadaluarsa bahan masih panjang.', margin, finalY + 12);
+
+  const sigY = finalY + 22;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+
+  // Left - Purchasing
+  doc.text('Dipesan Oleh (Purchasing/Outlet),', margin + 10, sigY);
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin + 10, sigY + 18, margin + 65, sigY + 18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(userName || 'Petugas Purchasing', margin + 10, sigY + 22);
+
+  // Right - Vendor Confirmed
+  doc.setFont('helvetica', 'normal');
+  doc.text('Diterima & Dikonfirmasi (Supplier),', pageWidth - margin - 65, sigY);
+  doc.line(pageWidth - margin - 65, sigY + 18, pageWidth - margin - 10, sigY + 18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(poData.supplierName, pageWidth - margin - 65, sigY + 22);
+
+  // Footer
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+  doc.text(`Dokumen resmi pesanan pembelian ${settings?.storeName || 'SOL CAFE'}. Dicetak otomatis oleh sistem.`, margin, pageHeight - 8);
+
+  doc.save(`Purchase_Order_${poNumber}_${poData.supplierName.replace(/\s+/g, '_')}.pdf`);
+};
+

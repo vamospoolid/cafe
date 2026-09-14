@@ -13,7 +13,9 @@ import {
   exportIngredientValuationPDF, 
   exportStockLossAuditPDF, 
   exportProcurementForecastPDF, 
-  exportStockOpnameVariancePDF 
+  exportStockOpnameVariancePDF,
+  exportDailyMaterialConsumptionPDF,
+  exportSimplePurchaseOrderPDF
 } from '../utils/pdfGenerator';
 
 const INGREDIENT_SUB_CATEGORIES: Record<string, string[]> = {
@@ -100,8 +102,8 @@ export const IngredientView: React.FC = () => {
   const token = posContext?.token;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
-  // Tab State: 'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname'
-  const [activeTab, setActiveTab] = useState<'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname'>('master');
+  // Tab State: 'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage'
+  const [activeTab, setActiveTab] = useState<'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage'>('master');
 
   // Master Ingredients Data
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -111,6 +113,15 @@ export const IngredientView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'all' | 'low' | 'out' | 'safe'>('all');
+
+  // Daily Usage & COGS Analytics State
+  const [usageData, setUsageData] = useState<any>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usagePreset, setUsagePreset] = useState<'today' | 'yesterday' | 'last7' | 'this_month' | 'custom'>('today');
+  const [usageStartDate, setUsageStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [usageEndDate, setUsageEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [usageCategoryFilter, setUsageCategoryFilter] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
+  const [usageTypeFilter, setUsageTypeFilter] = useState<string>('ALL');
 
   // Stock Loss Data & Analytics
   const [lossData, setLossData] = useState<any>(null);
@@ -221,6 +232,108 @@ export const IngredientView: React.FC = () => {
     } finally {
       setGeneratingPdf(false);
     }
+  };
+
+  const handleExportDailyUsagePDF = async () => {
+    try {
+      setGeneratingPdf(true);
+      let data = usageData;
+      if (!data) {
+        const s = usageStartDate;
+        const e = usageEndDate;
+        const c = usageCategoryFilter;
+        const t = usageTypeFilter;
+        const url = `${API}/ingredients/analytics/daily-usage?startDate=${s}T00:00:00.000Z&endDate=${e}T23:59:59.999Z&category=${c}&type=${t}`;
+        const res = await fetch(url, { headers });
+        if (res.ok) data = await res.json();
+      }
+      await exportDailyMaterialConsumptionPDF(
+        posContext?.settings || {},
+        data,
+        posContext?.user?.username || 'Head Chef / Finance',
+        usageStartDate,
+        usageEndDate
+      );
+      toast('Laporan Konsumsi Bahan Baku Harian berhasil diunduh!', 'success');
+      setPdfDropdownOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengunduh Laporan Konsumsi Harian', 'error');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleGenerateSupplierPO = async (sup: any) => {
+    try {
+      setGeneratingPdf(true);
+      await exportSimplePurchaseOrderPDF(
+        posContext?.settings || {},
+        {
+          supplierName: sup.supplierName,
+          supplierPhone: sup.phone,
+          items: sup.items.map((i: any) => ({
+            name: i.name,
+            qty: i.suggestedQty,
+            unit: i.unit,
+            estimatedPrice: i.buyPrice
+          })),
+          notes: 'Mohon barang dikirim dalam kondisi segar & segel utuh. Sertakan surat jalan resmi.'
+        },
+        posContext?.user?.username || 'Bagian Purchasing'
+      );
+      toast(`Surat PO untuk ${sup.supplierName} berhasil diunduh!`, 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal membuat Surat PO', 'error');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const fetchDailyUsage = async (start?: string, end?: string, cat?: string, type?: string) => {
+    setUsageLoading(true);
+    try {
+      const s = start || usageStartDate;
+      const e = end || usageEndDate;
+      const c = cat || usageCategoryFilter;
+      const t = type || usageTypeFilter;
+      const url = `${API}/ingredients/analytics/daily-usage?startDate=${s}T00:00:00.000Z&endDate=${e}T23:59:59.999Z&category=${c}&type=${t}`;
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setUsageData(data);
+      }
+    } catch (err) {
+      console.error('Error daily usage:', err);
+      toast('Gagal memuat data konsumsi harian', 'error');
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  const setPresetDate = (preset: 'today' | 'yesterday' | 'last7' | 'this_month') => {
+    setUsagePreset(preset);
+    const now = new Date();
+    let s = new Date();
+    let e = new Date();
+
+    if (preset === 'today') {
+      // today
+    } else if (preset === 'yesterday') {
+      s.setDate(now.getDate() - 1);
+      e.setDate(now.getDate() - 1);
+    } else if (preset === 'last7') {
+      s.setDate(now.getDate() - 6);
+    } else if (preset === 'this_month') {
+      s = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const startStr = s.toISOString().split('T')[0];
+    const endStr = e.toISOString().split('T')[0];
+    setUsageStartDate(startStr);
+    setUsageEndDate(endStr);
+    fetchDailyUsage(startStr, endStr, usageCategoryFilter, usageTypeFilter);
   };
 
   const copySupplierOrderToWA = (sup: any) => {
@@ -411,7 +524,8 @@ export const IngredientView: React.FC = () => {
     else if (activeTab === 'movements') fetchMovements();
     else if (activeTab === 'forecast') fetchForecast();
     else if (activeTab === 'opname') fetchOpnameHistory();
-  }, [activeTab, movementTypeFilter, movementIngredientFilter, token]);
+    else if (activeTab === 'daily_usage') fetchDailyUsage();
+  }, [activeTab, movementTypeFilter, movementIngredientFilter, usageCategoryFilter, usageTypeFilter, token]);
 
   const initOpnameItems = (ings: Ingredient[]) => {
     setOpnameItems(
@@ -769,6 +883,19 @@ export const IngredientView: React.FC = () => {
                     </button>
 
                     <button
+                      onClick={handleExportDailyUsagePDF}
+                      className="w-full px-4 py-2.5 hover:bg-emerald-50 text-left flex items-start gap-3 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <BarChart3 size={16} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800 group-hover:text-emerald-900">Laporan Konsumsi Harian (Daily COGS)</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Rekapitulasi HPP bahan keluar & rasio food cost</p>
+                      </div>
+                    </button>
+
+                    <button
                       onClick={handleExportOpnamePDF}
                       className="w-full px-4 py-2.5 hover:bg-sky-50 text-left flex items-start gap-3 transition-colors group"
                     >
@@ -804,6 +931,8 @@ export const IngredientView: React.FC = () => {
                 if (activeTab === 'shopping') fetchShoppingAnalytics();
                 if (activeTab === 'movements') fetchMovements();
                 if (activeTab === 'forecast') fetchForecast();
+                if (activeTab === 'opname') fetchOpnameHistory();
+                if (activeTab === 'daily_usage') fetchDailyUsage();
               }}
               title="Perbarui Data"
               style={{
@@ -819,7 +948,7 @@ export const IngredientView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 6 TAB UTAMA BAHAN BAKU
+          2. NAVIGASI 7 TAB UTAMA BAHAN BAKU
       ────────────────────────────────────────────────────────────── */}
       <div 
         style={{ 
@@ -829,7 +958,7 @@ export const IngredientView: React.FC = () => {
           border: '1px solid #e2e8f0', 
           boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
           gap: '.5rem', 
           flexShrink: 0
         }}
@@ -841,6 +970,13 @@ export const IngredientView: React.FC = () => {
             subtitle: 'Katalog & Stok Fisik', 
             icon: Package,
             badge: ingredients.length > 0 ? `${ingredients.length} Bahan` : null
+          },
+          { 
+            id: 'daily_usage', 
+            title: 'Konsumsi Harian', 
+            subtitle: 'Daily Usage & COGS', 
+            icon: BarChart3,
+            badge: (usageData?.items?.length || 0) > 0 ? `${usageData?.items?.length} Dipakai` : null
           },
           { 
             id: 'loss', 
@@ -1270,6 +1406,328 @@ export const IngredientView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
+          TAB: KONSUMSI BAHAN BAKU HARIAN & COGS ANALYTICS
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'daily_usage' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* FILTER & CONTROL TOOLBAR */}
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <BarChart3 size={20} className="text-indigo-600" />
+                  Analisis Konsumsi Bahan Baku & Beban Pokok Penjualan (HPP)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Pantau total pemakaian bahan riil harian dari pesanan POS, evaluasi biaya HPP, dan rasio food cost.
+                </p>
+              </div>
+
+              {/* ACTION BUTTONS */}
+              <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
+                <button
+                  onClick={handleExportDailyUsagePDF}
+                  disabled={generatingPdf}
+                  className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95"
+                  title="Cetak Laporan PDF Konsumsi Bahan Baku & COGS"
+                >
+                  <Printer size={15} />
+                  <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak Laporan PDF'}</span>
+                </button>
+
+                <button
+                  onClick={() => fetchDailyUsage()}
+                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
+                  title="Perbarui Data"
+                >
+                  <RefreshCw size={15} className={usageLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+
+            {/* PRESETS & FILTERS ROW */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              {/* Quick Date Presets */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400 mr-1">Periode:</span>
+                {[
+                  { id: 'today', label: 'Hari Ini' },
+                  { id: 'yesterday', label: 'Kemarin' },
+                  { id: 'last7', label: '7 Hari Terakhir' },
+                  { id: 'this_month', label: 'Bulan Ini' },
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setPresetDate(p.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      usagePreset === p.id
+                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Date Inputs & Category Filter */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
+                  <span className="text-[10px] font-bold text-slate-400">Dari:</span>
+                  <input
+                    type="date"
+                    value={usageStartDate}
+                    onChange={e => {
+                      setUsagePreset('custom' as any);
+                      setUsageStartDate(e.target.value);
+                      fetchDailyUsage(e.target.value, usageEndDate, usageCategoryFilter, usageTypeFilter);
+                    }}
+                    className="bg-transparent border-none outline-none text-xs font-bold text-slate-800"
+                  />
+                  <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
+                  <input
+                    type="date"
+                    value={usageEndDate}
+                    onChange={e => {
+                      setUsagePreset('custom' as any);
+                      setUsageEndDate(e.target.value);
+                      fetchDailyUsage(usageStartDate, e.target.value, usageCategoryFilter, usageTypeFilter);
+                    }}
+                    className="bg-transparent border-none outline-none text-xs font-bold text-slate-800"
+                  />
+                </div>
+
+                <select
+                  value={usageCategoryFilter}
+                  onChange={e => {
+                    setUsageCategoryFilter(e.target.value as any);
+                    fetchDailyUsage(usageStartDate, usageEndDate, e.target.value, usageTypeFilter);
+                  }}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                >
+                  <option value="ALL">Semua Kategori</option>
+                  <option value="FOOD">🍲 Dapur (Food)</option>
+                  <option value="DRINK">☕ Bar (Drink)</option>
+                  <option value="PACKAGING">📦 Kemasan (Packaging)</option>
+                </select>
+
+                <select
+                  value={usageTypeFilter}
+                  onChange={e => {
+                    setUsageTypeFilter(e.target.value);
+                    fetchDailyUsage(usageStartDate, usageEndDate, usageCategoryFilter, e.target.value);
+                  }}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                >
+                  <option value="ALL">Semua Pengurangan</option>
+                  <option value="Produksi">🍳 Produksi POS Saja</option>
+                  <option value="Rusak">🗑️ Waste / Kerusakan Saja</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* KPI METRIC CARDS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-3xl text-white shadow-lg shadow-indigo-600/20">
+              <div className="flex justify-between items-start">
+                <p className="text-xs font-bold text-indigo-100 uppercase tracking-wider">Total Estimasi HPP Terpakai</p>
+                <span className="px-2 py-0.5 bg-white/20 text-white rounded-md text-[10px] font-black">
+                  COGS
+                </span>
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-black mt-1">
+                Rp {(usageData?.summary?.totalCostUsage || 0).toLocaleString('id-ID')}
+              </h3>
+              <p className="text-xs text-indigo-100/90 mt-1 flex items-center gap-1.5">
+                <span>Rasio Food Cost:</span>
+                <span className="font-black px-1.5 py-0.2 bg-white text-indigo-900 rounded-md text-[11px]">
+                  {usageData?.summary?.foodCostRatio || 0}%
+                </span>
+              </p>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Omzet Penjualan POS</p>
+                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
+                  Rp {(usageData?.summary?.totalRevenue || 0).toLocaleString('id-ID')}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Penjualan lunas periode ini</p>
+              </div>
+              <div className="w-13 h-13 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <DollarSign size={24} />
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-rose-600 uppercase tracking-wider">Biaya Kerugian (Loss/Waste)</p>
+                <h3 className="text-2xl sm:text-3xl font-black text-rose-600 mt-1">
+                  Rp {(usageData?.summary?.totalLossCost || 0).toLocaleString('id-ID')}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Bahan basi / tumpah / rusak</p>
+              </div>
+              <div className="w-13 h-13 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <TrendingDown size={24} />
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Bahan Aktif Terpakai</p>
+                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
+                  {usageData?.summary?.totalActiveIngredientsUsed || 0}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Macam bahan baku yang keluar</p>
+              </div>
+              <div className="w-13 h-13 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <Package size={24} />
+              </div>
+            </div>
+          </div>
+
+          {/* BREAKDOWN PER STASIUN (FOOD vs DRINK vs PACKAGING) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 bg-amber-50/60 border border-amber-200/70 rounded-2xl flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-bold text-amber-700 uppercase">🍲 Biaya Dapur (Food)</div>
+                <div className="text-lg font-black text-amber-900 mt-0.5">
+                  Rp {(usageData?.summary?.foodCost || 0).toLocaleString('id-ID')}
+                </div>
+              </div>
+              <span className="text-2xl">🍜</span>
+            </div>
+
+            <div className="p-4 bg-sky-50/60 border border-sky-200/70 rounded-2xl flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-bold text-sky-700 uppercase">☕ Biaya Bar (Drink)</div>
+                <div className="text-lg font-black text-sky-900 mt-0.5">
+                  Rp {(usageData?.summary?.drinkCost || 0).toLocaleString('id-ID')}
+                </div>
+              </div>
+              <span className="text-2xl">🥤</span>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-bold text-slate-600 uppercase">📦 Biaya Kemasan (Packaging)</div>
+                <div className="text-lg font-black text-slate-900 mt-0.5">
+                  Rp {(usageData?.summary?.packagingCost || 0).toLocaleString('id-ID')}
+                </div>
+              </div>
+              <span className="text-2xl">🛍️</span>
+            </div>
+          </div>
+
+          {/* TABEL RINCIAN KONSUMSI BAHAN BAKU */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Layers size={18} className="text-indigo-600" />
+                  Rincian Pemakaian Riil per-Item Bahan Baku
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Total kuantitas gram/ml/pcs bahan yang terpakai beserta nilai rupiah HPP-nya.
+                </p>
+              </div>
+              <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                Total {usageData?.items?.length || 0} Bahan Terkonsumsi
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase">
+                  <tr>
+                    <th className="py-3.5 px-4">Nama Bahan Baku</th>
+                    <th className="py-3.5 px-3">Kategori</th>
+                    <th className="py-3.5 px-4 text-right">Total Pakai</th>
+                    <th className="py-3.5 px-3 text-right">Produksi POS</th>
+                    <th className="py-3.5 px-3 text-right">Waste / Loss</th>
+                    <th className="py-3.5 px-4 text-right">Harga Beli</th>
+                    <th className="py-3.5 px-4 text-right">Total Biaya (HPP)</th>
+                    <th className="py-3.5 px-4 text-right">Sisa Stok Fisik</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {usageLoading ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                        <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={24} />
+                        <p>Menghitung analisis konsumsi bahan baku...</p>
+                      </td>
+                    </tr>
+                  ) : usageData?.items?.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                        <Package className="inline-block mb-2 opacity-40 text-slate-400" size={32} />
+                        <p className="font-semibold text-slate-600">Tidak ada data pemakaian bahan baku pada periode ini.</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Pastikan sudah ada transaksi POS atau pencatatan stock loss di rentang tanggal yang dipilih.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    usageData?.items?.map((item: any, idx: number) => {
+                      const cat = item.category || 'FOOD';
+                      return (
+                        <tr key={item.ingredientId || idx} className="hover:bg-indigo-50/20 transition-colors">
+                          <td className="py-3.5 px-4 font-black text-slate-900">
+                            <div>{item.name}</div>
+                            {item.subCategory && (
+                              <span className="text-[10px] text-indigo-600 font-semibold">
+                                {item.subCategory}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-3">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                              {cat === 'FOOD' ? '🍲 Dapur' : (cat === 'DRINK' ? '☕ Bar' : '📦 Kemasan')}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right font-black text-indigo-700 text-sm">
+                            {(item.totalQtyUsed || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400 font-normal">{item.unit}</span>
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right font-semibold text-slate-700">
+                            {(item.productionQty || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{item.unit}</span>
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right">
+                            {item.lossQty > 0 ? (
+                              <span className="font-bold text-rose-600">
+                                {item.lossQty.toLocaleString('id-ID')} <span className="text-[10px] text-rose-400">{item.unit}</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right text-slate-600">
+                            Rp {(item.buyPrice || 0).toLocaleString('id-ID')}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right font-black text-slate-900 text-sm">
+                            Rp {(item.totalCost || 0).toLocaleString('id-ID')}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right font-bold text-slate-800">
+                            {(item.currentStock || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{item.unit}</span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
           TAB 2: STOCK LOSS & ANALISIS KERUSAKAN
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'loss' && (
@@ -1673,6 +2131,15 @@ export const IngredientView: React.FC = () => {
                           Rp {sup.totalCost.toLocaleString('id-ID')}
                         </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateSupplierPO(sup)}
+                        className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0"
+                        title={`Unduh Surat Purchase Order (PO) Resmi ${sup.supplierName}`}
+                      >
+                        <FileText size={15} />
+                        <span className="hidden sm:inline">Surat PO (PDF)</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => copySupplierOrderToWA(sup)}

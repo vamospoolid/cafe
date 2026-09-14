@@ -1,9 +1,9 @@
 {
-  "appId": "id.codenusa.cafestaff",
-  "appName": "SOL Staff Portal",
+  "appId": "id.codenusa.poscafe",
+  "appName": "SOL POS Kasir",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://cafe.codenusa.id/staff",
+    "url": "https://cafe.codenusa.id/pos",
     "cleartext": true
   }
 }

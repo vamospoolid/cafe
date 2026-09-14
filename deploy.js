@@ -84,6 +84,7 @@ if (target === 'backend') {
     
     echo "=== SETTING UP BACKEND ==="
     cd backend
+    npm install
     npx prisma db push --accept-data-loss
     npx tsc
     pm2 restart poscafe-backend

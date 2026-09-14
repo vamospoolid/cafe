@@ -6,12 +6,34 @@ import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
 import authRoutes from './routes/auth';
 
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Cyber Security: Hide server identity & apply HTTP protection headers
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  contentSecurityPolicy: false
+}));
+app.disable('x-powered-by');
 
 app.use(cors());
 app.use(express.json());
 import fs from 'fs';
+
+// Rate Limiter: Anti-Brute Force on Auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 menit
+  max: 30, // Maksimal 30 request per IP per 15 menit
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Terlalu banyak percobaan login / PIN dari IP ini. Akses dibatasi sementara 15 menit demi keamanan sistem.' }
+});
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/switch-pin', authLimiter);
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {

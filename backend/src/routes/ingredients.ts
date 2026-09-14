@@ -631,6 +631,163 @@ router.get('/stock-movements', authenticateToken, async (req: Request, res: Resp
   }
 });
 
+// GET /api/ingredients/analytics/daily-usage
+router.get('/analytics/daily-usage', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, category, type } = req.query;
+
+    let dateFilter: any = {};
+    if (startDate && endDate) {
+      const s = new Date(startDate as string);
+      const e = new Date(endDate as string);
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+        dateFilter = {
+          gte: s,
+          lte: e
+        };
+      }
+    } else {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      dateFilter = {
+        gte: startOfDay,
+        lte: endOfDay
+      };
+    }
+
+    let typeWhere: any = { in: ['Produksi', 'Rusak', 'Penyesuaian'] };
+    if (type && type !== 'ALL') {
+      typeWhere = type as string;
+    }
+
+    const logs = await prisma.ingredientLog.findMany({
+      where: {
+        createdAt: dateFilter,
+        type: typeWhere,
+        change: { lt: 0 }
+      },
+      include: {
+        ingredient: {
+          include: { supplier: true }
+        },
+        user: {
+          select: { id: true, name: true, role: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const orders = await prisma.order.findMany({
+      where: {
+        createdAt: dateFilter,
+        isPaid: true
+      },
+      select: { total: true }
+    });
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+
+    const usageMap: Record<number, {
+      ingredientId: number;
+      name: string;
+      category: string;
+      subCategory: string | null;
+      unit: string;
+      buyPrice: number;
+      currentStock: number;
+      minStock: number;
+      supplierName: string;
+      totalQtyUsed: number;
+      productionQty: number;
+      lossQty: number;
+      adjustmentQty: number;
+      totalCost: number;
+      lossCost: number;
+      eventCount: number;
+    }> = {};
+
+    logs.forEach(log => {
+      const ing = log.ingredient;
+      if (!ing) return;
+
+      const ingCategory = (ing as any).category || 'FOOD';
+      if (category && category !== 'ALL' && ingCategory !== category) {
+        return;
+      }
+
+      const qty = Math.abs(log.change);
+      const cost = qty * (ing.buyPrice || 0);
+
+      if (!usageMap[ing.id]) {
+        usageMap[ing.id] = {
+          ingredientId: ing.id,
+          name: ing.name,
+          category: ingCategory,
+          subCategory: (ing as any).subCategory || null,
+          unit: ing.unit,
+          buyPrice: ing.buyPrice,
+          currentStock: ing.stock,
+          minStock: ing.minStock,
+          supplierName: ing.supplier?.name || 'Tanpa Supplier',
+          totalQtyUsed: 0,
+          productionQty: 0,
+          lossQty: 0,
+          adjustmentQty: 0,
+          totalCost: 0,
+          lossCost: 0,
+          eventCount: 0
+        };
+      }
+
+      usageMap[ing.id].totalQtyUsed += qty;
+      usageMap[ing.id].totalCost += cost;
+      usageMap[ing.id].eventCount += 1;
+
+      if (log.type === 'Produksi') {
+        usageMap[ing.id].productionQty += qty;
+      } else if (log.type === 'Rusak') {
+        usageMap[ing.id].lossQty += qty;
+        usageMap[ing.id].lossCost += cost;
+      } else {
+        usageMap[ing.id].adjustmentQty += qty;
+      }
+    });
+
+    const items = Object.values(usageMap).sort((a, b) => b.totalCost - a.totalCost);
+
+    const totalCostUsage = items.reduce((sum, item) => sum + item.totalCost, 0);
+    const totalLossCost = items.reduce((sum, item) => sum + item.lossCost, 0);
+    const totalProductionCost = totalCostUsage - totalLossCost;
+    const foodCostRatio = totalRevenue > 0 ? Math.round((totalCostUsage / totalRevenue) * 1000) / 10 : 0;
+
+    const foodCost = items.filter(i => i.category === 'FOOD').reduce((sum, i) => sum + i.totalCost, 0);
+    const drinkCost = items.filter(i => i.category === 'DRINK').reduce((sum, i) => sum + i.totalCost, 0);
+    const packagingCost = items.filter(i => i.category === 'PACKAGING').reduce((sum, i) => sum + i.totalCost, 0);
+
+    const summary = {
+      totalCostUsage,
+      totalProductionCost,
+      totalLossCost,
+      totalRevenue,
+      foodCostRatio,
+      totalActiveIngredientsUsed: items.length,
+      foodCost,
+      drinkCost,
+      packagingCost,
+      topIngredients: items.slice(0, 5)
+    };
+
+    res.json({
+      summary,
+      items,
+      logs: logs.slice(0, 100)
+    });
+  } catch (error) {
+    console.error('Error fetching daily usage analytics:', error);
+    res.status(500).json({ error: 'Gagal mengambil analisis penggunaan bahan baku harian' });
+  }
+});
+
 // DELETE ingredient (hanya jika tidak ada resep aktif)
 router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
