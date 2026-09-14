@@ -23,7 +23,14 @@ import {
   RefreshCw,
   Package,
   Layers,
-  Sparkles
+  Sparkles,
+  ArrowLeft,
+  Save,
+  Trash2,
+  Building2,
+  Store,
+  Info,
+  Check
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -885,195 +892,411 @@ export default function WarehouseView() {
         </div>
       )}
 
-      {/* ─── MODAL: BELANJA MASUK GUDANG ─────────────────────────────────── */}
+      {/* ─── FULL PAGE: BELANJA MASUK GUDANG (INBOUND) ───────────────────── */}
       {showInboundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-100 p-5 sm:p-6 flex flex-col max-h-[90vh] overflow-hidden">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                <Truck className="text-indigo-600" size={20} /> Belanja Barang Masuk Gudang (Modal Owner)
-              </h3>
-              <button onClick={() => setShowInboundModal(false)} className="icon-btn hover:bg-slate-100">
-                <X size={18} />
+        <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col h-screen w-screen overflow-hidden animate-fade-in">
+          {/* Top Sticky Navbar */}
+          <header className="bg-white border-b border-slate-200 px-4 sm:px-8 py-3.5 flex items-center justify-between shrink-0 shadow-xs">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+              <button
+                type="button"
+                onClick={() => setShowInboundModal(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                <ArrowLeft size={16} />
+                <span className="hidden sm:inline">Kembali ke Gudang</span>
               </button>
+              <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2 truncate">
+                  <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-700">
+                    <Truck size={18} />
+                  </span>
+                  <span>Form Belanja Barang Masuk Gudang</span>
+                </h1>
+                <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
+                  Pencatatan pasokan partai besar / grosir ke Central Warehouse (Bahan Baku)
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={submitInbound} className="flex-1 overflow-y-auto pt-3 flex flex-col gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Supplier</label>
-                  <select
-                    className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 rounded-xl border border-slate-200 outline-none"
-                    value={inboundForm.supplierId}
-                    onChange={e => setInboundForm({ ...inboundForm, supplierId: e.target.value })}
-                  >
-                    <option value="">-- Pilih Supplier Terdaftar / Bebas --</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-black bg-emerald-50 text-emerald-800 border-emerald-200">
+                <span>Sumber:</span>
+                <span>{inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Dana Pribadi Owner' : 'Kas Operasional Muki'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInboundModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold text-xs transition-colors cursor-pointer hidden sm:block"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={submitInbound}
+                className="px-5 py-2 sm:py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-indigo-600/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Save size={16} />
+                <span>Simpan Belanja Masuk</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Scrollable Form Body */}
+          <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8">
+            <form onSubmit={submitInbound} className="max-w-7xl mx-auto w-full space-y-6 pb-24">
+              {/* Card 1: Informasi Pengadaan & Supplier */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                      <Store size={18} />
+                    </span>
+                    <div>
+                      <h2 className="font-extrabold text-sm sm:text-base text-slate-800">Informasi Supplier & Transaksi</h2>
+                      <p className="text-xs text-slate-400">Pilih supplier dan tentukan sumber dana pengadaan</p>
+                    </div>
+                  </div>
+
+                  <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600">
+                    ID Transaksi Baru
+                  </span>
                 </div>
-                {!inboundForm.supplierId && (
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Supplier */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nama Toko / Pasar (Jika Bebas)</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Pilih Supplier <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      className="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 outline-none transition-all"
+                      value={inboundForm.supplierId}
+                      onChange={e => setInboundForm({ ...inboundForm, supplierId: e.target.value })}
+                    >
+                      <option value="">-- Bebas / Tanpa Akun Supplier --</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.phone || 'No Telp -'})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Toko / Pasar Bebas */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Nama Toko / Distributor {inboundForm.supplierId ? '(Otomatis)' : '(Bebas)'}
+                    </label>
                     <input
                       type="text"
-                      className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 rounded-xl border border-slate-200 outline-none"
-                      placeholder="Contoh: Toko Sembako Jaya"
+                      disabled={!!inboundForm.supplierId}
+                      className="w-full py-2.5 px-3.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white disabled:bg-slate-100 border border-slate-200 focus:border-indigo-600 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 outline-none transition-all"
+                      placeholder="Contoh: Grosir Makmur / Pasar Induk"
                       value={inboundForm.supplierName}
                       onChange={e => setInboundForm({ ...inboundForm, supplierName: e.target.value })}
                     />
                   </div>
-                )}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Sumber Dana Belanja</label>
-                  <select
-                    className="w-full px-3 py-2 text-xs font-black bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 outline-none"
-                    value={inboundForm.paymentSource}
-                    onChange={e => setInboundForm({ ...inboundForm, paymentSource: e.target.value })}
-                  >
-                    <option value="DANA_PRIBADI_OWNER">Dana Pribadi Owner (Di luar Kas Muki)</option>
-                    <option value="KAS_MUKI">Kas Operasional Muki Ramen</option>
-                  </select>
+
+                  {/* Sumber Dana */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Sumber Dana Pembelian <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      className={`w-full py-2.5 px-3 border rounded-xl text-xs sm:text-sm font-black outline-none transition-all ${
+                        inboundForm.paymentSource === 'DANA_PRIBADI_OWNER'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                          : 'bg-amber-50 text-amber-800 border-amber-300'
+                      }`}
+                      value={inboundForm.paymentSource}
+                      onChange={e => setInboundForm({ ...inboundForm, paymentSource: e.target.value })}
+                    >
+                      <option value="DANA_PRIBADI_OWNER">💰 Dana Pribadi Owner (Rekomendasi)</option>
+                      <option value="KAS_MUKI">🏪 Kas Operasional Muki Ramen</option>
+                    </select>
+                  </div>
+
+                  {/* Tanggal */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Tanggal Pembelian <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs sm:text-sm font-bold text-slate-800 outline-none transition-all"
+                      value={inboundForm.date}
+                      onChange={e => setInboundForm({ ...inboundForm, date: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Tanggal Pembelian</label>
-                  <input
-                    type="date"
-                    className="w-full px-3 py-2 text-xs font-semibold bg-slate-50 rounded-xl border border-slate-200 outline-none"
-                    value={inboundForm.date}
-                    onChange={e => setInboundForm({ ...inboundForm, date: e.target.value })}
-                  />
+
+                {/* Info Alert Box */}
+                <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl flex items-start gap-2.5 text-xs text-blue-900">
+                  <Info size={16} className="text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? (
+                      <span>
+                        <strong>Mode Dana Pribadi Owner Aktif:</strong> Nilai total belanja barang ini akan dicatat sebagai penambahan <strong>Investasi / Modal Owner di Gudang</strong>. Kas harian kasir Muki Ramen <u>sama sekali tidak berkurang</u> hingga barang keluar diserap oleh dapur.
+                      </span>
+                    ) : (
+                      <span>
+                        <strong>Mode Kas Operasional Muki:</strong> Nilai total belanja akan langsung dipotong dari arus kas harian operasional Muki Ramen.
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Items List */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-black text-slate-800 uppercase">Daftar Bahan Yang Dibelanja</span>
+              {/* Card 2: Rincian Bahan Baku yang Dibelanja (Full Width Table) */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-xl bg-amber-50 text-amber-600">
+                      <Package size={18} />
+                    </span>
+                    <div>
+                      <h2 className="font-extrabold text-sm sm:text-base text-slate-800">Daftar Bahan Baku Grosir yang Masuk</h2>
+                      <p className="text-xs text-slate-400">Input kuantitas kemasan grosir, rasio konversi isi, dan harga modal beli</p>
+                    </div>
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleAddInboundItem}
-                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition-all border border-indigo-200 cursor-pointer"
                   >
-                    <Plus size={14} /> + Tambah Baris
+                    <Plus size={15} /> + Tambah Baris Bahan
                   </button>
                 </div>
 
-                <div className="space-y-2.5 max-h-56 overflow-y-auto">
-                  {inboundForm.items.map((it, idx) => {
-                    const baseTotal = (Number(it.purchaseQty) || 0) * (Number(it.conversionRatio) || 1);
-                    const subtotal = (Number(it.purchaseQty) || 0) * (Number(it.purchasePrice) || 0);
+                {/* Table Container */}
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider">
+                        <th className="p-3.5 w-12 text-center">No</th>
+                        <th className="p-3.5 min-w-[240px]">Nama Bahan Baku Terdaftar</th>
+                        <th className="p-3.5 min-w-[140px]">Satuan Grosir (Beli)</th>
+                        <th className="p-3.5 w-28 text-center">Qty Beli</th>
+                        <th className="p-3.5 w-32 text-center">Isi per Satuan</th>
+                        <th className="p-3.5 min-w-[150px]">Hasil Masuk Gudang</th>
+                        <th className="p-3.5 min-w-[160px] text-right">Harga Beli Satuan (Rp)</th>
+                        <th className="p-3.5 min-w-[160px] text-right">Subtotal Modal (Rp)</th>
+                        <th className="p-3.5 w-14 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {inboundForm.items.map((it, idx) => {
+                        const selectedIng = stockList.find(s => s.id === Number(it.ingredientId));
+                        const baseUnit = selectedIng?.unit || 'unit';
+                        const baseTotal = (Number(it.purchaseQty) || 0) * (Number(it.conversionRatio) || 1);
+                        const subtotal = (Number(it.purchaseQty) || 0) * (Number(it.purchasePrice) || 0);
 
-                    return (
-                      <div key={idx} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                          <select
-                            className="flex-1 px-3 py-2 text-xs font-bold bg-white rounded-xl border border-slate-200"
-                            value={it.ingredientId}
-                            onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
-                            required
-                          >
-                            <option value="">-- Pilih Bahan Baku --</option>
-                            {stockList.map(s => (
-                              <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
-                            ))}
-                          </select>
-                          {inboundForm.items.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveInboundItem(idx)}
-                              className="text-rose-500 hover:text-rose-700 p-1"
-                            >
-                              <X size={16} />
-                            </button>
-                          )}
-                        </div>
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="p-3.5 text-center font-bold text-slate-400">
+                              {idx + 1}
+                            </td>
+                            <td className="p-3.5">
+                              <select
+                                className="w-full py-2 px-3 text-xs font-bold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
+                                value={it.ingredientId}
+                                onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
+                                required
+                              >
+                                <option value="">-- Pilih Bahan Baku --</option>
+                                {stockList.map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} ({s.category}) — Satuan Dapur: {s.unit}
+                                  </option>
+                                ))}
+                              </select>
+                              {selectedIng && (
+                                <div className="text-[10px] text-slate-400 mt-1 pl-1">
+                                  Stok gudang saat ini: <strong>{selectedIng.warehouseStock} {selectedIng.unit}</strong>
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3.5">
+                              <input
+                                type="text"
+                                className="w-full py-2 px-2.5 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
+                                placeholder="cth: Karton / Dus"
+                                value={it.purchaseUnit}
+                                onChange={e => handleInboundItemChange(idx, 'purchaseUnit', e.target.value)}
+                                required
+                              />
+                            </td>
+                            <td className="p-3.5">
+                              <input
+                                type="number"
+                                step="any"
+                                min="0.01"
+                                className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
+                                value={it.purchaseQty}
+                                onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
+                                required
+                              />
+                            </td>
+                            <td className="p-3.5">
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.001"
+                                  className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
+                                  value={it.conversionRatio}
+                                  onChange={e => handleInboundItemChange(idx, 'conversionRatio', Number(e.target.value))}
+                                  required
+                                />
+                              </div>
+                              <div className="text-[10px] text-slate-400 text-center mt-0.5 font-medium">
+                                {baseUnit} / {it.purchaseUnit || 'Grosir'}
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              <div className="px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200/80 text-indigo-900 font-extrabold text-xs text-center">
+                                + {baseTotal.toLocaleString('id-ID')} {baseUnit}
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">Rp</span>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0"
+                                  className="w-full py-2 pl-7 pr-2 text-xs font-bold text-right bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
+                                  value={it.purchasePrice}
+                                  onChange={e => handleInboundItemChange(idx, 'purchasePrice', Number(e.target.value))}
+                                  required
+                                />
+                              </div>
+                            </td>
+                            <td className="p-3.5 text-right font-black text-xs text-slate-900">
+                              {formatCurrency(subtotal)}
+                            </td>
+                            <td className="p-3.5 text-center">
+                              {inboundForm.items.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveInboundItem(idx)}
+                                  className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors"
+                                  title="Hapus Baris"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Satuan Grosir</label>
-                            <input
-                              type="text"
-                              className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white rounded-lg border border-slate-200"
-                              placeholder="Karton/Dus"
-                              value={it.purchaseUnit}
-                              onChange={e => handleInboundItemChange(idx, 'purchaseUnit', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Qty Beli</label>
-                            <input
-                              type="number"
-                              step="any"
-                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white rounded-lg border border-slate-200"
-                              value={it.purchaseQty}
-                              onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Isi per Satuan</label>
-                            <input
-                              type="number"
-                              step="any"
-                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white rounded-lg border border-slate-200"
-                              value={it.conversionRatio}
-                              onChange={e => handleInboundItemChange(idx, 'conversionRatio', Number(e.target.value))}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Harga / Satuan Beli</label>
-                            <input
-                              type="number"
-                              step="any"
-                              className="w-full px-2.5 py-1.5 text-xs font-bold bg-white rounded-lg border border-slate-200"
-                              value={it.purchasePrice}
-                              onChange={e => handleInboundItemChange(idx, 'purchasePrice', Number(e.target.value))}
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <div className="text-[11px] text-slate-500 font-medium flex justify-between pt-1 border-t border-slate-200/60">
-                          <span>Masuk Gudang: <strong className="text-indigo-700">{baseTotal} unit</strong></span>
-                          <span>Subtotal: <strong className="text-slate-900">{formatCurrency(subtotal)}</strong></span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                {/* Add Row Button */}
+                <div className="pt-2 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={handleAddInboundItem}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer"
+                  >
+                    <Plus size={16} className="text-indigo-600" />
+                    <span>+ Tambah Baris Bahan Baku</span>
+                  </button>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Catatan Tambahan</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 outline-none"
-                  placeholder="Catatan surat jalan / nomor nota / kondisi barang"
-                  value={inboundForm.notes}
-                  onChange={e => setInboundForm({ ...inboundForm, notes: e.target.value })}
-                />
+              {/* Card 3: Catatan & Ringkasan Total */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="lg:col-span-7 bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-3">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Catatan Tambahan / Nomor Surat Jalan / Faktur
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="w-full py-2.5 px-3.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-indigo-600 rounded-xl text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 outline-none transition-all resize-none"
+                    placeholder="Contoh: No Nota #INV-89102, pengiriman tahap 1 via truk ekspedisi, kondisi kardus baik."
+                    value={inboundForm.notes}
+                    onChange={e => setInboundForm({ ...inboundForm, notes: e.target.value })}
+                  />
+                </div>
+
+                <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-lg border border-slate-800 space-y-4">
+                  <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">Ringkasan Pengadaan</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-600/50 text-indigo-200 font-bold">
+                      {inboundForm.items.length} SKU Bahan
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Total Jenis Barang:</span>
+                      <strong className="text-white">{inboundForm.items.length} Item</strong>
+                    </div>
+                    <div className="flex justify-between text-slate-300">
+                      <span>Metode Pembebanan:</span>
+                      <strong className="text-emerald-400">
+                        {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Buku Besar Modal Owner' : 'Kas Toko Langsung'}
+                      </strong>
+                    </div>
+                    <div className="pt-3 border-t border-slate-800 flex justify-between items-baseline">
+                      <span className="text-sm font-extrabold text-white">Grand Total Belanja:</span>
+                      <span className="text-xl sm:text-2xl font-black text-amber-400">
+                        {formatCurrency(
+                          inboundForm.items.reduce((acc, it) => acc + ((Number(it.purchaseQty) || 0) * (Number(it.purchasePrice) || 0)), 0)
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowInboundModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-md"
-                >
-                  Simpan Barang Masuk
-                </button>
-              </div>
             </form>
-          </div>
+          </main>
+
+          {/* Sticky Bottom Bar */}
+          <footer className="bg-white border-t border-slate-200 px-4 sm:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 shadow-lg">
+            <div className="flex items-center gap-3 text-xs text-slate-600 flex-wrap">
+              <span className="font-bold text-slate-800">Grand Total:</span>
+              <span className="text-base font-black text-indigo-700">
+                {formatCurrency(
+                  inboundForm.items.reduce((acc, it) => acc + ((Number(it.purchaseQty) || 0) * (Number(it.purchasePrice) || 0)), 0)
+                )}
+              </span>
+              <span className="hidden sm:inline text-slate-300">&bull;</span>
+              <span className="bg-slate-100 px-2.5 py-1 rounded-lg font-semibold">
+                {inboundForm.items.length} Macam Bahan
+              </span>
+              <span className={`px-2.5 py-1 rounded-lg font-bold ${
+                inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' 
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+              }`}>
+                {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Dana Pribadi Owner' : 'Kas Muki'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setShowInboundModal(false)}
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={submitInbound}
+                className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Save size={16} />
+                <span>Simpan Belanja Masuk Gudang</span>
+              </button>
+            </div>
+          </footer>
         </div>
       )}
 
