@@ -681,7 +681,7 @@ router.get('/analytics/daily-usage', authenticateToken, async (req: Request, res
     const orders = await prisma.order.findMany({
       where: {
         createdAt: dateFilter,
-        isPaid: true
+        status: 'Paid'
       },
       select: { total: true }
     });
