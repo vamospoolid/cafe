@@ -84,6 +84,39 @@ export const StaffPWAView: React.FC = () => {
   const [selectedStaffUser, setSelectedStaffUser] = useState<any | null>(null);
   const [loginMode, setLoginMode] = useState<'pin' | 'kiosk' | 'qr'>('kiosk');
 
+  // Individual Device Memory & Search State
+  const [savedDeviceStaff, setSavedDeviceStaff] = useState<any | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('staff_saved_user') || 'null');
+    } catch {
+      return null;
+    }
+  });
+  const [rememberDevice, setRememberDevice] = useState<boolean>(true);
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
+  const [cameraReady, setCameraReady] = useState(false);
+
+  // Helper avatar gradient based on role/name
+  const getAvatarGradient = (role: string = '', name: string = '') => {
+    const r = role.toLowerCase();
+    if (r.includes('barista') || r.includes('kopi')) return 'from-amber-500 to-orange-600';
+    if (r.includes('chef') || r.includes('dapur') || r.includes('cook')) return 'from-rose-500 to-red-600';
+    if (r.includes('kasir') || r.includes('cashier')) return 'from-emerald-500 to-teal-600';
+    if (r.includes('waiter') || r.includes('server') || r.includes('pramusaji')) return 'from-cyan-500 to-blue-600';
+    if (r.includes('admin') || r.includes('manager') || r.includes('lead')) return 'from-purple-500 to-indigo-600';
+    
+    const colors = [
+      'from-blue-600 to-indigo-700',
+      'from-emerald-500 to-teal-600',
+      'from-purple-600 to-pink-600',
+      'from-amber-500 to-orange-600',
+      'from-cyan-600 to-blue-700'
+    ];
+    const idx = (name || 'A').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length;
+    return colors[idx];
+  };
+
   // Barcode / QR Camera Scanner State
   const scannerVideoRef = useRef<HTMLVideoElement>(null);
   const [scannerStream, setScannerStream] = useState<MediaStream | null>(null);
@@ -327,8 +360,9 @@ export const StaffPWAView: React.FC = () => {
   };
 
   // Camera Management with WebRTC + fallback
-  const startCamera = async () => {
+  const startCamera = async (facing = cameraFacing) => {
     setIsCameraActive(true);
+    setCameraReady(false);
     try {
       if (cameraStream) {
         cameraStream.getTracks().forEach(t => t.stop());
@@ -336,7 +370,7 @@ export const StaffPWAView: React.FC = () => {
       let stream: MediaStream | null = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: cameraFacing, width: { ideal: 640 }, height: { ideal: 640 } },
+          video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 640 } },
           audio: false
         });
       } catch (err1) {
@@ -344,13 +378,15 @@ export const StaffPWAView: React.FC = () => {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       }
       setCameraStream(stream);
+      setCameraReady(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(err => console.warn('Video stream play error:', err));
       }
     } catch (e) {
       console.error('Camera error:', e);
-      toast('Kamera WebRTC belum diizinkan. Anda dapat menggunakan tombol "Buka Kamera Bawaan HP" di bawah.', 'info');
       setIsCameraActive(false);
+      setCameraReady(false);
     }
   };
 
@@ -360,7 +396,36 @@ export const StaffPWAView: React.FC = () => {
       setCameraStream(null);
     }
     setIsCameraActive(false);
+    setCameraReady(false);
   };
+
+  const toggleCameraFacing = () => {
+    const nextFacing = cameraFacing === 'user' ? 'environment' : 'user';
+    setCameraFacing(nextFacing);
+    if (isCameraActive) {
+      startCamera(nextFacing);
+    }
+  };
+
+  // Auto attach video stream whenever cameraStream or activeTab changes
+  useEffect(() => {
+    if (videoRef.current && cameraStream && isCameraActive) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch(e => console.warn('Video play error:', e));
+    }
+  }, [cameraStream, isCameraActive, activeTab, capturedPhoto]);
+
+  // Automatically start camera on Attendance Tab when photo is not captured yet
+  useEffect(() => {
+    if (token && activeTab === 'attendance' && !capturedPhoto) {
+      startCamera();
+    } else if (activeTab !== 'attendance' || !token) {
+      stopCamera();
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [token, activeTab, capturedPhoto]);
 
   const capturePhoto = () => {
     if (!videoRef.current) return;
@@ -369,8 +434,13 @@ export const StaffPWAView: React.FC = () => {
     canvas.height = videoRef.current.videoHeight || 480;
     const ctx = canvas.getContext('2d');
     if (ctx) {
+      // Mirror image horizontally if user-facing front camera
+      if (cameraFacing === 'user') {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+      }
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       setCapturedPhoto(dataUrl);
       stopCamera();
     }
@@ -560,9 +630,10 @@ export const StaffPWAView: React.FC = () => {
     setPinLoading(true);
     setPinError('');
     try {
+      const targetUser = selectedStaffUser || savedDeviceStaff;
       const payload: any = { pin: pinValue };
-      if (loginMode === 'kiosk' && selectedStaffUser?.id) {
-        payload.userId = selectedStaffUser.id;
+      if (targetUser?.id) {
+        payload.userId = targetUser.id;
       }
       const res = await fetch('/api/auth/switch-pin', {
         method: 'POST',
@@ -573,10 +644,15 @@ export const StaffPWAView: React.FC = () => {
       if (res.ok) {
         localStorage.setItem('staff_token', data.token);
         localStorage.setItem('staff_user', JSON.stringify(data.user));
+        if (rememberDevice) {
+          localStorage.setItem('staff_saved_user', JSON.stringify(data.user));
+          setSavedDeviceStaff(data.user);
+        }
         setToken(data.token);
         setUser(data.user);
         setSelectedStaffUser(null);
         setPinInput('');
+        setCapturedPhoto(null);
         toast(`Selamat bertugas, ${data.user.name}!`, 'success');
       } else {
         setPinError(data.error || 'PIN salah atau tidak valid.');
@@ -605,6 +681,7 @@ export const StaffPWAView: React.FC = () => {
     localStorage.removeItem('staff_user');
     setToken('');
     setUser(null);
+    setCapturedPhoto(null);
     stopCamera();
     toast('Berhasil keluar sesi', 'info');
   };
@@ -858,100 +935,117 @@ export const StaffPWAView: React.FC = () => {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // RENDER LOGIN SCREEN IF NOT AUTHENTICATED
+  // RENDER LOGIN SCREEN IF NOT AUTHENTICATED (INDIVIDUAL & KIOSK UX)
   // ─────────────────────────────────────────────────────────────
   if (!token || !user) {
+    const activeStaffToLogin = selectedStaffUser || savedDeviceStaff;
+
+    // Filter staff list based on search and role
+    const filteredStaffList = staffList.filter(st => {
+      const matchQuery = st.name.toLowerCase().includes(staffSearchQuery.toLowerCase()) ||
+                         (st.role && st.role.toLowerCase().includes(staffSearchQuery.toLowerCase()));
+      if (!matchQuery) return false;
+      if (selectedRoleFilter === 'ALL') return true;
+      const r = (st.role || '').toLowerCase();
+      if (selectedRoleFilter === 'BARISTA') return r.includes('barista') || r.includes('kopi');
+      if (selectedRoleFilter === 'KITCHEN') return r.includes('chef') || r.includes('dapur') || r.includes('cook');
+      if (selectedRoleFilter === 'CASHIER') return r.includes('kasir') || r.includes('cashier');
+      if (selectedRoleFilter === 'WAITER') return r.includes('waiter') || r.includes('server') || r.includes('pramusaji');
+      if (selectedRoleFilter === 'MANAGER') return r.includes('admin') || r.includes('manager') || r.includes('lead');
+      return true;
+    });
+
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col justify-between p-4 max-w-md mx-auto shadow-2xl relative select-none font-sans text-white">
-        <div className="text-center pt-6 space-y-2 relative z-10">
-          <div className="w-16 h-16 rounded-2xl bg-[#0052cc] mx-auto flex items-center justify-center shadow-lg border border-white/10">
-            <Fingerprint size={32} className="text-white animate-pulse" />
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-between p-4 sm:p-6 max-w-md mx-auto shadow-2xl relative select-none font-sans text-white antialiased overflow-hidden">
+        {/* Ambient background glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Brand & Time Header */}
+        <div className="text-center pt-2 space-y-1.5 relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-800 shadow-inner">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 font-mono">
+              {currentTime} • {settings?.storeName || 'SOL CAFE'}
+            </span>
           </div>
-          <h1 className="text-xl font-black tracking-tight">{settings?.storeName || 'SOL CAFE'}</h1>
-          <p className="text-xs text-blue-200 font-medium">Portal Absensi & Operasional Staf</p>
+          <h1 className="text-lg font-black tracking-tight text-white flex items-center justify-center gap-2">
+            <Sparkles size={16} className="text-[#0052cc]" />
+            <span>Portal Karyawan & Absensi</span>
+          </h1>
         </div>
 
-        <div className="bg-white text-slate-900 rounded-[2rem] p-6 shadow-2xl relative z-10 space-y-5">
-          {loginMode === 'kiosk' && !selectedStaffUser ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                  <User size={16} className="text-[#0052cc]" />
-                  <span>Pilih Profil Karyawan</span>
-                </h3>
-                <span className="text-[10px] font-bold text-slate-400">{staffList.length} Staf</span>
+        {/* Main Card */}
+        <div className="bg-slate-900/95 border border-slate-800 rounded-[2.2rem] p-5 shadow-2xl relative z-10 space-y-4 my-auto backdrop-blur-xl">
+          {/* STATE 1: INDIVIDUAL PROFILE PIN ENTRY */}
+          {activeStaffToLogin ? (
+            <div className="space-y-4 animate-fade-in">
+              {/* Header with Switch Account Button */}
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStaffUser(null);
+                    setSavedDeviceStaff(null);
+                    setPinInput('');
+                    setPinError('');
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition-all active:scale-95"
+                >
+                  <ArrowLeft size={13} />
+                  <span>Ganti Akun</span>
+                </button>
+
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  PIN Individu
+                </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
-                {staffList.map(st => (
-                  <button
-                    key={st.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedStaffUser(st);
-                      setPinInput('');
-                      setPinError('');
-                    }}
-                    className="p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 text-left transition-all active:scale-95 group shadow-sm"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-[#0052cc] text-white flex items-center justify-center font-black text-xs mb-2 group-hover:scale-105 transition-transform">
-                      {st.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div className="text-xs font-black text-slate-900 truncate">{st.name}</div>
-                    <div className="text-[10px] text-slate-500 font-semibold">{st.role}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <div className="flex items-center gap-2">
-                  {selectedStaffUser && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedStaffUser(null);
-                        setPinInput('');
-                        setPinError('');
-                      }}
-                      className="p-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600"
-                    >
-                      <ArrowLeft size={14} />
-                    </button>
-                  )}
-                  <div>
-                    <h3 className="text-xs font-black text-slate-900">
-                      {selectedStaffUser ? selectedStaffUser.name : 'Masukkan 6-Digit PIN'}
-                    </h3>
-                    <p className="text-[10px] text-slate-400">
-                      {selectedStaffUser ? `Role: ${selectedStaffUser.role}` : 'Ketik PIN rahasia Anda'}
-                    </p>
+              {/* Personal Avatar Card */}
+              <div className="text-center space-y-2 pt-1">
+                <div className="relative inline-block">
+                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${getAvatarGradient(activeStaffToLogin.role, activeStaffToLogin.name)} text-white flex items-center justify-center font-black text-xl shadow-lg border-2 border-white/20 mx-auto ring-4 ring-blue-500/20`}>
+                    {activeStaffToLogin.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-900" />
+                </div>
+
+                <div>
+                  <h2 className="text-base font-black text-white tracking-tight">
+                    {activeStaffToLogin.name}
+                  </h2>
+                  <div className="inline-flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-800 text-blue-300 font-extrabold border border-slate-700">
+                      {activeStaffToLogin.role}
+                    </span>
                   </div>
                 </div>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Ketik 6-digit PIN rahasia Anda untuk mulai bertugas
+                </p>
               </div>
 
-              {/* PIN Dots */}
-              <div className="flex justify-center gap-2.5 py-2">
+              {/* PIN Dots Display */}
+              <div className="flex justify-center gap-3 py-1">
                 {[0, 1, 2, 3, 4, 5].map(idx => (
                   <div
                     key={idx}
-                    className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                    className={`w-4 h-4 rounded-full transition-all duration-200 ${
                       pinInput.length > idx
-                        ? 'bg-[#0052cc] scale-110 shadow-sm shadow-blue-500/50'
-                        : 'bg-slate-200'
+                        ? 'bg-[#0052cc] scale-125 shadow-md shadow-blue-500/60 ring-2 ring-blue-400/40'
+                        : 'bg-slate-800 border border-slate-700'
                     }`}
                   />
                 ))}
               </div>
 
               {pinError && (
-                <p className="text-xs text-rose-600 font-bold text-center bg-rose-50 py-2 px-3 rounded-xl border border-rose-200 animate-pulse">
+                <p className="text-xs text-rose-400 font-bold text-center bg-rose-500/10 py-2 px-3 rounded-xl border border-rose-500/30 animate-shake">
                   {pinError}
                 </p>
               )}
 
-              {/* Keypad */}
+              {/* Modern Touch Keypad */}
               <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto pt-1">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
                   <button
@@ -959,7 +1053,7 @@ export const StaffPWAView: React.FC = () => {
                     type="button"
                     disabled={pinLoading}
                     onClick={() => handleKeypadClick(num)}
-                    className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-lg font-black transition-all active:scale-90 border border-slate-200 flex items-center justify-center shadow-sm"
+                    className="h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:bg-blue-600 text-white text-lg font-black transition-all active:scale-95 border border-slate-700/80 flex items-center justify-center shadow-sm"
                   >
                     {num}
                   </button>
@@ -968,7 +1062,7 @@ export const StaffPWAView: React.FC = () => {
                   type="button"
                   disabled={pinLoading}
                   onClick={() => setPinInput('')}
-                  className="h-12 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-black transition-all active:scale-90 border border-rose-200 flex items-center justify-center"
+                  className="h-12 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-black transition-all active:scale-95 border border-rose-500/20 flex items-center justify-center"
                 >
                   CLEAR
                 </button>
@@ -976,7 +1070,7 @@ export const StaffPWAView: React.FC = () => {
                   type="button"
                   disabled={pinLoading}
                   onClick={() => handleKeypadClick('0')}
-                  className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-lg font-black transition-all active:scale-90 border border-slate-200 flex items-center justify-center shadow-sm"
+                  className="h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:bg-blue-600 text-white text-lg font-black transition-all active:scale-95 border border-slate-700/80 flex items-center justify-center shadow-sm"
                 >
                   0
                 </button>
@@ -984,19 +1078,118 @@ export const StaffPWAView: React.FC = () => {
                   type="button"
                   disabled={pinLoading}
                   onClick={() => setPinInput(prev => prev.slice(0, -1))}
-                  className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-400 text-sm font-bold transition-all active:scale-90 border border-slate-200 flex items-center justify-center"
+                  className="h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-all active:scale-95 border border-slate-700/80 flex items-center justify-center"
                 >
                   ⌫
                 </button>
+              </div>
+
+              {/* Remember Profile Toggle */}
+              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between px-2">
+                <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberDevice}
+                    onChange={e => setRememberDevice(e.target.checked)}
+                    className="rounded bg-slate-800 border-slate-700 text-[#0052cc] focus:ring-0"
+                  />
+                  <span>Ingat profil di HP ini</span>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStaffUser(null);
+                    setSavedDeviceStaff(null);
+                    setPinInput('');
+                  }}
+                  className="text-[11px] font-bold text-blue-400 hover:text-blue-300 hover:underline"
+                >
+                  Pilih Staf Lain →
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* STATE 2: STAFF SELECTION LIST (SEARCH & CATEGORIES) */
+            <div className="space-y-3.5 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                <div>
+                  <h3 className="text-sm font-black text-white flex items-center gap-2">
+                    <User size={16} className="text-[#0052cc]" />
+                    <span>Pilih Profil Anda</span>
+                  </h3>
+                  <p className="text-[10px] text-slate-400">Pilih nama karyawan untuk memasukkan PIN</p>
+                </div>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800 text-blue-400 border border-slate-700">
+                  {staffList.length} Staf
+                </span>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={staffSearchQuery}
+                  onChange={e => setStaffSearchQuery(e.target.value)}
+                  placeholder="Cari nama atau role staf..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Filter Chips */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 text-[10px] font-bold scrollbar-none">
+                {['ALL', 'BARISTA', 'KITCHEN', 'CASHIER', 'WAITER', 'MANAGER'].map(chip => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setSelectedRoleFilter(chip)}
+                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all ${
+                      selectedRoleFilter === chip
+                        ? 'bg-[#0052cc] text-white shadow-sm font-black'
+                        : 'bg-slate-800/80 text-slate-400 hover:text-white border border-slate-700/60'
+                    }`}
+                  >
+                    {chip === 'ALL' ? 'Semua' : chip}
+                  </button>
+                ))}
+              </div>
+
+              {/* Staff Cards Grid */}
+              <div className="grid grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                {filteredStaffList.map(st => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedStaffUser(st);
+                      setPinInput('');
+                      setPinError('');
+                    }}
+                    className="p-3 rounded-2xl border border-slate-800 bg-slate-800/50 hover:bg-slate-800 hover:border-blue-500/50 text-left transition-all active:scale-95 group shadow-sm flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${getAvatarGradient(st.role, st.name)} text-white flex items-center justify-center font-black text-xs group-hover:scale-105 transition-transform shadow-sm`}>
+                        {st.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <ChevronRight size={14} className="text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-white truncate">{st.name}</div>
+                      <div className="text-[10px] text-blue-300 font-semibold truncate mt-0.5">{st.role}</div>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
 
+        {/* Footer Return Link */}
         <div className="text-center pb-2 relative z-10">
           <a
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-300 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-white transition-colors py-1 px-3 rounded-full hover:bg-slate-800/50"
           >
             <ArrowLeft size={14} /> Kembali ke Kasir Utama POS
           </a>
@@ -1048,7 +1241,7 @@ export const StaffPWAView: React.FC = () => {
           </div>
 
           <div className="pt-3 flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-[#0052cc] text-white flex items-center justify-center font-black text-base shadow-sm shrink-0">
+            <div className={`w-12 h-12 rounded-xl bg-gradient-to-tr ${getAvatarGradient(user.role, user.name)} text-white flex items-center justify-center font-black text-base shadow-sm shrink-0`}>
               {user.name.substring(0, 2).toUpperCase()}
             </div>
 
@@ -1102,7 +1295,7 @@ export const StaffPWAView: React.FC = () => {
             ───────────────────────────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto pb-28">
           {/* ─────────────────────────────────────────────────────────────
-              TAB 1: ABSENSI GPS & BIOMETRIC SELFIE CAMERA
+              TAB 1: ABSENSI GPS & DIRECT ACTIVE CAMERA FEED
               ───────────────────────────────────────────────────────────── */}
           {activeTab === 'attendance' && (
             <div className="p-4 space-y-4 animate-fade-in">
@@ -1180,16 +1373,18 @@ export const StaffPWAView: React.FC = () => {
                 </div>
               )}
 
-              {/* FOTO SELFIE KAMERA CONTAINER */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
+              {/* DIRECT ACTIVE CAMERA CONTAINER */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                    <Camera size={15} className="text-[#0052cc]" />
-                    <span>Foto Selfie Kehadiran</span>
-                  </h4>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <h4 className="text-xs font-black text-slate-900">
+                      Live Kamera Selfie Presensi
+                    </h4>
+                  </div>
                   {capturedPhoto && (
                     <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                      ✓ Terverifikasi
+                      ✓ Foto Terverifikasi
                     </span>
                   )}
                 </div>
@@ -1206,64 +1401,78 @@ export const StaffPWAView: React.FC = () => {
 
                 {!capturedPhoto ? (
                   <div className="space-y-3">
-                    {isCameraActive ? (
-                      <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[280px] mx-auto border-2 border-[#0052cc] shadow-inner">
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          className="w-full h-full object-cover transform -scale-x-100"
-                        />
-                        <div className="absolute inset-0 pointer-events-none border-2 border-white/50 rounded-full m-8 border-dashed animate-pulse" />
-                        
-                        <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-3 px-4">
-                          <button
-                            type="button"
-                            onClick={capturePhoto}
-                            className="w-12 h-12 rounded-full bg-white text-slate-950 flex items-center justify-center shadow-lg active:scale-90 border-4 border-blue-500"
-                          >
-                            <div className="w-7 h-7 rounded-full bg-[#0052cc]" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={stopCamera}
-                            className="px-3 py-1.5 rounded-xl bg-black/60 text-white text-[10px] font-bold backdrop-blur-sm"
-                          >
-                            Tutup
-                          </button>
+                    {/* Live Video Viewfinder */}
+                    <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-square max-w-[290px] mx-auto border-4 border-[#0052cc] shadow-xl ring-4 ring-blue-500/15">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className={`w-full h-full object-cover ${cameraFacing === 'user' ? 'transform -scale-x-100' : ''}`}
+                      />
+                      
+                      {/* Face Alignment Oval Guide */}
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div className="w-48 h-56 border-2 border-dashed border-emerald-400/70 rounded-[4rem] animate-pulse shadow-[0_0_15px_rgba(52,211,153,0.3)] flex items-center justify-center">
+                          <span className="text-[9px] font-black text-white/80 bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                            Posisikan Wajah
+                          </span>
                         </div>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={startCamera}
-                          className="w-full py-3.5 bg-[#0052cc] hover:bg-[#0043a8] text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm active:scale-95"
-                        >
-                          <Camera size={16} />
-                          <span>Buka Kamera Selfie Presensi</span>
-                        </button>
+
+                      {/* Top Floating Controls */}
+                      <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-auto">
+                        <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[10px] font-black text-emerald-400 border border-white/10 flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> LIVE
+                        </span>
 
                         <button
                           type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                          onClick={toggleCameraFacing}
+                          className="p-2 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 active:scale-90 transition-transform shadow-md"
+                          title="Ganti Kamera Depan/Belakang"
                         >
-                          <Smartphone size={14} className="text-[#0052cc]" />
-                          <span>Ambil Foto via Kamera HP (Alternatif)</span>
+                          <RefreshCcw size={14} />
                         </button>
                       </div>
-                    )}
+
+                      {/* Bottom Shutter Capture Action */}
+                      <div className="absolute bottom-3 inset-x-0 flex items-center justify-center pointer-events-auto">
+                        <button
+                          type="button"
+                          onClick={capturePhoto}
+                          className="w-14 h-14 rounded-full bg-white text-[#0052cc] flex items-center justify-center shadow-2xl active:scale-90 border-4 border-blue-500 hover:scale-105 transition-all group"
+                          title="Ambil Foto Presensi"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-[#0052cc] group-hover:bg-blue-700 transition-colors flex items-center justify-center text-white">
+                            <Camera size={16} />
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Fallback Native Camera Button */}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <Smartphone size={13} className="text-[#0052cc]" />
+                      <span>Buka Kamera HP (Jika Browser Tidak Mendukung)</span>
+                    </button>
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
-                    <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[200px] mx-auto border-2 border-emerald-500 shadow-md">
+                  /* Captured Photo Preview Card */
+                  <div className="space-y-3">
+                    <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-square max-w-[220px] mx-auto border-4 border-emerald-500 shadow-xl ring-4 ring-emerald-500/20">
                       <img src={capturedPhoto} alt="Selfie" className="w-full h-full object-cover" />
                       <button
                         type="button"
-                        onClick={() => setCapturedPhoto(null)}
-                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors"
+                        onClick={() => {
+                          setCapturedPhoto(null);
+                          startCamera();
+                        }}
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors shadow-lg"
                       >
                         <X size={14} />
                       </button>
@@ -1275,22 +1484,22 @@ export const StaffPWAView: React.FC = () => {
                         setCapturedPhoto(null);
                         startCamera();
                       }}
-                      className="w-full py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 shadow-sm"
+                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 shadow-sm transition-all"
                     >
-                      <RefreshCw size={12} />
-                      <span>Ambil Ulang Foto</span>
+                      <RefreshCw size={13} />
+                      <span>Ambil Ulang Foto Selfie</span>
                     </button>
                   </div>
                 )}
 
-                {/* BUTTON ACTION CLOCK IN / OUT (SOLID HIGH CONTRAST) */}
-                <div className="pt-2">
+                {/* BUTTON ACTION CLOCK IN / OUT */}
+                <div className="pt-2 border-t border-slate-100">
                   {!mySummary?.todayStatus?.clockedIn ? (
                     <button
                       type="button"
                       disabled={clockLoading || !isWithinRadius}
                       onClick={() => handleClockAction('IN')}
-                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
+                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95"
                     >
                       <CheckCircle2 size={18} />
                       <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK IN (MASUK KERJA)'}</span>
@@ -1300,13 +1509,13 @@ export const StaffPWAView: React.FC = () => {
                       type="button"
                       disabled={clockLoading}
                       onClick={() => handleClockAction('OUT')}
-                      className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:bg-slate-300 text-white rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
+                      className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-95"
                     >
                       <LogOut size={18} />
                       <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK OUT (SELESAI SHIFT)'}</span>
                     </button>
                   ) : (
-                    <div className="p-3.5 rounded-xl bg-slate-100 text-center text-xs font-bold text-slate-600 border border-slate-200">
+                    <div className="p-3.5 rounded-2xl bg-emerald-50 text-center text-xs font-bold text-emerald-800 border border-emerald-200">
                       ✓ Anda telah menyelesaikan shift hari ini. Terima kasih atas kerja keras Anda!
                     </div>
                   )}
