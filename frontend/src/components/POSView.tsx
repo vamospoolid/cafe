@@ -518,12 +518,12 @@ export const POSView = () => {
 
         {/* Scanner & Filter */}
         <div className="pos-toolbar flex flex-col gap-2.5">
-          <div className="scanner-box flex items-center gap-2 bg-emerald-50/70 border border-emerald-200/80 rounded-xl px-3 py-2 text-emerald-800 shadow-sm">
-            <Search size={18} className="text-emerald-600 shrink-0" />
+          <div className="scanner-box flex items-center gap-2 bg-gradient-to-r from-sky-50/90 via-blue-50/60 to-indigo-50/40 border border-sky-200/80 rounded-xl px-3 py-2 text-sky-900 shadow-sm transition-all focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
+            <Search size={18} className="text-sky-500 shrink-0" />
             <input 
               type="text" 
-              className="scanner-input flex-1 bg-transparent border-none outline-none font-medium text-xs sm:text-sm text-slate-800 placeholder-emerald-600/50" 
-              placeholder="Cari nama menu / scan barcode..."
+              className="scanner-input flex-1 bg-transparent border-none outline-none font-medium text-xs sm:text-sm text-slate-800 placeholder-sky-600/50" 
+              placeholder="Cari nama menu / scan barcode..." 
               value={searchTerm}
               onChange={handleSearchChange}
               onKeyDown={handleSearchKeyDown}
@@ -537,7 +537,7 @@ export const POSView = () => {
               </button>
             )}
             <button 
-              className="scanner-btn bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white border-none px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0" 
+              className="scanner-btn bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-600 hover:to-blue-600 active:scale-95 text-white border-none px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0" 
               onClick={handleCameraScan}
             >
               <Camera size={14} /> <span>Kamera</span>
@@ -549,8 +549,8 @@ export const POSView = () => {
             <button 
               className={`category-chip shrink-0 text-xs font-bold px-3.5 py-2 rounded-xl border transition-all flex items-center gap-1.5 ${
                 activeCategory === 'Semua' 
-                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white border-indigo-600 shadow-md shadow-indigo-200 ring-2 ring-indigo-400/30' 
-                  : 'bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-sm'
+                  ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white border-sky-400 shadow-md shadow-sky-100 ring-2 ring-sky-300/40' 
+                  : 'bg-white text-slate-700 border-slate-200/90 hover:bg-sky-50/50 hover:border-sky-200 shadow-sm'
               }`}
               onClick={() => {
                 setActiveCategory('Semua');
@@ -560,7 +560,7 @@ export const POSView = () => {
             >
               <span className="text-sm">✨</span>
               <span>Semua</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${activeCategory === 'Semua' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${activeCategory === 'Semua' ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'}`}>
                 {products.length}
               </span>
             </button>
@@ -572,8 +572,8 @@ export const POSView = () => {
                   key={cat.id}
                   className={`category-chip shrink-0 text-xs font-bold px-3.5 py-2 rounded-xl border transition-all flex items-center gap-1.5 ${
                     isSelected 
-                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white border-indigo-600 shadow-md shadow-indigo-200 ring-2 ring-indigo-400/30' 
-                      : 'bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-sm'
+                      ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white border-sky-400 shadow-md shadow-sky-100 ring-2 ring-sky-300/40' 
+                      : 'bg-white text-slate-700 border-slate-200/90 hover:bg-sky-50/50 hover:border-sky-200 shadow-sm'
                   }`}
                   onClick={() => {
                     setActiveCategory(cat.id);
@@ -584,7 +584,7 @@ export const POSView = () => {
                   <span className="text-sm">{getCategoryIcon(cat.name)}</span>
                   <span>{cat.name}</span>
                   {catProductCount > 0 && (
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'}`}>
                       {catProductCount}
                     </span>
                   )}
