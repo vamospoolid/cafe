@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Fingerprint, LogIn, LogOut, CheckCircle, AlertTriangle } from 'lucide-react';
+import { X, Fingerprint, LogIn, LogOut, CheckCircle2, AlertTriangle, Delete } from 'lucide-react';
 
 interface ClockInModalProps {
   isOpen: boolean;
@@ -51,9 +51,9 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
           setLoading(false);
           onSuccess();
           onClose();
-        }, 2000);
+        }, 1500);
       } else {
-        setStatusMsg({ type: 'error', text: data.error || 'Gagal absensi' });
+        setStatusMsg({ type: 'error', text: data.error || 'Gagal melakukan absensi' });
         setLoading(false);
         setPin(''); // Reset on error for retry
       }
@@ -65,48 +65,58 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
   };
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 9999 }}>
-      <div className="modal-content" style={{ maxWidth: '400px', padding: 0, overflow: 'hidden' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden border border-slate-100 flex flex-col animate-in fade-in zoom-in-95 duration-150">
         
         {/* Header Area */}
-        <div className="bg-primary text-white p-6 relative flex flex-col items-center justify-center text-center">
-          <button className="absolute top-4 right-4 text-white hover:text-gray-200" onClick={onClose} disabled={loading}>
-            <X size={24} />
+        <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-6 relative flex flex-col items-center justify-center text-center">
+          <button 
+            type="button"
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" 
+            onClick={onClose} 
+            disabled={loading}
+          >
+            <X size={18} />
           </button>
-          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-3">
-            <Fingerprint size={32} />
+          
+          <div className="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center mb-3 shadow-inner">
+            <Fingerprint size={30} className="text-indigo-200" />
           </div>
-          <h2 className="text-xl font-bold mb-1">Terminal Absensi</h2>
-          <p className="text-sm text-primary-100 opacity-80">Masukkan PIN 6-Digit Anda (Default: 123456)</p>
+          
+          <h2 className="text-lg font-black tracking-tight">Terminal Absensi Staf</h2>
+          <p className="text-xs text-indigo-200 mt-0.5">Ketik 6-Digit PIN Anda untuk Masuk / Pulang</p>
         </div>
 
         {/* PIN Display */}
         <div className="p-6 bg-slate-50 flex flex-col items-center">
-          <div className="flex gap-3 mb-6 justify-center">
+          <div className="flex gap-2.5 mb-5 justify-center">
             {[...Array(6)].map((_, i) => (
               <div 
                 key={i} 
-                className={`w-4 h-4 rounded-full ${i < pin.length ? 'bg-primary shadow-md scale-110' : 'bg-gray-300'}`}
-                style={{ transition: 'all 0.2s' }}
+                className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                  i < pin.length ? 'bg-indigo-600 shadow-md scale-110' : 'bg-slate-300'
+                }`}
               />
             ))}
           </div>
 
           {statusMsg && (
-            <div className={`text-sm font-bold p-3 rounded-lg w-full text-center mb-4 flex items-center justify-center gap-2 ${
-              statusMsg.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+            <div className={`text-xs font-black p-3 rounded-xl w-full text-center mb-4 flex items-center justify-center gap-2 ${
+              statusMsg.type === 'success' 
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                : 'bg-rose-50 text-rose-700 border border-rose-200'
             }`}>
-              {statusMsg.type === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-              {statusMsg.text}
+              {statusMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+              <span>{statusMsg.text}</span>
             </div>
           )}
 
           {/* Numpad */}
-          <div className="grid grid-cols-3 gap-3 w-full max-w-[250px] mx-auto mb-6">
+          <div className="grid grid-cols-3 gap-2.5 w-full max-w-[240px] mx-auto mb-5">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
               <button 
                 key={num} 
-                className="w-16 h-16 rounded-full bg-white border border-gray-200 text-2xl font-bold text-gray-800 flex items-center justify-center hover:bg-primary hover:text-white hover:border-primary transition-colors shadow-sm mx-auto disabled:opacity-50"
+                className="w-14 h-14 rounded-2xl bg-white border border-slate-200/80 text-xl font-black text-slate-800 flex items-center justify-center hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 active:scale-95 transition-all shadow-sm mx-auto disabled:opacity-50"
                 onClick={() => handleNumpad(num.toString())}
                 disabled={loading}
               >
@@ -114,45 +124,46 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
               </button>
             ))}
             <button 
-              className="w-16 h-16 rounded-full bg-red-50 text-danger border border-red-100 font-bold flex items-center justify-center hover:bg-red-100 transition-colors mx-auto disabled:opacity-50"
+              className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 font-black flex items-center justify-center hover:bg-rose-100 active:scale-95 transition-all mx-auto disabled:opacity-50"
               onClick={handleBackspace}
               disabled={loading}
+              title="Hapus"
             >
-              Hapus
+              <Delete size={18} />
             </button>
             <button 
-              className="w-16 h-16 rounded-full bg-white border border-gray-200 text-2xl font-bold text-gray-800 flex items-center justify-center hover:bg-primary hover:text-white hover:border-primary transition-colors shadow-sm mx-auto disabled:opacity-50"
+              className="w-14 h-14 rounded-2xl bg-white border border-slate-200/80 text-xl font-black text-slate-800 flex items-center justify-center hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 active:scale-95 transition-all shadow-sm mx-auto disabled:opacity-50"
               onClick={() => handleNumpad('0')}
               disabled={loading}
             >
               0
             </button>
             <button 
-              className="w-16 h-16 rounded-full bg-gray-100 text-gray-500 font-bold flex items-center justify-center hover:bg-gray-200 transition-colors mx-auto text-xs disabled:opacity-50"
+              className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-500 font-black flex items-center justify-center hover:bg-slate-200 active:scale-95 transition-all mx-auto text-xs uppercase tracking-wider disabled:opacity-50"
               onClick={() => {if(!loading) setPin('')}}
               disabled={loading}
             >
-              Clear
+              C
             </button>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex w-full gap-3">
+          <div className="flex w-full gap-2.5">
             <button 
-              className="flex-1 py-3 px-4 bg-success text-white rounded-xl font-bold flex flex-col items-center justify-center hover:bg-green-600 transition-colors shadow-sm disabled:opacity-50"
+              className="flex-1 py-3 px-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50"
               disabled={pin.length < 4 || loading}
               onClick={() => processAttendance('IN')}
             >
-              <LogIn size={20} className="mb-1" />
-              CLOCK IN
+              <LogIn size={16} />
+              MASUK (IN)
             </button>
             <button 
-              className="flex-1 py-3 px-4 bg-danger text-white rounded-xl font-bold flex flex-col items-center justify-center hover:bg-red-600 transition-colors shadow-sm disabled:opacity-50"
+              className="flex-1 py-3 px-3 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-rose-500/20 disabled:opacity-50"
               disabled={pin.length < 4 || loading}
               onClick={() => processAttendance('OUT')}
             >
-              <LogOut size={20} className="mb-1" />
-              CLOCK OUT
+              <LogOut size={16} />
+              PULANG (OUT)
             </button>
           </div>
           
