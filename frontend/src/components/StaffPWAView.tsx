@@ -2,18 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Fingerprint, Camera, MapPin, CheckCircle2, AlertTriangle, 
   Clock, Package, TrendingDown, RefreshCw, Plus, ArrowLeft, 
-  LogOut, ShieldAlert, Sparkles, Coffee, Utensils, ShoppingBag, 
-  History, Calendar, Check, AlertCircle, ChevronRight, X, Phone, User,
-  Award, ShieldCheck, Flame, DollarSign, Layers, ChevronDown, CheckCircle,
-  Zap, Info, Bell, Search, Filter, ArrowUpRight, Copy, ShoppingCart, List, 
-  ArrowDownLeft, FileDown, Trash2, CheckSquare, MessageCircle, ChefHat,
+  LogOut, Sparkles, Coffee, Utensils, ShoppingBag, 
+  Calendar, Check, AlertCircle, ChevronRight, X, User,
+  Award, ShieldCheck, DollarSign, ChevronDown, CheckCircle,
+  Zap, Info, Bell, Search, Filter, Trash2, CheckSquare,
   FileText, ClipboardList, Send, Upload, FileCheck, CheckCheck, RefreshCcw,
-  Smartphone, UserCheck
+  Smartphone, UserCheck, KeyRound
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { toast, confirmAlert } from '../utils/alert';
-import useSocket from '../hooks/useSocket';
 
 interface WorkShift {
   id: string;
@@ -35,21 +31,6 @@ interface Ingredient {
   supplier?: { id: number; name: string; phone?: string } | null;
 }
 
-interface AttendanceLog {
-  id: number;
-  date: string;
-  clockIn: string;
-  clockOut?: string;
-  shiftName?: string;
-  photoIn?: string;
-  photoOut?: string;
-  distanceIn?: number;
-  isWithinRadius?: boolean;
-  status: string;
-  lateMinutes?: number;
-  notes?: string;
-}
-
 interface LeaveRequestItem {
   id: number;
   type: string;
@@ -64,8 +45,6 @@ interface LeaveRequestItem {
 }
 
 export const StaffPWAView: React.FC = () => {
-  const socket = useSocket();
-
   // Authentication state
   const [token, setToken] = useState<string>(() => localStorage.getItem('staff_token') || '');
   const [user, setUser] = useState<any>(() => {
@@ -82,7 +61,6 @@ export const StaffPWAView: React.FC = () => {
   const [pinLoading, setPinLoading] = useState(false);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [selectedStaffUser, setSelectedStaffUser] = useState<any | null>(null);
-  const [loginMode, setLoginMode] = useState<'pin' | 'kiosk' | 'qr'>('kiosk');
 
   // Individual Device Memory & Search State
   const [savedDeviceStaff, setSavedDeviceStaff] = useState<any | null>(() => {
@@ -95,7 +73,6 @@ export const StaffPWAView: React.FC = () => {
   const [rememberDevice, setRememberDevice] = useState<boolean>(true);
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
-  const [cameraReady, setCameraReady] = useState(false);
 
   // Helper avatar gradient based on role/name
   const getAvatarGradient = (role: string = '', name: string = '') => {
@@ -117,26 +94,18 @@ export const StaffPWAView: React.FC = () => {
     return colors[idx];
   };
 
-  // Barcode / QR Camera Scanner State
-  const scannerVideoRef = useRef<HTMLVideoElement>(null);
-  const [scannerStream, setScannerStream] = useState<MediaStream | null>(null);
-  const [isScannerScanning, setIsScannerScanning] = useState(false);
-  const scannerIntervalRef = useRef<any>(null);
-
-  // Active Tab: 5 Bottom Tabs: 'attendance' | 'kds' | 'stock' | 'leave' | 'profile'
-  const [activeTab, setActiveTab] = useState<'attendance' | 'kds' | 'stock' | 'leave' | 'profile'>('attendance');
+  // Active Tab: 4 Bottom Tabs: 'attendance' | 'leave' | 'stock' | 'profile'
+  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'stock' | 'profile'>('attendance');
 
   // Live Digital Time
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDateStr, setCurrentDateStr] = useState<string>('');
-  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       setCurrentDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
-      setTick(t => t + 1);
     };
     updateTime();
     const timer = setInterval(updateTime, 1000);
@@ -167,32 +136,11 @@ export const StaffPWAView: React.FC = () => {
   const [clockLoading, setClockLoading] = useState(false);
   const [mySummary, setMySummary] = useState<any>(null);
 
-  // KDS Orders State
-  const [kdsOrders, setKdsOrders] = useState<any[]>([]);
-  const [kdsFilter, setKdsFilter] = useState<'ALL' | 'FOOD' | 'DRINK'>('ALL');
-  const [kdsLoading, setKdsLoading] = useState(false);
-  const prevOrderCountRef = useRef(0);
-
-  // Kitchen Stock State
-  const [stockSubTab, setStockSubTab] = useState<'catalog' | 'movements' | 'shopping'>('catalog');
+  // Stock State
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [stockLoading, setStockLoading] = useState(false);
   const [stockSearch, setStockSearch] = useState('');
   const [stockCategory, setStockCategory] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING' | 'LOW'>('ALL');
-
-  // Daily Movements State
-  const [todayMovements, setTodayMovements] = useState<any[]>([]);
-  const [movementsLoading, setMovementsLoading] = useState(false);
-
-  // Custom Shopping List State
-  const [customShoppingItems, setCustomShoppingItems] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('staff_custom_shopping_items') || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const [newShoppingInput, setNewShoppingInput] = useState('');
 
   // Stock Loss Modal State
   const [showLossModal, setShowLossModal] = useState(false);
@@ -225,56 +173,10 @@ export const StaffPWAView: React.FC = () => {
   });
   const [submittingLeave, setSubmittingLeave] = useState(false);
 
-  // Shift Handover & SOP Checklist State
-  const [profileSubTab, setProfileSubTab] = useState<'slip' | 'sop' | 'handover'>('slip');
-  const [sopType, setSopType] = useState<'OPENING' | 'CLOSING'>('OPENING');
-  const [openingItems, setOpeningItems] = useState([
-    { title: 'Nyalakan Lampu, AC & Display Toko', checked: false },
-    { title: 'Cek Kebersihan Meja, Kursi & Lantai Dining Area', checked: false },
-    { title: 'Cek Suhu Kulkas & Chiller Bahan Baku', checked: false },
-    { title: 'Kalibrasi Mesin Espresso & Cek Air Grinder', checked: false },
-    { title: 'Cek Persediaan Gas LPG & Air Galon', checked: false },
-    { title: 'Pastikan Kertas Thermal Printer Kasir Terpasang', checked: false },
-  ]);
-  const [closingItems, setClosingItems] = useState([
-    { title: 'Matikan Mesin Espresso, Kompor & Gas LPG', checked: false },
-    { title: 'Bersihkan Portafilter, Steam Wand & Drip Tray', checked: false },
-    { title: 'Tutup & Simpan Bahan Sisa ke Dalam Chiller', checked: false },
-    { title: 'Buang Sampah Dapur & Ganti Plastik Tempat Sampah', checked: false },
-    { title: 'Hitung Uang Fisik Kasir & Cocokkan dengan Laporan POS', checked: false },
-    { title: 'Kunci Pintu Toko, Matikan AC & Nyalakan Alarm/CCTV', checked: false },
-  ]);
-  const [sopNotes, setSopNotes] = useState('');
-  const [submittingSop, setSubmittingSop] = useState(false);
-
-  // Shift Handover State
-  const [handoverLogs, setHandoverLogs] = useState<any[]>([]);
-  const [handoverForm, setHandoverForm] = useState({
-    shiftName: 'Shift Pagi -> Shift Siang',
-    cashBalance: '',
-    equipmentStatus: 'Semua alat dan mesin beroperasi normal.',
-    notes: ''
-  });
-  const [submittingHandover, setSubmittingHandover] = useState(false);
-
-  // Sound generator
-  const playBeep = () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.3);
-    } catch (e) {
-      console.warn('AudioContext beep error', e);
-    }
-  };
+  // Change PIN Modal State
+  const [showChangePinModal, setShowChangePinModal] = useState(false);
+  const [changePinForm, setChangePinForm] = useState({ oldPin: '', newPin: '', confirmPin: '' });
+  const [submittingChangePin, setSubmittingChangePin] = useState(false);
 
   // Distance calculator (Haversine)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -308,7 +210,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch Staff List for Kiosk Login
+  // Fetch Staff List for Login
   const fetchStaffList = async () => {
     try {
       const res = await fetch('/api/auth/staff-list');
@@ -362,7 +264,6 @@ export const StaffPWAView: React.FC = () => {
   // Camera Management with WebRTC + fallback
   const startCamera = async (facing = cameraFacing) => {
     setIsCameraActive(true);
-    setCameraReady(false);
     try {
       if (cameraStream) {
         cameraStream.getTracks().forEach(t => t.stop());
@@ -378,7 +279,6 @@ export const StaffPWAView: React.FC = () => {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       }
       setCameraStream(stream);
-      setCameraReady(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play().catch(err => console.warn('Video stream play error:', err));
@@ -386,7 +286,6 @@ export const StaffPWAView: React.FC = () => {
     } catch (e) {
       console.error('Camera error:', e);
       setIsCameraActive(false);
-      setCameraReady(false);
     }
   };
 
@@ -396,7 +295,6 @@ export const StaffPWAView: React.FC = () => {
       setCameraStream(null);
     }
     setIsCameraActive(false);
-    setCameraReady(false);
   };
 
   const toggleCameraFacing = () => {
@@ -434,7 +332,6 @@ export const StaffPWAView: React.FC = () => {
     canvas.height = videoRef.current.videoHeight || 480;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      // Mirror image horizontally if user-facing front camera
       if (cameraFacing === 'user') {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -476,48 +373,6 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch KDS Live Orders
-  const fetchKdsOrders = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch('/api/kds/active', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.length > prevOrderCountRef.current && prevOrderCountRef.current !== 0) {
-          playBeep();
-        }
-        prevOrderCountRef.current = data.length;
-        setKdsOrders(data);
-      }
-    } catch (e) {
-      console.error('KDS Fetch error:', e);
-    }
-  };
-
-  // Update KDS Order Status
-  const handleUpdateKdsStatus = async (orderId: number, kdsStatus: string) => {
-    try {
-      const res = await fetch(`/api/kds/${orderId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ kdsStatus })
-      });
-      if (res.ok) {
-        toast(`Status pesanan diperbarui: ${kdsStatus}`, 'success');
-        fetchKdsOrders();
-      } else {
-        toast('Gagal memperbarui status pesanan', 'error');
-      }
-    } catch (e) {
-      toast('Terjadi kesalahan koneksi', 'error');
-    }
-  };
-
   // Fetch Ingredients
   const fetchIngredients = async () => {
     if (!token) return;
@@ -533,25 +388,6 @@ export const StaffPWAView: React.FC = () => {
       console.error(e);
     } finally {
       setStockLoading(false);
-    }
-  };
-
-  // Fetch Today Movements
-  const fetchTodayMovements = async () => {
-    if (!token) return;
-    setMovementsLoading(true);
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await fetch(`/api/ingredients/logs?date=${today}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setTodayMovements(await res.json());
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setMovementsLoading(false);
     }
   };
 
@@ -573,55 +409,16 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch Handover Logs
-  const fetchHandoverLogs = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch('/api/attendance/handover', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setHandoverLogs(await res.json());
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Socket.IO Listeners
-  useEffect(() => {
-    if (socket) {
-      const handleOrderUpdate = () => {
-        fetchKdsOrders();
-      };
-      socket.on('orderCreated', handleOrderUpdate);
-      socket.on('orderUpdated', handleOrderUpdate);
-      socket.on('kdsUpdate', handleOrderUpdate);
-      socket.on('tableStatusChanged', handleOrderUpdate);
-
-      return () => {
-        socket.off('orderCreated', handleOrderUpdate);
-        socket.off('orderUpdated', handleOrderUpdate);
-        socket.off('kdsUpdate', handleOrderUpdate);
-        socket.off('tableStatusChanged', handleOrderUpdate);
-      };
-    }
-  }, [socket, token]);
-
   // Tab Change Fetcher
   useEffect(() => {
     if (!token) return;
     fetchMySummary();
     if (activeTab === 'attendance') {
       requestGpsLocation();
-    } else if (activeTab === 'kds') {
-      fetchKdsOrders();
     } else if (activeTab === 'stock') {
       fetchIngredients();
     } else if (activeTab === 'leave') {
       fetchMyLeaves();
-    } else if (activeTab === 'profile') {
-      fetchHandoverLogs();
     }
   }, [token, activeTab]);
 
@@ -777,79 +574,6 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Submit SOP Checklist
-  const handleSubmitSop = async () => {
-    const items = sopType === 'OPENING' ? openingItems : closingItems;
-    setSubmittingSop(true);
-    try {
-      const res = await fetch('/api/attendance/checklist', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          type: sopType,
-          shiftName: mySummary?.todayStatus?.todayLog?.shiftName || 'Shift Bertugas',
-          items,
-          notes: sopNotes
-        })
-      });
-
-      if (res.ok) {
-        toast(`Checklist SOP ${sopType === 'OPENING' ? 'Buka' : 'Tutup'} Dapur berhasil disimpan!`, 'success');
-        setSopNotes('');
-      } else {
-        toast('Gagal menyimpan checklist SOP', 'error');
-      }
-    } catch (e) {
-      toast('Terjadi kesalahan koneksi', 'error');
-    } finally {
-      setSubmittingSop(false);
-    }
-  };
-
-  // Submit Shift Handover
-  const handleSubmitHandover = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!handoverForm.notes.trim()) {
-      return toast('Harap isi catatan pesan serah terima shift', 'warning');
-    }
-
-    setSubmittingHandover(true);
-    try {
-      const res = await fetch('/api/attendance/handover', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          ...handoverForm
-        })
-      });
-
-      if (res.ok) {
-        toast('Catatan serah terima shift berhasil disimpan!', 'success');
-        setHandoverForm({
-          shiftName: 'Shift Pagi -> Shift Siang',
-          cashBalance: '',
-          equipmentStatus: 'Semua alat dan mesin beroperasi normal.',
-          notes: ''
-        });
-        fetchHandoverLogs();
-      } else {
-        toast('Gagal menyimpan handover shift', 'error');
-      }
-    } catch (e) {
-      toast('Terjadi kesalahan koneksi', 'error');
-    } finally {
-      setSubmittingHandover(false);
-    }
-  };
-
   // Submit Stock Loss
   const handleSubmitStockLoss = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -926,21 +650,12 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Helper format time
-  const formatDuration = (dateStr: string) => {
-    const diffMs = Math.max(0, new Date().getTime() - new Date(dateStr).getTime());
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffSecs = Math.floor((diffMs % 60000) / 1000);
-    return `${diffMins.toString().padStart(2, '0')}:${diffSecs.toString().padStart(2, '0')}`;
-  };
-
   // ─────────────────────────────────────────────────────────────
-  // RENDER LOGIN SCREEN IF NOT AUTHENTICATED (INDIVIDUAL & KIOSK UX)
+  // RENDER LOGIN SCREEN IF NOT AUTHENTICATED
   // ─────────────────────────────────────────────────────────────
   if (!token || !user) {
     const activeStaffToLogin = selectedStaffUser || savedDeviceStaff;
 
-    // Filter staff list based on search and role
     const filteredStaffList = staffList.filter(st => {
       const matchQuery = st.name.toLowerCase().includes(staffSearchQuery.toLowerCase()) ||
                          (st.role && st.role.toLowerCase().includes(staffSearchQuery.toLowerCase()));
@@ -977,10 +692,8 @@ export const StaffPWAView: React.FC = () => {
 
         {/* Main Card */}
         <div className="bg-slate-900/95 border border-slate-800 rounded-[2.2rem] p-5 shadow-2xl relative z-10 space-y-4 my-auto backdrop-blur-xl">
-          {/* STATE 1: INDIVIDUAL PROFILE PIN ENTRY */}
           {activeStaffToLogin ? (
             <div className="space-y-4 animate-fade-in">
-              {/* Header with Switch Account Button */}
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                 <button
                   type="button"
@@ -1001,7 +714,6 @@ export const StaffPWAView: React.FC = () => {
                 </span>
               </div>
 
-              {/* Personal Avatar Card */}
               <div className="text-center space-y-2 pt-1">
                 <div className="relative inline-block">
                   <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${getAvatarGradient(activeStaffToLogin.role, activeStaffToLogin.name)} text-white flex items-center justify-center font-black text-xl shadow-lg border-2 border-white/20 mx-auto ring-4 ring-blue-500/20`}>
@@ -1025,7 +737,7 @@ export const StaffPWAView: React.FC = () => {
                 </p>
               </div>
 
-              {/* PIN Dots Display */}
+              {/* PIN Dots */}
               <div className="flex justify-center gap-3 py-1">
                 {[0, 1, 2, 3, 4, 5].map(idx => (
                   <div
@@ -1045,7 +757,7 @@ export const StaffPWAView: React.FC = () => {
                 </p>
               )}
 
-              {/* Modern Touch Keypad */}
+              {/* Keypad */}
               <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto pt-1">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
                   <button
@@ -1110,7 +822,6 @@ export const StaffPWAView: React.FC = () => {
               </div>
             </div>
           ) : (
-            /* STATE 2: STAFF SELECTION LIST (SEARCH & CATEGORIES) */
             <div className="space-y-3.5 animate-fade-in">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
                 <div>
@@ -1198,29 +909,14 @@ export const StaffPWAView: React.FC = () => {
     );
   }
 
-  // Filter KDS Orders
-  const filteredKdsOrders = kdsOrders.filter(order => {
-    if (kdsFilter === 'ALL') return true;
-    if (kdsFilter === 'FOOD') {
-      return order.items?.some((i: any) => i.product?.category?.printerTarget === 'KITCHEN' || !i.product?.category?.printerTarget);
-    }
-    if (kdsFilter === 'DRINK') {
-      return order.items?.some((i: any) => i.product?.category?.printerTarget === 'BAR');
-    }
-    return true;
-  });
-
   // ─────────────────────────────────────────────────────────────
-  // RENDER AUTHENTICATED STAFF APP WITH STICKY BOTTOM DOCK
+  // RENDER AUTHENTICATED STAFF APP WITH 4 ESSENTIAL TABS
   // ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-900/90 flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
-      {/* Mobile Device Simulation Shell on Desktop, Native Edge-to-Edge on Mobile */}
       <div className="w-full sm:max-w-[430px] min-h-screen sm:min-h-[860px] bg-slate-100 sm:rounded-[2rem] shadow-2xl sm:border sm:border-slate-800 flex flex-col relative overflow-hidden">
         
-        {/* ─────────────────────────────────────────────────────────────
-            1. TOP APP BAR & STAFF BANNER (SOLID CLEAN HEADER)
-            ───────────────────────────────────────────────────────────── */}
+        {/* TOP APP BAR */}
         <div className="bg-slate-900 text-white px-5 pt-4 pb-4 border-b border-slate-800 shrink-0">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
@@ -1290,13 +986,9 @@ export const StaffPWAView: React.FC = () => {
           </div>
         </div>
 
-        {/* ─────────────────────────────────────────────────────────────
-            SCROLLABLE CONTENT AREA
-            ───────────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto pb-28">
-          {/* ─────────────────────────────────────────────────────────────
-              TAB 1: ABSENSI GPS & DIRECT ACTIVE CAMERA FEED
-              ───────────────────────────────────────────────────────────── */}
+        {/* SCROLLABLE CONTENT */}
+        <div className="flex-1 overflow-y-auto pb-24">
+          {/* TAB 1: PRESENSI */}
           {activeTab === 'attendance' && (
             <div className="p-4 space-y-4 animate-fade-in">
               {/* GPS RADAR CARD */}
@@ -1344,7 +1036,7 @@ export const StaffPWAView: React.FC = () => {
                 </button>
               </div>
 
-              {/* PILIHAN SHIFT (JIKA BELUM CLOCK IN) */}
+              {/* SHIFT SELECTOR */}
               {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2.5">
                   <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -1524,423 +1216,234 @@ export const StaffPWAView: React.FC = () => {
             </div>
           )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 2: MOBILE KDS (DAPUR & BAR LIVE TICKET STATION)
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'kds' && (
-        <div className="p-4 space-y-4 animate-fade-in">
-          {/* FILTER TABS & SOUND STATUS */}
-          <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between gap-1">
-            <div className="flex gap-1 flex-1">
-              <button
-                type="button"
-                onClick={() => setKdsFilter('ALL')}
-                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all ${
-                  kdsFilter === 'ALL'
-                    ? 'bg-[#0052cc] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                Semua ({kdsOrders.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setKdsFilter('FOOD')}
-                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all ${
-                  kdsFilter === 'FOOD'
-                    ? 'bg-[#0052cc] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                🍳 Dapur
-              </button>
-              <button
-                type="button"
-                onClick={() => setKdsFilter('DRINK')}
-                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-black transition-all ${
-                  kdsFilter === 'DRINK'
-                    ? 'bg-[#0052cc] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                ☕ Bar
-              </button>
-            </div>
+          {/* TAB 2: IZIN & CUTI */}
+          {activeTab === 'leave' && (
+            <div className="p-4 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Pengajuan Izin & Sakit</h3>
+                  <p className="text-[10px] text-slate-400">Pengajuan digital tanpa surat manual</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNewLeaveModal(true)}
+                  className="py-2 px-3 rounded-2xl bg-[#0052cc] hover:bg-blue-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95"
+                >
+                  <Plus size={14} />
+                  <span>Buat Izin</span>
+                </button>
+              </div>
 
-            <button
-              type="button"
-              onClick={fetchKdsOrders}
-              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200"
-              title="Refresh KDS"
-            >
-              <RefreshCw size={14} />
-            </button>
-          </div>
-
-          {/* KDS TICKET CARDS LIST */}
-          {filteredKdsOrders.length === 0 ? (
-            <div className="py-12 bg-white rounded-3xl border border-slate-200 text-center space-y-2 p-4">
-              <ChefHat size={36} className="mx-auto text-slate-300" />
-              <h4 className="text-sm font-black text-slate-700">Dapur & Bar Santai</h4>
-              <p className="text-xs text-slate-400">Tidak ada antrean pesanan aktif saat ini.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredKdsOrders.map(order => {
-                const isCooking = order.kdsStatus === 'Cooking';
-                const isReady = order.kdsStatus === 'Ready';
-
-                return (
-                  <div
-                    key={order.id}
-                    className={`bg-white rounded-3xl border p-4 shadow-sm space-y-3 transition-all ${
-                      isReady
-                        ? 'border-emerald-300 bg-emerald-50/20'
-                        : isCooking
-                        ? 'border-amber-300 bg-amber-50/20'
-                        : 'border-slate-200'
-                    }`}
-                  >
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                      <div>
+              {leaveRequests.length === 0 ? (
+                <div className="py-12 bg-white rounded-3xl border border-slate-200 text-center space-y-2 p-4">
+                  <FileCheck size={36} className="mx-auto text-slate-300" />
+                  <h4 className="text-sm font-black text-slate-700">Belum Ada Pengajuan</h4>
+                  <p className="text-xs text-slate-400">Tekan tombol "+ Buat Izin" untuk mengajukan izin/sakit/cuti.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {leaveRequests.map(item => (
+                    <div
+                      key={item.id}
+                      className="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-white bg-slate-900 px-2 py-0.5 rounded-lg">
-                            {order.table?.tableNo ? `Meja ${order.table.tableNo}` : 'Takeaway'}
+                          <span className="text-xs font-black text-slate-900">{item.type}</span>
+                          <span className="text-[10px] text-slate-400">
+                            ({item.startDate === item.endDate ? item.startDate : `${item.startDate} s/d ${item.endDate}`})
                           </span>
-                          <span className="text-xs font-mono font-bold text-slate-500">#{order.orderNumber}</span>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">Pemesan: {order.customerName || 'Tamu'}</p>
-                      </div>
 
-                      <div className="text-right">
-                        <div className="inline-flex items-center gap-1 text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200">
-                          <Clock size={11} />
-                          <span>{formatDuration(order.createdAt)}</span>
-                        </div>
-                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                          Status: <strong className="text-slate-800">{order.kdsStatus || 'Pending'}</strong>
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Order Items */}
-                    <div className="space-y-2">
-                      {order.items?.map((item: any) => (
-                        <div key={item.id} className="flex items-start justify-between text-xs">
-                          <div className="flex items-start gap-2">
-                            <span className="w-5 h-5 rounded-md bg-blue-100 text-[#0052cc] font-black text-[11px] flex items-center justify-center shrink-0">
-                              {item.qty}x
-                            </span>
-                            <div>
-                              <span className="font-bold text-slate-800">{item.product?.name}</span>
-                              {item.notes && (
-                                <p className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded mt-0.5 border border-amber-200">
-                                  📝 {item.notes}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="pt-2 border-t border-slate-100 flex gap-2">
-                      {order.kdsStatus === 'Pending' && (
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateKdsStatus(order.id, 'Cooking')}
-                          className="flex-1 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                        <span
+                          className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                            item.status === 'Approved'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : item.status === 'Rejected'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
                         >
-                          <Flame size={14} />
-                          <span>Mulai Masak</span>
-                        </button>
-                      )}
-
-                      {order.kdsStatus === 'Cooking' && (
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateKdsStatus(order.id, 'Ready')}
-                          className="flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
-                        >
-                          <CheckCircle2 size={14} />
-                          <span>Siap Saji</span>
-                        </button>
-                      )}
-
-                      {order.kdsStatus === 'Ready' && (
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateKdsStatus(order.id, 'Served')}
-                          className="flex-1 py-2.5 rounded-2xl bg-[#0052cc] hover:bg-blue-800 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
-                        >
-                          <CheckCheck size={14} />
-                          <span>Diantar ke Meja</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 3: STOK BAHAN BAKU, SPOILAGE & LIST BELANJA PASAR
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'stock' && (
-        <div className="p-4 space-y-4 animate-fade-in">
-          {/* Quick Actions Header */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setShowLossModal(true)}
-              className="flex-1 py-2.5 px-3 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-black flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm"
-            >
-              <TrendingDown size={14} />
-              <span>Lapor Bahan Rusak</span>
-            </button>
-            <button
-              type="button"
-              onClick={fetchIngredients}
-              className="p-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-            >
-              <RefreshCw size={14} />
-            </button>
-          </div>
-
-          {/* Search & Category Filter */}
-          <div className="bg-white p-3 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
-            <div className="relative">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={stockSearch}
-                onChange={e => setStockSearch(e.target.value)}
-                placeholder="Cari bahan (kopi, susu, tuna, matcha)..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none"
-              />
-            </div>
-
-            <div className="grid grid-cols-4 gap-1 text-center">
-              <button
-                onClick={() => setStockCategory('ALL')}
-                className={`py-1.5 rounded-xl text-[11px] font-bold ${
-                  stockCategory === 'ALL' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                Semua ({ingredients.length})
-              </button>
-              <button
-                onClick={() => setStockCategory('FOOD')}
-                className={`py-1.5 rounded-xl text-[11px] font-bold ${
-                  stockCategory === 'FOOD' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                🍲 Dapur
-              </button>
-              <button
-                onClick={() => setStockCategory('DRINK')}
-                className={`py-1.5 rounded-xl text-[11px] font-bold ${
-                  stockCategory === 'DRINK' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                ☕ Bar
-              </button>
-              <button
-                onClick={() => setStockCategory('LOW')}
-                className={`py-1.5 rounded-xl text-[11px] font-bold ${
-                  stockCategory === 'LOW' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600'
-                }`}
-              >
-                ⚠️ Kritis ({ingredients.filter(i => i.stock <= i.minStock).length})
-              </button>
-            </div>
-          </div>
-
-          {/* List Ingredients */}
-          <div className="space-y-2.5">
-            {ingredients
-              .filter(i => {
-                if (stockCategory === 'FOOD') return (i.category || 'FOOD') === 'FOOD';
-                if (stockCategory === 'DRINK') return i.category === 'DRINK';
-                if (stockCategory === 'PACKAGING') return i.category === 'PACKAGING';
-                if (stockCategory === 'LOW') return i.stock <= i.minStock;
-                return true;
-              })
-              .filter(i => i.name.toLowerCase().includes(stockSearch.toLowerCase()))
-              .map(ing => {
-                const isLow = ing.stock <= ing.minStock;
-                return (
-                  <div
-                    key={ing.id}
-                    className={`bg-white p-3.5 rounded-3xl border shadow-sm flex items-center justify-between gap-3 ${
-                      isLow ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200/80'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <h5 className="text-xs font-black text-slate-900">{ing.name}</h5>
-                        {isLow && (
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-600 text-white">
-                            Menipis
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        Min: {ing.minStock} {ing.unit} {ing.subCategory ? `• ${ing.subCategory}` : ''}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="text-right">
-                        <span className="text-sm font-black text-slate-900 font-mono">
-                          {ing.stock} <span className="text-[10px] font-bold text-slate-500">{ing.unit}</span>
+                          {item.status === 'Approved' ? '✓ Disetujui' : item.status === 'Rejected' ? '✕ Ditolak' : '⏳ Menunggu Review'}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAdjustModal({ open: true, ingredient: ing });
-                          setAdjustForm({ change: '', description: '' });
-                        }}
-                        className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-[#0052cc] hover:bg-blue-100 font-bold text-[10px] border border-blue-200"
-                      >
-                        +Restock
-                      </button>
+
+                      <p className="text-xs text-slate-700 font-medium">"{item.reason}"</p>
+
+                      {item.adminNotes && (
+                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600">
+                          <strong>Catatan Admin ({item.approvedBy || 'Admin'}):</strong> {item.adminNotes}
+                        </div>
+                      )}
+
+                      {item.photoUrl && (
+                        <div className="pt-1">
+                          <a
+                            href={item.photoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-[#0052cc] font-bold hover:underline flex items-center gap-1"
+                          >
+                            <FileText size={11} /> Lihat Bukti / Surat Dokter
+                          </a>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 4: FORM IZIN, SAKIT, CUTI & RIWAYAT APPROVAL
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'leave' && (
-        <div className="p-4 space-y-4 animate-fade-in">
-          {/* Header & New Request Button */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-black text-slate-900">Pengajuan Izin & Sakit</h3>
-              <p className="text-[10px] text-slate-400">Pengajuan digital tanpa surat manual</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowNewLeaveModal(true)}
-              className="py-2 px-3 rounded-2xl bg-[#0052cc] hover:bg-blue-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95"
-            >
-              <Plus size={14} />
-              <span>Buat Izin</span>
-            </button>
-          </div>
-
-          {/* Riwayat Pengajuan Izin */}
-          {leaveRequests.length === 0 ? (
-            <div className="py-12 bg-white rounded-3xl border border-slate-200 text-center space-y-2 p-4">
-              <FileCheck size={36} className="mx-auto text-slate-300" />
-              <h4 className="text-sm font-black text-slate-700">Belum Ada Pengajuan</h4>
-              <p className="text-xs text-slate-400">Tekan tombol "+ Buat Izin" untuk mengajukan izin/sakit/cuti.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {leaveRequests.map(item => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-2.5"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-black text-slate-900">{item.type}</span>
-                      <span className="text-[10px] text-slate-400">
-                        ({item.startDate === item.endDate ? item.startDate : `${item.startDate} s/d ${item.endDate}`})
-                      </span>
-                    </div>
-
-                    <span
-                      className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
-                        item.status === 'Approved'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : item.status === 'Rejected'
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}
-                    >
-                      {item.status === 'Approved' ? '✓ Disetujui' : item.status === 'Rejected' ? '✕ Ditolak' : '⏳ Menunggu Review'}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-700 font-medium">"{item.reason}"</p>
-
-                  {item.adminNotes && (
-                    <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600">
-                      <strong>Catatan Admin ({item.approvedBy || 'Admin'}):</strong> {item.adminNotes}
-                    </div>
-                  )}
-
-                  {item.photoUrl && (
-                    <div className="pt-1">
-                      <a
-                        href={item.photoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] text-[#0052cc] font-bold hover:underline flex items-center gap-1"
-                      >
-                        <FileText size={11} /> Lihat Bukti / Surat Dokter
-                      </a>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 5: SLIP GAJI, SOP BUKA/TUTUP DAPUR & HANDOVER SHIFT
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'profile' && (
-        <div className="p-4 space-y-4 animate-fade-in">
-          {/* Sub-Tabs Selector */}
-          <div className="bg-white p-1 rounded-2xl border border-slate-200 flex gap-1">
-            <button
-              type="button"
-              onClick={() => setProfileSubTab('slip')}
-              className={`flex-1 py-1.5 rounded-xl text-xs font-black ${
-                profileSubTab === 'slip' ? 'bg-[#0052cc] text-white' : 'text-slate-600'
-              }`}
-            >
-              💵 Slip Gaji
-            </button>
-            <button
-              type="button"
-              onClick={() => setProfileSubTab('sop')}
-              className={`flex-1 py-1.5 rounded-xl text-xs font-black ${
-                profileSubTab === 'sop' ? 'bg-[#0052cc] text-white' : 'text-slate-600'
-              }`}
-            >
-              📋 SOP Dapur
-            </button>
-            <button
-              type="button"
-              onClick={() => setProfileSubTab('handover')}
-              className={`flex-1 py-1.5 rounded-xl text-xs font-black ${
-                profileSubTab === 'handover' ? 'bg-[#0052cc] text-white' : 'text-slate-600'
-              }`}
-            >
-              🔄 Handover
-            </button>
-          </div>
+          {/* TAB 3: STOK BAHAN BAKU & KERUSAKAN */}
+          {activeTab === 'stock' && (
+            <div className="p-4 space-y-4 animate-fade-in">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLossModal(true)}
+                  className="flex-1 py-2.5 px-3 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-black flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm"
+                >
+                  <TrendingDown size={14} />
+                  <span>Lapor Bahan Rusak / Basi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchIngredients}
+                  className="p-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  title="Refresh Stok"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
 
-          {/* SUBTAB 1: SLIP GAJI & REKAP */}
-          {profileSubTab === 'slip' && (
-            <div className="space-y-3">
+              {/* Search & Category Filter */}
+              <div className="bg-white p-3 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
+                <div className="relative">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={stockSearch}
+                    onChange={e => setStockSearch(e.target.value)}
+                    placeholder="Cari bahan (kopi, susu, sirup, dll)..."
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-4 gap-1 text-center">
+                  <button
+                    onClick={() => setStockCategory('ALL')}
+                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                      stockCategory === 'ALL' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    Semua ({ingredients.length})
+                  </button>
+                  <button
+                    onClick={() => setStockCategory('FOOD')}
+                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                      stockCategory === 'FOOD' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    Makanan
+                  </button>
+                  <button
+                    onClick={() => setStockCategory('DRINK')}
+                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                      stockCategory === 'DRINK' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    Minuman
+                  </button>
+                  <button
+                    onClick={() => setStockCategory('LOW')}
+                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                      stockCategory === 'LOW' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    ⚠️ Kritis ({ingredients.filter(i => i.stock <= i.minStock).length})
+                  </button>
+                </div>
+              </div>
+
+              {/* List Ingredients */}
+              <div className="space-y-2.5">
+                {ingredients
+                  .filter(i => {
+                    if (stockCategory === 'FOOD') return (i.category || 'FOOD') === 'FOOD';
+                    if (stockCategory === 'DRINK') return i.category === 'DRINK';
+                    if (stockCategory === 'PACKAGING') return i.category === 'PACKAGING';
+                    if (stockCategory === 'LOW') return i.stock <= i.minStock;
+                    return true;
+                  })
+                  .filter(i => i.name.toLowerCase().includes(stockSearch.toLowerCase()))
+                  .map(ing => {
+                    const isLow = ing.stock <= ing.minStock;
+                    return (
+                      <div
+                        key={ing.id}
+                        className={`bg-white p-3.5 rounded-3xl border shadow-sm flex items-center justify-between gap-3 ${
+                          isLow ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200/80'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <h5 className="text-xs font-black text-slate-900">{ing.name}</h5>
+                            {isLow && (
+                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-600 text-white">
+                                Menipis
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Min: {ing.minStock} {ing.unit} {ing.subCategory ? `• ${ing.subCategory}` : ''}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <span className="text-sm font-black text-slate-900 font-mono">
+                              {ing.stock} <span className="text-[10px] font-bold text-slate-500">{ing.unit}</span>
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdjustModal({ open: true, ingredient: ing });
+                              setAdjustForm({ change: '', description: '' });
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-[#0052cc] hover:bg-blue-100 font-bold text-[10px] border border-blue-200"
+                          >
+                            +Restock
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: PROFIL SAYA & STATISTIK PRESENSI */}
+          {activeTab === 'profile' && (
+            <div className="p-4 space-y-4 animate-fade-in">
+              {/* Profil Card */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm text-center space-y-3">
+                <div className="relative inline-block">
+                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${getAvatarGradient(user?.role, user?.name)} text-white flex items-center justify-center font-black text-2xl shadow-md border-2 border-white mx-auto`}>
+                    {user?.name?.substring(0, 2).toUpperCase()}
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white" />
+                </div>
+
+                <div>
+                  <h3 className="text-base font-black text-slate-900">{user?.name}</h3>
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-0.5 rounded-full border border-blue-100 inline-block mt-1">
+                    {user?.role}
+                  </span>
+                </div>
+              </div>
+
               {/* STATS TILES */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-white p-3 rounded-2xl border border-slate-200 text-center">
@@ -1957,186 +1460,50 @@ export const StaffPWAView: React.FC = () => {
                 </div>
               </div>
 
-              {/* ESTIMASI TAKE HOME PAY */}
-              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2.5">
+              {/* Shift Bertugas Hari Ini */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2">
                 <h4 className="text-xs font-black text-slate-900 border-b pb-2 flex items-center justify-between">
-                  <span>Rincian Insentif & Kedisiplinan</span>
-                  <span className="text-[10px] font-bold text-slate-400">Bulan Ini</span>
+                  <span>Informasi Shift Bertugas</span>
+                  <span className="text-[10px] font-bold text-slate-400">Hari Ini</span>
                 </h4>
 
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-600">Bonus Zero-Late:</span>
-                    <span className="font-bold text-emerald-600">
-                      +Rp {(mySummary?.discipline?.zeroLateBonusEarned || 0).toLocaleString('id-ID')}
+                    <span className="text-slate-500">Shift Terpilih:</span>
+                    <span className="font-bold text-slate-800">
+                      {mySummary?.todayStatus?.todayLog?.shiftName || 'Belum Presensi'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-600">Potongan Terlambat:</span>
-                    <span className="font-bold text-rose-600">
-                      -Rp {(mySummary?.discipline?.totalLatePenalty || 0).toLocaleString('id-ID')}
+                    <span className="text-slate-500">Jam Masuk (Clock In):</span>
+                    <span className="font-bold text-emerald-600">
+                      {mySummary?.todayStatus?.todayLog?.clockIn || '-'}
                     </span>
                   </div>
-                  <div className="flex justify-between pt-2 border-t font-black">
-                    <span className="text-slate-900">Total Reward Disiplin:</span>
-                    <span className="text-[#0052cc]">
-                      Rp {(mySummary?.discipline?.netDisciplineAmount || 0).toLocaleString('id-ID')}
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Jam Pulang (Clock Out):</span>
+                    <span className="font-bold text-slate-800">
+                      {mySummary?.todayStatus?.todayLog?.clockOut || '-'}
                     </span>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* SUBTAB 2: SOP BUKA / TUTUP DAPUR */}
-          {profileSubTab === 'sop' && (
-            <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
-                <h4 className="text-xs font-black text-slate-900">Checklist SOP Harian</h4>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setSopType('OPENING')}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-black ${
-                      sopType === 'OPENING' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    Opening
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSopType('CLOSING')}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-black ${
-                      sopType === 'CLOSING' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    Closing
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {(sopType === 'OPENING' ? openingItems : closingItems).map((item, idx) => (
-                  <label
-                    key={idx}
-                    className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100 cursor-pointer hover:bg-blue-50/50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={item.checked}
-                      onChange={e => {
-                        const checked = e.target.checked;
-                        if (sopType === 'OPENING') {
-                          const updated = [...openingItems];
-                          updated[idx].checked = checked;
-                          setOpeningItems(updated);
-                        } else {
-                          const updated = [...closingItems];
-                          updated[idx].checked = checked;
-                          setClosingItems(updated);
-                        }
-                      }}
-                      className="mt-0.5 rounded text-[#0052cc]"
-                    />
-                    <span className="text-xs font-semibold text-slate-800">{item.title}</span>
-                  </label>
-                ))}
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Catatan Tambahan:</label>
-                <input
-                  type="text"
-                  value={sopNotes}
-                  onChange={e => setSopNotes(e.target.value)}
-                  placeholder="Misal: Chiller 1 suhu stabil 3°C..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                />
-              </div>
-
+              {/* Logout Action */}
               <button
                 type="button"
-                disabled={submittingSop}
-                onClick={handleSubmitSop}
-                className="w-full py-3 bg-[#0052cc] hover:bg-blue-800 text-white rounded-2xl text-xs font-black shadow-md shadow-blue-500/20"
+                onClick={handleLogout}
+                className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-xs rounded-2xl border border-rose-200 flex items-center justify-center gap-2 transition-all shadow-sm"
               >
-                {submittingSop ? 'Menyimpan...' : 'Simpan Checklist SOP'}
+                <LogOut size={15} />
+                <span>Keluar dari Akun Staf</span>
               </button>
             </div>
           )}
-
-          {/* SUBTAB 3: SHIFT HANDOVER LOGBOOK */}
-          {profileSubTab === 'handover' && (
-            <div className="space-y-3">
-              <form onSubmit={handleSubmitHandover} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2.5">
-                <h4 className="text-xs font-black text-slate-900 border-b pb-2">Form Serah Terima (Handover)</h4>
-                
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Pergantian Shift:</label>
-                  <input
-                    type="text"
-                    value={handoverForm.shiftName}
-                    onChange={e => setHandoverForm({ ...handoverForm, shiftName: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Sisa Uang Kas Kecil / Laci (Rp):</label>
-                  <input
-                    type="number"
-                    value={handoverForm.cashBalance}
-                    onChange={e => setHandoverForm({ ...handoverForm, cashBalance: e.target.value })}
-                    placeholder="Misal: 150000"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 block mb-1">Catatan Tugas / Pesan Penting:</label>
-                  <textarea
-                    rows={2}
-                    value={handoverForm.notes}
-                    onChange={e => setHandoverForm({ ...handoverForm, notes: e.target.value })}
-                    placeholder="Ketik catatan untuk shift berikutnya..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submittingHandover}
-                  className="w-full py-2.5 bg-[#0052cc] hover:bg-blue-800 text-white rounded-xl text-xs font-black shadow-md"
-                >
-                  {submittingHandover ? 'Menyimpan...' : 'Kirim Handover'}
-                </button>
-              </form>
-
-              {/* Riwayat Handover */}
-              <div className="space-y-2">
-                {handoverLogs.slice(0, 5).map(h => (
-                  <div key={h.id} className="bg-white p-3 rounded-2xl border border-slate-200 text-xs space-y-1">
-                    <div className="flex justify-between font-black text-slate-900">
-                      <span>{h.shiftName}</span>
-                      <span className="text-[10px] text-slate-400">{h.date}</span>
-                    </div>
-                    <p className="text-slate-600 font-medium">"{h.notes}"</p>
-                    <p className="text-[10px] text-slate-400">Oleh: {h.user?.name} • Kas: Rp {Number(h.cashBalance).toLocaleString('id-ID')}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
-      )}
-    </div>
 
-        {/* ─────────────────────────────────────────────────────────────
-            STICKY BOTTOM NAVIGATION BAR (PROFESSIONAL MOBILE APP DOCK)
-            ───────────────────────────────────────────────────────────── */}
-        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[430px] mx-auto z-40 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-2 px-2 sm:rounded-b-[2rem]">
+        {/* STICKY BOTTOM 4 TABS DOCK */}
+        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[430px] mx-auto z-40 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-2 px-3 sm:rounded-b-[2rem]">
           <div className="flex items-center justify-around">
             {/* Tab 1: Presensi */}
             <button
@@ -2149,30 +1516,25 @@ export const StaffPWAView: React.FC = () => {
               }`}
             >
               <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <Fingerprint size={19} />
+                <Fingerprint size={20} />
               </div>
               <span className="text-[10px] tracking-tight mt-0.5">Presensi</span>
             </button>
 
-            {/* Tab 2: Dapur KDS */}
+            {/* Tab 2: Izin / Cuti */}
             <button
               type="button"
-              onClick={() => setActiveTab('kds')}
+              onClick={() => setActiveTab('leave')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
-                activeTab === 'kds'
+                activeTab === 'leave'
                   ? 'text-[#0052cc] font-black scale-105'
                   : 'text-slate-400 hover:text-slate-600 font-semibold'
               }`}
             >
-              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'kds' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <ChefHat size={19} />
+              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'leave' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
+                <FileText size={20} />
               </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Dapur KDS</span>
-              {kdsOrders.filter(o => o.kdsStatus !== 'Served').length > 0 && (
-                <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center shadow-sm">
-                  {kdsOrders.filter(o => o.kdsStatus !== 'Served').length}
-                </span>
-              )}
+              <span className="text-[10px] tracking-tight mt-0.5">Izin / Cuti</span>
             </button>
 
             {/* Tab 3: Stok Bahan */}
@@ -2186,31 +1548,15 @@ export const StaffPWAView: React.FC = () => {
               }`}
             >
               <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'stock' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <Package size={19} />
+                <Package size={20} />
               </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Stok</span>
+              <span className="text-[10px] tracking-tight mt-0.5">Stok Bahan</span>
               {ingredients.filter(i => i.stock <= i.minStock).length > 0 && (
-                <span className="absolute top-1 right-5 w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                <span className="absolute top-1 right-6 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
               )}
             </button>
 
-            {/* Tab 4: Izin / Cuti */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('leave')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
-                activeTab === 'leave'
-                  ? 'text-[#0052cc] font-black scale-105'
-                  : 'text-slate-400 hover:text-slate-600 font-semibold'
-              }`}
-            >
-              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'leave' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <FileText size={19} />
-              </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Izin / Cuti</span>
-            </button>
-
-            {/* Tab 5: Slip & SOP */}
+            {/* Tab 4: Profil Saya */}
             <button
               type="button"
               onClick={() => setActiveTab('profile')}
@@ -2221,234 +1567,228 @@ export const StaffPWAView: React.FC = () => {
               }`}
             >
               <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'profile' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <UserCheck size={19} />
+                <UserCheck size={20} />
               </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Slip & SOP</span>
+              <span className="text-[10px] tracking-tight mt-0.5">Profil Saya</span>
             </button>
           </div>
         </nav>
 
-      {/* ─────────────────────────────────────────────────────────────
-          MODAL BUAT PENGAJUAN IZIN
-          ───────────────────────────────────────────────────────────── */}
-      {showNewLeaveModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b pb-2.5">
-              <h3 className="text-sm font-black text-slate-900">Form Pengajuan Izin / Cuti</h3>
-              <button onClick={() => setShowNewLeaveModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitLeave} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">Jenis Pengajuan:</label>
-                <select
-                  value={leaveForm.type}
-                  onChange={e => setLeaveForm({ ...leaveForm, type: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                >
-                  <option value="Izin">Izin (Keperluan Mendesak)</option>
-                  <option value="Sakit">Sakit (Dengan / Tanpa Surat Dokter)</option>
-                  <option value="Cuti">Cuti Tahunan</option>
-                  <option value="Tukar Shift">Tukar Shift Kerja</option>
-                  <option value="Lainnya">Lainnya</option>
-                </select>
+        {/* MODAL BUAT PENGAJUAN IZIN */}
+        {showNewLeaveModal && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b pb-2.5">
+                <h3 className="text-sm font-black text-slate-900">Form Pengajuan Izin / Cuti</h3>
+                <button onClick={() => setShowNewLeaveModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={16} />
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <form onSubmit={handleSubmitLeave} className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Mulai:</label>
-                  <input
-                    type="date"
-                    value={leaveForm.startDate}
-                    onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Jenis Pengajuan:</label>
+                  <select
+                    value={leaveForm.type}
+                    onChange={e => setLeaveForm({ ...leaveForm, type: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                  >
+                    <option value="Izin">Izin (Keperluan Mendesak)</option>
+                    <option value="Sakit">Sakit (Dengan / Tanpa Surat Dokter)</option>
+                    <option value="Cuti">Cuti Tahunan</option>
+                    <option value="Tukar Shift">Tukar Shift Kerja</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Mulai:</label>
+                    <input
+                      type="date"
+                      value={leaveForm.startDate}
+                      onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Sampai:</label>
+                    <input
+                      type="date"
+                      value={leaveForm.endDate}
+                      onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Alasan / Keterangan:</label>
+                  <textarea
+                    rows={3}
+                    value={leaveForm.reason}
+                    onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
+                    placeholder="Ketik alasan izin secara jelas..."
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                     required
                   />
                 </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewLeaveModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingLeave}
+                    className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
+                  >
+                    {submittingLeave ? 'Mengirim...' : 'Kirim Izin'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL LAPOR BAHAN RUSAK */}
+        {showLossModal && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b pb-2.5">
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5 text-rose-600">
+                  <TrendingDown size={16} /> Lapor Bahan Rusak / Basi
+                </h3>
+                <button onClick={() => setShowLossModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitStockLoss} className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Sampai:</label>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Pilih Bahan Baku:</label>
+                  <select
+                    value={lossForm.ingredientId}
+                    onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    required
+                  >
+                    <option value="">-- Pilih Bahan --</option>
+                    {ingredients.map(i => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} (Sisa: {i.stock} {i.unit})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Jumlah Rusak / Terbuang:</label>
                   <input
-                    type="date"
-                    value={leaveForm.endDate}
-                    onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
+                    type="number"
+                    step="any"
+                    value={lossForm.qtyLoss}
+                    onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
+                    placeholder="Misal: 250"
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                     required
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">Alasan / Keterangan:</label>
-                <textarea
-                  rows={3}
-                  value={leaveForm.reason}
-                  onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                  placeholder="Ketik alasan izin secara jelas..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                  required
-                />
-              </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Penyebab Kerusakan:</label>
+                  <select
+                    value={lossForm.reason}
+                    onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                  >
+                    <option value="Busuk / Kadaluarsa">Busuk / Kadaluarsa</option>
+                    <option value="Tumpah / Rusak">Tumpah / Rusak</option>
+                    <option value="Kesalahan Masak / Gosong">Kesalahan Masak / Gosong</option>
+                    <option value="Sisa Trimming / Kupas">Sisa Trimming / Kupas</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowNewLeaveModal(false)}
-                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingLeave}
-                  className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
-                >
-                  {submittingLeave ? 'Mengirim...' : 'Kirim Izin'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          MODAL LAPOR BAHAN RUSAK (STOCK LOSS)
-          ───────────────────────────────────────────────────────────── */}
-      {showLossModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b pb-2.5">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5 text-rose-600">
-                <TrendingDown size={16} /> Lapor Bahan Rusak / Basi
-              </h3>
-              <button onClick={() => setShowLossModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={16} />
-              </button>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowLossModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingLoss}
+                    className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-black shadow-md"
+                  >
+                    {submittingLoss ? 'Menyimpan...' : 'Simpan Laporan'}
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleSubmitStockLoss} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">Pilih Bahan Baku:</label>
-                <select
-                  value={lossForm.ingredientId}
-                  onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                  required
-                >
-                  <option value="">-- Pilih Bahan --</option>
-                  {ingredients.map(i => (
-                    <option key={i.id} value={i.id}>
-                      {i.name} (Sisa: {i.stock} {i.unit})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">Jumlah Rusak / Terbuang:</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={lossForm.qtyLoss}
-                  onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
-                  placeholder="Misal: 250"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">Penyebab Kerusakan:</label>
-                <select
-                  value={lossForm.reason}
-                  onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                >
-                  <option value="Busuk / Kadaluarsa">Busuk / Kadaluarsa</option>
-                  <option value="Tumpah / Rusak">Tumpah / Rusak</option>
-                  <option value="Kesalahan Masak / Gosong">Kesalahan Masak / Gosong</option>
-                  <option value="Sisa Trimming / Kupas">Sisa Trimming / Kupas</option>
-                  <option value="Lainnya">Lainnya</option>
-                </select>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowLossModal(false)}
-                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingLoss}
-                  className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-black shadow-md"
-                >
-                  {submittingLoss ? 'Menyimpan...' : 'Simpan Laporan'}
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          MODAL QUICK RESTOCK BAHAN
-          ───────────────────────────────────────────────────────────── */}
-      {adjustModal.open && adjustModal.ingredient && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b pb-2.5">
-              <h3 className="text-sm font-black text-slate-900">
-                Restock: {adjustModal.ingredient.name}
-              </h3>
-              <button
-                onClick={() => setAdjustModal({ open: false, ingredient: null })}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <form onSubmit={handleQuickAdjust} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  Jumlah Masuk ({adjustModal.ingredient.unit}):
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={adjustForm.change}
-                  onChange={e => setAdjustForm({ ...adjustForm, change: e.target.value })}
-                  placeholder="Misal: 10"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
+        {/* MODAL QUICK RESTOCK */}
+        {adjustModal.open && adjustModal.ingredient && (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b pb-2.5">
+                <h3 className="text-sm font-black text-slate-900">
+                  Restock: {adjustModal.ingredient.name}
+                </h3>
                 <button
-                  type="button"
                   onClick={() => setAdjustModal({ open: false, ingredient: null })}
-                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                  className="text-slate-400 hover:text-slate-600"
                 >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={submittingAdjust}
-                  className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
-                >
-                  {submittingAdjust ? 'Menyimpan...' : 'Simpan Restock'}
+                  <X size={16} />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleQuickAdjust} className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Jumlah Masuk ({adjustModal.ingredient.unit}):
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={adjustForm.change}
+                    onChange={e => setAdjustForm({ ...adjustForm, change: e.target.value })}
+                    placeholder="Misal: 10"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustModal({ open: false, ingredient: null })}
+                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingAdjust}
+                    className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
+                  >
+                    {submittingAdjust ? 'Menyimpan...' : 'Simpan Restock'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );
