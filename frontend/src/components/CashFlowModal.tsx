@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { 
   X, DollarSign, Tag, FileText, Sparkles, Layers, Package, 
-  ArrowDownRight, ArrowUpRight, RotateCcw, Building2, Store 
+  ArrowDownRight, ArrowUpRight, RotateCcw, Building2, Check 
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
@@ -299,17 +299,18 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
   const terbilangText = formData.amount > 0 ? `${angkaTerbilang(formData.amount)} Rupiah` : '';
 
   return (
-    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto">
+      {/* Container: Full Screen Seamless Page View on Mobile (< md), Centered Modal Box on Desktop (>= md) */}
+      <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:rounded-3xl shadow-2xl flex flex-col md:overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-gray-200">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-gray-200 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
               <DollarSign size={22} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Catat Transaksi Arus Kas</h2>
-              <p className="text-xs text-gray-500">Pencatatan pembelanjaan bahan baku, operasional, & kas kecil</p>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">Catat Transaksi Arus Kas</h2>
+              <p className="text-xs text-gray-500">Pencatatan pembelanjaan bahan baku, operasional, & kas</p>
             </div>
           </div>
           <button 
@@ -322,45 +323,45 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
           </button>
         </div>
         
-        {/* Form Body */}
-        <form onSubmit={handleSubmit}>
-          <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+        {/* Form Body - Full Screen scrollable on mobile */}
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] md:max-h-[72vh] pb-32 md:pb-6">
             {/* Jenis Transaksi Toggle */}
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
                 Jenis Transaksi <span className="text-rose-500">*</span>
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => handleTypeChange('Pengeluaran')}
-                  className={`py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border transition-all ${
+                  className={`py-3 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 border transition-all ${
                     formData.type === 'Pengeluaran'
                       ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-sm ring-2 ring-rose-200 font-extrabold'
                       : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   <ArrowUpRight size={18} className={formData.type === 'Pengeluaran' ? 'text-rose-600' : 'text-gray-400'} />
-                  <span>Pengeluaran (Outflow / Belanja)</span>
+                  <span>Pengeluaran (Out)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleTypeChange('Pemasukan')}
-                  className={`py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border transition-all ${
+                  className={`py-3 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 border transition-all ${
                     formData.type === 'Pemasukan'
                       ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm ring-2 ring-emerald-200 font-extrabold'
                       : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   <ArrowDownRight size={18} className={formData.type === 'Pemasukan' ? 'text-emerald-600' : 'text-gray-400'} />
-                  <span>Pemasukan (Inflow / Modal)</span>
+                  <span>Pemasukan (In)</span>
                 </button>
               </div>
             </div>
 
             {/* Smart Procurement Box (Auto-fill Master Bahan Baku + Integrasi Supplier) */}
             {formData.type === 'Pengeluaran' && (
-              <div className="p-4 bg-gradient-to-r from-indigo-50/90 to-purple-50/90 border border-indigo-100 rounded-2xl space-y-3 shadow-inner">
+              <div className="p-3.5 sm:p-4 bg-gradient-to-r from-indigo-50/90 to-purple-50/90 border border-indigo-100 rounded-2xl space-y-3 shadow-inner">
                 {/* Auto-fill Bahan Baku */}
                 <div>
                   <label className="flex items-center gap-2 text-xs font-bold text-indigo-950 mb-1.5">
@@ -372,7 +373,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
                     value={selectedIngredient?.id || ''}
                     onChange={handleIngredientSelect}
                   >
-                    <option value="">-- Pilih bahan baku untuk auto-fill deskripsi, harga & supplier --</option>
+                    <option value="">-- Pilih bahan baku untuk auto-fill deskripsi & supplier --</option>
                     {ingredients.map(ing => (
                       <option key={ing.id} value={ing.id}>
                         {ing.name} (Stok: {ing.stock} {ing.unit} | Rp {ing.buyPrice?.toLocaleString('id-ID')}) {ing.supplier?.name ? `• [${ing.supplier.name}]` : ''}
@@ -381,7 +382,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
                   </select>
                 </div>
 
-                {/* Supplier / Vendor Selector (Mendukung ada supplier maupun non-supplier) */}
+                {/* Supplier / Vendor Selector */}
                 <div>
                   <label className="flex items-center gap-2 text-xs font-bold text-indigo-950 mb-1.5">
                     <Building2 size={14} className="text-indigo-600" />
@@ -392,7 +393,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
                     value={selectedSupplierId}
                     onChange={handleSupplierChange}
                   >
-                    <option value="">-- Tanpa Supplier / Belanja Langsung (Pasar Tradisional / Retail / Lainnya) --</option>
+                    <option value="">-- Tanpa Supplier / Belanja Langsung (Pasar / Retail) --</option>
                     {suppliers.map(sup => (
                       <option key={sup.id} value={sup.id}>
                         🏢 {sup.name} {sup.phone ? `(${sup.phone})` : ''} {sup.contact ? `• PIC: ${sup.contact}` : ''}
@@ -404,7 +405,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
             )}
 
             {/* 2-Tier Hierarchical Categories */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-3.5">
               {/* Kategori Utama */}
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
@@ -446,8 +447,8 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
               </div>
             </div>
 
-            {/* Nominal Transaksi - ULTRA CLEAR Currency Input */}
-            <div className="bg-slate-50/80 p-4 rounded-2xl border border-gray-200/80 space-y-2.5">
+            {/* Nominal Transaksi - Currency Input */}
+            <div className="bg-slate-50/80 p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 space-y-2.5">
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-1.5 text-xs font-bold text-gray-800 uppercase tracking-wider">
                   <DollarSign size={14} className="text-indigo-600" />
@@ -464,25 +465,24 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
                 )}
               </div>
 
-              {/* Input Group with Thousand Separator */}
+              {/* Input Group */}
               <div className="flex rounded-2xl shadow-sm border-2 border-indigo-200/80 focus-within:border-indigo-600 focus-within:ring-4 focus-within:ring-indigo-500/10 overflow-hidden bg-white transition-all">
-                <div className="bg-indigo-600 text-white px-4 py-3 flex items-center font-black text-lg select-none">
+                <div className="bg-indigo-600 text-white px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center font-black text-base sm:text-lg select-none">
                   Rp
                 </div>
                 <input 
                   type="text" 
                   inputMode="numeric"
                   name="amount"
-                  className="w-full px-4 py-3 outline-none font-black text-2xl text-gray-900 tracking-wide placeholder-gray-300" 
+                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 outline-none font-black text-xl sm:text-2xl text-gray-900 tracking-wide placeholder-gray-300" 
                   placeholder="0"
                   value={displayAmount}
                   onChange={handleAmountChange}
                   required
-                  autoFocus
                 />
               </div>
 
-              {/* Live Terbilang & Spelled-out Preview */}
+              {/* Live Terbilang Preview */}
               {formData.amount > 0 ? (
                 <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2 animate-in fade-in">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0"></div>
@@ -497,13 +497,13 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
                 </div>
               ) : (
                 <div className="text-[11px] text-gray-400 italic">
-                  Ketik nominal (angka otomatis diformat dengan titik pemisah ribuan)
+                  Ketik nominal pengeluaran / pemasukan
                 </div>
               )}
 
               {/* Quick Preset Buttons */}
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[11px] font-bold text-gray-500 mr-1">Pilihan Cepat:</span>
+                <span className="text-[11px] font-bold text-gray-500 mr-1">Cepat:</span>
                 {[
                   { label: '+10 Rb', val: 10000 },
                   { label: '+50 Rb', val: 50000 },
@@ -530,7 +530,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
                     className="px-2.5 py-1 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg shadow-sm transition-all flex items-center gap-1"
                   >
                     <Sparkles size={12} className="text-amber-600" />
-                    Harga Master: Rp {selectedIngredient.buyPrice.toLocaleString('id-ID')}
+                    Rp {selectedIngredient.buyPrice.toLocaleString('id-ID')}
                   </button>
                 )}
               </div>
@@ -540,13 +540,13 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
             <div>
               <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                 <FileText size={14} className="text-indigo-600" />
-                Rincian & Keterangan Belanja <span className="text-rose-500">*</span>
+                Rincian & Keterangan <span className="text-rose-500">*</span>
               </label>
               <textarea 
                 name="description"
-                className="w-full bg-slate-50 border border-gray-300 text-gray-800 text-sm rounded-xl px-4 py-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all" 
+                className="w-full bg-slate-50 border border-gray-300 text-gray-800 text-sm rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all" 
                 rows={2}
-                placeholder="Contoh: Beli Ayam Fillet 5kg di Pasar Tradisional, Nota terlampir"
+                placeholder="Contoh: Beli Ayam Fillet 5kg di Pasar, Nota terlampir"
                 value={formData.description}
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 required
@@ -554,11 +554,11 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
+          {/* Footer - Fixed at bottom on Mobile, Modal footer on Desktop */}
+          <div className="flex items-center justify-end gap-3 px-5 sm:px-6 py-3.5 sm:py-4 bg-gray-50 border-t border-gray-200 shrink-0">
             <button 
               type="button" 
-              className="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold text-sm hover:bg-gray-100 transition-colors" 
+              className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold text-sm hover:bg-gray-100 transition-colors" 
               onClick={onClose} 
               disabled={loading}
             >
@@ -566,7 +566,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
             </button>
             <button 
               type="submit" 
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-200 transition-all flex items-center gap-2" 
+              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2 active:scale-95" 
               disabled={loading}
             >
               {loading ? (
@@ -575,7 +575,10 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }
                   <span>Menyimpan...</span>
                 </>
               ) : (
-                <span>Simpan Transaksi</span>
+                <>
+                  <Check size={16} />
+                  <span>Simpan Transaksi</span>
+                </>
               )}
             </button>
           </div>
