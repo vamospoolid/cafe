@@ -221,9 +221,12 @@ const CashFlowView = () => {
   };
 
   return (
-    <div className="p-3 sm:p-5 pb-36 sm:pb-12 h-full flex-1 min-h-0 overflow-y-auto bg-slate-50 flex flex-col gap-3.5" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div 
+      className="p-3 sm:p-5 pb-36 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-4" 
+      style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+    >
       {/* 1. Header Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-primary shadow-inner">
             <DollarSign size={22} className="text-indigo-600" />
@@ -253,7 +256,7 @@ const CashFlowView = () => {
       </div>
 
       {/* 2. Compact 3-KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
         <div className="p-3 sm:p-3.5 rounded-2xl border-l-4 border-emerald-500 shadow-sm bg-white flex items-center justify-between border border-gray-200/80">
           <div>
             <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Total Pemasukan (In)</div>
@@ -291,7 +294,7 @@ const CashFlowView = () => {
       </div>
 
       {/* 3. Category Filter Pills */}
-      <div className="bg-white p-3 rounded-2xl border border-gray-200/80 shadow-sm space-y-2">
+      <div className="bg-white p-3 rounded-2xl border border-gray-200/80 shadow-sm space-y-2 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
             <Layers size={14} className="text-indigo-600" />
@@ -336,8 +339,8 @@ const CashFlowView = () => {
         </div>
       </div>
 
-      {/* 4. Main Transaction Section */}
-      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col">
+      {/* 4. Main Transaction Section - shrink-0 with full visibility */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col shrink-0">
         {/* Table & Filter Header */}
         <div className="p-3.5 sm:p-4 border-b border-gray-200 bg-slate-50/80 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2">
