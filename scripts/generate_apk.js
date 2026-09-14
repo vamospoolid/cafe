@@ -45,7 +45,7 @@ const buildTargets = [
         name: 'SOL POS - Kasir & Tablet',
         appId: 'id.codenusa.poscafe',
         appName: 'SOL POS Kasir',
-        url: 'http://cafe.codenusa.id/pos',
+        url: 'https://cafe.codenusa.id/pos',
         outputFileName: 'sol-pos-cashier.apk'
     },
     {
@@ -53,7 +53,7 @@ const buildTargets = [
         name: 'SOL POS - Portal Staf & Absensi',
         appId: 'id.codenusa.cafestaff',
         appName: 'SOL Staff Portal',
-        url: 'http://cafe.codenusa.id/staff',
+        url: 'https://cafe.codenusa.id/staff',
         outputFileName: 'muki-staff-pos.apk'
     }
 ];

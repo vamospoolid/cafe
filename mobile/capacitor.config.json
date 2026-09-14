@@ -4,6 +4,6 @@
   "webDir": "../frontend/dist",
   "server": {
     "url": "https://cafe.codenusa.id/staff",
-    "cleartext": false
+    "cleartext": true
   }
 }

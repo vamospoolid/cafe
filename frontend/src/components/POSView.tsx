@@ -425,9 +425,9 @@ export const POSView = () => {
   return (
     <div className="pos-layout" style={{ flexDirection: isMobile ? 'column' : 'row', height: '100%', overflow: 'hidden' }}>
       {/* Kiri: Daftar Produk */}
-      <div className="pos-main">
-        {/* PWA & Tablet Kiosk Actions Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-1">
+      <div className="pos-main flex-1 flex flex-col overflow-y-auto">
+        {/* PWA & Tablet Kiosk Actions Bar - Sembunyikan di HP karena sudah ada Topbar */}
+        <div className="hidden sm:flex flex-wrap items-center justify-between gap-2 px-1 pb-1">
           <div className="flex items-center gap-2">
             {/* Status Online/Offline */}
             {posContext?.isOnline ? (
@@ -490,76 +490,122 @@ export const POSView = () => {
           </div>
         </div>
 
+        {/* Offline Queue Bar di HP jika ada antrean */}
+        {isMobile && (posContext?.offlineQueueCount ?? 0) > 0 && (
+          <div className="flex items-center justify-between p-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+            <span className="font-semibold flex items-center gap-1.5">
+              <WifiOff size={13} className="text-amber-600" /> {posContext?.offlineQueueCount} Transaksi Offline
+            </span>
+            <button 
+              onClick={handleManualSync} 
+              disabled={isSyncing}
+              className="px-2.5 py-1 bg-amber-600 text-white font-bold rounded-lg active:scale-95 transition-all text-[11px]"
+            >
+              Sinkron Sekarang
+            </button>
+          </div>
+        )}
+
         {/* Scanner & Filter */}
-        <div className="pos-toolbar" style={{ flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '0.75rem' : '1.5rem', alignItems: 'stretch' }}>
-          <div className="scanner-box" style={{ width: '100%' }}>
-            <Search size={20} />
+        <div className="pos-toolbar flex flex-col gap-2.5">
+          <div className="scanner-box flex items-center gap-2 bg-emerald-50/70 border border-emerald-200/80 rounded-xl px-3 py-2 text-emerald-800 shadow-sm">
+            <Search size={18} className="text-emerald-600 shrink-0" />
             <input 
               type="text" 
-              className="scanner-input" 
-              placeholder="Cari menu / scan barcode..."
+              className="scanner-input flex-1 bg-transparent border-none outline-none font-medium text-xs sm:text-sm text-slate-800 placeholder-emerald-600/50" 
+              placeholder="Cari nama menu / scan barcode..."
               value={searchTerm}
               onChange={handleSearchChange}
               onKeyDown={handleSearchKeyDown}
-              autoFocus
             />
-            <button className="scanner-btn" onClick={handleCameraScan}>
-              <Camera size={16} /> Kamera
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')} 
+                className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+              >
+                <X size={14} />
+              </button>
+            )}
+            <button 
+              className="scanner-btn bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white border-none px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0" 
+              onClick={handleCameraScan}
+            >
+              <Camera size={14} /> <span>Kamera</span>
             </button>
           </div>
           
-          <div className="category-filter">
+          {/* Category Filter Chips */}
+          <div className="category-filter flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             <button 
-              className={`category-chip ${activeCategory === 'Semua' ? 'active' : ''}`}
+              className={`category-chip shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
+                activeCategory === 'Semua' 
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' 
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
               onClick={() => {
                 setActiveCategory('Semua');
                 setActiveSubCategory('Semua');
+                posContext?.triggerHaptic(10);
               }}
             >
-              Semua
+              Semua ({products.length})
             </button>
-            {categories.map(cat => (
-              <button 
-                key={cat.id}
-                className={`category-chip ${activeCategory === cat.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveCategory(cat.id);
-                  setActiveSubCategory('Semua');
-                }}
-              >
-                {cat.name}
-              </button>
-            ))}
+            {categories.map(cat => {
+              const catProductCount = products.filter(p => p.categoryId === cat.id).length;
+              return (
+                <button 
+                  key={cat.id}
+                  className={`category-chip shrink-0 text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
+                    activeCategory === cat.id 
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200' 
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                  onClick={() => {
+                    setActiveCategory(cat.id);
+                    setActiveSubCategory('Semua');
+                    posContext?.triggerHaptic(10);
+                  }}
+                >
+                  {cat.name} {catProductCount > 0 ? `(${catProductCount})` : ''}
+                </button>
+              );
+            })}
           </div>
 
-          {/* Sub-Category Filter Chips (if selected category has subcategories) */}
+          {/* Sub-Category Filter Chips */}
           {(() => {
             if (activeCategory === 'Semua') return null;
             const currentCat = categories.find(c => c.id === activeCategory);
             const subCats = currentCat?.subCategories || [];
             if (subCats.length === 0) return null;
             return (
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-1 animate-fade-in">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1">Sub:</span>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-1 animate-fade-in scrollbar-none">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 mr-0.5">Sub:</span>
                 <button
-                  className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all shrink-0 ${
+                  className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold transition-all shrink-0 ${
                     activeSubCategory === 'Semua'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}
-                  onClick={() => setActiveSubCategory('Semua')}
+                  onClick={() => {
+                    setActiveSubCategory('Semua');
+                    posContext?.triggerHaptic(10);
+                  }}
                 >
                   Semua {currentCat.name}
                 </button>
                 {subCats.map((sub: any) => (
                   <button
                     key={sub.id}
-                    className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all shrink-0 ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold transition-all shrink-0 ${
                       activeSubCategory === sub.id
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
                         : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                     }`}
-                    onClick={() => setActiveSubCategory(sub.id)}
+                    onClick={() => {
+                      setActiveSubCategory(sub.id);
+                      posContext?.triggerHaptic(10);
+                    }}
                   >
                     {sub.name}
                   </button>
@@ -569,48 +615,68 @@ export const POSView = () => {
           })()}
         </div>
 
-        {/* Grid Produk */}
-        <div className="product-grid overflow-y-auto">
+        {/* Grid Produk Responsive 2-Kolom di HP / Multi-Kolom di Layar Lebar */}
+        <div className="product-grid flex-1">
           {filteredProducts.map(product => {
             const isSoldOut = Boolean(product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe));
+            const cartQty = cart.find(item => item.product.id === product.id)?.qty || 0;
             return (
               <div 
                 key={product.id} 
-                className={`product-card group relative transition-all ${
+                className={`product-card group relative transition-all rounded-2xl overflow-hidden border border-slate-200/80 bg-white shadow-sm hover:shadow-md active:scale-95 flex flex-col justify-between ${
                   isSoldOut 
                     ? 'opacity-60 grayscale cursor-not-allowed border-rose-200/50 bg-slate-50' 
-                    : 'cursor-pointer hover:border-amber-400/80 hover:shadow-md'
+                    : 'cursor-pointer hover:border-indigo-500'
                 }`} 
-                onClick={() => handleProductClick(product)}
+                onClick={() => {
+                  if (!isSoldOut) {
+                    posContext?.triggerHaptic(15);
+                    handleProductClick(product);
+                  }
+                }}
               >
-                <div className="product-img-wrapper bg-gray-100 flex items-center justify-center relative overflow-hidden">
+                <div className="product-img-wrapper bg-slate-50 flex items-center justify-center relative overflow-hidden h-28 sm:h-36 w-full">
                   {product.imageUrl ? (
-                    <img src={product.imageUrl} alt={product.name} className={`product-img ${!isSoldOut ? 'group-hover:scale-105' : ''} transition-transform`} />
+                    <img src={product.imageUrl} alt={product.name} className={`product-img w-full h-full object-cover ${!isSoldOut ? 'group-hover:scale-105' : ''} transition-transform duration-300`} />
                   ) : (
-                    <Package size={40} className="text-gray-300" />
+                    <Package size={36} className="text-slate-300" />
+                  )}
+
+                  {/* Quantity In-Cart Badge */}
+                  {cartQty > 0 && !isSoldOut && (
+                    <div className="absolute top-2 right-2 bg-emerald-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-md border border-white/80 animate-in zoom-in-50 duration-200">
+                      {cartQty}x
+                    </div>
                   )}
                   
                   {/* Sold Out Badge Overlay */}
                   {isSoldOut ? (
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10">
-                      <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg border border-white/20 animate-pulse">
-                        HABIS / SOLD OUT
+                    <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10">
+                      <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider rounded-md shadow-md border border-white/20">
+                        HABIS
                       </span>
-                      <span className="text-[9px] text-white/90 font-medium mt-1">Dapur Kehabisan Bahan</span>
                     </div>
                   ) : (
-                    <div className="absolute inset-0 bg-black bg-opacity-10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   )}
                 </div>
-                <div className="product-info">
+
+                <div className="product-info p-2.5 sm:p-3 flex flex-col justify-between flex-1 gap-1">
                   <div>
-                    <div className="product-name truncate" title={product.name}>{product.name}</div>
-                    <div className="product-price">{formatCurrency(product.sellPrice)}</div>
-                    <div className="product-stock flex justify-between items-center mt-1">
+                    <div className="product-name font-bold text-xs sm:text-sm text-slate-800 line-clamp-2 leading-tight" title={product.name}>
+                      {product.name}
+                    </div>
+                  </div>
+                  
+                  <div className="pt-1 mt-auto">
+                    <div className="product-price font-black text-xs sm:text-sm text-indigo-600">
+                      {formatCurrency(product.sellPrice)}
+                    </div>
+                    <div className="product-stock flex justify-between items-center text-[10px] sm:text-xs text-slate-400 mt-0.5">
                       {isSoldOut ? (
-                        <span className="text-[10px] font-black text-rose-500 uppercase">Stok Habis</span>
+                        <span className="font-extrabold text-rose-500 uppercase text-[9px]">Stok Habis</span>
                       ) : (
-                        <span className={`text-xs font-semibold ${product.stock <= product.minStock ? 'text-red-500' : 'text-gray-500'}`}>
+                        <span className={`font-semibold ${product.stock <= product.minStock ? 'text-red-500' : 'text-slate-400'}`}>
                           Stok: {product.stock}
                         </span>
                       )}
@@ -621,13 +687,16 @@ export const POSView = () => {
             );
           })}
           {filteredProducts.length === 0 && (
-            <div className="col-span-full text-center p-12 text-gray-400">
-              <Package size={48} className="mx-auto mb-4 opacity-50" />
-              <p>Belum ada produk untuk kategori ini.</p>
+            <div className="col-span-full text-center py-12 px-4 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200 my-4">
+              <Package size={42} className="mx-auto mb-3 opacity-40 text-slate-400" />
+              <p className="text-xs sm:text-sm font-semibold text-slate-600">Belum ada produk untuk kategori ini</p>
+              <p className="text-[11px] text-slate-400 mt-1">Coba pilih kategori lain atau kata kunci pencarian yang berbeda.</p>
             </div>
           )}
         </div>
-      </div>      {/* Kanan: Keranjang - Hanya dirender pada layar Desktop */}
+      </div>
+
+      {/* Kanan: Keranjang - Hanya dirender pada layar Desktop */}
       {!isMobile && (
         <div className="pos-sidebar">
           <div className="cart-header">
@@ -770,19 +839,25 @@ export const POSView = () => {
       {/* Mobile Cart Floating bar (collapsed state) */}
       {isMobile && cart.length > 0 && !isMobileCartOpen && (
         <div 
-          onClick={() => setIsMobileCartOpen(true)}
-          className="fixed bottom-24 left-4 right-4 h-14 bg-emerald-600/95 backdrop-blur-md rounded-2xl border border-emerald-500/30 shadow-lg flex items-center justify-between px-5 z-30 cursor-pointer text-white animate-bounce-subtle"
-          style={{ boxShadow: '0 8px 30px rgba(16, 185, 129, 0.3)' }}
+          onClick={() => {
+            posContext?.triggerHaptic(20);
+            setIsMobileCartOpen(true);
+          }}
+          className="fixed bottom-20 left-3.5 right-3.5 sm:bottom-24 sm:left-4 sm:right-4 h-14 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 backdrop-blur-md rounded-2xl border border-emerald-400/40 shadow-xl flex items-center justify-between px-4 z-30 cursor-pointer text-white active:scale-[0.98] transition-all"
+          style={{ boxShadow: '0 8px 25px rgba(5, 150, 105, 0.35)' }}
         >
-          <div className="flex items-center gap-2">
-            <ShoppingCart size={18} />
-            <span className="font-extrabold text-xs">{cart.reduce((sum, item) => sum + item.qty, 0)} Item</span>
-            <span className="text-emerald-400">|</span>
-            <span className="font-extrabold text-xs">{formatCurrency(total)}</span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <ShoppingCart size={16} />
+            </div>
+            <div>
+              <div className="font-black text-xs leading-none">{cart.reduce((sum, item) => sum + item.qty, 0)} Menu Dipilih</div>
+              <div className="font-extrabold text-[13px] text-emerald-100 mt-0.5">{formatCurrency(total)}</div>
+            </div>
           </div>
-          <div className="flex items-center gap-1 font-bold text-[10px] bg-white text-emerald-700 px-3 py-1.5 rounded-xl">
-            <span>Lihat Keranjang</span>
-            <ArrowRight size={10} />
+          <div className="flex items-center gap-1.5 font-black text-xs bg-white text-emerald-800 px-3.5 py-2 rounded-xl shadow-sm">
+            <span>Lihat Pesanan</span>
+            <ArrowRight size={13} />
           </div>
         </div>
       )}
