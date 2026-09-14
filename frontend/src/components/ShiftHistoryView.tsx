@@ -4,7 +4,7 @@ import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { exportShiftSettlementPDF } from '../utils/pdfGenerator';
+import { exportShiftSettlementPDF, exportFinancialPDF } from '../utils/pdfGenerator';
 import { toast } from '../utils/alert';
 
 const ShiftHistoryView = () => {
@@ -25,26 +25,45 @@ const ShiftHistoryView = () => {
     return new Date(iso).toLocaleDateString('id-ID');
   };
 
-  const fetchData = async () => {
+  const fetchShifts = async () => {
     setLoading(true);
     try {
-      const headers = { Authorization: `Bearer ${posContext?.token}` };
-      const [shiftsRes, currentRes] = await Promise.all([
-        fetch('/api/shifts', { headers }),
-        fetch('/api/shifts/current', { headers })
-      ]);
-
-      if (shiftsRes.ok) setShifts(await shiftsRes.json());
-      if (currentRes.ok) setActiveShift(await currentRes.json());
-    } catch (err) {
-      console.error(err);
+      const res = await fetch('/api/shifts', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setShifts(data);
+      }
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchActiveShift = async () => {
+    try {
+      const res = await fetch('/api/shifts/active', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveShift(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchData = () => {
+    fetchShifts();
+    fetchActiveShift();
+  };
+
   useEffect(() => {
-    if (posContext?.token) fetchData();
+    fetchShifts();
+    fetchActiveShift();
   }, [posContext?.token]);
 
   const handleOpenShift = () => {
@@ -71,34 +90,27 @@ const ShiftHistoryView = () => {
     }
   };
 
-  const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.text('Laporan Riwayat Shift & Rekap Kasir', 14, 15);
-    doc.setFontSize(10);
-    doc.text(`Dicetak Pada: ${new Date().toLocaleString('id-ID')}`, 14, 22);
-
-    const tableColumn = ["Tanggal", "Kasir", "Jam Buka", "Jam Tutup", "Saldo Awal", "Sistem", "Laci Fisik", "Selisih"];
-    const tableRows: any[] = [];
-
-    shifts.forEach((s) => {
-      tableRows.push([
-        formatDate(s.waktuBuka),
-        s.user?.name,
-        formatTime(s.waktuBuka),
-        formatTime(s.waktuTutup),
-        formatCurrency(s.saldoAwal),
-        s.saldoSistem ? formatCurrency(s.saldoSistem) : '-',
-        s.saldoFisikLaci ? formatCurrency(s.saldoFisikLaci) : '-',
-        s.selisih ? formatCurrency(s.selisih) : '-'
-      ]);
-    });
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 28,
-    });
-    doc.save(`Laporan_Shift_${Date.now()}.pdf`);
+  const exportPDF = async () => {
+    if (shifts.length === 0) {
+      toast('Tidak ada riwayat shift untuk dicetak.', 'error');
+      return;
+    }
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const firstShiftDate = shifts[shifts.length - 1]?.waktuBuka ? shifts[shifts.length - 1].waktuBuka.split('T')[0] : todayStr;
+      await exportFinancialPDF(
+        'shifts',
+        posContext?.settings || { storeName: 'SOL CAFE' },
+        shifts,
+        firstShiftDate,
+        todayStr,
+        posContext?.user?.username || 'Supervisor'
+      );
+      toast('Laporan Rekapitulasi Shift berhasil diunduh!', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mencetak laporan shift', 'error');
+    }
   };
 
   return (

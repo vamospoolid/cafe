@@ -185,12 +185,35 @@ export const IngredientView: React.FC = () => {
   const handleExportLossPDF = async () => {
     try {
       setGeneratingPdf(true);
-      let data = lossData;
-      if (!data) {
-        const res = await fetch(`${API}/ingredients/loss/analytics`, { headers });
-        if (res.ok) data = await res.json();
+      let raw = lossData;
+      if (!raw) {
+        // Fix URL: endpoint yang benar adalah /loss-analytics (bukan /loss/analytics)
+        const res = await fetch(`${API}/ingredients/loss-analytics`, { headers });
+        if (res.ok) raw = await res.json();
       }
-      await exportStockLossAuditPDF(posContext?.settings || {}, data, posContext?.user?.username || 'Auditor Dapur');
+      // Mapping field API -> format yang diexpect exportStockLossAuditPDF
+      const mappedData = raw ? {
+        totalLossRupiah: raw.summary?.totalLossCost || 0,
+        totalLossIncidents: raw.summary?.totalLossCount || 0,
+        lossRatePercentage: raw.summary?.lossPercentage || 0,
+        efficiencyRate: raw.summary?.efficiencyPercentage || 100,
+        totalProductionValue: raw.summary?.totalProductionCost || 0,
+        topLossItems: (raw.topLossItems || []).map((t: any) => ({
+          name: t.name,
+          unit: t.unit,
+          totalQty: t.totalQty,
+          totalRupiah: t.totalCost  // API pakai totalCost, PDF expect totalRupiah
+        })),
+        lossLogs: (raw.logs || []).map((l: any) => ({
+          date: l.createdAt,
+          ingredient: l.ingredient,
+          qtyLoss: Math.abs(l.change),
+          costLoss: l.cost || (Math.abs(l.change) * (l.ingredient?.buyPrice || 0)),
+          reason: l.reason || 'Lainnya',
+          recordedBy: l.user?.name || 'Staf Dapur'
+        }))
+      } : null;
+      await exportStockLossAuditPDF(posContext?.settings || {}, mappedData, posContext?.user?.username || 'Auditor Dapur');
       toast('Laporan Audit Stock Loss berhasil diunduh!', 'success');
       setPdfDropdownOpen(false);
     } catch (e) {
@@ -204,12 +227,27 @@ export const IngredientView: React.FC = () => {
   const handleExportShoppingPDF = async () => {
     try {
       setGeneratingPdf(true);
-      let data = shoppingData;
-      if (!data) {
-        const res = await fetch(`${API}/ingredients/shopping/analytics`, { headers });
-        if (res.ok) data = await res.json();
+      let raw = shoppingData;
+      if (!raw) {
+        // Fix URL: endpoint yang benar adalah /shopping-analytics (bukan /shopping/analytics)
+        const res = await fetch(`${API}/ingredients/shopping-analytics`, { headers });
+        if (res.ok) raw = await res.json();
       }
-      await exportProcurementForecastPDF(posContext?.settings || {}, data, posContext?.user?.username || 'Purchasing');
+      // Mapping field API -> format yang diexpect exportProcurementForecastPDF
+      const mappedData = raw ? {
+        totalEstimatedCost: raw.summary?.totalRestockCost || 0,
+        criticalItems: (raw.lowStockItems || []).map((item: any) => ({
+          name: item.name,
+          unit: item.unit,
+          currentStock: item.stock,        // API: stock  -> PDF: currentStock
+          minStock: item.minStock,
+          recommendedBuyQty: item.suggestedQty,  // API: suggestedQty -> PDF: recommendedBuyQty
+          buyPrice: item.buyPrice,
+          estimatedCost: item.estimatedCost,
+          supplierName: item.supplier?.name || 'Umum / Pasar'  // API: supplier.name -> PDF: supplierName
+        }))
+      } : null;
+      await exportProcurementForecastPDF(posContext?.settings || {}, mappedData, posContext?.user?.username || 'Purchasing');
       toast('Laporan Rencana Anggaran Belanja berhasil diunduh!', 'success');
       setPdfDropdownOpen(false);
     } catch (e) {
@@ -223,7 +261,25 @@ export const IngredientView: React.FC = () => {
   const handleExportOpnamePDF = async () => {
     try {
       setGeneratingPdf(true);
-      await exportStockOpnameVariancePDF(posContext?.settings || {}, opnameItems, auditorName, opnameNotes);
+      let itemsToExport = opnameItems;
+      if (itemsToExport.length === 0) {
+        let currentIngredients = ingredients;
+        if (currentIngredients.length === 0) {
+          const res = await fetch(`${API}/ingredients`, { headers });
+          if (res.ok) currentIngredients = await res.json();
+        }
+        itemsToExport = currentIngredients.map(i => ({
+          ingredientId: i.id,
+          name: i.name,
+          unit: i.unit,
+          buyPrice: i.buyPrice,
+          systemStock: i.stock,
+          physicalStock: i.stock,
+          reason: 'Normal',
+          notes: 'Audit Rutin Persediaan'
+        }));
+      }
+      await exportStockOpnameVariancePDF(posContext?.settings || {}, itemsToExport, auditorName, opnameNotes);
       toast('Berita Acara Stock Opname berhasil diunduh!', 'success');
       setPdfDropdownOpen(false);
     } catch (e) {

@@ -181,62 +181,108 @@ export const exportFinancialPDF = async (
 
   // ─── 1. LAPORAN LABA RUGI (pl) ───
   if (type === 'pl') {
-    const pl = data.profitLoss || {};
-    const tableColumn = ['KETERANGAN AKUN / OPERASIONAL', 'NOMINAL'];
+    const pl = data?.profitLoss || data || {};
+    const salesRevenue = pl.salesRevenue || 0;
+    const otherRevenue = pl.otherRevenue || 0;
+    const otherRevenueBreakdown = pl.otherRevenueBreakdown || {};
+    const shiftOverage = pl.shiftOverage || 0;
+    const operatingRevenue = pl.operatingRevenue !== undefined ? pl.operatingRevenue : (salesRevenue + otherRevenue + shiftOverage);
+    const cogs = pl.cogs || 0;
+    const grossProfit = pl.grossProfit !== undefined ? pl.grossProfit : (operatingRevenue - cogs);
+    const opexAmount = pl.opexAmount || 0;
+    const opexBreakdown = pl.opexBreakdown || {};
+    const shiftShortage = pl.shiftShortage || 0;
+    const operatingExpenses = pl.operatingExpenses !== undefined ? pl.operatingExpenses : (opexAmount + shiftShortage);
+    const netIncome = pl.netIncome !== undefined ? pl.netIncome : (grossProfit - operatingExpenses);
+
+    const grossMarginPercent = operatingRevenue > 0 ? Math.round((grossProfit / operatingRevenue) * 100) : 0;
+    const netMarginPercent = operatingRevenue > 0 ? Math.round((netIncome / operatingRevenue) * 100) : 0;
+
+    // Executive Summary Card
+    autoTable(doc, {
+      head: [['RINGKASAN EKSEKUTIF KEUANGAN (KEY FINANCIAL METRICS)', 'NILAI']],
+      body: [
+        ['TOTAL PENDAPATAN OPERASIONAL (OPERATING REVENUE)', formatCurrency(operatingRevenue)],
+        ['TOTAL BEBAN POKOK PENJUALAN (HPP / COGS)', `-${formatCurrency(cogs)}`],
+        ['LABA KOTOR KAFE (GROSS PROFIT)', `${formatCurrency(grossProfit)} (${grossMarginPercent}% Margin)`],
+        ['TOTAL BEBAN OPERASIONAL (OPEX & SHORTAGE)', `-${formatCurrency(operatingExpenses)}`],
+        ['LABA BERSIH OPERASIONAL (NET OPERATING INCOME)', `${formatCurrency(netIncome)} (${netMarginPercent}% Net Margin)`]
+      ],
+      startY: 38,
+      margin: { top: 38, bottom: 20, left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } },
+      didParseCell: (cellData: any) => {
+        if (cellData.row.index === 4) {
+          cellData.cell.styles.fillColor = netIncome >= 0 ? [209, 250, 229] : [254, 226, 226];
+          cellData.cell.styles.textColor = netIncome >= 0 ? [16, 122, 68] : [220, 38, 38];
+          cellData.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    const nextY = (doc as any).lastAutoTable?.finalY || 80;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('RINCIAN STRUKTUR AKUN LABA RUGI OPERASIONAL (DETAIL)', margin, nextY + 7);
+
+    const tableColumn = ['URAIAN KEUANGAN OPERASIONAL (ACCOUNT CLASSIFICATION)', 'NOMINAL (IDR)'];
     const tableRows: any[] = [
-      ['1. PENDAPATAN OPERASIONAL', ''],
-      ['   Penjualan Bersih Kasir (POS)', formatCurrency(pl.salesRevenue)]
+      ['1. PENDAPATAN OPERASIONAL (REVENUE)', ''],
+      ['     Penjualan Kasir POS Bersih', formatCurrency(salesRevenue)]
     ];
 
-    // Detail Pemasukan Kas Operasional dari Cashflow
-    if (pl.otherRevenueBreakdown && Object.keys(pl.otherRevenueBreakdown).length > 0) {
-      Object.entries(pl.otherRevenueBreakdown).forEach(([cat, val]) => {
-        tableRows.push([`   Pendapatan Lain-lain (${cat})`, formatCurrency(Number(val))]);
+    if (otherRevenueBreakdown && Object.keys(otherRevenueBreakdown).length > 0) {
+      Object.entries(otherRevenueBreakdown).forEach(([cat, val]) => {
+        tableRows.push([`     Pendapatan Lain-lain: ${cat}`, formatCurrency(Number(val))]);
       });
-    } else if (pl.otherRevenue > 0) {
-      tableRows.push(['   Pendapatan Lain-lain (Petty Cash Masuk)', formatCurrency(pl.otherRevenue)]);
+    } else if (otherRevenue > 0) {
+      tableRows.push(['     Pendapatan Lain-lain (Petty Cash Masuk)', formatCurrency(otherRevenue)]);
     }
 
-    if (pl.shiftOverage > 0) {
-      tableRows.push(['   Kelebihan Uang Kasir (Overage)', formatCurrency(pl.shiftOverage)]);
+    if (shiftOverage > 0) {
+      tableRows.push(['     Kelebihan Uang Kasir (Cash Overage)', formatCurrency(shiftOverage)]);
     }
 
-    tableRows.push(['TOTAL PENDAPATAN OPERASIONAL', formatCurrency(pl.operatingRevenue)]);
+    tableRows.push(['TOTAL PENDAPATAN OPERASIONAL', formatCurrency(operatingRevenue)]);
     tableRows.push(['', '']);
-    tableRows.push(['2. HARGA POKOK PENJUALAN (HPP)', '']);
-    tableRows.push(['   Beban Pokok Persediaan Bahan Baku (HPP)', `-${formatCurrency(pl.cogs)}`]);
-    tableRows.push(['TOTAL BEBAN HPP', `-${formatCurrency(pl.cogs)}`]);
+    tableRows.push(['2. HARGA POKOK PENJUALAN (HPP / COGS)', '']);
+    tableRows.push(['     Beban Pemakaian Bahan Baku Resep POS', `-${formatCurrency(cogs)}`]);
+    tableRows.push(['TOTAL BEBAN POKOK PENJUALAN', `-${formatCurrency(cogs)}`]);
     tableRows.push(['', '']);
-    tableRows.push(['LABA KOTOR (GROSS PROFIT)', formatCurrency(pl.grossProfit)]);
+    tableRows.push(['LABA KOTOR OPERASIONAL (GROSS PROFIT)', formatCurrency(grossProfit)]);
     tableRows.push(['', '']);
-    tableRows.push(['3. BEBAN OPERASIONAL (OPEX)', '']);
+    tableRows.push(['3. BEBAN OPERASIONAL (OPERATING EXPENSES - OPEX)', '']);
 
-    // Detail Beban Kas Operasional dari Cashflow
-    if (pl.opexBreakdown && Object.keys(pl.opexBreakdown).length > 0) {
-      Object.entries(pl.opexBreakdown).forEach(([cat, val]) => {
-        tableRows.push([`   Beban ${cat}`, `-${formatCurrency(Number(val))}`]);
+    if (opexBreakdown && Object.keys(opexBreakdown).length > 0) {
+      Object.entries(opexBreakdown).forEach(([cat, val]) => {
+        tableRows.push([`     Beban Operasional: ${cat}`, `-${formatCurrency(Number(val))}`]);
       });
-    } else if (pl.opexAmount > 0) {
-      tableRows.push(['   Beban Kas Operasional (Petty Cash Keluar)', `-${formatCurrency(pl.opexAmount)}`]);
+    } else if (opexAmount > 0) {
+      tableRows.push(['     Beban Kas Operasional (Petty Cash Keluar)', `-${formatCurrency(opexAmount)}`]);
     }
 
-    if (pl.shiftShortage > 0) {
-      tableRows.push(['   Kekurangan Uang Kasir (Shortage)', `-${formatCurrency(pl.shiftShortage)}`]);
+    if (shiftShortage > 0) {
+      tableRows.push(['     Kekurangan Uang Kasir (Cash Shortage)', `-${formatCurrency(shiftShortage)}`]);
     }
 
-    tableRows.push(['TOTAL BEBAN OPERASIONAL', `-${formatCurrency(pl.operatingExpenses)}`]);
+    tableRows.push(['TOTAL BEBAN OPERASIONAL', `-${formatCurrency(operatingExpenses)}`]);
     tableRows.push(['', '']);
-    tableRows.push(['LABA BERSIH OPERASIONAL (NET INCOME)', formatCurrency(pl.netIncome)]);
+    tableRows.push(['LABA / (RUGI) BERSIH OPERASIONAL (NET PROFIT)', formatCurrency(netIncome)]);
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 38,
+      startY: nextY + 10,
       margin: { top: 38, bottom: 20 },
       theme: 'plain',
       styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
       headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' } },
+      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 55, halign: 'right', fontStyle: 'bold' } },
       didParseCell: (cellData: any) => {
         const text = cellData.cell.text[0] || '';
         if (text.startsWith('1. ') || text.startsWith('2. ') || text.startsWith('3. ')) {
@@ -251,12 +297,12 @@ export const exportFinancialPDF = async (
           cellData.cell.styles.lineColor = [203, 213, 225];
           cellData.cell.styles.lineWidth = { top: 0.5, bottom: 0.5 };
         }
-        if (text.startsWith('LABA BERSIH OPERASIONAL')) {
+        if (text.startsWith('LABA / (RUGI) BERSIH')) {
           cellData.cell.styles.fontStyle = 'bold';
           cellData.cell.styles.fontSize = 9.5;
-          cellData.cell.styles.fillColor = [209, 250, 229];
-          cellData.cell.styles.textColor = [16, 122, 68];
-          cellData.cell.styles.lineColor = [16, 122, 68];
+          cellData.cell.styles.fillColor = netIncome >= 0 ? [209, 250, 229] : [254, 226, 226];
+          cellData.cell.styles.textColor = netIncome >= 0 ? [16, 122, 68] : [220, 38, 38];
+          cellData.cell.styles.lineColor = netIncome >= 0 ? [16, 122, 68] : [220, 38, 38];
           cellData.cell.styles.lineWidth = { top: 0.5, bottom: 1.5 };
         }
       }
@@ -267,40 +313,81 @@ export const exportFinancialPDF = async (
 
   // ─── 2. LAPORAN ARUS KAS (cashflow) ───
   else if (type === 'cashflow') {
-    const cf = data.cashFlow || {};
-    const tableColumn = ['AKTIVITAS ARUS KAS / KETERANGAN', 'NOMINAL'];
+    const cf = data?.cashFlow || data || {};
+    const salesReceipts = cf.inflow?.salesReceipts || 0;
+    const otherReceipts = cf.inflow?.otherReceipts || 0;
+    const overages = cf.inflow?.overages || 0;
+    const totalInflow = cf.inflow?.total !== undefined ? cf.inflow.total : (salesReceipts + otherReceipts + overages);
+
+    const opexPayments = cf.outflow?.opexPayments || 0;
+    const shortages = cf.outflow?.shortages || 0;
+    const totalOutflow = cf.outflow?.total !== undefined ? cf.outflow.total : (opexPayments + shortages);
+
+    const netCashFlow = cf.netCashFlow !== undefined ? cf.netCashFlow : (totalInflow - totalOutflow);
+
+    // Summary Card
+    autoTable(doc, {
+      head: [['RINGKASAN EKSEKUTIF ARUS KAS OPERASIONAL', 'NILAI KAS']],
+      body: [
+        ['TOTAL PENERIMAAN KAS MASUK (CASH INFLOW)', formatCurrency(totalInflow)],
+        ['TOTAL PENGELUARAN KAS KELUAR (CASH OUTFLOW)', `-${formatCurrency(totalOutflow)}`],
+        ['KENAIKAN / (PENURUNAN) KAS BERSIH', `${formatCurrency(netCashFlow)} (${netCashFlow >= 0 ? 'Surplus Kas' : 'Defisit Kas'})`]
+      ],
+      startY: 38,
+      margin: { top: 38, bottom: 20, left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } },
+      didParseCell: (cellData: any) => {
+        if (cellData.row.index === 2) {
+          cellData.cell.styles.fillColor = netCashFlow >= 0 ? [209, 250, 229] : [254, 226, 226];
+          cellData.cell.styles.textColor = netCashFlow >= 0 ? [16, 122, 68] : [220, 38, 38];
+          cellData.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    const nextY = (doc as any).lastAutoTable?.finalY || 70;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('RINCIAN AKTIVITAS ARUS KAS METODE LANGSUNG (DIRECT METHOD)', margin, nextY + 7);
+
+    const tableColumn = ['AKTIVITAS ARUS KAS / URAIAN TRANSAKSI', 'NOMINAL (IDR)'];
     const tableRows = [
-      ['ARUS KAS MASUK (INFLOW)', ''],
-      ['   Penerimaan Uang dari Pelanggan (Omzet POS)', formatCurrency(cf.inflow?.salesReceipts)],
-      ['   Penerimaan Petty Cash', formatCurrency(cf.inflow?.otherReceipts)],
-      ['   Akumulasi Kelebihan Uang Laci Shift (Overage)', formatCurrency(cf.inflow?.overages)],
-      ['TOTAL KAS MASUK', formatCurrency(cf.inflow?.total)],
+      ['1. ARUS KAS MASUK OPERASIONAL (INFLOW)', ''],
+      ['     Penerimaan Penjualan Kasir POS (Omzet Kasir)', formatCurrency(salesReceipts)],
+      ['     Penerimaan Kas Lain-lain (Petty Cash In)', formatCurrency(otherReceipts)],
+      ['     Akumulasi Kelebihan Uang Laci Kasir (Cash Overage)', formatCurrency(overages)],
+      ['TOTAL ARUS KAS MASUK', formatCurrency(totalInflow)],
       ['', ''],
-      ['ARUS KAS KELUAR (OUTFLOW)', ''],
-      ['   Pembayaran Biaya Petty Cash (Bahan & Operasional)', `-${formatCurrency(cf.outflow?.opexPayments)}`],
-      ['   Akumulasi Kekurangan Uang Laci Shift (Shortage)', `-${formatCurrency(cf.outflow?.shortages)}`],
-      ['TOTAL KAS KELUAR', `-${formatCurrency(cf.outflow?.total)}`],
+      ['2. ARUS KAS KELUAR OPERASIONAL (OUTFLOW)', ''],
+      ['     Pembayaran Beban Operasional Kas (Petty Cash Out)', `-${formatCurrency(opexPayments)}`],
+      ['     Akumulasi Kekurangan Uang Laci Kasir (Cash Shortage)', `-${formatCurrency(shortages)}`],
+      ['TOTAL ARUS KAS KELUAR', `-${formatCurrency(totalOutflow)}`],
       ['', ''],
-      ['KENAIKAN / (PENURUNAN) KAS BERSIH', formatCurrency(cf.netCashFlow)]
+      ['KENAIKAN / (PENURUNAN) KAS BERSIH PERIODE BERJALAN', formatCurrency(netCashFlow)]
     ];
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 38,
+      startY: nextY + 10,
       margin: { top: 38, bottom: 20 },
       theme: 'plain',
       styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
       headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' } },
+      columnStyles: { 0: { cellWidth: 'auto' }, 1: { cellWidth: 55, halign: 'right', fontStyle: 'bold' } },
       didParseCell: (cellData: any) => {
         const text = cellData.cell.text[0] || '';
-        if (text === 'ARUS KAS MASUK (INFLOW)' || text === 'ARUS KAS KELUAR (OUTFLOW)') {
+        if (text.startsWith('1. ') || text.startsWith('2. ')) {
           cellData.cell.styles.fontStyle = 'bold';
           cellData.cell.styles.textColor = text.includes('INFLOW') ? [16, 122, 68] : [220, 38, 38];
           cellData.cell.styles.fontSize = 9;
         }
-        if (text === 'TOTAL KAS MASUK' || text === 'TOTAL KAS KELUAR') {
+        if (text === 'TOTAL ARUS KAS MASUK' || text === 'TOTAL ARUS KAS KELUAR') {
           cellData.cell.styles.fontStyle = 'bold';
           cellData.cell.styles.textColor = [30, 41, 59];
           cellData.cell.styles.fillColor = [248, 250, 252];
@@ -310,9 +397,9 @@ export const exportFinancialPDF = async (
         if (text.startsWith('KENAIKAN / (PENURUNAN)')) {
           cellData.cell.styles.fontStyle = 'bold';
           cellData.cell.styles.fontSize = 9.5;
-          cellData.cell.styles.fillColor = [209, 250, 229];
-          cellData.cell.styles.textColor = [16, 122, 68];
-          cellData.cell.styles.lineColor = [16, 122, 68];
+          cellData.cell.styles.fillColor = netCashFlow >= 0 ? [209, 250, 229] : [254, 226, 226];
+          cellData.cell.styles.textColor = netCashFlow >= 0 ? [16, 122, 68] : [220, 38, 38];
+          cellData.cell.styles.lineColor = netCashFlow >= 0 ? [16, 122, 68] : [220, 38, 38];
           cellData.cell.styles.lineWidth = { top: 0.5, bottom: 1.5 };
         }
       }
@@ -323,9 +410,12 @@ export const exportFinancialPDF = async (
 
   // ─── 3. JURNAL LEDGER UMUM (ledger) ───
   else if (type === 'ledger') {
-    const tableColumn = ['TANGGAL / REF', 'KETERANGAN AKUN', 'DEBIT', 'KREDIT'];
+    const tableColumn = ['TANGGAL / REF', 'KETERANGAN AKUN / DESKRIPSI', 'DEBIT (RP)', 'KREDIT (RP)'];
     const tableRows: any[] = [];
-    const journals = data.journals || [];
+    const journals = Array.isArray(data) ? data : (data?.journals || []);
+
+    let totalDebit = 0;
+    let totalCredit = 0;
 
     journals.forEach((j: any) => {
       const dateStr = new Date(j.date).toLocaleDateString('id-ID', {
@@ -342,14 +432,28 @@ export const exportFinancialPDF = async (
       ]);
       j.lines?.forEach((l: any) => {
         const isCredit = l.credit > 0;
+        const dVal = Number(l.debit) || 0;
+        const cVal = Number(l.credit) || 0;
+        totalDebit += dVal;
+        totalCredit += cVal;
+
         tableRows.push([
           '',
           isCredit ? `      ${l.account}` : l.account,
-          l.debit > 0 ? formatCurrency(l.debit) : '',
-          l.credit > 0 ? formatCurrency(l.credit) : ''
+          dVal > 0 ? formatCurrency(dVal) : '',
+          cVal > 0 ? formatCurrency(cVal) : ''
         ]);
       });
     });
+
+    // Baris Keseimbangan Jurnal (Balance Check)
+    const isBalanced = totalDebit === totalCredit;
+    tableRows.push([
+      'TOTAL AGREGAT',
+      isBalanced ? 'STATUS KESEIMBANGAN: SEIMBANG (BALANCE)' : 'STATUS KESEIMBANGAN: TERDAPAT SELISIH (UNBALANCED)',
+      formatCurrency(totalDebit),
+      formatCurrency(totalCredit)
+    ]);
 
     autoTable(doc, {
       head: [tableColumn],
@@ -366,6 +470,15 @@ export const exportFinancialPDF = async (
         3: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
       },
       didParseCell: (cellData: any) => {
+        const isTotalRow = cellData.row.index === tableRows.length - 1;
+        if (isTotalRow) {
+          cellData.cell.styles.fillColor = isBalanced ? [209, 250, 229] : [254, 226, 226];
+          cellData.cell.styles.textColor = isBalanced ? [16, 122, 68] : [220, 38, 38];
+          cellData.cell.styles.fontStyle = 'bold';
+          cellData.cell.styles.lineWidth = { top: 0.5, bottom: 1.5 };
+          return;
+        }
+
         const cellVal = cellData.row.cells[1]?.text[0] || '';
         const isMetaRow = cellVal.startsWith('Deskripsi Transaksi:');
         if (isMetaRow) {
@@ -391,8 +504,7 @@ export const exportFinancialPDF = async (
 
   // ─── 4. LAPORAN PENJUALAN PER-MENU (products) ───
   else if (type === 'products') {
-    const tableColumn = ['NAMA MENU', 'KATEGORI', 'TERJUAL', 'OMZET KOTOR', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN'];
-    const products = data || [];
+    const products = Array.isArray(data) ? data : (data?.products || []);
     
     // Aggregation values
     let totalQty = 0;
@@ -400,16 +512,49 @@ export const exportFinancialPDF = async (
     let totalCogs = 0;
     let totalProfit = 0;
 
-    const tableRows = products.map((p: any) => {
+    products.forEach((p: any) => {
       totalQty += p.qty || 0;
       totalRev += p.revenue || 0;
       totalCogs += p.cost || 0;
       totalProfit += p.profit || 0;
+    });
 
+    const avgMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 100) : 0;
+
+    // Executive Summary Card
+    autoTable(doc, {
+      head: [['RINGKASAN EKSEKUTIF PENJUALAN MENU (F&B)', 'TOTAL']],
+      body: [
+        ['Total Menu Aktif Terjual', `${products.length} Varian Menu`],
+        ['Total Porsi / Item Terjual', `${totalQty.toLocaleString('id-ID')} Porsi`],
+        ['Total Omzet Kotor Penjualan', formatCurrency(totalRev)],
+        ['Total Beban HPP Bahan Baku', formatCurrency(totalCogs)],
+        ['Total Laba Kotor Penjualan (Gross Margin)', `${formatCurrency(totalProfit)} (${avgMargin}% Margin)`]
+      ],
+      startY: 38,
+      margin: { top: 38, bottom: 20, left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } }
+    });
+
+    const nextY = (doc as any).lastAutoTable?.finalY || 75;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('RINCIAN PENJUALAN & MARGIN PER-MENU', margin, nextY + 7);
+
+    const tableColumn = ['NO', 'NAMA MENU', 'KATEGORI', 'TERJUAL', 'HARGA JUAL', 'OMZET KOTOR', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN'];
+
+    const tableRows = products.map((p: any, idx: number) => {
       return [
+        idx + 1,
         p.name,
-        p.category,
+        p.category || 'Food & Drink',
         `${p.qty} porsi`,
+        formatCurrency(p.price || (p.qty > 0 ? Math.round(p.revenue / p.qty) : 0)),
         formatCurrency(p.revenue),
         formatCurrency(p.cost),
         formatCurrency(p.profit),
@@ -418,11 +563,12 @@ export const exportFinancialPDF = async (
     });
 
     // Append total row
-    const avgMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 100) : 0;
     tableRows.push([
-      'TOTAL PENJUALAN',
+      '',
+      'TOTAL AGREGAT PENJUALAN',
       '',
       `${totalQty} porsi`,
+      '',
       formatCurrency(totalRev),
       formatCurrency(totalCogs),
       formatCurrency(totalProfit),
@@ -432,23 +578,26 @@ export const exportFinancialPDF = async (
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 38,
+      startY: nextY + 10,
       margin: { top: 38, bottom: 20 },
       theme: 'striped',
-      styles: { fontSize: 8, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
-      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+      styles: { fontSize: 7.5, cellPadding: 1.8, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
       columnStyles: {
-        0: { fontStyle: 'bold' },
-        2: { halign: 'right', fontStyle: 'bold' },
-        3: { halign: 'right' },
-        4: { halign: 'right' },
-        5: { halign: 'right', fontStyle: 'bold' },
-        6: { halign: 'right', fontStyle: 'bold' }
+        0: { cellWidth: 8, halign: 'center' },
+        1: { fontStyle: 'bold', cellWidth: 42 },
+        2: { cellWidth: 22, halign: 'center' },
+        3: { cellWidth: 16, halign: 'right' },
+        4: { cellWidth: 22, halign: 'right' },
+        5: { cellWidth: 24, halign: 'right' },
+        6: { cellWidth: 22, halign: 'right' },
+        7: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
+        8: { cellWidth: 14, halign: 'right', fontStyle: 'bold' }
       },
       didParseCell: (cellData: any) => {
         const isTotalRow = cellData.row.index === tableRows.length - 1;
         if (isTotalRow) {
-          cellData.cell.styles.fillColor = [209, 250, 229]; // light green background
+          cellData.cell.styles.fillColor = [209, 250, 229];
           cellData.cell.styles.textColor = [16, 122, 68];
           cellData.cell.styles.fontStyle = 'bold';
           cellData.cell.styles.lineColor = [16, 122, 68];
@@ -462,27 +611,77 @@ export const exportFinancialPDF = async (
 
   // ─── 5. LAPORAN AUDIT SHIFT (shifts) ───
   else if (type === 'shifts') {
-    const tableColumn = ['WAKTU TUTUP', 'STAF KASIR', 'SALDO AWAL', 'KAS SISTEM', 'FISIK LACI', 'SELISIH KAS', 'STATUS'];
-    const shifts = data || [];
+    const shifts = Array.isArray(data) ? data : (data?.shifts || []);
     
+    let totalAwal = 0;
+    let totalCashSales = 0;
+    let totalNonCashSales = 0;
+    let totalSistem = 0;
+    let totalFisik = 0;
     let totalSelisih = 0;
 
-    const tableRows = shifts.map((s: any) => {
+    shifts.forEach((s: any) => {
+      totalAwal += s.saldoAwal || 0;
+      totalCashSales += s.cashSales || 0;
+      totalNonCashSales += s.nonCashSales || 0;
+      totalSistem += s.saldoSistem || 0;
+      totalFisik += s.saldoFisikLaci || 0;
       totalSelisih += s.selisih || 0;
+    });
+
+    // Summary Card
+    autoTable(doc, {
+      head: [['RINGKASAN REKAPITULASI AUDIT SHIFT KASIR', 'NILAI KEUANGAN']],
+      body: [
+        ['Total Sesi Shift Terekam', `${shifts.length} Shift`],
+        ['Total Modal Awal Laci (Starting Float)', formatCurrency(totalAwal)],
+        ['Total Penjualan Kas Tunai (Cash Omzet)', formatCurrency(totalCashSales)],
+        ['Total Penjualan Non-Tunai (QRIS/EDC/Bank)', formatCurrency(totalNonCashSales)],
+        ['TOTAL SELISIH KASIR (DISCREPANCY)', `${formatCurrency(totalSelisih)} (${totalSelisih === 0 ? 'SEIMBANG / MATCH' : totalSelisih < 0 ? 'KAS KURANG (SHORT)' : 'KAS LEBIH (OVER)'})`]
+      ],
+      startY: 38,
+      margin: { top: 38, bottom: 20, left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } },
+      didParseCell: (cellData: any) => {
+        if (cellData.row.index === 4) {
+          cellData.cell.styles.fillColor = totalSelisih === 0 ? [209, 250, 229] : totalSelisih < 0 ? [254, 226, 226] : [254, 243, 199];
+          cellData.cell.styles.textColor = totalSelisih === 0 ? [16, 122, 68] : totalSelisih < 0 ? [220, 38, 38] : [217, 119, 6];
+          cellData.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    const nextY = (doc as any).lastAutoTable?.finalY || 75;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('DAFTAR DETAIL SESI SHIFT & REKONSILIASI KAS LACI', margin, nextY + 7);
+
+    const tableColumn = ['NO', 'WAKTU TUTUP', 'STAF KASIR', 'SALDO AWAL', 'OMZET KAS', 'NON-TUNAI', 'KAS SISTEM', 'FISIK LACI', 'SELISIH', 'STATUS'];
+
+    const tableRows = shifts.map((s: any, idx: number) => {
       const dateStr = s.waktuTutup ? new Date(s.waktuTutup).toLocaleDateString('id-ID', {
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
         minute: '2-digit'
-      }) : '-';
+      }) : 'Aktif';
 
-      const selisihText = s.selisih === 0 ? 'Rp 0' : `${s.selisih > 0 ? '+' : ''}${formatCurrency(s.selisih)}`;
-      const statusText = s.selisih === 0 ? 'Cocok (OK)' : s.selisih < 0 ? 'Shortage (-)' : 'Overage (+)';
+      const selisihVal = s.selisih || 0;
+      const selisihText = selisihVal === 0 ? 'Rp 0' : `${selisihVal > 0 ? '+' : ''}${formatCurrency(selisihVal)}`;
+      const statusText = selisihVal === 0 ? 'Cocok' : selisihVal < 0 ? 'Kurang' : 'Lebih';
 
       return [
+        idx + 1,
         dateStr,
         s.user?.name || 'Kasir',
         formatCurrency(s.saldoAwal),
+        formatCurrency(s.cashSales || 0),
+        formatCurrency(s.nonCashSales || 0),
         formatCurrency(s.saldoSistem || 0),
         formatCurrency(s.saldoFisikLaci || 0),
         selisihText,
@@ -491,29 +690,37 @@ export const exportFinancialPDF = async (
     });
 
     tableRows.push([
-      'TOTAL SELISIH KAS',
       '',
+      'TOTAL AUDIT',
       '',
-      '',
-      '',
+      formatCurrency(totalAwal),
+      formatCurrency(totalCashSales),
+      formatCurrency(totalNonCashSales),
+      formatCurrency(totalSistem),
+      formatCurrency(totalFisik),
       formatCurrency(totalSelisih),
-      totalSelisih === 0 ? 'OK' : totalSelisih < 0 ? 'Shortage (-)' : 'Overage (+)'
+      totalSelisih === 0 ? 'PAS' : totalSelisih < 0 ? 'KURANG' : 'LEBIH'
     ]);
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 38,
+      startY: nextY + 10,
       margin: { top: 38, bottom: 20 },
       theme: 'striped',
-      styles: { fontSize: 8, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
-      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+      styles: { fontSize: 7, cellPadding: 1.6, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
       columnStyles: {
-        0: { fontStyle: 'bold' },
-        2: { halign: 'right' },
-        3: { halign: 'right' },
-        4: { halign: 'right' },
-        5: { halign: 'right', fontStyle: 'bold' }
+        0: { cellWidth: 7, halign: 'center' },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 20, fontStyle: 'bold' },
+        3: { cellWidth: 17, halign: 'right' },
+        4: { cellWidth: 18, halign: 'right' },
+        5: { cellWidth: 18, halign: 'right' },
+        6: { cellWidth: 19, halign: 'right' },
+        7: { cellWidth: 19, halign: 'right' },
+        8: { cellWidth: 19, halign: 'right', fontStyle: 'bold' },
+        9: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }
       },
       didParseCell: (cellData: any) => {
         const isTotalRow = cellData.row.index === tableRows.length - 1;
@@ -530,57 +737,96 @@ export const exportFinancialPDF = async (
 
   // ─── 6. LAPORAN MUTASI & VALUASI STOK (inventory) ───
   else if (type === 'inventory') {
-    const tableColumn = ['NAMA BAHAN', 'SATUAN', 'STOK AWAL', 'MASUK', 'KELUAR', 'STOK AKHIR', 'MIN STOK', 'STATUS', 'NILAI ASET'];
-    const items = data.inventory || [];
-    const summary = data.summary || {};
+    const items = Array.isArray(data) ? data : (data?.inventory || []);
+    const summary = data?.summary || {};
 
-    const tableRows = items.map((item: any) => {
-      const totalKeluar = item.keluarProduksi + item.keluarRusak;
-      const isCritical = item.stockAkhir <= item.minStock;
+    let calcValuation = 0;
+    let criticalCount = 0;
+    items.forEach((item: any) => {
+      calcValuation += item.totalValuation || ((item.stockAkhir || 0) * (item.buyPrice || 0));
+      if ((item.stockAkhir || 0) <= (item.minStock || 0)) criticalCount++;
+    });
+
+    const totalAssetVal = summary.totalAssetValuation || calcValuation;
+    const totalCritical = summary.criticalItemsCount !== undefined ? summary.criticalItemsCount : criticalCount;
+
+    // Summary Card
+    autoTable(doc, {
+      head: [['RINGKASAN VALUASI ASET & MUTASI PERSEDIAAN', 'NILAI']],
+      body: [
+        ['TOTAL VALUASI ASET BAHAN BAKU AKHIR', formatCurrency(totalAssetVal)],
+        ['Total Item Bahan Baku Terdaftar', `${items.length} Bahan Baku`],
+        ['Status Item Kritis (Mendekati / Di Bawah Buffer Min)', `${totalCritical} Bahan Perlu Restock`]
+      ],
+      startY: 38,
+      margin: { top: 38, bottom: 20, left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', fontStyle: 'bold' } }
+    });
+
+    const nextY = (doc as any).lastAutoTable?.finalY || 65;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('RINCIAN MUTASI FISIK & VALUASI PERSEDIAAN BAHAN BAKU', margin, nextY + 7);
+
+    const tableColumn = ['NO', 'NAMA BAHAN BAKU', 'SAT', 'STOK AWAL', 'MASUK', 'KELUAR', 'STOK AKHIR', 'HARGA', 'VALUASI ASET', 'STATUS'];
+
+    const tableRows = items.map((item: any, idx: number) => {
+      const totalKeluar = (item.keluarProduksi || 0) + (item.keluarRusak || 0);
+      const isCritical = (item.stockAkhir || 0) <= (item.minStock || 0);
       const statusText = isCritical ? 'Kritis' : 'Aman';
+      const itemVal = item.totalValuation || ((item.stockAkhir || 0) * (item.buyPrice || 0));
 
       return [
+        idx + 1,
         item.name,
-        item.unit,
-        item.stockAwal.toLocaleString('id-ID'),
-        item.masuk.toLocaleString('id-ID'),
+        item.unit || '',
+        (item.stockAwal || 0).toLocaleString('id-ID'),
+        (item.masuk || 0).toLocaleString('id-ID'),
         totalKeluar.toLocaleString('id-ID'),
-        item.stockAkhir.toLocaleString('id-ID'),
-        item.minStock.toLocaleString('id-ID'),
-        statusText,
-        formatCurrency(item.totalValuation)
+        (item.stockAkhir || 0).toLocaleString('id-ID'),
+        formatCurrency(item.buyPrice || 0),
+        formatCurrency(itemVal),
+        statusText
       ];
     });
 
     tableRows.push([
-      'TOTAL VALUASI ASET BAHAN BAKU',
+      '',
+      'TOTAL VALUASI ASET PERSEDIAAN',
       '',
       '',
       '',
       '',
       '',
       '',
-      '',
-      formatCurrency(summary.totalAssetValuation || 0)
+      formatCurrency(totalAssetVal),
+      ''
     ]);
 
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 38,
+      startY: nextY + 10,
       margin: { top: 38, bottom: 20 },
       theme: 'striped',
       styles: { fontSize: 7, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
       headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
       columnStyles: {
-        0: { fontStyle: 'bold' },
-        2: { halign: 'right' },
-        3: { halign: 'right' },
-        4: { halign: 'right' },
-        5: { halign: 'right', fontStyle: 'bold' },
-        6: { halign: 'right' },
-        7: { halign: 'center', fontStyle: 'bold' },
-        8: { halign: 'right', fontStyle: 'bold' }
+        0: { cellWidth: 7, halign: 'center' },
+        1: { fontStyle: 'bold', cellWidth: 38 },
+        2: { cellWidth: 12, halign: 'center' },
+        3: { cellWidth: 16, halign: 'right' },
+        4: { cellWidth: 15, halign: 'right' },
+        5: { cellWidth: 15, halign: 'right' },
+        6: { cellWidth: 16, halign: 'right', fontStyle: 'bold' },
+        7: { cellWidth: 20, halign: 'right' },
+        8: { cellWidth: 23, halign: 'right', fontStyle: 'bold' },
+        9: { cellWidth: 14, halign: 'center', fontStyle: 'bold' }
       },
       didParseCell: (cellData: any) => {
         const isTotalRow = cellData.row.index === tableRows.length - 1;
@@ -589,24 +835,18 @@ export const exportFinancialPDF = async (
           cellData.cell.styles.textColor = [15, 118, 110];
           cellData.cell.styles.fontStyle = 'bold';
         } else {
-          // Highlight critical stock rows in soft warning color
-          const rowStatus = cellData.row.cells[7]?.text[0];
+          const rowStatus = cellData.row.cells[9]?.text[0];
           if (rowStatus === 'Kritis') {
-            cellData.cell.styles.fillColor = [254, 242, 242]; // soft red
-            if (cellData.column.index === 7) {
-              cellData.cell.styles.textColor = [220, 38, 38]; // bold red status text
+            cellData.cell.styles.fillColor = [254, 242, 242];
+            if (cellData.column.index === 9) {
+              cellData.cell.styles.textColor = [220, 38, 38];
             }
           }
         }
       }
     });
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 120;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text(`Ringkasan Mutasi: Total Aset Bernilai ${formatCurrency(summary.totalAssetValuation || 0)} dengan ${summary.criticalItemsCount || 0} bahan kritis (stok menipis) dan ${summary.totalMutationsCount || 0} mutasi terdaftar.`, margin, finalY + 8);
-
-    addSignatureBlock(doc, finalY + 10);
+    addSignatureBlock(doc, (doc as any).lastAutoTable?.finalY || 100);
   }
 
   // ─── 8. LAPORAN DETAIL MENU & VALUASI BARANG JADI (product_details) ───
@@ -1240,21 +1480,21 @@ export const exportStockLossAuditPDF = async (
     pdfDoc.text('Owner / Manajer', pageWidth - margin - 50, signatureY + 22);
   };
 
-  const totalLossRp = lossData?.totalLossRupiah || 0;
-  const totalIncidents = lossData?.totalLossIncidents || 0;
-  const lossRate = lossData?.lossRatePercentage || 0;
-  const efficiencyRate = lossData?.efficiencyRate || 100;
-  const productionValue = lossData?.totalProductionValue || 0;
+  const totalLossRp = lossData?.totalLossRupiah ?? lossData?.summary?.totalLossCost ?? 0;
+  const totalIncidents = lossData?.totalLossIncidents ?? lossData?.summary?.totalLossCount ?? 0;
+  const lossRate = lossData?.lossRatePercentage ?? lossData?.summary?.lossPercentage ?? 0;
+  const efficiencyRate = lossData?.efficiencyRate ?? lossData?.summary?.efficiencyPercentage ?? 100;
+  const productionValue = lossData?.totalProductionValue ?? lossData?.summary?.totalProductionCost ?? 0;
 
   // Key KPI Cards
   autoTable(doc, {
     head: [['KEY PERFORMANCE INDICATOR (KPI) LOSS & EFISIENSI', 'HASIL EVALUASI']],
     body: [
-      ['TOTAL VALUASI KERUGIAN BAHAN BAKU (STOCK LOSS)', `Rp ${totalLossRp.toLocaleString('id-ID')}`],
+      ['TOTAL VALUASI KERUGIAN BAHAN BAKU (STOCK LOSS)', formatCurrency(totalLossRp)],
       ['Total Insiden Kerusakan Dicatat', `${totalIncidents} Kejadian Insiden`],
       ['Tingkat Kerugian Bahan (% Loss Rate)', `${lossRate}% dari total pengeluaran`],
       ['Tingkat Efisiensi Bahan (% Yield Rate)', `${efficiencyRate}% sukses diproduksi/terjual`],
-      ['Total Nilai Produksi Sukses Terjual (POS)', `Rp ${productionValue.toLocaleString('id-ID')}`]
+      ['Total Nilai Produksi Sukses Terjual (POS)', formatCurrency(productionValue)]
     ],
     startY: 38,
     margin: { top: 38, bottom: 20 },
@@ -1267,18 +1507,19 @@ export const exportStockLossAuditPDF = async (
   let nextY = (doc as any).lastAutoTable?.finalY || 85;
 
   // Top 5 Loss Items
-  if (lossData?.topLossItems && lossData.topLossItems.length > 0) {
+  const rawTopItems = lossData?.topLossItems || [];
+  if (rawTopItems.length > 0) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(30, 41, 59);
     doc.text('TOP 5 BAHAN PENYUMBANG KERUGIAN TERBESAR (PARETO 80/20)', margin, nextY + 8);
 
     const topColumns = ['PERINGKAT', 'NAMA BAHAN BAKU', 'TOTAL QTY RUSAK', 'TOTAL VALUASI RUGI (RP)'];
-    const topRows = lossData.topLossItems.map((t: any, idx: number) => [
+    const topRows = rawTopItems.map((t: any, idx: number) => [
       `Peringkat #${idx + 1}`,
       t.name,
       `${t.totalQty} ${t.unit}`,
-      formatCurrency(t.totalRupiah)
+      formatCurrency(t.totalRupiah !== undefined ? t.totalRupiah : (t.totalCost || 0))
     ]);
 
     autoTable(doc, {
@@ -1306,14 +1547,15 @@ export const exportStockLossAuditPDF = async (
   doc.setTextColor(30, 41, 59);
   doc.text('RIWAYAT LENGKAP PENCATATAN INSIDEN STOCK LOSS & WASTE', margin, nextY + 8);
 
+  const rawLogs = lossData?.lossLogs || lossData?.logs || [];
   const logColumns = ['TANGGAL/WAKTU', 'BAHAN BAKU', 'QTY RUSAK', 'VALUASI (RP)', 'ALASAN', 'DICATAT OLEH'];
-  const logRows = (lossData?.lossLogs || []).map((l: any) => [
-    new Date(l.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+  const logRows = rawLogs.map((l: any) => [
+    new Date(l.date || l.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
     l.ingredient?.name || '-',
-    `${l.qtyLoss} ${l.ingredient?.unit || ''}`,
-    formatCurrency(l.costLoss),
+    `${l.qtyLoss !== undefined ? l.qtyLoss : Math.abs(l.change || 0)} ${l.ingredient?.unit || ''}`,
+    formatCurrency(l.costLoss !== undefined ? l.costLoss : (l.cost || (Math.abs(l.change || 0) * (l.ingredient?.buyPrice || 0)))),
     l.reason || 'Lainnya',
-    l.recordedBy || 'Staf Dapur'
+    l.recordedBy || l.user?.name || 'Staf Dapur'
   ]);
 
   autoTable(doc, {
@@ -1449,8 +1691,9 @@ export const exportProcurementForecastPDF = async (
     pdfDoc.text('Owner / General Manager', pageWidth - margin - 50, signatureY + 22);
   };
 
-  const totalEstimatedCost = shoppingData?.totalEstimatedCost || 0;
-  const criticalCount = shoppingData?.criticalItems?.length || 0;
+  const rawItems = shoppingData?.criticalItems || shoppingData?.lowStockItems || [];
+  const totalEstimatedCost = shoppingData?.totalEstimatedCost ?? shoppingData?.summary?.totalRestockCost ?? rawItems.reduce((acc: number, i: any) => acc + (i.estimatedCost || 0), 0);
+  const criticalCount = rawItems.length;
 
   // Summary Metrics
   autoTable(doc, {
@@ -1475,16 +1718,25 @@ export const exportProcurementForecastPDF = async (
   doc.text('DAFTAR BAHAN BAKU YANG PERLU DIBELI / DIREORDER', margin, nextY + 8);
 
   const planColumns = ['NO', 'BAHAN BAKU', 'SISA STOK', 'BUFFER MIN', 'SARAN ORDER', 'EST. HARGA', 'EST. ANGGARAN (RP)', 'SUPPLIER'];
-  const planRows = (shoppingData?.criticalItems || []).map((item: any, idx: number) => [
-    idx + 1,
-    item.name,
-    `${item.currentStock} ${item.unit}`,
-    `${item.minStock} ${item.unit}`,
-    `${item.recommendedBuyQty} ${item.unit}`,
-    formatCurrency(item.buyPrice),
-    formatCurrency(item.estimatedCost),
-    item.supplierName || 'Umum / Pasar'
-  ]);
+  const planRows = rawItems.map((item: any, idx: number) => {
+    const curStock = item.currentStock !== undefined ? item.currentStock : (item.stock || 0);
+    const minStk = item.minStock || 0;
+    const reqQty = item.recommendedBuyQty !== undefined ? item.recommendedBuyQty : (item.suggestedQty || 0);
+    const price = item.buyPrice || 0;
+    const cost = item.estimatedCost !== undefined ? item.estimatedCost : (reqQty * price);
+    const sName = item.supplierName || item.supplier?.name || 'Umum / Pasar';
+
+    return [
+      idx + 1,
+      item.name,
+      `${curStock} ${item.unit || ''}`,
+      `${minStk} ${item.unit || ''}`,
+      `${reqQty} ${item.unit || ''}`,
+      formatCurrency(price),
+      formatCurrency(cost),
+      sName
+    ];
+  });
 
   autoTable(doc, {
     head: [planColumns],
@@ -1623,13 +1875,14 @@ export const exportStockOpnameVariancePDF = async (
   };
 
   // Calculations
+  const rawOpnameItems = Array.isArray(opnameItems) ? opnameItems : [];
   let totalDiscrepancyPlus = 0;
   let totalDiscrepancyMinus = 0;
   let matchedItems = 0;
 
-  const tableRows = opnameItems.map((item, idx) => {
-    const sys = Number(item.systemStock) || 0;
-    const phys = item.physicalStock === '' ? sys : (Number(item.physicalStock) || 0);
+  const tableRows = rawOpnameItems.map((item, idx) => {
+    const sys = Number(item.systemStock !== undefined ? item.systemStock : item.stock) || 0;
+    const phys = item.physicalStock === '' || item.physicalStock === undefined ? sys : (Number(item.physicalStock) || 0);
     const diff = phys - sys;
     const diffRp = diff * (item.buyPrice || 0);
 
@@ -1640,17 +1893,17 @@ export const exportStockOpnameVariancePDF = async (
     return [
       idx + 1,
       item.name,
-      item.unit,
+      item.unit || '',
       sys,
       phys,
       diff > 0 ? `+${diff}` : diff,
-      formatCurrency(item.buyPrice),
+      formatCurrency(item.buyPrice || 0),
       diff > 0 ? `+${formatCurrency(diffRp)}` : formatCurrency(diffRp),
       item.reason || item.notes || '-'
     ];
   });
 
-  const accuracyRate = opnameItems.length > 0 ? Math.round((matchedItems / opnameItems.length) * 100) : 100;
+  const accuracyRate = rawOpnameItems.length > 0 ? Math.round((matchedItems / rawOpnameItems.length) * 100) : 100;
   const netVarianceRp = totalDiscrepancyPlus - totalDiscrepancyMinus;
 
   // Summary Metrics Table
@@ -2167,15 +2420,20 @@ export const exportShiftSettlementPDF = async (
 
   // Financial Summary Table
   const saldoAwal = shiftData.saldoAwal || 0;
-  const cashSales = shiftData.cashSales || 0;
-  const nonCashSales = shiftData.nonCashSales || 0;
   const voidCount = shiftData.voidCount || 0;
   const voidCashTotal = shiftData.voidCashTotal || 0;
   const manualCashIn = shiftData.manualCashIn || 0;
   const manualCashOut = shiftData.manualCashOut || 0;
   const cashDebtIncome = shiftData.cashDebtIncome || 0;
-  const saldoSistem = shiftData.saldoSistem || (saldoAwal + cashSales - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut);
-  const saldoFisikLaci = shiftData.saldoFisikLaci || 0;
+  const nonCashSales = shiftData.nonCashSales || 0;
+
+  // Resilient fallback jika shiftData belum di-enrich oleh backend API
+  const cashSales = shiftData.cashSales !== undefined 
+    ? shiftData.cashSales 
+    : (shiftData.saldoSistem !== undefined ? Math.max(0, shiftData.saldoSistem - saldoAwal - manualCashIn - cashDebtIncome + voidCashTotal + manualCashOut) : 0);
+
+  const saldoSistem = shiftData.saldoSistem !== undefined ? shiftData.saldoSistem : (saldoAwal + cashSales - voidCashTotal + cashDebtIncome + manualCashIn - manualCashOut);
+  const saldoFisikLaci = shiftData.saldoFisikLaci !== undefined ? shiftData.saldoFisikLaci : 0;
   const selisih = shiftData.selisih !== undefined ? shiftData.selisih : (saldoFisikLaci - saldoSistem);
 
   const tableRows = [

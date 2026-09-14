@@ -139,13 +139,59 @@ export const ReportView: React.FC = () => {
     setExportingPdf(true);
     try {
       let dataToPass: any = null;
-      if (type === 'products') dataToPass = reportData.products || [];
-      else if (type === 'pl') dataToPass = accountingData.profitLoss;
-      else if (type === 'cashflow') dataToPass = accountingData.cashFlow;
-      else if (type === 'ledger') dataToPass = accountingData;
-      else if (type === 'shifts') dataToPass = reportData.shifts || [];
-      else if (type === 'inventory') dataToPass = inventoryData;
-      else if (type === 'dashboard') dataToPass = reportData;
+
+      // Validasi data sebelum generate PDF agar tidak menghasilkan dokumen kosong
+      if (type === 'products') {
+        const products = reportData.products || [];
+        if (products.length === 0) {
+          toast('Tidak ada data penjualan menu untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        dataToPass = products;
+      } else if (type === 'pl') {
+        const pl = accountingData.profitLoss;
+        if (!pl || (pl.salesRevenue === 0 && pl.operatingRevenue === 0)) {
+          toast('Tidak ada data transaksi untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        dataToPass = pl;
+      } else if (type === 'cashflow') {
+        const cf = accountingData.cashFlow;
+        if (!cf || cf.inflow?.total === 0) {
+          toast('Tidak ada data arus kas untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        dataToPass = cf;
+      } else if (type === 'ledger') {
+        const journals = accountingData.journals || [];
+        if (journals.length === 0) {
+          toast('Tidak ada entri jurnal untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        dataToPass = accountingData;
+      } else if (type === 'shifts') {
+        const s = reportData.shifts || [];
+        if (s.length === 0) {
+          toast('Tidak ada riwayat shift untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        dataToPass = s;
+      } else if (type === 'inventory') {
+        const inv = inventoryData?.inventory || [];
+        if (inv.length === 0) {
+          toast('Tidak ada data persediaan bahan baku untuk diekspor.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        dataToPass = inventoryData;
+      } else if (type === 'dashboard') {
+        dataToPass = reportData;
+      }
 
       await exportFinancialPDF(
         type,
@@ -164,6 +210,7 @@ export const ReportView: React.FC = () => {
       setExportingPdf(false);
     }
   };
+
 
   // CSV Export Helper
   const downloadCSVFile = (filename: string, content: string) => {

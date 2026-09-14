@@ -5,6 +5,33 @@ import { authenticateToken } from '../middlewares/authMiddleware';
 const router = Router();
 const prisma = new PrismaClient();
 
+// Shared helpers untuk menghitung porsi kas per metode pembayaran
+const getCashPortion = (paymentMethod: string | null, total: number): number => {
+  if (!paymentMethod) return 0;
+  const pm = paymentMethod.trim();
+  if (pm.toLowerCase() === 'cash' || pm.toLowerCase() === 'tunai') return total;
+  if (pm.startsWith('Split')) {
+    const match = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
+    if (match && match[1]) return Number(match[1].replace(/\./g, '')) || 0;
+  }
+  return 0;
+};
+
+const getNonCashPortion = (paymentMethod: string | null, total: number): number => {
+  if (!paymentMethod) return 0;
+  const pm = paymentMethod.trim();
+  const lp = pm.toLowerCase();
+  if (lp === 'cash' || lp === 'tunai') return 0;
+  if (lp === 'piutang') return 0;
+  if (lp === 'qris' || lp === 'debit' || lp === 'transfer' || lp === 'credit' || lp === 'non-tunai') return total;
+  if (pm.startsWith('Split')) {
+    const cashMatch = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
+    const cashAmt = cashMatch ? Number(cashMatch[1].replace(/\./g, '')) || 0 : 0;
+    return Math.max(0, total - cashAmt);
+  }
+  return total;
+};
+
 // Get active shift for logged in user (or any active open shift)
 router.get('/current', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -19,14 +46,97 @@ router.get('/current', authenticateToken, async (req: Request, res: Response) =>
   }
 });
 
-// Get all shifts (for admin / supervisor history)
+// Get all shifts (for admin / supervisor history) — dengan rekap finansial lengkap
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const shifts = await prisma.shift.findMany({
       include: { user: { select: { name: true } } },
       orderBy: { id: 'desc' }
     });
-    res.json(shifts);
+
+    if (shifts.length === 0) return res.json([]);
+
+    // Tentukan rentang tanggal keseluruhan untuk fetch data sekaligus (efisien / batch)
+    const now = new Date();
+    const earliestOpen = shifts.reduce((min, s) => s.waktuBuka < min ? s.waktuBuka : min, shifts[0].waktuBuka);
+    const latestClose = shifts.reduce((max, s) => {
+      const t = s.waktuTutup || now;
+      return t > max ? t : max;
+    }, shifts[0].waktuTutup || now);
+
+    // Fetch semua order, cashflow, debtpayment dalam rentang global sekaligus
+    const [allOrders, allCashFlows, allDebtPayments] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          OR: [
+            { paidAt: { gte: earliestOpen, lte: latestClose } },
+            { paidAt: null, createdAt: { gte: earliestOpen, lte: latestClose } }
+          ]
+        },
+        select: { status: true, paymentMethod: true, total: true, paidAt: true, createdAt: true }
+      }),
+      prisma.cashFlow.findMany({
+        where: { date: { gte: earliestOpen, lte: latestClose } },
+        select: { type: true, amount: true, category: true, date: true }
+      }),
+      prisma.debtPayment.findMany({
+        where: { createdAt: { gte: earliestOpen, lte: latestClose } },
+        select: { paymentMethod: true, amountPaid: true, createdAt: true }
+      })
+    ]);
+
+    // Hitung data finansial per shift
+    const enrichedShifts = shifts.map(shift => {
+      const shiftStart = shift.waktuBuka;
+      const shiftEnd = shift.waktuTutup || now;
+
+      const inRange = (ts: Date | null | undefined): boolean =>
+        ts != null && ts >= shiftStart && ts <= shiftEnd;
+
+      // Order dalam shift ini
+      const shiftOrders = allOrders.filter(o => inRange(o.paidAt ?? o.createdAt));
+      const paidOrders = shiftOrders.filter(o => o.status === 'Paid');
+      const voidOrders = shiftOrders.filter(o => o.status === 'Void');
+
+      const cashSales = paidOrders.reduce((s, o) => s + getCashPortion(o.paymentMethod, o.total), 0);
+      const nonCashSales = paidOrders.reduce((s, o) => s + getNonCashPortion(o.paymentMethod, o.total), 0);
+      const voidCount = voidOrders.length;
+      const voidCashTotal = voidOrders.reduce((s, o) => s + getCashPortion(o.paymentMethod, o.total), 0);
+      const voidNonCashTotal = voidOrders.reduce((s, o) => s + getNonCashPortion(o.paymentMethod, o.total), 0);
+
+      // CashFlow dalam shift ini
+      const shiftCashFlows = allCashFlows.filter(cf => inRange(cf.date));
+      const manualCashIn = shiftCashFlows
+        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang')
+        .reduce((s, cf) => s + cf.amount, 0);
+      const manualCashOut = shiftCashFlows
+        .filter(cf => cf.type === 'Pengeluaran')
+        .reduce((s, cf) => s + cf.amount, 0);
+
+      // Debt payments dalam shift ini
+      const shiftDebtPayments = allDebtPayments.filter(dp => inRange(dp.createdAt));
+      const cashDebtIncome = shiftDebtPayments
+        .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
+        .reduce((s, dp) => s + dp.amountPaid, 0);
+      const nonCashDebtIncome = shiftDebtPayments
+        .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
+        .reduce((s, dp) => s + dp.amountPaid, 0);
+
+      return {
+        ...shift,
+        cashSales,
+        nonCashSales,
+        voidCount,
+        voidCashTotal,
+        voidNonCashTotal,
+        manualCashIn,
+        manualCashOut,
+        cashDebtIncome,
+        nonCashDebtIncome
+      };
+    });
+
+    res.json(enrichedShifts);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Gagal mengambil data shift' });
@@ -74,52 +184,21 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       return res.status(404).json({ error: 'Tidak ada shift aktif' });
     }
 
-    // Fix #1 (backward-compatible): Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
-    // Ini memastikan order lama (paidAt=null) tetap terhitung, dan order baru diatribusikan ke shift yang benar
+    // Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
         OR: [
-          // Order baru: paidAt tersedia dan dalam rentang shift
           { paidAt: { gte: activeShift.waktuBuka } },
-          // Order lama (legacy): paidAt belum diisi, fallback ke createdAt
           { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
         ]
       }
     });
 
-    const getCashPortion = (paymentMethod: string | null, total: number) => {
-      if (!paymentMethod) return 0;
-      const pm = paymentMethod.trim();
-      if (pm.toLowerCase() === 'cash' || pm.toLowerCase() === 'tunai') return total;
-      if (pm.startsWith('Split')) {
-        const match = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
-        if (match && match[1]) {
-          return Number(match[1].replace(/\./g, '')) || 0;
-        }
-      }
-      return 0;
-    };
-
-    const getNonCashPortion = (paymentMethod: string | null, total: number) => {
-      if (!paymentMethod) return 0;
-      const pm = paymentMethod.trim();
-      const lowerPm = pm.toLowerCase();
-      if (lowerPm === 'cash' || lowerPm === 'tunai') return 0;
-      if (lowerPm === 'piutang') return 0;
-      if (lowerPm === 'qris' || lowerPm === 'debit' || lowerPm === 'transfer' || lowerPm === 'credit' || lowerPm === 'non-tunai') return total;
-      if (pm.startsWith('Split')) {
-        const cashMatch = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
-        const cashAmt = cashMatch ? Number(cashMatch[1].replace(/\./g, '')) || 0 : 0;
-        return Math.max(0, total - cashAmt);
-      }
-      return total;
-    };
-
     const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
     const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
-    // Hitung transaksi Void selama shift (untuk rekonsiliasi kas riil)
+    // Hitung transaksi Void selama shift
     const voidOrders = await prisma.order.findMany({
       where: {
         status: 'Void',
@@ -189,49 +268,16 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Tidak ada shift yang aktif untuk ditutup.' });
     }
 
-    // Fix #1 (backward-compatible): Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
+    // Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
         OR: [
-          // Order baru: paidAt tersedia dan dalam rentang shift
           { paidAt: { gte: activeShift.waktuBuka } },
-          // Order lama (legacy): paidAt belum diisi, fallback ke createdAt
           { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
         ]
       }
     });
-
-    const getCashPortion = (paymentMethod: string | null, total: number) => {
-      if (!paymentMethod) return 0;
-      const pm = paymentMethod.trim();
-      if (pm.toLowerCase() === 'cash' || pm.toLowerCase() === 'tunai') {
-        return total;
-      }
-      if (pm.startsWith('Split')) {
-        const match = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
-        if (match && match[1]) {
-          const cleanNum = match[1].replace(/\./g, '');
-          return Number(cleanNum) || 0;
-        }
-      }
-      return 0;
-    };
-
-    const getNonCashPortion = (paymentMethod: string | null, total: number) => {
-      if (!paymentMethod) return 0;
-      const pm = paymentMethod.trim();
-      const lowerPm = pm.toLowerCase();
-      if (lowerPm === 'cash' || lowerPm === 'tunai') return 0;
-      if (lowerPm === 'piutang') return 0;
-      if (lowerPm === 'qris' || lowerPm === 'debit' || lowerPm === 'transfer' || lowerPm === 'credit' || lowerPm === 'non-tunai') return total;
-      if (pm.startsWith('Split')) {
-        const cashMatch = pm.match(/Tunai\s+(?:Rp)+\s*([\d\.]+)/i);
-        const cashAmt = cashMatch ? Number(cashMatch[1].replace(/\./g, '')) || 0 : 0;
-        return Math.max(0, total - cashAmt);
-      }
-      return total;
-    };
 
     const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
     const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
@@ -251,9 +297,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
 
     // Hitung pengeluaran/pemasukan manual kas (CashFlow)
     const cashFlows = await prisma.cashFlow.findMany({
-      where: {
-        date: { gte: activeShift.waktuBuka }
-      }
+      where: { date: { gte: activeShift.waktuBuka } }
     });
 
     const debtPayments = await prisma.debtPayment.findMany({
