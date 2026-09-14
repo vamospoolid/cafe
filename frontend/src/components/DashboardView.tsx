@@ -112,7 +112,10 @@ const DashboardView = () => {
   const serviceSpeed = getServiceStatus(summary.averageServiceTime);
 
   return (
-    <div className="p-3.5 sm:p-6 pb-28 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6">
+    <div 
+      className="p-3.5 sm:p-6 pb-28 sm:pb-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">

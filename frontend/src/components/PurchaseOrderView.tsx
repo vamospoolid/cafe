@@ -164,7 +164,10 @@ const PurchaseOrderView: React.FC = () => {
   const totalDiterima = pos.filter(p => p.status === 'Diterima').length;
 
   return (
-    <div className="p-3.5 sm:p-6 pb-32 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6">
+    <div 
+      className="p-3.5 sm:p-6 pb-32 sm:pb-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/80 shadow-sm">
         <div>

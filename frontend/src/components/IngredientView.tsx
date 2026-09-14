@@ -780,7 +780,10 @@ export const IngredientView: React.FC = () => {
   const estimatedLossAmount = (parseFloat(lossForm.qtyLoss) || 0) * (selectedLossIngredient?.buyPrice || 0);
 
   return (
-    <div className="p-3.5 sm:p-6 pb-32 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-4">
+    <div 
+      className="p-3.5 sm:p-6 pb-32 sm:pb-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       
       {/* ─────────────────────────────────────────────────────────────
           1. STICKY TOP BAR: HEADER, BADGE, & ACTION BUTTONS

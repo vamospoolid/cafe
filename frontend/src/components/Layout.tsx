@@ -378,7 +378,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
         
-        <div className="page-content" style={{ paddingBottom: isMobile ? '80px' : '0px' }}>
+        <div className="page-content flex-1 min-h-0 w-full overflow-hidden">
           {children}
         </div>
       </main>

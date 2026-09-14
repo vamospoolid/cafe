@@ -222,8 +222,8 @@ const CashFlowView = () => {
 
   return (
     <div 
-      className="p-3 sm:p-5 pb-36 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-4" 
-      style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+      className="p-3 sm:p-5 pb-36 sm:pb-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-4" 
+      style={{ WebkitOverflowScrolling: 'touch' }}
     >
       {/* 1. Header Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm shrink-0">
