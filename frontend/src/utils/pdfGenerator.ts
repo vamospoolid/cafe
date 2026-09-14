@@ -781,11 +781,21 @@ export const exportFinancialPDF = async (
 
     const finalY = (doc as any).lastAutoTable?.finalY || 100;
     
-    // Summary Tables
+    // Page break safety check: if summary block + signatures won't fit on current page, start clean on next page
+    let summaryStartY = finalY;
+    const requiredSummaryHeight = 65;
+    if (summaryStartY + requiredSummaryHeight > pageHeight - 25) {
+      doc.addPage();
+      summaryStartY = 40; // Safely below header on new page
+    } else {
+      summaryStartY = summaryStartY + 8;
+    }
+
+    // Summary Section Header
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(30, 41, 59);
-    doc.text('RINGKASAN KEUANGAN TRANSAKSI (SAH)', margin, finalY + 8);
+    doc.text('RINGKASAN KEUANGAN TRANSAKSI (SAH)', margin, summaryStartY + 4);
     
     const summaryRows = [
       ['Total Penjualan Kotor (POS)', formatCurrency(totalSales + totalDiscount)],
@@ -797,8 +807,8 @@ export const exportFinancialPDF = async (
 
     autoTable(doc, {
       body: summaryRows,
-      startY: finalY + 12,
-      margin: { left: margin, right: margin + 95 },
+      startY: summaryStartY + 7,
+      margin: { top: 38, bottom: 20, left: margin, right: margin + 95 },
       theme: 'grid',
       styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
       columnStyles: {
@@ -813,16 +823,19 @@ export const exportFinancialPDF = async (
       }
     });
 
-    const leftTableY = (doc as any).lastAutoTable?.finalY || finalY + 40;
+    const leftTableY = (doc as any).lastAutoTable?.finalY || summaryStartY + 35;
 
-    doc.text('BREAKDOWN METODE PEMBAYARAN', margin + 95, finalY + 8);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text('BREAKDOWN METODE PEMBAYARAN', margin + 95, summaryStartY + 4);
     const paymentRows = Object.entries(paymentSummary).map(([method, amount]) => [method, formatCurrency(amount)]);
     paymentRows.push(['TOTAL PENERIMAAN KAS', formatCurrency(totalNet)]);
 
     autoTable(doc, {
       body: paymentRows,
-      startY: finalY + 12,
-      margin: { left: margin + 95, right: margin },
+      startY: summaryStartY + 7,
+      margin: { top: 38, bottom: 20, left: margin + 95, right: margin },
       theme: 'grid',
       styles: { fontSize: 7.5, cellPadding: 1.5, font: 'helvetica', textColor: [51, 65, 85] },
       columnStyles: {
@@ -837,7 +850,7 @@ export const exportFinancialPDF = async (
       }
     });
 
-    const rightTableY = (doc as any).lastAutoTable?.finalY || finalY + 40;
+    const rightTableY = (doc as any).lastAutoTable?.finalY || summaryStartY + 35;
     const finalSummaryY = Math.max(leftTableY, rightTableY);
 
     if (voidCount > 0) {

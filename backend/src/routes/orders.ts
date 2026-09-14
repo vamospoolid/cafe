@@ -7,6 +7,8 @@ import { PrinterService } from '../services/PrinterService';
 const router = Router();
 const prisma = new PrismaClient();
 
+import { getLocalDateRange, getCustomDateRange, getLocalOrderDatePrefix } from '../utils/dateHelper';
+
 // Helper: Process loyalty points earning
 const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: number, orderNumber: string) => {
   const settings = await tx.settings.findFirst();
@@ -90,9 +92,8 @@ const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRed
 };
 
 // Fungsi untuk generate nomor order (Contoh: ORD-20231025-001)
-const generateOrderNumber = async () => {
-  const date = new Date();
-  const dateString = date.toISOString().slice(0, 10).replace(/-/g, '');
+const generateOrderNumber = async (tzOffset?: number | string) => {
+  const dateString = getLocalOrderDatePrefix(typeof tzOffset === 'number' ? tzOffset : -420);
   
   // Cari order terakhir di hari yang sama
   const lastOrder = await prisma.order.findFirst({
@@ -118,7 +119,7 @@ const generateOrderNumber = async () => {
 // GET all orders (Riwayat Transaksi)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { status, date, active } = req.query;
+    const { status, date, startDate, endDate, active, tzOffset } = req.query;
     
     // Filter conditions
     const whereCondition: any = {};
@@ -136,26 +137,18 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     }
     
     if (date) {
-      // Filter by specific date (YYYY-MM-DD)
-      const startDate = new Date(date as string);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(date as string);
-      endDate.setHours(23, 59, 59, 999);
-      
+      // Filter by specific local date (YYYY-MM-DD)
+      const { startUtc, endUtc } = getLocalDateRange(date as string, tzOffset as string);
       whereCondition.createdAt = {
-        gte: startDate,
-        lte: endDate
+        gte: startUtc,
+        lte: endUtc
       };
-    } else if (req.query.startDate && req.query.endDate) {
-      // Filter by custom date range
-      const startVal = new Date(req.query.startDate as string);
-      startVal.setHours(0, 0, 0, 0);
-      const endVal = new Date(req.query.endDate as string);
-      endVal.setHours(23, 59, 59, 999);
-      
+    } else if (startDate && endDate) {
+      // Filter by custom local date range
+      const { startUtc, endUtc } = getCustomDateRange(startDate as string, endDate as string, tzOffset as string);
       whereCondition.createdAt = {
-        gte: startVal,
-        lte: endVal
+        gte: startUtc,
+        lte: endUtc
       };
     }
 

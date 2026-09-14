@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { History, Search, RotateCcw, Printer, Filter, ShoppingCart, DollarSign, BarChart2, User, XCircle, Download, FileText, Zap, Eye } from 'lucide-react';
+import { History, Search, RotateCcw, Printer, Filter, ShoppingCart, DollarSign, BarChart2, User, XCircle, Download, FileText, Zap, Eye, Calendar } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import ReceiptPrinter from './ReceiptPrinter';
 import OrderDetailModal from './OrderDetailModal';
 import { exportFinancialPDF } from '../utils/pdfGenerator';
-
+import { getTodayStr, getYesterdayStr, getLast7DaysRange, getThisMonthRange, formatLocalDate } from '../utils/dateUtils';
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
+
 const TransactionHistoryView = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
@@ -15,13 +16,39 @@ const TransactionHistoryView = () => {
   const [printOrder, setPrintOrder] = useState<any>(null);
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<any>(null);
   
-  // Filter States
-  const [dateFilter, setDateFilter] = useState('');
+  // Filter States: Default to 'today'
+  const [preset, setPreset] = useState<'today' | 'yesterday' | 'week' | 'month' | 'custom' | 'all'>('today');
+  const [startDate, setStartDate] = useState(getTodayStr());
+  const [endDate, setEndDate] = useState(getTodayStr());
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   
   const posContext = useContext(POSContext);
   const [printLoading, setPrintLoading] = useState<number | null>(null);
+
+  const handleSelectPreset = (newPreset: 'today' | 'yesterday' | 'week' | 'month' | 'custom' | 'all') => {
+    setPreset(newPreset);
+    if (newPreset === 'today') {
+      const t = getTodayStr();
+      setStartDate(t);
+      setEndDate(t);
+    } else if (newPreset === 'yesterday') {
+      const y = getYesterdayStr();
+      setStartDate(y);
+      setEndDate(y);
+    } else if (newPreset === 'week') {
+      const r = getLast7DaysRange();
+      setStartDate(r.startDate);
+      setEndDate(r.endDate);
+    } else if (newPreset === 'month') {
+      const r = getThisMonthRange();
+      setStartDate(r.startDate);
+      setEndDate(r.endDate);
+    } else if (newPreset === 'all') {
+      setStartDate('');
+      setEndDate('');
+    }
+  };
 
   const handleDirectPrint = async (orderId: number) => {
     if (!posContext?.settings?.printerIp) {
@@ -62,8 +89,14 @@ const TransactionHistoryView = () => {
     try {
       let url = '/api/orders';
       const params = new URLSearchParams();
-      if (dateFilter) params.append('date', dateFilter);
+      if (startDate && endDate) {
+        params.append('startDate', startDate);
+        params.append('endDate', endDate);
+      } else if (startDate) {
+        params.append('date', startDate);
+      }
       if (statusFilter) params.append('status', statusFilter);
+      params.append('tzOffset', String(new Date().getTimezoneOffset()));
       
       if (params.toString()) url += `?${params.toString()}`;
 
@@ -79,7 +112,7 @@ const TransactionHistoryView = () => {
 
   useEffect(() => {
     if (posContext?.token) fetchOrders();
-  }, [posContext?.token, dateFilter, statusFilter]);
+  }, [posContext?.token, startDate, endDate, statusFilter]);
 
   const handleVoid = async (id: number, orderNumber: string) => {
     if (!posContext?.user?.permissions?.canVoid) {
@@ -116,10 +149,9 @@ const TransactionHistoryView = () => {
 
   // EXPORT FUNCTIONS
   const exportPDF = async () => {
-    // Determine the date range printed. If no filter is selected, default to oldest to current date
-    const oldestDate = orders.length > 0 ? orders[orders.length - 1].createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
-    const rangeStart = dateFilter || oldestDate;
-    const rangeEnd = dateFilter || new Date().toISOString().split('T')[0];
+    const oldestDate = orders.length > 0 ? orders[orders.length - 1].createdAt.split('T')[0] : getTodayStr();
+    const rangeStart = startDate || oldestDate;
+    const rangeEnd = endDate || getTodayStr();
     
     await exportFinancialPDF(
       'transactions',
@@ -146,6 +178,12 @@ const TransactionHistoryView = () => {
     XLSX.writeFile(workbook, `Laporan_Transaksi_${Date.now()}.xlsx`);
   };
 
+  const handleReset = () => {
+    handleSelectPreset('today');
+    setStatusFilter('');
+    setSearchQuery('');
+  };
+
   return (
     <div 
       className="p-3 sm:p-6 pb-32 sm:pb-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
@@ -156,13 +194,13 @@ const TransactionHistoryView = () => {
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
             <History className="text-primary" /> Riwayat Transaksi
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">Daftar semua transaksi penjualan yang telah diproses</p>
+          <p className="text-xs text-slate-500 mt-0.5">Daftar transaksi penjualan dengan sinkronisasi waktu lokal real-time</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl" onClick={exportPDF}>
+          <button className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all active:scale-95" onClick={exportPDF}>
             <FileText size={15} className="text-rose-500" /> Export PDF
           </button>
-          <button className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl" onClick={exportExcel}>
+          <button className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all active:scale-95" onClick={exportExcel}>
             <Download size={15} className="text-emerald-600" /> Export Excel
           </button>
         </div>
@@ -213,30 +251,130 @@ const TransactionHistoryView = () => {
           </button>
           
           {isFilterOpen && (
-            <div className="p-3.5 sm:p-4 bg-white grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-100">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">Tanggal Transaksi</label>
-                <input type="date" className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+            <div className="p-3.5 sm:p-4 bg-white space-y-3.5 border-t border-slate-100">
+              {/* Quick Preset Buttons */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap mr-1 flex items-center gap-1">
+                  <Calendar size={13} /> Periode:
+                </span>
+                <button 
+                  type="button"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'today' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  onClick={() => handleSelectPreset('today')}
+                >
+                  Hari Ini
+                </button>
+                <button 
+                  type="button"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'yesterday' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  onClick={() => handleSelectPreset('yesterday')}
+                >
+                  Kemarin
+                </button>
+                <button 
+                  type="button"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'week' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  onClick={() => handleSelectPreset('week')}
+                >
+                  7 Hari Terakhir
+                </button>
+                <button 
+                  type="button"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'month' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  onClick={() => handleSelectPreset('month')}
+                >
+                  Bulan Ini
+                </button>
+                <button 
+                  type="button"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'all' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  onClick={() => handleSelectPreset('all')}
+                >
+                  Semua
+                </button>
+                <button 
+                  type="button"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'custom' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  onClick={() => setPreset('custom')}
+                >
+                  Kustom ⚙️
+                </button>
               </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">Status Pembayaran</label>
-                <select className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                  <option value="">Semua Status</option>
-                  <option value="Paid">Lunas (Paid)</option>
-                  <option value="Pending">Menunggu (Pending)</option>
-                  <option value="Void">Dibatalkan (Void)</option>
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">Cari Spesifik</label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
-                    <input type="text" className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-medium" placeholder="Cari No. Transaksi atau Nama..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+
+              {/* Filter Inputs Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1 border-t border-slate-50">
+                {preset === 'custom' ? (
+                  <>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">Dari Tanggal</label>
+                      <input 
+                        type="date" 
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                        value={startDate} 
+                        onChange={e => setStartDate(e.target.value)} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">Sampai Tanggal</label>
+                      <input 
+                        type="date" 
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                        value={endDate} 
+                        onChange={e => setEndDate(e.target.value)} 
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Pilih Tanggal Spesifik</label>
+                    <input 
+                      type="date" 
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                      value={startDate} 
+                      onChange={e => {
+                        setPreset('custom');
+                        setStartDate(e.target.value);
+                        setEndDate(e.target.value);
+                      }} 
+                    />
                   </div>
-                  <button className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shrink-0" onClick={() => { setDateFilter(''); setStatusFilter(''); setSearchQuery(''); }}>
-                    <RotateCcw size={14} /> Reset
-                  </button>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Status Pembayaran</label>
+                  <select 
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                    value={statusFilter} 
+                    onChange={e => setStatusFilter(e.target.value)}
+                  >
+                    <option value="">Semua Status</option>
+                    <option value="Paid">Lunas (Paid)</option>
+                    <option value="Pending">Menunggu (Pending)</option>
+                    <option value="Void">Dibatalkan (Void)</option>
+                  </select>
+                </div>
+
+                <div className={preset === 'custom' ? 'sm:col-span-2 md:col-span-1' : 'sm:col-span-2'}>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Cari Spesifik</label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                      <input 
+                        type="text" 
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                        placeholder="No. Transaksi / Pelanggan..." 
+                        value={searchQuery} 
+                        onChange={e => setSearchQuery(e.target.value)} 
+                      />
+                    </div>
+                    <button 
+                      className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors" 
+                      onClick={handleReset}
+                      title="Reset Filter ke Hari Ini"
+                    >
+                      <RotateCcw size={14} /> Reset
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
