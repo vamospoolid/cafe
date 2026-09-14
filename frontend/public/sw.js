@@ -1,4 +1,4 @@
-const CACHE_NAME = 'solpos-cache-v2';
+const CACHE_NAME = 'solpos-cache-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -38,6 +38,23 @@ self.addEventListener('fetch', (event) => {
 
   // Skip socket.io & non-GET API mutations
   if (url.pathname.startsWith('/socket.io')) {
+    return;
+  }
+
+  // Handle HTML document & navigation requests (Network-First strategy)
+  // Ensures user immediately gets the latest JS/CSS bundles without stale app shell!
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
     return;
   }
 

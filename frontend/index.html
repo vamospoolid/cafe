@@ -27,13 +27,13 @@
           navigator.serviceWorker.register('/sw.js')
             .then(reg => {
               console.log('[PWA] Service Worker registered with scope:', reg.scope);
-              // Handle update ready
               reg.onupdatefound = () => {
                 const installingWorker = reg.installing;
                 if (installingWorker) {
                   installingWorker.onstatechange = () => {
                     if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      console.log('[PWA] Konten baru tersedia, silakan refresh.');
+                      console.log('[PWA] Versi baru terdeteksi, memuat ulang otomatis...');
+                      window.location.reload();
                     }
                   };
                 }
