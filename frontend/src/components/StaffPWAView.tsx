@@ -2,12 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Fingerprint, Camera, MapPin, CheckCircle2, AlertTriangle, 
   Clock, Package, TrendingDown, RefreshCw, Plus, ArrowLeft, 
-  LogOut, Sparkles, Coffee, Utensils, ShoppingBag, 
-  Calendar, Check, AlertCircle, ChevronRight, X, User,
+  LogOut, Coffee, Calendar, Check, AlertCircle, ChevronRight, X, User,
   Award, ShieldCheck, DollarSign, ChevronDown, CheckCircle,
   Zap, Info, Bell, Search, Filter, Trash2, CheckSquare,
   FileText, ClipboardList, Send, Upload, FileCheck, CheckCheck, RefreshCcw,
-  Smartphone, UserCheck, KeyRound
+  Smartphone, UserCheck, KeyRound, ArrowRight, CornerDownLeft, Sparkles
 } from 'lucide-react';
 import { toast, confirmAlert } from '../utils/alert';
 
@@ -74,24 +73,15 @@ export const StaffPWAView: React.FC = () => {
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState('ALL');
 
-  // Helper avatar gradient based on role/name
-  const getAvatarGradient = (role: string = '', name: string = '') => {
+  // Solid avatar color (no gradient) based on role
+  const getAvatarColor = (role: string = '') => {
     const r = role.toLowerCase();
-    if (r.includes('barista') || r.includes('kopi')) return 'from-amber-500 to-orange-600';
-    if (r.includes('chef') || r.includes('dapur') || r.includes('cook')) return 'from-rose-500 to-red-600';
-    if (r.includes('kasir') || r.includes('cashier')) return 'from-emerald-500 to-teal-600';
-    if (r.includes('waiter') || r.includes('server') || r.includes('pramusaji')) return 'from-cyan-500 to-blue-600';
-    if (r.includes('admin') || r.includes('manager') || r.includes('lead')) return 'from-purple-500 to-indigo-600';
-    
-    const colors = [
-      'from-blue-600 to-indigo-700',
-      'from-emerald-500 to-teal-600',
-      'from-purple-600 to-pink-600',
-      'from-amber-500 to-orange-600',
-      'from-cyan-600 to-blue-700'
-    ];
-    const idx = (name || 'A').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length;
-    return colors[idx];
+    if (r.includes('barista') || r.includes('kopi')) return 'bg-amber-600 text-white';
+    if (r.includes('chef') || r.includes('dapur') || r.includes('cook')) return 'bg-rose-600 text-white';
+    if (r.includes('kasir') || r.includes('cashier')) return 'bg-emerald-600 text-white';
+    if (r.includes('waiter') || r.includes('server') || r.includes('pramusaji')) return 'bg-sky-600 text-white';
+    if (r.includes('admin') || r.includes('manager') || r.includes('lead')) return 'bg-indigo-600 text-white';
+    return 'bg-slate-700 text-white';
   };
 
   // Active Tab: 4 Bottom Tabs: 'attendance' | 'leave' | 'stock' | 'profile'
@@ -105,7 +95,7 @@ export const StaffPWAView: React.FC = () => {
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-      setCurrentDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
+      setCurrentDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }));
     };
     updateTime();
     const timer = setInterval(updateTime, 1000);
@@ -173,18 +163,14 @@ export const StaffPWAView: React.FC = () => {
   });
   const [submittingLeave, setSubmittingLeave] = useState(false);
 
-  // Change PIN Modal State
-  const [showChangePinModal, setShowChangePinModal] = useState(false);
-  const [changePinForm, setChangePinForm] = useState({ oldPin: '', newPin: '', confirmPin: '' });
-  const [submittingChangePin, setSubmittingChangePin] = useState(false);
-
-  // Distance calculator (Haversine)
+  // Calculate Distance (Haversine formula)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3;
+    const R = 6371e3; // meters
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
     const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
     const a =
       Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
       Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
@@ -255,7 +241,7 @@ export const StaffPWAView: React.FC = () => {
       },
       err => {
         setGpsLoading(false);
-        setGpsError('Gagal mendeteksi GPS. Harap izinkan akses lokasi di browser/aplikasi.');
+        setGpsError('Gagal mendeteksi GPS. Harap izinkan akses lokasi di pengaturan HP/browser.');
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -317,6 +303,7 @@ export const StaffPWAView: React.FC = () => {
   useEffect(() => {
     if (token && activeTab === 'attendance' && !capturedPhoto) {
       startCamera();
+      requestGpsLocation();
     } else if (activeTab !== 'attendance' || !token) {
       stopCamera();
     }
@@ -382,7 +369,8 @@ export const StaffPWAView: React.FC = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        setIngredients(await res.json());
+        const data = await res.json();
+        setIngredients(data);
       }
     } catch (e) {
       console.error(e);
@@ -393,14 +381,15 @@ export const StaffPWAView: React.FC = () => {
 
   // Fetch Leave Requests
   const fetchMyLeaves = async () => {
-    if (!token || !user?.id) return;
+    if (!token) return;
     setLeaveLoading(true);
     try {
-      const res = await fetch(`/api/attendance/leaves?userId=${user.id}`, {
+      const res = await fetch('/api/attendance/leaves', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        setLeaveRequests(await res.json());
+        const data = await res.json();
+        setLeaveRequests(data);
       }
     } catch (e) {
       console.error(e);
@@ -409,13 +398,10 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Tab Change Fetcher
   useEffect(() => {
     if (!token) return;
     fetchMySummary();
-    if (activeTab === 'attendance') {
-      requestGpsLocation();
-    } else if (activeTab === 'stock') {
+    if (activeTab === 'stock') {
       fetchIngredients();
     } else if (activeTab === 'leave') {
       fetchMyLeaves();
@@ -468,8 +454,15 @@ export const StaffPWAView: React.FC = () => {
       const newPin = pinInput + num;
       setPinInput(newPin);
       if (newPin.length === 6) {
-        setTimeout(() => handlePinSubmit(newPin), 150);
+        setTimeout(() => handlePinSubmit(newPin), 120);
       }
+    }
+  };
+
+  const handleKeypadBackspace = () => {
+    setPinError('');
+    if (pinInput.length > 0) {
+      setPinInput(pinInput.slice(0, -1));
     }
   };
 
@@ -671,30 +664,25 @@ export const StaffPWAView: React.FC = () => {
     });
 
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col justify-between p-4 sm:p-6 max-w-md mx-auto shadow-2xl relative select-none font-sans text-white antialiased overflow-hidden">
-        {/* Ambient background glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-
+      <div className="min-h-screen bg-slate-950 flex flex-col justify-between p-4 sm:p-6 max-w-md mx-auto relative select-none font-sans text-slate-100 antialiased">
         {/* Brand & Time Header */}
-        <div className="text-center pt-2 space-y-1.5 relative z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 border border-slate-800 shadow-inner">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 font-mono">
-              {currentTime} • {settings?.storeName || 'SOL CAFE'}
+        <div className="text-center pt-3 space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[11px] font-bold text-slate-300 font-mono tracking-wide">
+              {settings?.storeName || 'SOL CAFE'} • {currentTime}
             </span>
           </div>
-          <h1 className="text-lg font-black tracking-tight text-white flex items-center justify-center gap-2">
-            <Sparkles size={16} className="text-[#0052cc]" />
-            <span>Portal Karyawan & Absensi</span>
+          <h1 className="text-base font-bold text-white tracking-tight">
+            Portal Karyawan & Presensi
           </h1>
         </div>
 
         {/* Main Card */}
-        <div className="bg-slate-900/95 border border-slate-800 rounded-[2.2rem] p-5 shadow-2xl relative z-10 space-y-4 my-auto backdrop-blur-xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 my-auto">
           {activeStaffToLogin ? (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -703,48 +691,45 @@ export const StaffPWAView: React.FC = () => {
                     setPinInput('');
                     setPinError('');
                   }}
-                  className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition-all active:scale-95"
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all active:scale-95"
                 >
                   <ArrowLeft size={13} />
                   <span>Ganti Akun</span>
                 </button>
 
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                  PIN Individu
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  PIN Akses
                 </span>
               </div>
 
               <div className="text-center space-y-2 pt-1">
-                <div className="relative inline-block">
-                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${getAvatarGradient(activeStaffToLogin.role, activeStaffToLogin.name)} text-white flex items-center justify-center font-black text-xl shadow-lg border-2 border-white/20 mx-auto ring-4 ring-blue-500/20`}>
-                    {activeStaffToLogin.name.substring(0, 2).toUpperCase()}
-                  </div>
-                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-900" />
+                <div className={`w-16 h-16 rounded-2xl ${getAvatarColor(activeStaffToLogin.role)} flex items-center justify-center font-bold text-xl mx-auto shadow-md border border-slate-700`}>
+                  {activeStaffToLogin.name.substring(0, 2).toUpperCase()}
                 </div>
 
                 <div>
-                  <h2 className="text-base font-black text-white tracking-tight">
+                  <h2 className="text-base font-bold text-white tracking-tight">
                     {activeStaffToLogin.name}
                   </h2>
-                  <div className="inline-flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-800 text-blue-300 font-extrabold border border-slate-700">
+                  <div className="inline-flex items-center gap-1.5 mt-1">
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700">
                       {activeStaffToLogin.role}
                     </span>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Ketik 6-digit PIN rahasia Anda untuk mulai bertugas
+                <p className="text-xs text-slate-400">
+                  Masukkan 6-digit PIN Anda
                 </p>
               </div>
 
               {/* PIN Dots */}
-              <div className="flex justify-center gap-3 py-1">
+              <div className="flex justify-center gap-3.5 py-2">
                 {[0, 1, 2, 3, 4, 5].map(idx => (
                   <div
                     key={idx}
-                    className={`w-4 h-4 rounded-full transition-all duration-200 ${
+                    className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
                       pinInput.length > idx
-                        ? 'bg-[#0052cc] scale-125 shadow-md shadow-blue-500/60 ring-2 ring-blue-400/40'
+                        ? 'bg-blue-500 scale-125 shadow-md shadow-blue-500/40'
                         : 'bg-slate-800 border border-slate-700'
                     }`}
                   />
@@ -752,113 +737,79 @@ export const StaffPWAView: React.FC = () => {
               </div>
 
               {pinError && (
-                <p className="text-xs text-rose-400 font-bold text-center bg-rose-500/10 py-2 px-3 rounded-xl border border-rose-500/30 animate-shake">
+                <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-800/80 text-center text-xs font-medium text-rose-300">
                   {pinError}
-                </p>
+                </div>
               )}
 
-              {/* Keypad */}
-              <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto pt-1">
+              {/* Minimal Keypad */}
+              <div className="grid grid-cols-3 gap-2.5 max-w-[260px] mx-auto pt-1">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(num => (
                   <button
                     key={num}
                     type="button"
                     disabled={pinLoading}
                     onClick={() => handleKeypadClick(num)}
-                    className="h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:bg-blue-600 text-white text-lg font-black transition-all active:scale-95 border border-slate-700/80 flex items-center justify-center shadow-sm"
+                    className="h-14 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:bg-slate-600 border border-slate-700/80 text-white font-bold text-xl flex items-center justify-center transition-all active:scale-95 shadow-sm"
                   >
                     {num}
                   </button>
                 ))}
                 <button
                   type="button"
-                  disabled={pinLoading}
                   onClick={() => setPinInput('')}
-                  className="h-12 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-black transition-all active:scale-95 border border-rose-500/20 flex items-center justify-center"
+                  className="h-14 rounded-2xl bg-slate-800/50 hover:bg-slate-800 text-slate-400 font-semibold text-xs flex items-center justify-center border border-slate-800 transition-all active:scale-95"
                 >
-                  CLEAR
+                  Reset
                 </button>
                 <button
                   type="button"
                   disabled={pinLoading}
                   onClick={() => handleKeypadClick('0')}
-                  className="h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:bg-blue-600 text-white text-lg font-black transition-all active:scale-95 border border-slate-700/80 flex items-center justify-center shadow-sm"
+                  className="h-14 rounded-2xl bg-slate-800/90 hover:bg-slate-700 active:bg-slate-600 border border-slate-700/80 text-white font-bold text-xl flex items-center justify-center transition-all active:scale-95 shadow-sm"
                 >
                   0
                 </button>
                 <button
                   type="button"
-                  disabled={pinLoading}
-                  onClick={() => setPinInput(prev => prev.slice(0, -1))}
-                  className="h-12 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-all active:scale-95 border border-slate-700/80 flex items-center justify-center"
+                  onClick={handleKeypadBackspace}
+                  className="h-14 rounded-2xl bg-slate-800/50 hover:bg-slate-800 text-slate-400 font-semibold text-xs flex items-center justify-center border border-slate-800 transition-all active:scale-95"
                 >
-                  ⌫
-                </button>
-              </div>
-
-              {/* Remember Profile Toggle */}
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between px-2">
-                <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={rememberDevice}
-                    onChange={e => setRememberDevice(e.target.checked)}
-                    className="rounded bg-slate-800 border-slate-700 text-[#0052cc] focus:ring-0"
-                  />
-                  <span>Ingat profil di HP ini</span>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedStaffUser(null);
-                    setSavedDeviceStaff(null);
-                    setPinInput('');
-                  }}
-                  className="text-[11px] font-bold text-blue-400 hover:text-blue-300 hover:underline"
-                >
-                  Pilih Staf Lain →
+                  <ArrowLeft size={16} />
                 </button>
               </div>
             </div>
           ) : (
-            <div className="space-y-3.5 animate-fade-in">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                <div>
-                  <h3 className="text-sm font-black text-white flex items-center gap-2">
-                    <User size={16} className="text-[#0052cc]" />
-                    <span>Pilih Profil Anda</span>
-                  </h3>
-                  <p className="text-[10px] text-slate-400">Pilih nama karyawan untuk memasukkan PIN</p>
-                </div>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800 text-blue-400 border border-slate-700">
-                  {staffList.length} Staf
-                </span>
+            /* Staff Selector List */
+            <div className="space-y-4">
+              <div className="text-center space-y-1">
+                <h2 className="text-base font-bold text-white">Pilih Profil Karyawan</h2>
+                <p className="text-xs text-slate-400">Pilih nama Anda untuk masuk ke sistem</p>
               </div>
 
               {/* Search Bar */}
               <div className="relative">
-                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={staffSearchQuery}
                   onChange={e => setStaffSearchQuery(e.target.value)}
-                  placeholder="Cari nama atau role staf..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  placeholder="Cari nama atau jabatan..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               {/* Filter Chips */}
-              <div className="flex gap-1.5 overflow-x-auto pb-1 text-[10px] font-bold scrollbar-none">
+              <div className="flex gap-1.5 overflow-x-auto pb-1 text-[11px] font-medium scrollbar-none">
                 {['ALL', 'BARISTA', 'KITCHEN', 'CASHIER', 'WAITER', 'MANAGER'].map(chip => (
                   <button
                     key={chip}
                     type="button"
                     onClick={() => setSelectedRoleFilter(chip)}
-                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all ${
+                    className={`px-3 py-1 rounded-lg shrink-0 transition-all ${
                       selectedRoleFilter === chip
-                        ? 'bg-[#0052cc] text-white shadow-sm font-black'
-                        : 'bg-slate-800/80 text-slate-400 hover:text-white border border-slate-700/60'
+                        ? 'bg-blue-600 text-white font-semibold'
+                        : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'
                     }`}
                   >
                     {chip === 'ALL' ? 'Semua' : chip}
@@ -877,17 +828,17 @@ export const StaffPWAView: React.FC = () => {
                       setPinInput('');
                       setPinError('');
                     }}
-                    className="p-3 rounded-2xl border border-slate-800 bg-slate-800/50 hover:bg-slate-800 hover:border-blue-500/50 text-left transition-all active:scale-95 group shadow-sm flex flex-col justify-between"
+                    className="p-3 rounded-2xl border border-slate-800 bg-slate-800/60 hover:bg-slate-800 hover:border-slate-700 text-left transition-all active:scale-95 group shadow-sm flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${getAvatarGradient(st.role, st.name)} text-white flex items-center justify-center font-black text-xs group-hover:scale-105 transition-transform shadow-sm`}>
+                      <div className={`w-9 h-9 rounded-xl ${getAvatarColor(st.role)} flex items-center justify-center font-bold text-xs shadow-sm`}>
                         {st.name.substring(0, 2).toUpperCase()}
                       </div>
-                      <ChevronRight size={14} className="text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
+                      <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-all" />
                     </div>
                     <div>
-                      <div className="text-xs font-black text-white truncate">{st.name}</div>
-                      <div className="text-[10px] text-blue-300 font-semibold truncate mt-0.5">{st.role}</div>
+                      <div className="text-xs font-bold text-white truncate">{st.name}</div>
+                      <div className="text-[10px] text-slate-400 truncate mt-0.5">{st.role}</div>
                     </div>
                   </button>
                 ))}
@@ -897,12 +848,12 @@ export const StaffPWAView: React.FC = () => {
         </div>
 
         {/* Footer Return Link */}
-        <div className="text-center pb-2 relative z-10">
+        <div className="text-center pb-3">
           <a
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-white transition-colors py-1 px-3 rounded-full hover:bg-slate-800/50"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors py-1 px-3 rounded-full hover:bg-slate-900"
           >
-            <ArrowLeft size={14} /> Kembali ke Kasir Utama POS
+            <ArrowLeft size={13} /> Kembali ke Layar Kasir POS
           </a>
         </div>
       </div>
@@ -910,173 +861,136 @@ export const StaffPWAView: React.FC = () => {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // RENDER AUTHENTICATED STAFF APP WITH 4 ESSENTIAL TABS
+  // RENDER AUTHENTICATED STAFF APP WITH CLEAN 4 TABS
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-900/90 flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
-      <div className="w-full sm:max-w-[430px] min-h-screen sm:min-h-[860px] bg-slate-100 sm:rounded-[2rem] shadow-2xl sm:border sm:border-slate-800 flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
+      <div className="w-full sm:max-w-[420px] min-h-screen sm:min-h-[850px] bg-slate-50 sm:rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
         
-        {/* TOP APP BAR */}
-        <div className="bg-slate-900 text-white px-5 pt-4 pb-4 border-b border-slate-800 shrink-0">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-300">
-                {settings?.storeName || 'SOL CAFE'} • PORTAL STAF
-              </span>
+        {/* REFINED COMPACT HEADER */}
+        <header className="bg-slate-900 text-white px-4 pt-3.5 pb-3.5 border-b border-slate-800 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-9 h-9 rounded-xl ${getAvatarColor(user.role)} flex items-center justify-center font-bold text-xs shrink-0 shadow-sm`}>
+                {user.name.substring(0, 2).toUpperCase()}
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h2 className="text-xs font-bold text-white truncate">{user.name}</h2>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700 shrink-0">
+                    {user.role}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
+                  <Clock size={11} className="text-slate-400" />
+                  <span>{currentTime}</span>
+                  <span className="text-slate-600">•</span>
+                  <span className="truncate">{currentDateStr}</span>
+                </div>
+              </div>
             </div>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center gap-1.5 active:scale-95 shadow-sm"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all active:scale-95 shrink-0"
+              title="Keluar Akun"
             >
-              <LogOut size={13} />
-              <span>Keluar</span>
+              <LogOut size={14} />
             </button>
           </div>
 
-          <div className="pt-3 flex items-center gap-3.5">
-            <div className={`w-12 h-12 rounded-xl bg-gradient-to-tr ${getAvatarGradient(user.role, user.name)} text-white flex items-center justify-center font-black text-base shadow-sm shrink-0`}>
-              {user.name.substring(0, 2).toUpperCase()}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black text-white truncate">{user.name}</h2>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-slate-800 text-blue-300 font-extrabold border border-slate-700">
-                  {user.role}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5 flex items-center gap-1.5">
-                <Clock size={12} className="text-emerald-400" />
-                <span className="font-mono font-bold text-slate-200">{currentTime}</span>
-                <span className="text-slate-600">•</span>
-                <span className="truncate">{currentDateStr}</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Shift status banner */}
-          <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Status:</span>
+          {/* Clean Status & Shift Sub-bar */}
+          <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+            <div className="flex items-center gap-1.5">
               {mySummary?.todayStatus?.clockedIn ? (
                 mySummary?.todayStatus?.clockedOut ? (
-                  <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-300 border border-blue-500/30 text-[10px] font-black">
-                    ✓ Selesai Shift
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-300 font-semibold border border-slate-700">
+                    <CheckCircle2 size={11} className="text-blue-400" /> Selesai Shift
                   </span>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-black flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" /> Sedang Bertugas
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 font-semibold border border-emerald-800/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Sedang Bertugas
                   </span>
                 )
               ) : (
-                <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-black flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-950/60 text-amber-300 font-semibold border border-amber-800/60">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Belum Presensi
                 </span>
               )}
             </div>
 
-            {mySummary?.todayStatus?.todayLog?.shiftName && (
-              <span className="text-[10px] text-slate-300 font-extrabold bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
-                {mySummary.todayStatus.todayLog.shiftName.split('(')[0]}
-              </span>
-            )}
+            <div className="text-[10px] text-slate-400 font-medium">
+              {mySummary?.todayStatus?.todayLog?.shiftName ? (
+                <span className="text-slate-300 font-semibold">{mySummary.todayStatus.todayLog.shiftName.split('(')[0]}</span>
+              ) : (
+                <span>{settings?.storeName || 'SOL CAFE'}</span>
+              )}
+            </div>
           </div>
-        </div>
+        </header>
 
-        {/* SCROLLABLE CONTENT */}
-        <div className="flex-1 overflow-y-auto pb-24">
-          {/* TAB 1: PRESENSI */}
+        {/* SCROLLABLE MAIN CONTENT */}
+        <main className="flex-1 overflow-y-auto pb-24">
+          
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 1: HERO PRESENSI BIOMETRIC SCANNER
+             ───────────────────────────────────────────────────────────── */}
           {activeTab === 'attendance' && (
-            <div className="p-4 space-y-4 animate-fade-in">
-              {/* GPS RADAR CARD */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${
-                    isWithinRadius ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'
-                  }`}>
-                    <MapPin size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                      <span>{settings?.storeName || 'SOL CAFE'}</span>
-                      {isWithinRadius && <CheckCircle2 size={14} className="text-emerald-500" />}
-                    </h4>
-                    <p className="text-[11px] font-semibold mt-0.5">
-                      {gpsLoading ? (
-                        <span className="text-amber-600 flex items-center gap-1">
-                          <RefreshCw size={11} className="animate-spin" /> Mengunci koordinat GPS...
-                        </span>
-                      ) : isWithinRadius ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-1">
-                          <span>✓ GPS Valid</span>
-                          <span className="text-slate-400 font-normal font-mono">
-                            ({gpsDistance !== null ? `${gpsDistance}m` : '0m'} / {settings?.gpsRadiusMeters || 150}m)
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-rose-600 font-bold">
-                          Di Luar Radius ({gpsDistance !== null ? `${gpsDistance}m` : '-'})
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={requestGpsLocation}
-                  disabled={gpsLoading}
-                  className="p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 active:scale-95 shrink-0 transition-all shadow-sm"
-                  title="Perbarui GPS"
-                >
-                  <RefreshCw size={14} className={gpsLoading ? 'animate-spin text-[#0052cc]' : ''} />
-                </button>
-              </div>
-
-              {/* SHIFT SELECTOR */}
+            <div className="p-4 space-y-4">
+              
+              {/* Shift Selector Buttons */}
               {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2.5">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <Clock size={14} className="text-[#0052cc]" /> Jadwal Shift Kerja:
-                  </label>
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block px-0.5">
+                    Pilih Shift Kerja:
+                  </span>
                   <div className="grid grid-cols-2 gap-2">
-                    {shifts.map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setSelectedShiftId(s.id)}
-                        className={`p-3 rounded-xl border text-left transition-all ${
-                          selectedShiftId === s.id
-                            ? 'border-2 border-[#0052cc] bg-blue-50/70 shadow-sm'
-                            : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
-                        }`}
-                      >
-                        <div className="text-xs font-black text-slate-900 truncate flex items-center justify-between">
-                          <span>{s.name}</span>
-                          {selectedShiftId === s.id && <Check size={12} className="text-[#0052cc]" />}
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-bold mt-0.5">{s.start} - {s.end}</div>
-                      </button>
-                    ))}
+                    {shifts.map(s => {
+                      const isSelected = selectedShiftId === s.id;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => setSelectedShiftId(s.id)}
+                          className={`p-2.5 rounded-xl border text-left transition-all ${
+                            isSelected
+                              ? 'border-blue-600 bg-blue-50/90 text-blue-950 shadow-sm'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold truncate">{s.name}</span>
+                            {isSelected && <Check size={12} className="text-blue-600 shrink-0" />}
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                            {s.start} - {s.end}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* DIRECT ACTIVE CAMERA CONTAINER */}
-              <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <h4 className="text-xs font-black text-slate-900">
-                      Live Kamera Selfie Presensi
-                    </h4>
+              {/* CAMERA SCANNER HERO VIEWFINDER */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3.5">
+                
+                {/* Viewfinder Header Status */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                    <Camera size={15} className="text-slate-600" />
+                    <span>Verifikasi Wajah Selfie</span>
                   </div>
-                  {capturedPhoto && (
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                      ✓ Foto Terverifikasi
+
+                  {capturedPhoto ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                      <CheckCircle size={11} /> Foto Siap
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-medium text-slate-400">
+                      Posisikan di tengah
                     </span>
                   )}
                 </div>
@@ -1093,8 +1007,8 @@ export const StaffPWAView: React.FC = () => {
 
                 {!capturedPhoto ? (
                   <div className="space-y-3">
-                    {/* Live Video Viewfinder */}
-                    <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-square max-w-[290px] mx-auto border-4 border-[#0052cc] shadow-xl ring-4 ring-blue-500/15">
+                    {/* Live Viewfinder Frame */}
+                    <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[280px] mx-auto border border-slate-800 shadow-inner">
                       <video
                         ref={videoRef}
                         autoPlay
@@ -1103,70 +1017,82 @@ export const StaffPWAView: React.FC = () => {
                         className={`w-full h-full object-cover ${cameraFacing === 'user' ? 'transform -scale-x-100' : ''}`}
                       />
                       
-                      {/* Face Alignment Oval Guide */}
+                      {/* Biometric Corner Framing Guides */}
+                      <div className="absolute inset-0 pointer-events-none p-5 flex flex-col justify-between">
+                        <div className="flex justify-between">
+                          <div className="w-6 h-6 border-t-2 border-l-2 border-emerald-400 rounded-tl-lg" />
+                          <div className="w-6 h-6 border-t-2 border-r-2 border-emerald-400 rounded-tr-lg" />
+                        </div>
+                        <div className="flex justify-between">
+                          <div className="w-6 h-6 border-b-2 border-l-2 border-emerald-400 rounded-bl-lg" />
+                          <div className="w-6 h-6 border-b-2 border-r-2 border-emerald-400 rounded-br-lg" />
+                        </div>
+                      </div>
+
+                      {/* Face Silhouette Guide */}
                       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        <div className="w-48 h-56 border-2 border-dashed border-emerald-400/70 rounded-[4rem] animate-pulse shadow-[0_0_15px_rgba(52,211,153,0.3)] flex items-center justify-center">
-                          <span className="text-[9px] font-black text-white/80 bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
-                            Posisikan Wajah
+                        <div className="w-40 h-48 border border-dashed border-white/40 rounded-[3rem] flex items-center justify-center">
+                          <span className="text-[9px] font-bold text-white/90 bg-black/60 px-2 py-0.5 rounded-full">
+                            Wajah
                           </span>
                         </div>
                       </div>
 
-                      {/* Top Floating Controls */}
-                      <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-auto">
-                        <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[10px] font-black text-emerald-400 border border-white/10 flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> LIVE
+                      {/* Top Overlay Bar */}
+                      <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between pointer-events-auto">
+                        <span className="px-2 py-0.5 rounded-md bg-black/70 text-[9px] font-bold text-emerald-400 border border-white/10 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
                         </span>
 
                         <button
                           type="button"
                           onClick={toggleCameraFacing}
-                          className="p-2 rounded-xl bg-black/60 hover:bg-black/80 backdrop-blur-md text-white border border-white/10 active:scale-90 transition-transform shadow-md"
-                          title="Ganti Kamera Depan/Belakang"
+                          className="p-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white border border-white/10 transition-all active:scale-90"
+                          title="Putar Kamera"
                         >
-                          <RefreshCcw size={14} />
+                          <RefreshCcw size={13} />
                         </button>
                       </div>
 
-                      {/* Bottom Shutter Capture Action */}
+                      {/* Tactile Shutter Button */}
                       <div className="absolute bottom-3 inset-x-0 flex items-center justify-center pointer-events-auto">
                         <button
                           type="button"
                           onClick={capturePhoto}
-                          className="w-14 h-14 rounded-full bg-white text-[#0052cc] flex items-center justify-center shadow-2xl active:scale-90 border-4 border-blue-500 hover:scale-105 transition-all group"
-                          title="Ambil Foto Presensi"
+                          className="w-13 h-13 p-1 rounded-full bg-white/90 border-2 border-white flex items-center justify-center shadow-lg active:scale-90 transition-transform"
+                          title="Ambil Foto"
                         >
-                          <div className="w-8 h-8 rounded-full bg-[#0052cc] group-hover:bg-blue-700 transition-colors flex items-center justify-center text-white">
+                          <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center">
                             <Camera size={16} />
                           </div>
                         </button>
                       </div>
                     </div>
 
-                    {/* Fallback Native Camera Button */}
+                    {/* Fallback Native Camera Trigger */}
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
                     >
-                      <Smartphone size={13} className="text-[#0052cc]" />
-                      <span>Buka Kamera HP (Jika Browser Tidak Mendukung)</span>
+                      <Smartphone size={13} />
+                      <span>Gunakan Kamera Bawaan HP</span>
                     </button>
                   </div>
                 ) : (
-                  /* Captured Photo Preview Card */
+                  /* Captured Photo Preview */
                   <div className="space-y-3">
-                    <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-square max-w-[220px] mx-auto border-4 border-emerald-500 shadow-xl ring-4 ring-emerald-500/20">
-                      <img src={capturedPhoto} alt="Selfie" className="w-full h-full object-cover" />
+                    <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-[230px] mx-auto border-2 border-emerald-600 shadow-md">
+                      <img src={capturedPhoto} alt="Selfie Presensi" className="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick={() => {
                           setCapturedPhoto(null);
                           startCamera();
                         }}
-                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors shadow-lg"
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors shadow"
                       >
-                        <X size={14} />
+                        <X size={13} />
                       </button>
                     </div>
 
@@ -1176,87 +1102,129 @@ export const StaffPWAView: React.FC = () => {
                         setCapturedPhoto(null);
                         startCamera();
                       }}
-                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                      className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <RefreshCw size={13} />
-                      <span>Ambil Ulang Foto Selfie</span>
+                      <RefreshCw size={12} />
+                      <span>Foto Ulang</span>
                     </button>
                   </div>
                 )}
 
-                {/* BUTTON ACTION CLOCK IN / OUT */}
-                <div className="pt-2 border-t border-slate-100">
-                  {!mySummary?.todayStatus?.clockedIn ? (
-                    <button
-                      type="button"
-                      disabled={clockLoading || !isWithinRadius}
-                      onClick={() => handleClockAction('IN')}
-                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95"
-                    >
-                      <CheckCircle2 size={18} />
-                      <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK IN (MASUK KERJA)'}</span>
-                    </button>
-                  ) : !mySummary?.todayStatus?.clockedOut ? (
-                    <button
-                      type="button"
-                      disabled={clockLoading}
-                      onClick={() => handleClockAction('OUT')}
-                      className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:bg-slate-300 text-white rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 active:scale-95"
-                    >
-                      <LogOut size={18} />
-                      <span>{clockLoading ? 'Memproses Presensi...' : 'CLOCK OUT (SELESAI SHIFT)'}</span>
-                    </button>
-                  ) : (
-                    <div className="p-3.5 rounded-2xl bg-emerald-50 text-center text-xs font-bold text-emerald-800 border border-emerald-200">
-                      ✓ Anda telah menyelesaikan shift hari ini. Terima kasih atas kerja keras Anda!
+                {/* GPS Status Strip */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={`p-1.5 rounded-lg shrink-0 ${isWithinRadius ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                      <MapPin size={14} />
                     </div>
-                  )}
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-800 text-[11px] truncate">
+                        {settings?.storeName || 'SOL CAFE'}
+                      </div>
+                      <div className="text-[10px]">
+                        {gpsLoading ? (
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <RefreshCw size={10} className="animate-spin" /> Mengunci GPS...
+                          </span>
+                        ) : isWithinRadius ? (
+                          <span className="text-emerald-700 font-medium">
+                            ✓ Lokasi Valid ({gpsDistance !== null ? `${gpsDistance}m` : '0m'} / {settings?.gpsRadiusMeters || 150}m)
+                          </span>
+                        ) : (
+                          <span className="text-rose-600 font-medium">
+                            Di Luar Radius ({gpsDistance !== null ? `${gpsDistance}m` : '-'})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={requestGpsLocation}
+                    disabled={gpsLoading}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all active:scale-95 shrink-0"
+                    title="Refresh GPS"
+                  >
+                    <RefreshCw size={12} className={gpsLoading ? 'animate-spin text-blue-600' : ''} />
+                  </button>
                 </div>
+              </div>
+
+              {/* PRIMARY CLOCK IN / OUT ACTION BUTTON */}
+              <div>
+                {!mySummary?.todayStatus?.clockedIn ? (
+                  <button
+                    type="button"
+                    disabled={clockLoading || !isWithinRadius}
+                    onClick={() => handleClockAction('IN')}
+                    className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 active:bg-black disabled:bg-slate-300 text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
+                  >
+                    <CheckCircle2 size={16} className="text-emerald-400" />
+                    <span>{clockLoading ? 'Memproses Presensi...' : 'Presensi Masuk (Clock In)'}</span>
+                  </button>
+                ) : !mySummary?.todayStatus?.clockedOut ? (
+                  <button
+                    type="button"
+                    disabled={clockLoading}
+                    onClick={() => handleClockAction('OUT')}
+                    className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 disabled:bg-slate-300 text-white rounded-2xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md active:scale-95"
+                  >
+                    <LogOut size={16} />
+                    <span>{clockLoading ? 'Memproses Presensi...' : 'Presensi Pulang (Clock Out)'}</span>
+                  </button>
+                ) : (
+                  <div className="p-3 rounded-2xl bg-emerald-50 text-center text-xs font-medium text-emerald-800 border border-emerald-200 flex items-center justify-center gap-1.5">
+                    <CheckCircle2 size={15} className="text-emerald-600" />
+                    <span>Shift hari ini telah selesai. Terima kasih atas dedikasi Anda!</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* TAB 2: IZIN & CUTI */}
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 2: IZIN & CUTI
+             ───────────────────────────────────────────────────────────── */}
           {activeTab === 'leave' && (
-            <div className="p-4 space-y-4 animate-fade-in">
+            <div className="p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-black text-slate-900">Pengajuan Izin & Sakit</h3>
-                  <p className="text-[10px] text-slate-400">Pengajuan digital tanpa surat manual</p>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Pengajuan Izin & Sakit</h3>
+                  <p className="text-[11px] text-slate-500">Kirim permohonan digital ke manajemen</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowNewLeaveModal(true)}
-                  className="py-2 px-3 rounded-2xl bg-[#0052cc] hover:bg-blue-800 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95"
+                  className="py-1.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95"
                 >
-                  <Plus size={14} />
+                  <Plus size={13} />
                   <span>Buat Izin</span>
                 </button>
               </div>
 
               {leaveRequests.length === 0 ? (
-                <div className="py-12 bg-white rounded-3xl border border-slate-200 text-center space-y-2 p-4">
-                  <FileCheck size={36} className="mx-auto text-slate-300" />
-                  <h4 className="text-sm font-black text-slate-700">Belum Ada Pengajuan</h4>
-                  <p className="text-xs text-slate-400">Tekan tombol "+ Buat Izin" untuk mengajukan izin/sakit/cuti.</p>
+                <div className="py-12 bg-white rounded-2xl border border-slate-200 text-center space-y-2 p-4">
+                  <FileCheck size={32} className="mx-auto text-slate-300" />
+                  <h4 className="text-xs font-bold text-slate-700">Belum Ada Pengajuan</h4>
+                  <p className="text-[11px] text-slate-400">Tekan "+ Buat Izin" untuk mengajukan izin kerja atau sakit.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {leaveRequests.map(item => (
                     <div
                       key={item.id}
-                      className="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm space-y-2.5"
+                      className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-2"
                     >
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black text-slate-900">{item.type}</span>
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-xs font-bold text-slate-900">{item.type}</span>
+                          <span className="text-[10px] text-slate-500">
                             ({item.startDate === item.endDate ? item.startDate : `${item.startDate} s/d ${item.endDate}`})
                           </span>
                         </div>
 
                         <span
-                          className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
                             item.status === 'Approved'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : item.status === 'Rejected'
@@ -1264,27 +1232,27 @@ export const StaffPWAView: React.FC = () => {
                               : 'bg-amber-50 text-amber-700 border border-amber-200'
                           }`}
                         >
-                          {item.status === 'Approved' ? '✓ Disetujui' : item.status === 'Rejected' ? '✕ Ditolak' : '⏳ Menunggu Review'}
+                          {item.status === 'Approved' ? '✓ Disetujui' : item.status === 'Rejected' ? '✕ Ditolak' : '⏳ Menunggu'}
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-700 font-medium">"{item.reason}"</p>
+                      <p className="text-xs text-slate-700">"{item.reason}"</p>
 
                       {item.adminNotes && (
-                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-600">
-                          <strong>Catatan Admin ({item.approvedBy || 'Admin'}):</strong> {item.adminNotes}
+                        <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-[10px] text-slate-600">
+                          <strong>Catatan Manajemen ({item.approvedBy || 'Admin'}):</strong> {item.adminNotes}
                         </div>
                       )}
 
                       {item.photoUrl && (
-                        <div className="pt-1">
+                        <div className="pt-0.5">
                           <a
                             href={item.photoUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[10px] text-[#0052cc] font-bold hover:underline flex items-center gap-1"
+                            className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1"
                           >
-                            <FileText size={11} /> Lihat Bukti / Surat Dokter
+                            <FileText size={11} /> Lihat Lampiran Surat Dokter
                           </a>
                         </div>
                       )}
@@ -1295,79 +1263,81 @@ export const StaffPWAView: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 3: STOK BAHAN BAKU & KERUSAKAN */}
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 3: STOK BAHAN BAKU
+             ───────────────────────────────────────────────────────────── */}
           {activeTab === 'stock' && (
-            <div className="p-4 space-y-4 animate-fade-in">
+            <div className="p-4 space-y-3.5">
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setShowLossModal(true)}
-                  className="flex-1 py-2.5 px-3 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-black flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm"
+                  className="flex-1 py-2 px-3 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm"
                 >
-                  <TrendingDown size={14} />
-                  <span>Lapor Bahan Rusak / Basi</span>
+                  <TrendingDown size={13} />
+                  <span>Lapor Bahan Basi / Rusak</span>
                 </button>
                 <button
                   type="button"
                   onClick={fetchIngredients}
-                  className="p-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
                   title="Refresh Stok"
                 >
-                  <RefreshCw size={14} />
+                  <RefreshCw size={13} />
                 </button>
               </div>
 
-              {/* Search & Category Filter */}
-              <div className="bg-white p-3 rounded-3xl border border-slate-200/80 shadow-sm space-y-2">
+              {/* Search & Filter */}
+              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm space-y-2">
                 <div className="relative">
-                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={stockSearch}
                     onChange={e => setStockSearch(e.target.value)}
-                    placeholder="Cari bahan (kopi, susu, sirup, dll)..."
-                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none"
+                    placeholder="Cari nama bahan baku..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
-                <div className="grid grid-cols-4 gap-1 text-center">
+                <div className="grid grid-cols-4 gap-1 text-center text-[10px]">
                   <button
                     onClick={() => setStockCategory('ALL')}
-                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
-                      stockCategory === 'ALL' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    className={`py-1 rounded-lg font-bold ${
+                      stockCategory === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
                     }`}
                   >
                     Semua ({ingredients.length})
                   </button>
                   <button
                     onClick={() => setStockCategory('FOOD')}
-                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
-                      stockCategory === 'FOOD' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    className={`py-1 rounded-lg font-bold ${
+                      stockCategory === 'FOOD' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
                     }`}
                   >
                     Makanan
                   </button>
                   <button
                     onClick={() => setStockCategory('DRINK')}
-                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
-                      stockCategory === 'DRINK' ? 'bg-[#0052cc] text-white' : 'bg-slate-100 text-slate-600'
+                    className={`py-1 rounded-lg font-bold ${
+                      stockCategory === 'DRINK' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
                     }`}
                   >
                     Minuman
                   </button>
                   <button
                     onClick={() => setStockCategory('LOW')}
-                    className={`py-1.5 rounded-xl text-[11px] font-bold ${
+                    className={`py-1 rounded-lg font-bold ${
                       stockCategory === 'LOW' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600'
                     }`}
                   >
-                    ⚠️ Kritis ({ingredients.filter(i => i.stock <= i.minStock).length})
+                    Menipis ({ingredients.filter(i => i.stock <= i.minStock).length})
                   </button>
                 </div>
               </div>
 
-              {/* List Ingredients */}
-              <div className="space-y-2.5">
+              {/* Ingredients List */}
+              <div className="space-y-2">
                 {ingredients
                   .filter(i => {
                     if (stockCategory === 'FOOD') return (i.category || 'FOOD') === 'FOOD';
@@ -1382,15 +1352,15 @@ export const StaffPWAView: React.FC = () => {
                     return (
                       <div
                         key={ing.id}
-                        className={`bg-white p-3.5 rounded-3xl border shadow-sm flex items-center justify-between gap-3 ${
-                          isLow ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200/80'
+                        className={`bg-white p-3 rounded-2xl border shadow-sm flex items-center justify-between gap-3 ${
+                          isLow ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
                         }`}
                       >
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <h5 className="text-xs font-black text-slate-900">{ing.name}</h5>
+                            <h5 className="text-xs font-bold text-slate-900">{ing.name}</h5>
                             {isLow && (
-                              <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-rose-600 text-white">
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-600 text-white">
                                 Menipis
                               </span>
                             )}
@@ -1402,8 +1372,8 @@ export const StaffPWAView: React.FC = () => {
 
                         <div className="flex items-center gap-2">
                           <div className="text-right">
-                            <span className="text-sm font-black text-slate-900 font-mono">
-                              {ing.stock} <span className="text-[10px] font-bold text-slate-500">{ing.unit}</span>
+                            <span className="text-xs font-bold text-slate-900 font-mono">
+                              {ing.stock} <span className="text-[10px] font-normal text-slate-500">{ing.unit}</span>
                             </span>
                           </div>
                           <button
@@ -1412,7 +1382,7 @@ export const StaffPWAView: React.FC = () => {
                               setAdjustModal({ open: true, ingredient: ing });
                               setAdjustForm({ change: '', description: '' });
                             }}
-                            className="px-2.5 py-1.5 rounded-xl bg-blue-50 text-[#0052cc] hover:bg-blue-100 font-bold text-[10px] border border-blue-200"
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[10px] border border-slate-200"
                           >
                             +Restock
                           </button>
@@ -1424,47 +1394,46 @@ export const StaffPWAView: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 4: PROFIL SAYA & STATISTIK PRESENSI */}
+          {/* ─────────────────────────────────────────────────────────────
+              TAB 4: PROFIL SAYA & REKAP PRESENSI
+             ───────────────────────────────────────────────────────────── */}
           {activeTab === 'profile' && (
-            <div className="p-4 space-y-4 animate-fade-in">
+            <div className="p-4 space-y-4">
               {/* Profil Card */}
-              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm text-center space-y-3">
-                <div className="relative inline-block">
-                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${getAvatarGradient(user?.role, user?.name)} text-white flex items-center justify-center font-black text-2xl shadow-md border-2 border-white mx-auto`}>
-                    {user?.name?.substring(0, 2).toUpperCase()}
-                  </div>
-                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white" />
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm text-center space-y-2.5">
+                <div className={`w-14 h-14 rounded-2xl ${getAvatarColor(user?.role)} flex items-center justify-center font-bold text-xl mx-auto shadow-sm`}>
+                  {user?.name?.substring(0, 2).toUpperCase()}
                 </div>
 
                 <div>
-                  <h3 className="text-base font-black text-slate-900">{user?.name}</h3>
-                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-0.5 rounded-full border border-blue-100 inline-block mt-1">
+                  <h3 className="text-sm font-bold text-slate-900">{user?.name}</h3>
+                  <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200 inline-block mt-1">
                     {user?.role}
                   </span>
                 </div>
               </div>
 
-              {/* STATS TILES */}
+              {/* Stats Summary */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-white p-3 rounded-2xl border border-slate-200 text-center">
-                  <p className="text-[10px] font-bold text-slate-400">Total Hadir</p>
-                  <h4 className="text-base font-black text-[#0052cc]">{mySummary?.stats?.totalHadir || 0} Hari</h4>
+                  <p className="text-[10px] font-medium text-slate-500">Total Hadir</p>
+                  <h4 className="text-sm font-bold text-slate-900 mt-0.5">{mySummary?.stats?.totalHadir || 0} Hari</h4>
                 </div>
                 <div className="bg-white p-3 rounded-2xl border border-slate-200 text-center">
-                  <p className="text-[10px] font-bold text-slate-400">Terlambat</p>
-                  <h4 className="text-base font-black text-rose-600">{mySummary?.stats?.totalTerlambat || 0}x</h4>
+                  <p className="text-[10px] font-medium text-slate-500">Terlambat</p>
+                  <h4 className="text-sm font-bold text-rose-600 mt-0.5">{mySummary?.stats?.totalTerlambat || 0}x</h4>
                 </div>
                 <div className="bg-white p-3 rounded-2xl border border-slate-200 text-center">
-                  <p className="text-[10px] font-bold text-slate-400">Jam Kerja</p>
-                  <h4 className="text-base font-black text-slate-800">{mySummary?.stats?.totalWorkHours || 0} Jam</h4>
+                  <p className="text-[10px] font-medium text-slate-500">Jam Kerja</p>
+                  <h4 className="text-sm font-bold text-slate-900 mt-0.5">{mySummary?.stats?.totalWorkHours || 0} Jam</h4>
                 </div>
               </div>
 
               {/* Shift Bertugas Hari Ini */}
-              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2">
-                <h4 className="text-xs font-black text-slate-900 border-b pb-2 flex items-center justify-between">
-                  <span>Informasi Shift Bertugas</span>
-                  <span className="text-[10px] font-bold text-slate-400">Hari Ini</span>
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                <h4 className="text-xs font-bold text-slate-900 border-b pb-2 flex items-center justify-between">
+                  <span>Status Kehadiran Hari Ini</span>
+                  <span className="text-[10px] text-slate-400 font-normal">{currentDateStr}</span>
                 </h4>
 
                 <div className="space-y-1.5 text-xs">
@@ -1477,13 +1446,17 @@ export const StaffPWAView: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-slate-500">Jam Masuk (Clock In):</span>
                     <span className="font-bold text-emerald-600">
-                      {mySummary?.todayStatus?.todayLog?.clockIn || '-'}
+                      {mySummary?.todayStatus?.todayLog?.clockIn 
+                        ? new Date(mySummary.todayStatus.todayLog.clockIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                        : '-'}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Jam Pulang (Clock Out):</span>
                     <span className="font-bold text-slate-800">
-                      {mySummary?.todayStatus?.todayLog?.clockOut || '-'}
+                      {mySummary?.todayStatus?.todayLog?.clockOut 
+                        ? new Date(mySummary.todayStatus.todayLog.clockOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                        : '-'}
                     </span>
                   </div>
                 </div>
@@ -1493,17 +1466,19 @@ export const StaffPWAView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black text-xs rounded-2xl border border-rose-200 flex items-center justify-center gap-2 transition-all shadow-sm"
+                className="w-full py-3 bg-white hover:bg-rose-50 text-rose-600 font-bold text-xs rounded-2xl border border-rose-200 flex items-center justify-center gap-2 transition-all shadow-sm"
               >
-                <LogOut size={15} />
-                <span>Keluar dari Akun Staf</span>
+                <LogOut size={14} />
+                <span>Ganti Akun / Keluar</span>
               </button>
             </div>
           )}
-        </div>
+        </main>
 
-        {/* STICKY BOTTOM 4 TABS DOCK */}
-        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[430px] mx-auto z-40 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-2 px-3 sm:rounded-b-[2rem]">
+        {/* ─────────────────────────────────────────────────────────────
+            STICKY MINIMAL BOTTOM 4 TABS DOCK
+           ───────────────────────────────────────────────────────────── */}
+        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[420px] mx-auto z-40 bg-white border-t border-slate-200 py-2 px-3 sm:rounded-b-3xl shadow-lg">
           <div className="flex items-center justify-around">
             {/* Tab 1: Presensi */}
             <button
@@ -1511,30 +1486,30 @@ export const StaffPWAView: React.FC = () => {
               onClick={() => setActiveTab('attendance')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
                 activeTab === 'attendance'
-                  ? 'text-[#0052cc] font-black scale-105'
-                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+                  ? 'text-slate-950 font-bold'
+                  : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'attendance' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <Fingerprint size={20} />
+              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'attendance' ? 'bg-slate-100 text-slate-900' : ''}`}>
+                <Fingerprint size={19} />
               </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Presensi</span>
+              <span className="text-[10px] mt-0.5">Presensi</span>
             </button>
 
             {/* Tab 2: Izin / Cuti */}
             <button
               type="button"
               onClick={() => setActiveTab('leave')}
-              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
                 activeTab === 'leave'
-                  ? 'text-[#0052cc] font-black scale-105'
-                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+                  ? 'text-slate-950 font-bold'
+                  : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'leave' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <FileText size={20} />
+              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'leave' ? 'bg-slate-100 text-slate-900' : ''}`}>
+                <FileText size={19} />
               </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Izin / Cuti</span>
+              <span className="text-[10px] mt-0.5">Izin / Cuti</span>
             </button>
 
             {/* Tab 3: Stok Bahan */}
@@ -1543,16 +1518,16 @@ export const StaffPWAView: React.FC = () => {
               onClick={() => setActiveTab('stock')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
                 activeTab === 'stock'
-                  ? 'text-[#0052cc] font-black scale-105'
-                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+                  ? 'text-slate-950 font-bold'
+                  : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'stock' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <Package size={20} />
+              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'stock' ? 'bg-slate-100 text-slate-900' : ''}`}>
+                <Package size={19} />
               </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Stok Bahan</span>
+              <span className="text-[10px] mt-0.5">Stok Bahan</span>
               {ingredients.filter(i => i.stock <= i.minStock).length > 0 && (
-                <span className="absolute top-1 right-6 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                <span className="absolute top-1 right-6 w-2 h-2 rounded-full bg-rose-500" />
               )}
             </button>
 
@@ -1562,24 +1537,24 @@ export const StaffPWAView: React.FC = () => {
               onClick={() => setActiveTab('profile')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
                 activeTab === 'profile'
-                  ? 'text-[#0052cc] font-black scale-105'
-                  : 'text-slate-400 hover:text-slate-600 font-semibold'
+                  ? 'text-slate-950 font-bold'
+                  : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <div className={`p-1.5 rounded-2xl transition-all ${activeTab === 'profile' ? 'bg-blue-50 text-[#0052cc]' : ''}`}>
-                <UserCheck size={20} />
+              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'profile' ? 'bg-slate-100 text-slate-900' : ''}`}>
+                <UserCheck size={19} />
               </div>
-              <span className="text-[10px] tracking-tight mt-0.5">Profil Saya</span>
+              <span className="text-[10px] mt-0.5">Profil Saya</span>
             </button>
           </div>
         </nav>
 
         {/* MODAL BUAT PENGAJUAN IZIN */}
         {showNewLeaveModal && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b pb-2.5">
-                <h3 className="text-sm font-black text-slate-900">Form Pengajuan Izin / Cuti</h3>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Form Pengajuan Izin / Cuti</h3>
                 <button onClick={() => setShowNewLeaveModal(false)} className="text-slate-400 hover:text-slate-600">
                   <X size={16} />
                 </button>
@@ -1591,7 +1566,7 @@ export const StaffPWAView: React.FC = () => {
                   <select
                     value={leaveForm.type}
                     onChange={e => setLeaveForm({ ...leaveForm, type: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                   >
                     <option value="Izin">Izin (Keperluan Mendesak)</option>
                     <option value="Sakit">Sakit (Dengan / Tanpa Surat Dokter)</option>
@@ -1603,53 +1578,50 @@ export const StaffPWAView: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Mulai:</label>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">Mulai Tanggal:</label>
                     <input
                       type="date"
                       value={leaveForm.startDate}
                       onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                      required
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono"
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Sampai:</label>
+                    <label className="text-[10px] font-bold text-slate-600 block mb-1">Sampai Tanggal:</label>
                     <input
                       type="date"
                       value={leaveForm.endDate}
                       onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                      required
+                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Alasan / Keterangan:</label>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Alasan Pengajuan:</label>
                   <textarea
                     rows={3}
                     value={leaveForm.reason}
                     onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                    placeholder="Ketik alasan izin secara jelas..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    required
+                    placeholder="Tulis alasan izin / sakit secara jelas..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
                   />
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                <div className="pt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() => setShowNewLeaveModal(false)}
-                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submittingLeave}
-                    className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
+                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm"
                   >
-                    {submittingLeave ? 'Mengirim...' : 'Kirim Izin'}
+                    {submittingLeave ? 'Mengirim...' : 'Kirim Pengajuan'}
                   </button>
                 </div>
               </form>
@@ -1657,13 +1629,14 @@ export const StaffPWAView: React.FC = () => {
           </div>
         )}
 
-        {/* MODAL LAPOR BAHAN RUSAK */}
+        {/* MODAL LAPOR STOCK LOSS */}
         {showLossModal && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b pb-2.5">
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5 text-rose-600">
-                  <TrendingDown size={16} /> Lapor Bahan Rusak / Basi
+                <h3 className="text-xs font-bold text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
+                  <TrendingDown size={14} />
+                  <span>Pencatatan Bahan Rusak / Basi</span>
                 </h3>
                 <button onClick={() => setShowLossModal(false)} className="text-slate-400 hover:text-slate-600">
                   <X size={16} />
@@ -1676,13 +1649,12 @@ export const StaffPWAView: React.FC = () => {
                   <select
                     value={lossForm.ingredientId}
                     onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                   >
                     <option value="">-- Pilih Bahan --</option>
-                    {ingredients.map(i => (
-                      <option key={i.id} value={i.id}>
-                        {i.name} (Sisa: {i.stock} {i.unit})
+                    {ingredients.map(ing => (
+                      <option key={ing.id} value={ing.id}>
+                        {ing.name} (Stok: {ing.stock} {ing.unit})
                       </option>
                     ))}
                   </select>
@@ -1692,44 +1664,54 @@ export const StaffPWAView: React.FC = () => {
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">Jumlah Rusak / Terbuang:</label>
                   <input
                     type="number"
-                    step="any"
+                    step="0.01"
                     value={lossForm.qtyLoss}
                     onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
-                    placeholder="Misal: 250"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    required
+                    placeholder="Contoh: 0.5 atau 2"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Penyebab Kerusakan:</label>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Penyebab Kerugian:</label>
                   <select
                     value={lossForm.reason}
                     onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                   >
                     <option value="Busuk / Kadaluarsa">Busuk / Kadaluarsa</option>
-                    <option value="Tumpah / Rusak">Tumpah / Rusak</option>
-                    <option value="Kesalahan Masak / Gosong">Kesalahan Masak / Gosong</option>
-                    <option value="Sisa Trimming / Kupas">Sisa Trimming / Kupas</option>
+                    <option value="Tumpah / Pecah">Tumpah / Pecah</option>
+                    <option value="Salah Buat / Reject Order">Salah Buat / Reject Order</option>
+                    <option value="Hilang / Selisih Opname">Hilang / Selisih Opname</option>
                     <option value="Lainnya">Lainnya</option>
                   </select>
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Catatan Tambahan:</label>
+                  <input
+                    type="text"
+                    value={lossForm.notes}
+                    onChange={e => setLossForm({ ...lossForm, notes: e.target.value })}
+                    placeholder="Contoh: Susu basi saat buka kulkas pagi"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() => setShowLossModal(false)}
-                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submittingLoss}
-                    className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-black shadow-md"
+                    className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm"
                   >
-                    {submittingLoss ? 'Menyimpan...' : 'Simpan Laporan'}
+                    {submittingLoss ? 'Menyimpan...' : 'Simpan Loss'}
                   </button>
                 </div>
               </form>
@@ -1739,12 +1721,13 @@ export const StaffPWAView: React.FC = () => {
 
         {/* MODAL QUICK RESTOCK */}
         {adjustModal.open && adjustModal.ingredient && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b pb-2.5">
-                <h3 className="text-sm font-black text-slate-900">
-                  Restock: {adjustModal.ingredient.name}
-                </h3>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">+ Restock Masuk</h3>
+                  <p className="text-[11px] text-slate-500 font-semibold">{adjustModal.ingredient.name}</p>
+                </div>
                 <button
                   onClick={() => setAdjustModal({ open: false, ingredient: null })}
                   className="text-slate-400 hover:text-slate-600"
@@ -1756,31 +1739,42 @@ export const StaffPWAView: React.FC = () => {
               <form onSubmit={handleQuickAdjust} className="space-y-3">
                 <div>
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    Jumlah Masuk ({adjustModal.ingredient.unit}):
+                    Jumlah Barang Masuk ({adjustModal.ingredient.unit}):
                   </label>
                   <input
                     type="number"
-                    step="any"
+                    step="0.01"
+                    autoFocus
                     value={adjustForm.change}
                     onChange={e => setAdjustForm({ ...adjustForm, change: e.target.value })}
-                    placeholder="Misal: 10"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                    required
+                    placeholder={`Misal: 5 atau 10 ${adjustModal.ingredient.unit}`}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
                   />
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Keterangan / Faktur:</label>
+                  <input
+                    type="text"
+                    value={adjustForm.description}
+                    onChange={e => setAdjustForm({ ...adjustForm, description: e.target.value })}
+                    placeholder="Contoh: Beli di pasar / supplier datang"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() => setAdjustModal({ open: false, ingredient: null })}
-                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={submittingAdjust}
-                    className="flex-1 py-2.5 bg-[#0052cc] text-white rounded-xl text-xs font-black shadow-md"
+                    className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm"
                   >
                     {submittingAdjust ? 'Menyimpan...' : 'Simpan Restock'}
                   </button>
@@ -1789,6 +1783,7 @@ export const StaffPWAView: React.FC = () => {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
