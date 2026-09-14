@@ -371,7 +371,7 @@ const CRMView = () => {
         </div>
 
         {/* Data Container */}
-        <div className="card flex-1 p-0 overflow-hidden shadow-sm border border-slate-200/80 rounded-2xl flex flex-col bg-white shrink-0">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col shrink-0">
           {loading ? (
             <div className="p-12 text-center text-slate-400 font-medium text-xs">Memuat data pelanggan...</div>
           ) : customers.length === 0 ? (
@@ -381,7 +381,7 @@ const CRMView = () => {
               {/* Mobile Member Cards (< 768px) */}
               <div className="md:hidden divide-y divide-slate-100">
                 {customers.map((c) => {
-                  const totalDebt = c.debts ? c.debts.filter((d: any) => d.status === 'Belum Lunas').reduce((sum: number, d: any) => sum + d.remaining, 0) : 0;
+                  const totalDebt = c.debts ? c.debts.reduce((sum: number, d: any) => sum + (Number(d.remaining) || 0), 0) : 0;
                   return (
                     <div 
                       key={c.id} 
@@ -470,8 +470,8 @@ const CRMView = () => {
               </div>
 
               {/* Desktop Table (>= 768px) */}
-              <div className="hidden md:block table-responsive flex-1 overflow-y-auto">
-                <table className="data-table w-full text-left border-collapse">
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
                       <th className="p-3.5 font-bold text-xs text-slate-400 uppercase">Pelanggan</th>
@@ -485,7 +485,7 @@ const CRMView = () => {
                   </thead>
                   <tbody>
                     {customers.map((c) => {
-                      const totalDebt = c.debts ? c.debts.filter((d: any) => d.status === 'Belum Lunas').reduce((sum: number, d: any) => sum + d.remaining, 0) : 0;
+                      const totalDebt = c.debts ? c.debts.reduce((sum: number, d: any) => sum + (Number(d.remaining) || 0), 0) : 0;
                       return (
                         <tr 
                           key={c.id} 

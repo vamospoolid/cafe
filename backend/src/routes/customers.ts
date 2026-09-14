@@ -29,7 +29,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       include: {
         debts: {
           where: { status: 'Belum Lunas' },
-          select: { remaining: true }
+          select: { id: true, remaining: true, status: true }
         }
       },
       orderBy: { name: 'asc' }
