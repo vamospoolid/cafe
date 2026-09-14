@@ -926,8 +926,23 @@ const SettingsView = () => {
                 </div>
 
                 {/* Drink Customization Toggle Card */}
-                <div className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-sm transition-all">
-                  <label className="flex items-start gap-4 cursor-pointer select-none">
+                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableDrinkCustomization ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm`}>
+                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                          <Coffee size={16} className="text-indigo-600" />
+                          <span>Kustomisasi Minuman (Sugar, Ice, Temperature)</span>
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.enableDrinkCustomization ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                          {formData.enableDrinkCustomization ? '✓ AKTIF' : 'NONAKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                        Tampilkan opsi pilihan level gula, jumlah es, dan suhu (panas/dingin) saat kasir memasukkan item minuman ke keranjang belanja POS.
+                      </p>
+                    </div>
+
                     <div className="relative mt-1 shrink-0">
                       <input
                         type="checkbox"
@@ -951,27 +966,27 @@ const SettingsView = () => {
                         }} />
                       </div>
                     </div>
-                     <div>
-                      <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                        <Coffee size={16} className="text-indigo-650" />
-                        <span>Kustomisasi Minuman (Sugar, Ice, Temperature)</span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Tampilkan pilihan **level gula, jumlah es, dan pilihan suhu (panas/dingin)** saat kasir memasukkan item minuman ke keranjang belanja POS. 
-                        Opsi pilihan akan diteruskan ke cetakan KDS dapur dan struk pembayaran.
-                      </div>
-                      <div className="mt-3">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full ${ formData.enableDrinkCustomization ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {formData.enableDrinkCustomization ? '✓ KUSTOMISASI AKTIF' : 'KUSTOMISASI NONAKTIF'}
-                        </span>
-                      </div>
-                    </div>
                   </label>
                 </div>
 
                 {/* High-Precision Mode Toggle Card */}
-                <div className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-sm transition-all mt-4">
-                  <label className="flex items-start gap-4 cursor-pointer select-none">
+                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${highPrecisionMode ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm mt-4`}>
+                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                          <Sliders size={16} className="text-indigo-600" />
+                          <span>Mode Presisi Tinggi (Hardware & Sistem Ketat)</span>
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${highPrecisionMode ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                          {highPrecisionMode ? '✓ AKTIF' : 'NONAKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                        Aktifkan untuk terminal kasir utama yang membutuhkan kontrol fisik ketat, cetak matrix bluetooth, pembukaan laci kas RJ11, dan kiosk mode.
+                      </p>
+                    </div>
+
                     <div className="relative mt-1 shrink-0">
                       <input
                         type="checkbox"
@@ -993,20 +1008,6 @@ const SettingsView = () => {
                           width: 18, height: 18, borderRadius: '50%', background: 'white',
                           transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                         }} />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                        <Sliders size={16} className="text-indigo-650" />
-                        <span>Mode Presisi Tinggi (Kontrol Hardware & Sistem Ketat)</span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Aktifkan jika perangkat ini bertindak sebagai terminal kasir utama yang membutuhkan kontrol fisik ketat, cetak matrix bluetooth terpisah, pembukaan laci kas RJ11 otomatis, dan penguncian Kiosk mode.
-                      </div>
-                      <div className="mt-3">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full ${ highPrecisionMode ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {highPrecisionMode ? '✓ MODE PRESISI AKTIF' : 'MODE PRESISI NONAKTIF'}
-                        </span>
                       </div>
                     </div>
                   </label>
@@ -1102,9 +1103,24 @@ const SettingsView = () => {
               </div>
 
               <div className="max-w-3xl space-y-6">
-                {/* Enable/Disable Toggle */}
-                <div className="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-sm transition-all">
-                  <label className="flex items-start gap-4 cursor-pointer select-none">
+                {/* Enable/Disable Toggle Card */}
+                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.loyaltyEnabled ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm`}>
+                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                          <Award size={16} className="text-indigo-600" />
+                          <span>Aktifkan Program Loyalitas Belanja</span>
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.loyaltyEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                          {formData.loyaltyEnabled ? '✓ AKTIF' : 'NONAKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                        Berikan poin reward otomatis saat pelanggan bertransaksi dan izinkan penukaran poin sebagai diskon cashback pembayaran di kasir POS.
+                      </p>
+                    </div>
+
                     <div className="relative mt-1 shrink-0">
                       <input
                         type="checkbox"
@@ -1127,20 +1143,6 @@ const SettingsView = () => {
                           transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                         }} />
                       </div>
-                             <div>
-                      <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                        <Award size={16} className="text-indigo-650" />
-                        <span>Aktifkan Program Loyalitas Poin Belanja</span>
-                      </div>
-                      <div className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        Jika dinonaktifkan, seluruh pencatatan/penghitungan poin belanja baru dan fitur penukaran poin cashback (redeem) di kasir POS akan disembunyikan dan diabaikan secara otomatis.
-                      </div>
-                      <div className="mt-3">
-                        <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full ${ formData.loyaltyEnabled ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {formData.loyaltyEnabled ? '✓ PROGRAM AKTIF' : 'PROGRAM NONAKTIF'}
-                        </span>
-                      </div>
-                    </div>
                     </div>
                   </label>
                 </div>

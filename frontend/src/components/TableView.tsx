@@ -520,7 +520,7 @@ const TableView = () => {
             <p className="font-semibold">Menyinkronkan status meja...</p>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="p-3 sm:p-5 bg-slate-50/70 flex-1 overflow-y-auto">
+          <div className="p-3 sm:p-5 pb-52 sm:pb-8 bg-slate-50/70 flex-1 overflow-y-auto">
             {filteredTables.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-400 w-full">
                 <Armchair size={48} className="text-slate-300 mb-3" />
@@ -734,7 +734,7 @@ const TableView = () => {
             )}
           </div>
         ) : viewMode === 'list' ? (
-          <div className="p-0 overflow-x-auto bg-white">
+          <div className="p-0 overflow-x-auto bg-white pb-48 sm:pb-4">
             <table className="data-table w-full text-left border-collapse text-xs">
               <thead className="bg-slate-50 sticky top-0 shadow-sm text-[11px]">
                 <tr>
