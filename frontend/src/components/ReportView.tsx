@@ -221,61 +221,47 @@ export const ReportView: React.FC = () => {
   const avgMargin = totalMenuRevenue > 0 ? Math.round((totalMenuProfit / totalMenuRevenue) * 100) : 0;
 
   return (
-    <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    <div className="p-3 sm:p-6 pb-28 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-5">
       
       {/* ─────────────────────────────────────────────────────────────
           1. STICKY TOP BAR: JUDUL, QUICK FILTER TANGGAL & ACTION BUTTONS
       ────────────────────────────────────────────────────────────── */}
-      <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 flex flex-col gap-3.5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-              <span style={{ padding: '.25rem .6rem', background: '#ede9fe', color: '#7c3aed', borderRadius: '.5rem', fontSize: '.75rem', fontWeight: 800 }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-1 bg-purple-50 text-indigo-700 rounded-lg text-xs font-extrabold">
                 {posContext?.settings?.storeName || 'MUKI RAMEN'}
               </span>
-              <h2 style={{ margin: 0, fontWeight: 900, fontSize: '1.4rem', color: '#0f172a' }}>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
                 Laporan & Analisis Bisnis
               </h2>
             </div>
-            <p style={{ margin: '.25rem 0 0', fontSize: '.82rem', color: '#64748b' }}>
+            <p className="text-xs text-slate-500 mt-1">
               Pantau omzet, laba kotor per menu, rekap shift kasir, dan laporan keuangan formal
             </p>
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', flexWrap: 'wrap' }}>
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setShowPdfModal(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1.15rem',
-                background: 'linear-gradient(135deg, #7c3aed, #6366f1)', color: 'white',
-                border: 'none', borderRadius: '.75rem', fontWeight: 800, fontSize: '.85rem',
-                cursor: 'pointer', boxShadow: '0 4px 12px rgba(124,58,237,0.3)', transition: 'all 0.15s'
-              }}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all"
             >
-              <Printer size={16} /> Unduh PDF Resmi
+              <Printer size={15} /> <span>Unduh PDF Resmi</span>
             </button>
 
             <button
               onClick={handleExportCSV}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1rem',
-                background: 'white', color: '#334155', border: '1px solid #cbd5e1',
-                borderRadius: '.75rem', fontWeight: 700, fontSize: '.82rem', cursor: 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-              }}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-all"
             >
-              <Download size={15} /> Export CSV
+              <Download size={15} /> <span>Export CSV</span>
             </button>
 
             <button
               onClick={fetchAllReportData}
               title="Perbarui Data"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38,
-                background: 'white', border: '1px solid #cbd5e1', borderRadius: '.75rem',
-                color: '#475569', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-              }}
+              className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
             >
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             </button>
@@ -283,9 +269,9 @@ export const ReportView: React.FC = () => {
         </div>
 
         {/* Date Filter Bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.75rem', paddingTop: '.75rem', borderTop: '1px solid #f1f5f9' }}>
-          {/* Quick Filter Pills */}
-          <div style={{ display: 'flex', gap: '.35rem', background: '#f1f5f9', padding: '.25rem', borderRadius: '.6rem' }}>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          {/* Quick Filter Pills (Horizontally scrollable on mobile) */}
+          <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl overflow-x-auto max-w-full scrollbar-none">
             {[
               { id: 'today', label: 'Hari Ini' },
               { id: 'yesterday', label: 'Kemarin' },
@@ -296,14 +282,11 @@ export const ReportView: React.FC = () => {
               <button
                 key={f.id}
                 onClick={() => handleQuickFilter(f.id as any)}
-                style={{
-                  padding: '.4rem .75rem', borderRadius: '.45rem', border: 'none',
-                  background: quickFilter === f.id ? 'white' : 'transparent',
-                  color: quickFilter === f.id ? '#7c3aed' : '#64748b',
-                  fontWeight: quickFilter === f.id ? 800 : 600, fontSize: '.75rem',
-                  cursor: 'pointer', boxShadow: quickFilter === f.id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  transition: 'all 0.1s'
-                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
+                  quickFilter === f.id
+                    ? 'bg-white text-indigo-700 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
                 {f.label}
               </button>
@@ -311,9 +294,9 @@ export const ReportView: React.FC = () => {
           </div>
 
           {/* Date Picker Range */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem', background: '#f8fafc', padding: '.35rem .65rem', borderRadius: '.5rem', border: '1px solid #e2e8f0' }}>
-              <Calendar size={14} color="#64748b" />
+          <div className="flex items-center gap-2 w-full lg:w-auto">
+            <div className="flex-1 lg:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              <Calendar size={14} className="text-slate-400 shrink-0" />
               <input
                 type="date"
                 value={startDate}
@@ -321,12 +304,12 @@ export const ReportView: React.FC = () => {
                   setStartDate(e.target.value);
                   setQuickFilter('custom');
                 }}
-                style={{ border: 'none', background: 'transparent', fontSize: '.78rem', fontWeight: 700, color: '#1e293b', outline: 'none' }}
+                className="w-full border-none bg-transparent text-xs font-bold text-slate-800 outline-none"
               />
             </div>
-            <span style={{ fontSize: '.75rem', color: '#94a3b8', fontWeight: 700 }}>s/d</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '.3rem', background: '#f8fafc', padding: '.35rem .65rem', borderRadius: '.5rem', border: '1px solid #e2e8f0' }}>
-              <Calendar size={14} color="#64748b" />
+            <span className="text-xs text-slate-400 font-bold shrink-0">s/d</span>
+            <div className="flex-1 lg:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              <Calendar size={14} className="text-slate-400 shrink-0" />
               <input
                 type="date"
                 value={endDate}
@@ -334,7 +317,7 @@ export const ReportView: React.FC = () => {
                   setEndDate(e.target.value);
                   setQuickFilter('custom');
                 }}
-                style={{ border: 'none', background: 'transparent', fontSize: '.78rem', fontWeight: 700, color: '#1e293b', outline: 'none' }}
+                className="w-full border-none bg-transparent text-xs font-bold text-slate-800 outline-none"
               />
             </div>
           </div>
@@ -344,19 +327,7 @@ export const ReportView: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           2. NAVIGASI 5 TAB UTAMA LAPORAN
       ────────────────────────────────────────────────────────────── */}
-      <div 
-        style={{ 
-          background: 'white', 
-          borderRadius: '1.15rem', 
-          padding: '.5rem', 
-          border: '1px solid #e2e8f0', 
-          boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '.5rem', 
-          flexShrink: 0
-        }}
-      >
+      <div className="bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 shrink-0">
         {[
           { 
             id: 'dashboard', 

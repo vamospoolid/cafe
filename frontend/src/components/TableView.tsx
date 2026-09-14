@@ -411,36 +411,36 @@ const TableView = () => {
   });
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-50 overflow-y-auto">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-3 sm:p-6 pb-28 sm:pb-8 h-full flex flex-col bg-slate-50 overflow-y-auto gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800">
             <Armchair className="text-primary" /> Manajemen Meja & Area
           </h2>
-          <p className="text-muted mt-1">Kelola tata letak meja dan pantau status pesanan (pending bill/kds) secara real-time.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Kelola tata letak meja dan pantau status pesanan (pending bill/kds) secara real-time.</p>
         </div>
-        <button className="btn btn-primary shadow-md hover:shadow-lg transition-all" onClick={() => { setSelectedTable(null); setIsModalOpen(true); }}>
-          <Plus size={18} /> Tambah Meja
+        <button className="btn btn-primary shadow-md hover:shadow-lg transition-all self-start sm:self-auto py-2.5 px-4 text-xs font-bold" onClick={() => { setSelectedTable(null); setIsModalOpen(true); }}>
+          <Plus size={16} /> Tambah Meja
         </button>
       </div>
 
-      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm">
+      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm rounded-2xl">
         {isEditMode ? (
-          <div className="flex items-center gap-3 bg-amber-50 border-b border-amber-200 p-4 w-full justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-amber-50 border-b border-amber-200 p-3 sm:p-4 w-full justify-between">
             <span className="text-xs font-bold text-amber-800 flex items-center gap-2">
               <Info size={16} className="text-amber-600 shrink-0" />
               <span>Mode Edit Tata Letak: Silakan geser (drag) meja untuk mengatur posisinya sesuai tata letak kafe Anda.</span>
             </span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 self-end sm:self-auto shrink-0">
               <button type="button" className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all" onClick={handleCancelLayout}>Batal</button>
               <button type="button" className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all" onClick={handleSaveLayout}>Simpan Posisi</button>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 p-4 border-b border-gray-200 bg-white">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            {/* Area Classification Tabs */}
-            <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 p-3 sm:p-4 border-b border-gray-200 bg-white">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            {/* Area Classification Tabs (Horizontally scrollable on mobile) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full scrollbar-none">
               {areas.map(area => {
                 const count = tables.filter(t => {
                   const tArea = (t.name && t.name.trim() !== '') ? t.name.trim() : 'Area Umum';
@@ -451,7 +451,7 @@ const TableView = () => {
                   <button
                     key={area}
                     onClick={() => setSelectedArea(area)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
                       isActive 
                         ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-100' 
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
@@ -464,36 +464,36 @@ const TableView = () => {
             </div>
 
             {/* Status Legends */}
-            <div className="flex gap-2 text-[10px] font-semibold border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-4">
-              <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Kosong</span>
-              <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div> Diproses</span>
-              <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Sudah Disajikan</span>
+            <div className="flex flex-wrap gap-2 text-[10px] font-semibold border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-3">
+              <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Kosong</span>
+              <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div> Diproses</span>
+              <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Disajikan</span>
             </div>
           </div>
           
           {/* View Toggles & Layout Editor Button */}
-          <div className="flex items-center gap-3 self-start md:self-auto">
+          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
             {viewMode === 'map' && (
               <button
                 type="button"
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
                 onClick={startEditMode}
               >
-                <Map size={14} className="text-indigo-600" /> Atur Posisi Meja
+                <Map size={14} className="text-indigo-600" /> <span className="hidden sm:inline">Atur Posisi Meja</span><span className="sm:hidden">Atur Posisi</span>
               </button>
             )}
             <div className="flex gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/60">
               <button
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'map' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs sm:text-sm font-semibold transition-colors ${viewMode === 'map' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 onClick={() => setViewMode('map')}
               >
-                <Map size={16} /> Denah Visual
+                <Map size={14} /> Denah
               </button>
               <button
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs sm:text-sm font-semibold transition-colors ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                 onClick={() => setViewMode('list')}
               >
-                <List size={16} /> Tabel Data
+                <List size={14} /> Tabel
               </button>
             </div>
           </div>
@@ -506,16 +506,16 @@ const TableView = () => {
             <p className="font-semibold">Menyinkronkan status meja...</p>
           </div>
         ) : viewMode === 'list' ? (
-          <div className="p-0 flex-1 overflow-y-auto bg-white">
-            <table className="data-table w-full text-left border-collapse">
-              <thead className="bg-slate-50 sticky top-0 shadow-sm">
+          <div className="p-0 flex-1 overflow-x-auto overflow-y-auto bg-white">
+            <table className="data-table w-full text-left border-collapse text-xs">
+              <thead className="bg-slate-50 sticky top-0 shadow-sm text-[11px]">
                 <tr>
-                  <th className="px-6 py-4">NOMOR MEJA</th>
-                  <th className="px-6 py-4">KAPASITAS</th>
-                  <th className="px-6 py-4">STATUS SISTEM</th>
-                  <th className="px-6 py-4">KONDISI SAAT INI</th>
-                  <th className="px-6 py-4">INFO PESANAN</th>
-                  <th className="px-6 py-4 text-right">AKSI</th>
+                  <th className="px-4 py-3">NOMOR MEJA</th>
+                  <th className="px-4 py-3">KAPASITAS</th>
+                  <th className="px-4 py-3">STATUS SISTEM</th>
+                  <th className="px-4 py-3">KONDISI SAAT INI</th>
+                  <th className="px-4 py-3">INFO PESANAN</th>
+                  <th className="px-4 py-3 text-right">AKSI</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

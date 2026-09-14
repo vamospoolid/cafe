@@ -145,92 +145,92 @@ const TransactionHistoryView = () => {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-50 overflow-y-auto">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-3 sm:p-6 pb-28 sm:pb-8 h-full flex flex-col bg-slate-50 overflow-y-auto gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
             <History className="text-primary" /> Riwayat Transaksi
           </h2>
-          <p className="text-muted mt-1">Daftar semua transaksi penjualan yang telah diproses</p>
+          <p className="text-xs text-slate-500 mt-0.5">Daftar semua transaksi penjualan yang telah diproses</p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn bg-white border border-gray-300 text-gray-700 hover:bg-gray-50" onClick={exportPDF}>
-            <FileText size={16} className="text-red-500" /> Export PDF
+        <div className="flex items-center gap-2 flex-wrap">
+          <button className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl" onClick={exportPDF}>
+            <FileText size={15} className="text-rose-500" /> Export PDF
           </button>
-          <button className="btn bg-white border border-gray-300 text-gray-700 hover:bg-gray-50" onClick={exportExcel}>
-            <Download size={16} className="text-green-600" /> Export Excel
+          <button className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl" onClick={exportExcel}>
+            <Download size={15} className="text-emerald-600" /> Export Excel
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm bg-white rounded-2xl">
           <div>
-            <div className="text-2xl font-bold">{validOrders.length}</div>
-            <div className="text-sm text-muted">Total Transaksi Sah</div>
+            <div className="text-2xl font-black text-slate-900">{validOrders.length}</div>
+            <div className="text-xs font-semibold text-slate-500">Total Transaksi Sah</div>
           </div>
-          <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-primary">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
             <ShoppingCart size={20} />
           </div>
         </div>
         
-        <div className="card flex items-center justify-between p-4 border-l-4 border-success shadow-sm">
+        <div className="card flex items-center justify-between p-4 border-l-4 border-success shadow-sm bg-white rounded-2xl">
           <div>
-            <div className="text-2xl font-bold text-success">{formatCurrency(totalSales)}</div>
-            <div className="text-sm text-muted">Total Penjualan</div>
+            <div className="text-2xl font-black text-emerald-600">{formatCurrency(totalSales)}</div>
+            <div className="text-xs font-semibold text-slate-500">Total Penjualan</div>
           </div>
-          <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-success">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
             <DollarSign size={20} />
           </div>
         </div>
 
-        <div className="card flex items-center justify-between p-4 border-l-4 border-indigo-500 shadow-sm">
+        <div className="card flex items-center justify-between p-4 border-l-4 border-indigo-500 shadow-sm bg-white rounded-2xl">
           <div>
-            <div className="text-2xl font-bold text-indigo-700">{formatCurrency(avgSales)}</div>
-            <div className="text-sm text-muted">Rata-rata Transaksi</div>
+            <div className="text-2xl font-black text-indigo-700">{formatCurrency(avgSales)}</div>
+            <div className="text-xs font-semibold text-slate-500">Rata-rata Transaksi</div>
           </div>
-          <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-500">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
             <BarChart2 size={20} />
           </div>
         </div>
       </div>
 
-      <div className="card flex-1 flex flex-col p-0 overflow-hidden shadow-sm">
-        <div className="border-b border-gray-200">
+      <div className="card flex-1 flex flex-col p-0 overflow-hidden shadow-sm bg-white rounded-2xl border border-slate-200/80">
+        <div className="border-b border-slate-200">
           <button 
-            className="w-full p-4 flex justify-between items-center bg-gray-50 hover:bg-gray-100 transition-colors"
+            className="w-full p-3.5 sm:p-4 flex justify-between items-center bg-slate-50/70 hover:bg-slate-100/70 transition-colors"
             onClick={() => setIsFilterOpen(!isFilterOpen)}
           >
-            <div className="flex items-center gap-2 font-bold text-primary">
-              <Filter size={18} /> Filter Transaksi
+            <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-indigo-700">
+              <Filter size={16} /> Filter &amp; Pencarian Transaksi
             </div>
-            <span className={`transform transition-transform ${isFilterOpen ? 'rotate-180' : ''}`}>â–¼</span>
+            <span className={`text-xs text-slate-400 transform transition-transform ${isFilterOpen ? 'rotate-180' : ''}`}>▼</span>
           </button>
           
           {isFilterOpen && (
-            <div className="p-4 bg-white grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-gray-100">
+            <div className="p-3.5 sm:p-4 bg-white grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 border-t border-slate-100">
               <div>
-                <label className="block text-xs font-semibold text-muted mb-1">Tanggal Transaksi</label>
-                <input type="date" className="form-control" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">Tanggal Transaksi</label>
+                <input type="date" className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-muted mb-1">Status Pembayaran</label>
-                <select className="form-control" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">Status Pembayaran</label>
+                <select className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                   <option value="">Semua Status</option>
                   <option value="Paid">Lunas (Paid)</option>
                   <option value="Pending">Menunggu (Pending)</option>
                   <option value="Void">Dibatalkan (Void)</option>
                 </select>
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-muted mb-1">Cari Spesifik</label>
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">Cari Spesifik</label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <Search size={16} className="absolute left-3 top-3 text-gray-400" />
-                    <input type="text" className="form-control pl-9" placeholder="Cari No. Transaksi atau Nama..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                    <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                    <input type="text" className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-medium" placeholder="Cari No. Transaksi atau Nama..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                   </div>
-                  <button className="btn bg-gray-100 text-gray-700 hover:bg-gray-200 px-4 flex items-center gap-2 whitespace-nowrap" onClick={() => { setDateFilter(''); setStatusFilter(''); setSearchQuery(''); }}>
-                    <RotateCcw size={16} /> Reset
+                  <button className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shrink-0" onClick={() => { setDateFilter(''); setStatusFilter(''); setSearchQuery(''); }}>
+                    <RotateCcw size={14} /> Reset
                   </button>
                 </div>
               </div>
@@ -238,7 +238,7 @@ const TransactionHistoryView = () => {
           )}
         </div>
 
-        <div className="table-responsive p-4 flex-1 overflow-y-auto">
+        <div className="table-responsive p-0 flex-1 overflow-x-auto overflow-y-auto">
           {loading ? (
             <div className="p-8 text-center text-gray-500">Memuat riwayat transaksi...</div>
           ) : (

@@ -63,185 +63,174 @@ const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
     <button
       type="button"
       onClick={onClick}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: '0.25rem', padding: desc ? '0.75rem 0.5rem' : '0.5rem 1rem',
-        flex: desc ? 1 : undefined,
-        minWidth: desc ? 0 : undefined,
-        borderRadius: '0.75rem', border: '2px solid',
-        borderColor: selected ? 'var(--primary)' : '#e2e8f0',
-        background: selected ? 'var(--secondary)' : '#fafafa',
-        color: selected ? 'var(--primary)' : '#64748b',
-        fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer',
-        transition: 'all 0.15s ease',
-        boxShadow: selected ? '0 0 0 3px rgba(124,58,237,0.12)' : 'none',
-        whiteSpace: 'nowrap',
-      }}
+      className={`flex flex-col items-center justify-center text-center transition-all cursor-pointer rounded-2xl border-2 active:scale-95 ${
+        desc ? 'flex-1 min-w-0 p-2 sm:p-3' : 'p-2 sm:p-2.5 flex-1 min-w-[70px] sm:min-w-0'
+      } ${
+        selected 
+          ? 'border-indigo-600 bg-indigo-50/70 text-indigo-700 shadow-sm ring-2 ring-indigo-200/50' 
+          : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100/80 text-slate-600'
+      }`}
     >
-      {emoji && <span style={{ fontSize: '1.1rem' }}>{emoji}</span>}
-      <span>{label}</span>
-      {desc && <span style={{ fontSize: '0.65rem', fontWeight: 500, color: selected ? 'var(--primary)' : '#94a3b8' }}>{desc}</span>}
+      {emoji && <span className="text-lg sm:text-xl leading-tight mb-0.5">{emoji}</span>}
+      <span className="font-bold text-xs sm:text-xs leading-tight">{label}</span>
+      {desc && <span className={`text-[10px] mt-0.5 font-medium leading-tight ${selected ? 'text-indigo-600' : 'text-slate-400'}`}>{desc}</span>}
     </button>
   );
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1100 }}>
-      {/* Landscape container */}
-      <div style={{
-        background: 'white', borderRadius: '1.5rem',
-        boxShadow: '0 25px 60px rgba(0,0,0,0.18)',
-        width: '100%', maxWidth: 780,
-        animation: 'modalIn 0.25s ease-out',
-        overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      }}>
+    <div className="modal-overlay p-3 sm:p-4" style={{ zIndex: 1100 }}>
+      {/* Container: Full width on mobile vertical, Max 780px on tablet/web */}
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[780px] max-h-[92vh] sm:max-h-[85vh] overflow-hidden flex flex-col animate-scale-up border border-slate-200/80">
 
         {/* ─── Header ─── */}
-        <div style={{
-          padding: '1.25rem 1.75rem',
-          borderBottom: '1px solid #e2e8f0',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'linear-gradient(135deg, var(--secondary) 0%, #f5f3ff 100%)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: '0.75rem',
-              background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Coffee size={20} color="white" />
+        <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-50/80 via-purple-50/40 to-slate-50 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-sm shadow-indigo-200">
+              <Coffee size={18} />
             </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-main)' }}>Kustomisasi Minuman</div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--primary)', fontWeight: 600 }}>{productName}</div>
+            <div className="truncate">
+              <div className="font-extrabold text-sm sm:text-base text-slate-900 truncate">Kustomisasi Minuman</div>
+              <div className="text-xs font-bold text-indigo-600 truncate">{productName}</div>
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose}><X size={20} /></button>
+          <button 
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all shrink-0 ml-2" 
+            onClick={onClose}
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        {/* ─── Body: 2-column layout ─── */}
-        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {/* ─── Body: 2-column layout on Desktop/Tablet, Vertical Scrollable Stack on Mobile ─── */}
+        <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
 
-          {/* LEFT: Options */}
-          <div style={{ flex: 1, padding: '1.5rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', borderRight: '1px solid #f1f5f9' }}>
+          {/* LEFT: Options (Scrollable) */}
+          <div className="flex-1 p-4 sm:p-6 flex flex-col gap-4 sm:gap-5 overflow-y-auto md:border-r border-slate-100">
 
             {/* Suhu */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
-                <Thermometer size={15} color="var(--primary)" />
-                <span style={{ fontWeight: 800, fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Suhu Minuman</span>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Thermometer size={14} className="text-indigo-600" />
+                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Suhu Minuman</span>
               </div>
-              <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <div className="grid grid-cols-3 gap-2">
                 {TEMP_OPTIONS.map(t => (
-                  <OptionChip key={t.label} label={t.label} emoji={t.emoji} desc={t.desc} selected={temperature === t.label} onClick={() => setTemperature(t.label)} />
+                  <OptionChip 
+                    key={t.label} 
+                    label={t.label} 
+                    emoji={t.emoji} 
+                    desc={t.desc} 
+                    selected={temperature === t.label} 
+                    onClick={() => setTemperature(t.label)} 
+                  />
                 ))}
               </div>
             </div>
 
             {/* Gula */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
-                <Layers size={15} color="var(--primary)" />
-                <span style={{ fontWeight: 800, fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tingkat Gula</span>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Layers size={14} className="text-indigo-600" />
+                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Tingkat Gula</span>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {SUGAR_OPTIONS.map(s => (
-                  <OptionChip key={s.label} label={s.label} emoji={s.emoji} selected={sugar === s.label} onClick={() => setSugar(s.label)} />
+                  <OptionChip 
+                    key={s.label} 
+                    label={s.label} 
+                    emoji={s.emoji} 
+                    selected={sugar === s.label} 
+                    onClick={() => setSugar(s.label)} 
+                  />
                 ))}
               </div>
             </div>
 
             {/* Es (only Iced) */}
-            <div style={{ opacity: temperature === 'Iced' ? 1 : 0.3, pointerEvents: temperature === 'Iced' ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
-                <Droplets size={15} color="var(--primary)" />
-                <span style={{ fontWeight: 800, fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tingkat Es</span>
-                {temperature !== 'Iced' && <span style={{ fontSize: '0.65rem', color: '#f59e0b', fontWeight: 600, background: '#fef9c3', padding: '0.1rem 0.4rem', borderRadius: '0.25rem' }}>Khusus Iced</span>}
+            <div className={`transition-opacity duration-200 ${temperature === 'Iced' ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Droplets size={14} className="text-indigo-600" />
+                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Tingkat Es</span>
+                {temperature !== 'Iced' && (
+                  <span className="text-[10px] text-amber-700 font-bold bg-amber-50 border border-amber-200/70 px-1.5 py-0.2 rounded-md ml-1">
+                    Khusus Iced
+                  </span>
+                )}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {ICE_OPTIONS.map(i => (
-                  <OptionChip key={i.label} label={i.label} emoji={i.emoji} selected={ice === i.label} onClick={() => setIce(i.label)} />
+                  <OptionChip 
+                    key={i.label} 
+                    label={i.label} 
+                    emoji={i.emoji} 
+                    selected={ice === i.label} 
+                    onClick={() => setIce(i.label)} 
+                  />
                 ))}
               </div>
             </div>
 
             {/* Catatan */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem' }}>
-                <MessageSquare size={15} color="var(--primary)" />
-                <span style={{ fontWeight: 800, fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Catatan Tambahan</span>
-                <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 500 }}>opsional</span>
+              <div className="flex items-center gap-1.5 mb-2">
+                <MessageSquare size={14} className="text-indigo-600" />
+                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Catatan Tambahan</span>
+                <span className="text-[10px] text-slate-400 font-medium">opsional</span>
               </div>
               <input
                 type="text"
-                className="form-control"
-                placeholder="cth: tanpa whip cream, pake gelas besar..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all bg-slate-50/50"
+                placeholder="cth: tanpa whip cream, ekstra saus..."
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                style={{ fontSize: '0.875rem', borderRadius: '0.75rem' }}
               />
             </div>
           </div>
 
-          {/* RIGHT: Summary + CTA */}
-          <div style={{
-            width: 240, padding: '1.5rem',
-            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-            background: '#fafafa',
-          }}>
+          {/* RIGHT / BOTTOM: Summary + CTA */}
+          <div className="w-full md:w-[260px] p-4 sm:p-5 flex flex-col justify-between bg-slate-50/90 border-t md:border-t-0 border-slate-100 shrink-0">
             <div>
-              <div style={{ fontWeight: 800, fontSize: '0.72rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.75rem' }}>
-                Preview Pesanan
+              <div className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider mb-2">
+                Preview Kustomisasi
               </div>
 
-              <div style={{ background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', minHeight: 120 }}>
-                <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-main)', borderBottom: '1px dashed #e2e8f0', paddingBottom: '0.5rem', marginBottom: '0.25rem' }}>
+              <div className="bg-white rounded-2xl border border-slate-200/80 p-3 flex flex-col gap-1.5 shadow-sm">
+                <div className="font-bold text-xs sm:text-sm text-slate-800 border-b border-dashed border-slate-200 pb-1.5 truncate">
                   {productName}
                 </div>
-                {summaryTags.map((tag, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <CheckCircle2 size={12} color={tag.text} />
-                    <span style={{
-                      background: tag.color, color: tag.text,
-                      fontWeight: 700, fontSize: '0.75rem',
-                      padding: '0.2rem 0.5rem', borderRadius: '0.4rem',
-                    }}>
-                      {tag.label}
-                    </span>
-                  </div>
-                ))}
+                <div className="flex flex-wrap md:flex-col gap-1.5">
+                  {summaryTags.map((tag, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <CheckCircle2 size={12} style={{ color: tag.text }} className="shrink-0" />
+                      <span 
+                        style={{ background: tag.color, color: tag.text }} 
+                        className="font-bold text-[11px] px-2 py-0.5 rounded-md"
+                      >
+                        {tag.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.5 }}>
-                Pilihan ini akan tampil di<br />
-                <strong style={{ color: 'var(--primary)' }}>KDS Dapur</strong> dan <strong style={{ color: 'var(--primary)' }}>Struk</strong>.
-              </div>
+              <p className="hidden md:block mt-3 text-[11px] text-slate-400 leading-relaxed">
+                Pilihan ini akan diteruskan ke <strong className="text-indigo-600 font-bold">KDS Dapur</strong> &amp; <strong className="text-indigo-600 font-bold">Struk Kasir</strong>.
+              </p>
             </div>
 
             {/* Buttons */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1.5rem' }}>
+            <div className="flex flex-col gap-2 mt-3 sm:mt-4">
               <button
                 type="button"
                 onClick={handleConfirm}
-                style={{
-                  padding: '0.875rem', borderRadius: '0.875rem', border: 'none',
-                  background: 'var(--primary)', color: 'white', fontWeight: 700,
-                  fontSize: '0.9rem', cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(124,58,237,0.35)',
-                  transition: 'transform 0.15s, box-shadow 0.15s',
-                }}
-                onMouseEnter={e => { (e.target as HTMLElement).style.transform = 'translateY(-1px)'; (e.target as HTMLElement).style.boxShadow = '0 6px 18px rgba(124,58,237,0.4)'; }}
-                onMouseLeave={e => { (e.target as HTMLElement).style.transform = ''; (e.target as HTMLElement).style.boxShadow = '0 4px 14px rgba(124,58,237,0.35)'; }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
-                ✓ Tambah ke Keranjang
+                <span>✓ Tambah ke Keranjang</span>
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                style={{
-                  padding: '0.75rem', borderRadius: '0.875rem',
-                  border: '2px solid #e2e8f0', background: 'white',
-                  fontWeight: 600, cursor: 'pointer', color: '#64748b', fontSize: '0.875rem',
-                  transition: 'border-color 0.15s',
-                }}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs active:scale-95 transition-all"
               >
                 Lewati / Tanpa Kustomisasi
               </button>
