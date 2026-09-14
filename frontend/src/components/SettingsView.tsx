@@ -296,19 +296,19 @@ const SettingsView = () => {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-50/50 overflow-y-auto">
+    <div className="p-3 sm:p-6 lg:p-8 h-full flex flex-col bg-slate-50/50 overflow-y-auto pb-32 sm:pb-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-black flex items-center gap-2 text-slate-800 tracking-tight">
-            <Settings className="text-indigo-600 animate-spin-slow" size={26} /> Pengaturan Sistem
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800 tracking-tight">
+            <Settings className="text-indigo-600" size={26} /> Pengaturan Sistem
           </h2>
           <p className="text-xs font-semibold text-slate-400 mt-1 uppercase tracking-wider">
-            Konfigurasi profil toko, perpajakan, format struk printer, & metode pembayaran.
+            Konfigurasi profil toko, mode POS, format struk printer, & metode pembayaran.
           </p>
         </div>
         <button 
-          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-6 py-3 rounded-xl transition-all font-bold text-sm hover:scale-[1.02]" 
+          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl transition-all font-bold text-xs sm:text-sm hover:scale-[1.02] shrink-0" 
           onClick={handleSave}
           disabled={loading}
         >
@@ -316,125 +316,46 @@ const SettingsView = () => {
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-8 flex-1 h-full items-start">
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 h-full items-start">
         
-        {/* Navigation Tabs (Sidebar style on desktop) */}
-        <div className="w-full lg:w-72 shrink-0 space-y-2.5">
-          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-2">Kelompok Menu</div>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'profil' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('profil')}
-          >
-            <Store size={18} className={activeTab === 'profil' ? 'text-white' : 'text-slate-400'} /> Profil Kafe
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'struk' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('struk')}
-          >
-            <Receipt size={18} className={activeTab === 'struk' ? 'text-white' : 'text-slate-400'} /> Format Struk
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'pajak' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('pajak')}
-          >
-            <Percent size={18} className={activeTab === 'pajak' ? 'text-white' : 'text-slate-400'} /> Pajak & Service
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'bayar' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('bayar')}
-          >
-            <CreditCard size={18} className={activeTab === 'bayar' ? 'text-white' : 'text-slate-400'} /> Metode Pembayaran
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'fitur' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('fitur')}
-          >
-            <Settings size={18} className={activeTab === 'fitur' ? 'text-white' : 'text-slate-400'} /> Fitur Tambahan POS
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'crm' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('crm')}
-          >
-            <Award size={18} className={activeTab === 'crm' ? 'text-white' : 'text-slate-400'} /> CRM & Loyalitas Member
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'inventaris' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('inventaris')}
-          >
-            <PackageSearch size={18} className={activeTab === 'inventaris' ? 'text-white' : 'text-slate-400'} /> Mode Inventaris
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'printer_bt' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('printer_bt')}
-          >
-            <Printer size={18} className={activeTab === 'printer_bt' ? 'text-white' : 'text-slate-400'} /> Printer Bluetooth
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'database' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('database')}
-          >
-            <Database size={18} className={activeTab === 'database' ? 'text-white' : 'text-slate-400'} /> Database & Backup
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'absensi_gps' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('absensi_gps')}
-          >
-            <MapPin size={18} className={activeTab === 'absensi_gps' ? 'text-white' : 'text-slate-400'} /> Absensi & GPS Toko
-          </button>
-          <button 
-            className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl text-left font-bold transition-all text-sm border ${
-              activeTab === 'koneksi_server' 
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]' 
-                : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 hover:translate-x-1 shadow-sm'
-            }`}
-            onClick={() => setActiveTab('koneksi_server')}
-          >
-            <Smartphone size={18} className={activeTab === 'koneksi_server' ? 'text-white' : 'text-slate-400'} /> Koneksi Terminal
-          </button>
+        {/* Navigation Tabs (Scrollable pills on mobile, sidebar on desktop) */}
+        <div className="w-full lg:w-72 shrink-0 flex lg:flex-col overflow-x-auto lg:overflow-visible gap-2 pb-2 lg:pb-0 no-scrollbar">
+          <div className="hidden lg:block text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Kelompok Menu</div>
+          
+          {[
+            { id: 'profil', label: 'Profil Kafe', icon: Store },
+            { id: 'struk', label: 'Printer & KDS', icon: Receipt },
+            { id: 'pajak', label: 'Pajak & Service', icon: Percent },
+            { id: 'bayar', label: 'Metode Pembayaran', icon: CreditCard },
+            { id: 'fitur', label: 'Mode Operasional POS', icon: Settings },
+            { id: 'crm', label: 'CRM & Member', icon: Award },
+            { id: 'inventaris', label: 'Mode Inventaris', icon: PackageSearch },
+            { id: 'printer_bt', label: 'Printer Bluetooth', icon: Printer },
+            { id: 'database', label: 'Database & Backup', icon: Database },
+            { id: 'absensi_gps', label: 'Absensi & GPS Toko', icon: MapPin },
+            { id: 'koneksi_server', label: 'Koneksi Terminal', icon: Smartphone },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`shrink-0 flex items-center gap-2 sm:gap-3 px-3.5 py-2.5 lg:px-4 lg:py-3 rounded-2xl text-left font-bold transition-all text-xs sm:text-sm border whitespace-nowrap lg:whitespace-normal ${
+                  isActive
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]'
+                    : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 shadow-sm'
+                }`}
+              >
+                <Icon size={16} className={isActive ? 'text-white' : 'text-slate-400'} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 w-full bg-white p-6 sm:p-8 shadow-sm border border-slate-200/80 rounded-3xl overflow-hidden min-h-[500px]">
+        <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-3xl overflow-hidden min-h-[500px]">
           
           {activeTab === 'profil' && (
             <div className="space-y-8 animate-fade-in">

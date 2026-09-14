@@ -1,9 +1,22 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin, Search, PackageSearch } from 'lucide-react';
+import { Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin, Search, PackageSearch, MessageCircle, X, Sparkles, Building2, User } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 
-interface Supplier { id: number; name: string; contact?: string; phone?: string; email?: string; address?: string; notes?: string; _count?: { purchaseOrders: number; ingredients: number }; }
+interface Supplier {
+  id: number;
+  name: string;
+  contact?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  _count?: {
+    purchaseOrders: number;
+    ingredients: number;
+  };
+}
+
 const API = '/api';
 
 const SupplierView: React.FC = () => {
@@ -22,139 +35,384 @@ const SupplierView: React.FC = () => {
     setLoading(true);
     try {
       const res = await fetch(`${API}/suppliers`, { headers });
-      if (res.ok) setSuppliers(await res.json());
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      if (res.ok) {
+        setSuppliers(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { if (token) fetchData(); }, [token]);
+  useEffect(() => {
+    if (token) fetchData();
+  }, [token]);
 
-  const openAdd = () => { setEditData(null); setForm({ name: '', contact: '', phone: '', email: '', address: '', notes: '' }); setShowModal(true); };
-  const openEdit = (s: Supplier) => { setEditData(s); setForm({ name: s.name, contact: s.contact || '', phone: s.phone || '', email: s.email || '', address: s.address || '', notes: s.notes || '' }); setShowModal(true); };
+  const openAdd = () => {
+    setEditData(null);
+    setForm({ name: '', contact: '', phone: '', email: '', address: '', notes: '' });
+    setShowModal(true);
+  };
+
+  const openEdit = (s: Supplier) => {
+    setEditData(s);
+    setForm({
+      name: s.name,
+      contact: s.contact || '',
+      phone: s.phone || '',
+      email: s.email || '',
+      address: s.address || '',
+      notes: s.notes || ''
+    });
+    setShowModal(true);
+  };
 
   const handleSave = async () => {
-    if (!form.name) return toast('Nama supplier wajib diisi', 'error');
+    if (!form.name.trim()) return toast('Nama supplier wajib diisi', 'error');
     const url = editData ? `${API}/suppliers/${editData.id}` : `${API}/suppliers`;
-    const res = await fetch(url, { method: editData ? 'PUT' : 'POST', headers, body: JSON.stringify(form) });
-    if (res.ok) { toast(editData ? 'Supplier diperbarui' : 'Supplier ditambahkan', 'success'); setShowModal(false); fetchData(); }
-    else { const err = await res.json(); toast(err.error || 'Gagal menyimpan', 'error'); }
+    const res = await fetch(url, {
+      method: editData ? 'PUT' : 'POST',
+      headers,
+      body: JSON.stringify(form)
+    });
+    if (res.ok) {
+      toast(editData ? 'Data supplier berhasil diperbarui' : 'Supplier baru berhasil ditambahkan', 'success');
+      setShowModal(false);
+      fetchData();
+    } else {
+      const err = await res.json();
+      toast(err.error || 'Gagal menyimpan supplier', 'error');
+    }
   };
 
   const handleDelete = async (s: Supplier) => {
-    const confirm = await confirmAlert('Hapus Supplier', `Hapus "${s.name}"?`);
+    const confirm = await confirmAlert('Hapus Supplier', `Hapus "${s.name}" dari daftar pemasok?`);
     if (!confirm.isConfirmed) return;
     const res = await fetch(`${API}/suppliers/${s.id}`, { method: 'DELETE', headers });
-    if (res.ok) { toast('Supplier dihapus', 'success'); fetchData(); }
-    else { const err = await res.json(); toast(err.error || 'Gagal menghapus', 'error'); }
+    if (res.ok) {
+      toast('Supplier berhasil dihapus', 'success');
+      fetchData();
+    } else {
+      const err = await res.json();
+      toast(err.error || 'Gagal menghapus supplier', 'error');
+    }
   };
 
-  const filtered = suppliers.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.phone || '').includes(search));
+  const filtered = suppliers.filter(
+    s =>
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      (s.contact || '').toLowerCase().includes(search.toLowerCase()) ||
+      (s.phone || '').includes(search)
+  );
+
+  const totalPO = suppliers.reduce((s, x) => s + (x._count?.purchaseOrders || 0), 0);
+  const totalBahan = suppliers.reduce((s, x) => s + (x._count?.ingredients || 0), 0);
 
   return (
-    <div style={{ padding: '1.5rem', height: '100%', overflowY: 'auto', background: '#f4f6f9', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '.5rem', margin: 0, fontWeight: 800, fontSize: '1.4rem', color: 'var(--text-main)' }}>
-            <Truck color="var(--primary)" size={24} /> Manajemen Supplier
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '.85rem', margin: '.25rem 0 0' }}>Kelola data pemasok bahan baku dan produk</p>
-        </div>
-        <button onClick={openAdd} style={{ display: 'flex', alignItems: 'center', gap: '.5rem', padding: '.75rem 1.25rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '.875rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 14px rgba(124,58,237,.3)' }}>
-          <Plus size={18} /> Tambah Supplier
-        </button>
-      </div>
-
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '.875rem' }}>
-        {[
-          { label: 'Total Supplier', val: suppliers.length, color: '#7c3aed', bg: '#f5f3ff' },
-          { label: 'Total PO Dibuat', val: suppliers.reduce((s, x) => s + (x._count?.purchaseOrders || 0), 0), color: '#0369a1', bg: '#e0f2fe' },
-          { label: 'Bahan Baku Tertaut', val: suppliers.reduce((s, x) => s + (x._count?.ingredients || 0), 0), color: '#166534', bg: '#f0fdf4' },
-        ].map(s => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: '1rem', padding: '1rem 1.25rem', border: `1px solid ${s.color}22` }}>
-            <div style={{ fontSize: '1.75rem', fontWeight: 900, color: s.color }}>{s.val}</div>
-            <div style={{ fontSize: '.75rem', fontWeight: 700, color: s.color, opacity: .8 }}>{s.label}</div>
+    <div className="h-full flex-1 overflow-y-auto w-full bg-slate-50/50">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto pb-32 sm:pb-24">
+        {/* HEADER UTAMA */}
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+              <Truck size={26} />
+            </div>
+            <div>
+              <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                Manajemen Pemasok / Supplier
+              </h2>
+              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
+                Kelola data vendor, kontak pemesanan bahan baku kopi & dapur, serta riwayat purchase order.
+              </p>
+            </div>
           </div>
-        ))}
-      </div>
 
-      {/* Search */}
-      <div style={{ background: 'white', borderRadius: '1rem', padding: '.75rem 1rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-        <Search size={16} color="#94a3b8" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari nama / telepon supplier..." style={{ border: 'none', outline: 'none', flex: 1, fontSize: '.875rem', background: 'transparent' }} />
-      </div>
-
-      {/* Cards Grid */}
-      {loading ? (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>Memuat...</div>
-      ) : filtered.length === 0 ? (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0' }}>
-          <Truck size={48} style={{ opacity: .3, margin: '0 auto 1rem', display: 'block' }} />
-          <div style={{ fontWeight: 700 }}>Belum ada supplier</div>
+          <button
+            onClick={openAdd}
+            className="w-full sm:w-auto justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2"
+          >
+            <Plus size={16} /> Tambah Supplier
+          </button>
         </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-          {filtered.map(s => (
-            <div key={s.id} style={{ background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '.875rem' }}>
+
+        {/* METRICS STATS */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Mitra Pemasok</span>
+            <div className="flex items-baseline justify-between mt-1">
+              <span className="text-2xl sm:text-3xl font-black text-indigo-600">{suppliers.length}</span>
+              <span className="text-xs font-bold text-slate-500">Vendor Aktif</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Purchase Order (PO)</span>
+            <div className="flex items-baseline justify-between mt-1">
+              <span className="text-2xl sm:text-3xl font-black text-blue-600">{totalPO}</span>
+              <span className="text-xs font-bold text-slate-500">Faktur Pemesanan</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Bahan Baku Tertaut</span>
+            <div className="flex items-baseline justify-between mt-1">
+              <span className="text-2xl sm:text-3xl font-black text-emerald-600">{totalBahan}</span>
+              <span className="text-xs font-bold text-slate-500">Item Bahan</span>
+            </div>
+          </div>
+        </div>
+
+        {/* SEARCH BAR */}
+        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-sm flex items-center gap-2.5">
+          <Search size={18} className="text-slate-400 shrink-0 ml-1.5" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Cari nama supplier, PIC, nomor telepon/WA..."
+            className="w-full bg-transparent border-none outline-none text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600 p-1">
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        {/* SUPPLIERS GRID */}
+        {loading ? (
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center text-slate-400">
+            <Truck size={32} className="mx-auto text-indigo-400 animate-pulse mb-2" />
+            <p className="text-xs font-bold">Memuat daftar pemasok...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center text-slate-400">
+            <Truck size={36} className="mx-auto text-slate-300 mb-2" />
+            <h4 className="text-sm font-bold text-slate-700">Belum Ada Pemasok</h4>
+            <p className="text-xs text-slate-400 mt-1">
+              {search ? 'Tidak ada supplier yang cocok dengan kata kunci pencarian.' : 'Silakan tambahkan supplier baru untuk melacak pemesanan bahan baku.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map(s => {
+              const cleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
+              const waNumber = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+
+              return (
+                <div
+                  key={s.id}
+                  className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-4"
+                >
+                  <div className="space-y-3">
+                    {/* Header Card */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
+                          <Building2 size={20} />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-sm sm:text-base text-slate-900 leading-tight">{s.name}</h3>
+                          {s.contact && (
+                            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1 mt-0.5">
+                              <User size={11} className="text-slate-400" /> PIC: {s.contact}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEdit(s)}
+                          className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 flex items-center justify-center transition-all"
+                          title="Edit Supplier"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(s)}
+                          className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition-all"
+                          title="Hapus Supplier"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Contacts & Address */}
+                    <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
+                      {s.phone && (
+                        <div className="flex items-center justify-between gap-2 py-0.5">
+                          <span className="flex items-center gap-1.5 text-slate-700 font-bold">
+                            <Phone size={13} className="text-slate-400 shrink-0" />
+                            {s.phone}
+                          </span>
+                          {waNumber && (
+                            <a
+                              href={`https://wa.me/${waNumber}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black flex items-center gap-1 hover:bg-emerald-100 transition-all"
+                            >
+                              <MessageCircle size={10} /> Chat WA
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {s.email && (
+                        <div className="flex items-center gap-1.5 text-slate-600 py-0.5">
+                          <Mail size={13} className="text-slate-400 shrink-0" />
+                          <span className="truncate">{s.email}</span>
+                        </div>
+                      )}
+
+                      {s.address && (
+                        <div className="flex items-start gap-1.5 text-slate-600 py-0.5">
+                          <MapPin size={13} className="text-slate-400 shrink-0 mt-0.5" />
+                          <span className="line-clamp-2 leading-relaxed">{s.address}</span>
+                        </div>
+                      )}
+
+                      {s.notes && (
+                        <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-xl border border-slate-100 mt-1">
+                          "{s.notes}"
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footers Stats */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-center">
+                    <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-2">
+                      <span className="text-base font-black text-indigo-700 block">{s._count?.purchaseOrders || 0}</span>
+                      <span className="text-[10px] font-bold text-indigo-500 uppercase">Purchase Order</span>
+                    </div>
+                    <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2">
+                      <span className="text-base font-black text-emerald-700 block">{s._count?.ingredients || 0}</span>
+                      <span className="text-[10px] font-bold text-emerald-500 uppercase">Bahan Baku</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* MODAL FORM SUPPLIER */}
+        {showModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-lg w-full border border-slate-100 shadow-2xl space-y-4 my-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                    <Truck size={16} />
+                  </div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900">
+                    {editData ? 'Edit Data Supplier' : 'Tambah Supplier Baru'}
+                  </h3>
+                </div>
+                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs max-h-[70vh] overflow-y-auto pr-1">
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-main)' }}>{s.name}</div>
-                  {s.contact && <div style={{ fontSize: '.78rem', color: '#64748b', marginTop: '.15rem' }}>PIC: {s.contact}</div>}
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Nama Perusahaan / Supplier *
+                  </label>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                    placeholder="Contoh: CV. Sumber Biji Kopi Nusantara"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                  />
                 </div>
-                <div style={{ display: 'flex', gap: '.4rem' }}>
-                  <button onClick={() => openEdit(s)} style={{ width: 30, height: 30, border: '1.5px solid #bfdbfe', background: '#eff6ff', borderRadius: '.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}><Edit2 size={13} /></button>
-                  <button onClick={() => handleDelete(s)} style={{ width: 30, height: 30, border: '1.5px solid #fecaca', background: '#fff1f2', borderRadius: '.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}><Trash2 size={13} /></button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
-                {s.phone && <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.78rem', color: '#475569' }}><Phone size={12} />{s.phone}</div>}
-                {s.email && <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.78rem', color: '#475569' }}><Mail size={12} />{s.email}</div>}
-                {s.address && <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.78rem', color: '#475569' }}><MapPin size={12} />{s.address}</div>}
-                {s.notes && <div style={{ fontSize: '.72rem', color: '#94a3b8', fontStyle: 'italic', borderTop: '1px solid #f1f5f9', paddingTop: '.4rem', marginTop: '.2rem' }}>"{s.notes}"</div>}
-              </div>
-              <div style={{ display: 'flex', gap: '.5rem', marginTop: '.875rem', paddingTop: '.75rem', borderTop: '1px solid #f1f5f9' }}>
-                <div style={{ flex: 1, textAlign: 'center', background: '#f5f3ff', borderRadius: '.5rem', padding: '.4rem' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#7c3aed' }}>{s._count?.purchaseOrders || 0}</div>
-                  <div style={{ fontSize: '.65rem', color: '#7c3aed', fontWeight: 600 }}>PO</div>
-                </div>
-                <div style={{ flex: 1, textAlign: 'center', background: '#f0fdf4', borderRadius: '.5rem', padding: '.4rem' }}>
-                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#166534' }}>{s._count?.ingredients || 0}</div>
-                  <div style={{ fontSize: '.65rem', color: '#166534', fontWeight: 600 }}>Bahan Baku</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
-      {/* Modal */}
-      {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'white', borderRadius: '1.25rem', padding: '2rem', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,.2)' }}>
-            <h3 style={{ margin: '0 0 1.5rem', fontWeight: 800, fontSize: '1.1rem' }}>{editData ? 'Edit Supplier' : 'Tambah Supplier Baru'}</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '.875rem' }}>
-              {[
-                { label: 'Nama Perusahaan / Supplier *', key: 'name', placeholder: 'cth: CV. Sumber Bahan Kopi' },
-                { label: 'Nama PIC / Contact Person', key: 'contact', placeholder: 'cth: Budi Santoso' },
-                { label: 'Nomor Telepon', key: 'phone', placeholder: '08xxxxxxxxxx' },
-                { label: 'Email', key: 'email', placeholder: 'supplier@email.com' },
-                { label: 'Alamat', key: 'address', placeholder: 'Jl. ...' },
-                { label: 'Catatan', key: 'notes', placeholder: 'Catatan tambahan...' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label style={{ fontSize: '.8rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '.35rem' }}>{f.label}</label>
-                  <input value={(form as any)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                    placeholder={f.placeholder} style={{ width: '100%', padding: '.625rem .875rem', border: '1.5px solid #e2e8f0', borderRadius: '.625rem', fontSize: '.875rem', outline: 'none', boxSizing: 'border-box' }} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Nama PIC / Sales
+                    </label>
+                    <input
+                      type="text"
+                      value={form.contact}
+                      onChange={e => setForm(p => ({ ...p, contact: e.target.value }))}
+                      placeholder="Budi Santoso"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Nomor Telepon / WA
+                    </label>
+                    <input
+                      type="text"
+                      value={form.phone}
+                      onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                      placeholder="0812xxxxxxxx"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '.75rem', marginTop: '1.5rem' }}>
-              <button onClick={() => setShowModal(false)} style={{ flex: 1, padding: '.75rem', border: '1.5px solid #e2e8f0', borderRadius: '.75rem', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#64748b' }}>Batal</button>
-              <button onClick={handleSave} style={{ flex: 2, padding: '.75rem', border: 'none', borderRadius: '.75rem', background: 'var(--primary)', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Simpan</button>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Email Vendor</label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                    placeholder="supplier@kopi.com"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Alamat Gudang / Kantor</label>
+                  <textarea
+                    rows={2}
+                    value={form.address}
+                    onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
+                    placeholder="Jl. Raya Kopi No. 12, Gudang Barat..."
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Catatan Tambahan (Term of Payment, dll)</label>
+                  <textarea
+                    rows={2}
+                    value={form.notes}
+                    onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                    placeholder="TOP 14 hari, minimal order 5kg roast beans..."
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all"
+                >
+                  Simpan Data
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
