@@ -480,7 +480,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     }).sort((a, b) => b.qty - a.qty);
 
     // 2. Fetch Closed Shifts in range
-    const shifts = await prisma.shift.findMany({
+    const rawShifts = await prisma.shift.findMany({
       where: {
         status: 'Closed',
         waktuTutup: {
@@ -492,6 +492,41 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
         user: { select: { name: true } }
       },
       orderBy: { waktuTutup: 'desc' }
+    });
+
+    // Enrich shifts dengan perhitungan omzet kas dan non-tunai akurat dari transaksi
+    const shifts = rawShifts.map(s => {
+      const sStart = s.waktuBuka;
+      const sEnd = s.waktuTutup || new Date();
+      const inShift = (d: Date | null) => d != null && d >= sStart && d <= sEnd;
+      const sOrders = orders.filter(o => inShift(o.paidAt ?? o.createdAt));
+      
+      let cash = 0;
+      let nonCash = 0;
+      sOrders.forEach(o => {
+        const pm = (o.paymentMethod || '').trim().toLowerCase();
+        if (pm === 'cash' || pm === 'tunai') {
+          cash += o.total;
+        } else if (pm.startsWith('split')) {
+          const match = pm.match(/tunai\s+(?:rp)+\s*([\d\.]+)/i);
+          const cAmt = match && match[1] ? Number(match[1].replace(/\./g, '')) || 0 : 0;
+          cash += cAmt;
+          nonCash += Math.max(0, o.total - cAmt);
+        } else {
+          nonCash += o.total;
+        }
+      });
+
+      // Fallback rekonsiliasi jika tidak ada order tertaut tapi terdapat saldo sistem
+      if (cash === 0 && (s.saldoSistem || 0) > (s.saldoAwal || 0)) {
+        cash = Math.max(0, (s.saldoSistem || 0) - (s.saldoAwal || 0));
+      }
+
+      return {
+        ...s,
+        cashSales: cash,
+        nonCashSales: nonCash
+      };
     });
 
     // 3. TODAY'S RECAP (Independent of filters)

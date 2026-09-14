@@ -622,7 +622,8 @@ export const exportFinancialPDF = async (
 
     shifts.forEach((s: any) => {
       totalAwal += s.saldoAwal || 0;
-      totalCashSales += s.cashSales || 0;
+      const cash = s.cashSales !== undefined ? s.cashSales : Math.max(0, (s.saldoSistem || 0) - (s.saldoAwal || 0));
+      totalCashSales += cash;
       totalNonCashSales += s.nonCashSales || 0;
       totalSistem += s.saldoSistem || 0;
       totalFisik += s.saldoFisikLaci || 0;
@@ -680,7 +681,7 @@ export const exportFinancialPDF = async (
         dateStr,
         s.user?.name || 'Kasir',
         formatCurrency(s.saldoAwal),
-        formatCurrency(s.cashSales || 0),
+        formatCurrency(s.cashSales !== undefined ? s.cashSales : Math.max(0, (s.saldoSistem || 0) - (s.saldoAwal || 0))),
         formatCurrency(s.nonCashSales || 0),
         formatCurrency(s.saldoSistem || 0),
         formatCurrency(s.saldoFisikLaci || 0),
