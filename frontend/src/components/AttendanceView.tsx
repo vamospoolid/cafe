@@ -274,21 +274,14 @@ export const AttendanceView: React.FC = () => {
   const totalWorkHoursMonth = summaries.reduce((acc, s) => acc + (s.stats?.totalWorkHours || 0), 0);
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-3.5 sm:space-y-6 max-w-[1600px] mx-auto pb-52 sm:pb-24 w-full">
-      {/* HEADER UTAMA / ACTION TOOLBAR */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 bg-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm shrink-0">
-        <div className="hidden sm:flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
-            <UserCheck size={26} />
-          </div>
-          <div>
-            <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-              Absensi & Rekapitulasi Staf
-            </h2>
-            <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
-              Monitoring kehadiran real-time via GPS geofencing, foto selfie kamera, dan shift rolling.
-            </p>
-          </div>
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+      {/* HEADER / ACTION TOOLBAR */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
+        <div className="hidden sm:block">
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
+            <UserCheck className="text-primary" size={24} /> Absensi &amp; Rekapitulasi Staf
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">Monitoring kehadiran real-time via GPS geofencing, foto selfie kamera, dan shift rolling</p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -296,13 +289,13 @@ export const AttendanceView: React.FC = () => {
             href="/staff"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 sm:flex-none justify-center px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5"
+            className="w-full sm:w-auto btn bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 shadow-sm flex items-center justify-center gap-1.5 py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all active:scale-95"
           >
             <Smartphone size={15} /> PWA Staf
           </a>
 
           <button
-            className="flex-1 sm:flex-none justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all active:scale-95 flex items-center gap-2"
+            className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all active:scale-95"
             onClick={() => setIsModalOpen(true)}
           >
             <Fingerprint size={16} /> Terminal Absensi

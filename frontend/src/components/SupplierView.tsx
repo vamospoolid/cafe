@@ -110,73 +110,68 @@ const SupplierView: React.FC = () => {
   const totalBahan = suppliers.reduce((s, x) => s + (x._count?.ingredients || 0), 0);
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 space-y-3.5 sm:space-y-6 max-w-[1600px] mx-auto pb-52 sm:pb-24 w-full">
-      {/* HEADER UTAMA / ACTION TOOLBAR */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 bg-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm shrink-0">
-        <div className="hidden sm:flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
-            <Truck size={26} />
-          </div>
-          <div>
-            <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-              Manajemen Pemasok / Supplier
-            </h2>
-            <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5">
-              Kelola data vendor, kontak pemesanan bahan baku kopi & dapur, serta riwayat purchase order.
-            </p>
-          </div>
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+      {/* HEADER / ACTION TOOLBAR */}
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
+        <div className="hidden sm:block">
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
+            <Truck className="text-primary" size={24} /> Manajemen Pemasok / Supplier
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">Kelola data vendor, kontak pemesanan bahan baku kopi &amp; dapur, serta riwayat purchase order</p>
         </div>
 
-        <button
-          onClick={openAdd}
-          className="w-full sm:w-auto justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all active:scale-95 flex items-center gap-2"
-        >
-          <Plus size={16} /> + Tambah Supplier
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={openAdd}
+            className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all active:scale-95"
+          >
+            <Plus size={16} /> + Tambah Supplier
+          </button>
+        </div>
       </div>
 
-        {/* METRICS STATS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Mitra Pemasok</span>
-            <div className="flex items-baseline justify-between mt-1">
-              <span className="text-2xl sm:text-3xl font-black text-indigo-600">{suppliers.length}</span>
-              <span className="text-xs font-bold text-slate-500">Vendor Aktif</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Purchase Order (PO)</span>
-            <div className="flex items-baseline justify-between mt-1">
-              <span className="text-2xl sm:text-3xl font-black text-blue-600">{totalPO}</span>
-              <span className="text-xs font-bold text-slate-500">Faktur Pemesanan</span>
-            </div>
-          </div>
-
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Bahan Baku Tertaut</span>
-            <div className="flex items-baseline justify-between mt-1">
-              <span className="text-2xl sm:text-3xl font-black text-emerald-600">{totalBahan}</span>
-              <span className="text-xs font-bold text-slate-500">Item Bahan</span>
-            </div>
+      {/* METRICS STATS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 shrink-0">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Mitra Pemasok</span>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="text-2xl sm:text-3xl font-black text-indigo-600">{suppliers.length}</span>
+            <span className="text-xs font-bold text-slate-500">Vendor Aktif</span>
           </div>
         </div>
 
-        {/* SEARCH BAR */}
-        <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-sm flex items-center gap-2.5">
-          <Search size={18} className="text-slate-400 shrink-0 ml-1.5" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Cari nama supplier, PIC, nomor telepon/WA..."
-            className="w-full bg-transparent border-none outline-none text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400"
-          />
-          {search && (
-            <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600 p-1">
-              <X size={16} />
-            </button>
-          )}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Purchase Order (PO)</span>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="text-2xl sm:text-3xl font-black text-blue-600">{totalPO}</span>
+            <span className="text-xs font-bold text-slate-500">Faktur Pemesanan</span>
+          </div>
         </div>
+
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Bahan Baku Tertaut</span>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="text-2xl sm:text-3xl font-black text-emerald-600">{totalBahan}</span>
+            <span className="text-xs font-bold text-slate-500">Item Bahan</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SEARCH BAR */}
+      <div className="card p-3 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 shrink-0">
+        <Search size={16} className="text-slate-400 shrink-0 ml-1" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Cari nama supplier, PIC, nomor telepon/WA..."
+          className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-slate-400"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="text-xs font-bold text-slate-400 hover:text-slate-600 px-1">
+            <X size={16} />
+          </button>
+        )}
+      </div>
 
         {/* SUPPLIERS GRID */}
         {loading ? (
