@@ -553,10 +553,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           </div>
 
-          {/* Member Loyalty Card */}
+          {/* Member Loyalty / Guest Card */}
           {posContext?.settings?.loyaltyEnabled !== false && (
             <div className="mt-4 pt-3 border-t border-slate-200/80">
-              {currentCustomer?.name && currentCustomer?.name !== 'Pelanggan Umum' ? (
+              {currentCustomer?.id ? (
                 <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs">
@@ -566,6 +566,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <div className="text-xs font-bold text-emerald-900 leading-tight flex items-center gap-1">
                         <span>{currentCustomer.name}</span>
                         <ShieldCheck size={12} className="text-emerald-600" />
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-200 text-emerald-800 uppercase">
+                          {currentCustomer.tier || 'Member'}
+                        </span>
                       </div>
                       <div className="text-[10px] text-emerald-700">
                         {currentCustomer.points || 0} Poin Tersedia
@@ -580,13 +583,36 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     Ganti
                   </button>
                 </div>
+              ) : currentCustomer?.name && currentCustomer?.name !== 'Pelanggan Umum' ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-black text-xs">
+                      {currentCustomer.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-800 leading-tight flex items-center gap-1">
+                        <span>{currentCustomer.name}</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-200 text-slate-600">Tamu</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {currentCustomer.phone || 'Non-Member'}
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsCustomerModalOpen(true)}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-slate-200 px-2 py-1 rounded-lg shadow-sm"
+                  >
+                    Ubah / Member
+                  </button>
+                </div>
               ) : (
                 <button 
                   onClick={() => setIsCustomerModalOpen(true)}
                   className="w-full py-2 px-3 rounded-xl border border-dashed border-slate-300 hover:border-indigo-400 bg-white hover:bg-indigo-50/50 text-slate-600 hover:text-indigo-600 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
                 >
                   <UserPlus size={14} />
-                  <span>Hubungkan Member & Poin</span>
+                  <span>Pilih Pelanggan / Member & Poin</span>
                 </button>
               )}
             </div>
