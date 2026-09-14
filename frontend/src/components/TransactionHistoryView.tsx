@@ -145,8 +145,8 @@ const TransactionHistoryView = () => {
   };
 
   return (
-    <div className="p-3 sm:p-6 pb-28 sm:pb-8 h-full flex flex-col bg-slate-50 overflow-y-auto gap-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="p-3 sm:p-6 pb-32 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div>
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
             <History className="text-primary" /> Riwayat Transaksi
@@ -163,7 +163,7 @@ const TransactionHistoryView = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
         <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm bg-white rounded-2xl">
           <div>
             <div className="text-2xl font-black text-slate-900">{validOrders.length}</div>
@@ -195,7 +195,7 @@ const TransactionHistoryView = () => {
         </div>
       </div>
 
-      <div className="card flex-1 flex flex-col p-0 overflow-hidden shadow-sm bg-white rounded-2xl border border-slate-200/80">
+      <div className="card flex-initial md:flex-1 flex flex-col p-0 shadow-sm bg-white rounded-2xl border border-slate-200/80 overflow-hidden shrink-0">
         <div className="border-b border-slate-200">
           <button 
             className="w-full p-3.5 sm:p-4 flex justify-between items-center bg-slate-50/70 hover:bg-slate-100/70 transition-colors"
@@ -238,76 +238,143 @@ const TransactionHistoryView = () => {
           )}
         </div>
 
-        <div className="table-responsive p-0 flex-1 overflow-x-auto overflow-y-auto">
-          {loading ? (
-            <div className="p-8 text-center text-gray-500">Memuat riwayat transaksi...</div>
-          ) : (
-            <table className="data-table w-full text-left border-collapse">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>NO. TRANSAKSI</th>
-                  <th>TANGGAL & WAKTU</th>
-                  <th>PELANGGAN</th>
-                  <th>KASIR</th>
-                  <th>TOTAL</th>
-                  <th>STATUS & METODE</th>
-                  <th className="text-right">AKSI</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.length === 0 ? (
+        {/* Loading State */}
+        {loading ? (
+          <div className="p-8 text-center text-gray-500">Memuat riwayat transaksi...</div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="p-12 text-center text-gray-400 font-medium">Tidak ada riwayat transaksi.</div>
+        ) : (
+          <>
+            {/* Mobile Cards View (Visible on Mobile Screens < 640px) */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {filteredOrders.map((trx, idx) => (
+                <div key={trx.id} className={`p-4 space-y-3 ${trx.status === 'Void' ? 'opacity-60 bg-slate-50/50' : 'bg-white'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-400">#{idx + 1}</span>
+                      <span className="font-extrabold text-sm text-primary">{trx.orderNumber}</span>
+                    </div>
+                    {trx.status === 'Void' ? (
+                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 font-bold">VOID</span>
+                    ) : trx.status === 'Paid' ? (
+                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold">LUNAS</span>
+                    ) : (
+                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold">PENDING</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[11px] text-slate-400 block">Waktu:</span>
+                      <span className="font-medium text-slate-700">{formatDate(trx.createdAt)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-400 block">Pelanggan:</span>
+                      <span className="font-bold text-slate-800 truncate block">{trx.customerName || 'Tamu'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-400 block">Kasir / Metode:</span>
+                      <span className="font-medium text-slate-700">{trx.user?.name || '-'} • <span className="text-slate-500">{trx.paymentMethod || '-'}</span></span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-slate-400 block">Total:</span>
+                      <span className="font-black text-sm text-slate-900">{formatCurrency(trx.total)}</span>
+                    </div>
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50">
+                    <button 
+                      className="px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                      onClick={() => setPrintOrder(trx)}
+                    >
+                      <Printer size={14} /> Preview
+                    </button>
+                    <button 
+                      className={`px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs flex items-center gap-1.5 transition-colors ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      onClick={() => handleDirectPrint(trx.id)}
+                      disabled={printLoading === trx.id}
+                    >
+                      <Zap size={14} className={printLoading === trx.id ? 'animate-pulse' : ''} /> Cetak Struk
+                    </button>
+                    {trx.status !== 'Void' && posContext?.user?.permissions?.canVoid && (
+                      <button 
+                        className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                        onClick={() => handleVoid(trx.id, trx.orderNumber)}
+                      >
+                        <XCircle size={14} /> Void
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop / Tablet Table View (Visible on Screens >= 640px) */}
+            <div className="hidden sm:block table-responsive p-0 overflow-x-auto">
+              <table className="data-table w-full text-left border-collapse">
+                <thead>
                   <tr>
-                    <td colSpan={8} className="text-center py-8 text-gray-500">Tidak ada riwayat transaksi.</td>
+                    <th>#</th>
+                    <th>NO. TRANSAKSI</th>
+                    <th>TANGGAL &amp; WAKTU</th>
+                    <th>PELANGGAN</th>
+                    <th>KASIR</th>
+                    <th>TOTAL</th>
+                    <th>STATUS &amp; METODE</th>
+                    <th className="text-right">AKSI</th>
                   </tr>
-                ) : filteredOrders.map((trx, idx) => (
-                  <tr key={trx.id} className={trx.status === 'Void' ? 'opacity-50 bg-gray-50' : ''}>
-                    <td className="text-muted">{idx + 1}</td>
-                    <td className="font-bold text-primary">{trx.orderNumber}</td>
-                    <td className="text-sm">{formatDate(trx.createdAt)}</td>
-                    <td>
-                      <div className="flex items-center gap-1 font-semibold text-gray-800">
-                        <User size={14} className="text-gray-400" /> {trx.customerName}
-                      </div>
-                    </td>
-                    <td className="text-sm">{trx.user?.name}</td>
-                    <td className="font-bold text-gray-900">{formatCurrency(trx.total)}</td>
-                    <td>
-                      {trx.status === 'Void' ? (
-                        <span className="text-xs px-2 py-1 rounded-md bg-red-100 text-red-700 border border-red-200 font-bold">VOID</span>
-                      ) : trx.status === 'Paid' ? (
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className="text-xs px-2 py-1 rounded-md bg-green-100 text-green-700 border border-green-200 font-bold">LUNAS</span>
-                          <span className="text-xs text-muted">{trx.paymentMethod}</span>
+                </thead>
+                <tbody>
+                  {filteredOrders.map((trx, idx) => (
+                    <tr key={trx.id} className={trx.status === 'Void' ? 'opacity-50 bg-gray-50' : ''}>
+                      <td className="text-muted">{idx + 1}</td>
+                      <td className="font-bold text-primary">{trx.orderNumber}</td>
+                      <td className="text-sm">{formatDate(trx.createdAt)}</td>
+                      <td>
+                        <div className="flex items-center gap-1 font-semibold text-gray-800">
+                          <User size={14} className="text-gray-400" /> {trx.customerName}
                         </div>
-                      ) : (
-                        <span className="text-xs px-2 py-1 rounded-md bg-yellow-100 text-yellow-700 border border-yellow-200 font-bold">PENDING</span>
-                      )}
-                    </td>
-                    <td className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <button className="icon-btn text-blue-600 bg-blue-50" title="Preview / Cetak PDF" onClick={() => setPrintOrder(trx)}><Printer size={16}/></button>
-                        <button 
-                          className={`icon-btn text-emerald-600 bg-emerald-50 ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`} 
-                          title="Cetak Struk Termal Langsung" 
-                          onClick={() => handleDirectPrint(trx.id)}
-                          disabled={printLoading === trx.id}
-                        >
-                          <Zap size={16} className={printLoading === trx.id ? 'animate-pulse' : ''} />
-                        </button>
-                        {trx.status !== 'Void' && posContext?.user?.permissions?.canVoid && (
-                          <button className="icon-btn text-red-600 bg-red-50" onClick={() => handleVoid(trx.id, trx.orderNumber)}>
-                            <XCircle size={16}/>
-                          </button>
+                      </td>
+                      <td className="text-sm">{trx.user?.name}</td>
+                      <td className="font-bold text-gray-900">{formatCurrency(trx.total)}</td>
+                      <td>
+                        {trx.status === 'Void' ? (
+                          <span className="text-xs px-2 py-1 rounded-md bg-red-100 text-red-700 border border-red-200 font-bold">VOID</span>
+                        ) : trx.status === 'Paid' ? (
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="text-xs px-2 py-1 rounded-md bg-green-100 text-green-700 border border-green-200 font-bold">LUNAS</span>
+                            <span className="text-xs text-muted">{trx.paymentMethod}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs px-2 py-1 rounded-md bg-yellow-100 text-yellow-700 border border-yellow-200 font-bold">PENDING</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                      </td>
+                      <td className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <button className="icon-btn text-blue-600 bg-blue-50" title="Preview / Cetak PDF" onClick={() => setPrintOrder(trx)}><Printer size={16}/></button>
+                          <button 
+                            className={`icon-btn text-emerald-600 bg-emerald-50 ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`} 
+                            title="Cetak Struk Termal Langsung" 
+                            onClick={() => handleDirectPrint(trx.id)}
+                            disabled={printLoading === trx.id}
+                          >
+                            <Zap size={16} className={printLoading === trx.id ? 'animate-pulse' : ''} />
+                          </button>
+                          {trx.status !== 'Void' && posContext?.user?.permissions?.canVoid && (
+                            <button className="icon-btn text-red-600 bg-red-50" onClick={() => handleVoid(trx.id, trx.orderNumber)}>
+                              <XCircle size={16}/>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
       
       {printOrder && <ReceiptPrinter order={printOrder} onClose={() => setPrintOrder(null)} />}

@@ -424,7 +424,7 @@ const TableView = () => {
         </button>
       </div>
 
-      <div className="card flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm rounded-2xl">
+      <div className="card flex-initial md:flex-1 flex flex-col p-0 overflow-hidden border border-gray-200 shadow-sm rounded-2xl shrink-0">
         {isEditMode ? (
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-amber-50 border-b border-amber-200 p-3 sm:p-4 w-full justify-between">
             <span className="text-xs font-bold text-amber-800 flex items-center gap-2">
@@ -506,7 +506,7 @@ const TableView = () => {
             <p className="font-semibold">Menyinkronkan status meja...</p>
           </div>
         ) : viewMode === 'list' ? (
-          <div className="p-0 flex-1 overflow-x-auto overflow-y-auto bg-white">
+          <div className="p-0 overflow-x-auto bg-white">
             <table className="data-table w-full text-left border-collapse text-xs">
               <thead className="bg-slate-50 sticky top-0 shadow-sm text-[11px]">
                 <tr>
