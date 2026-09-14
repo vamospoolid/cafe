@@ -1549,3 +1549,44 @@ input:checked + .toggle-slider:before {
   background: #fee2e2;
   color: #991b1b;
 }
+
+/* =============================================
+   Responsive Table & Visibility Helper Classes
+   ============================================= */
+.crm-desktop-table {
+  display: none !important;
+}
+.crm-mobile-cards {
+  display: block !important;
+}
+
+@media (min-width: 768px) {
+  .crm-desktop-table {
+    display: block !important;
+  }
+  .crm-mobile-cards {
+    display: none !important;
+  }
+  .md\:block {
+    display: block !important;
+  }
+  .md\:hidden {
+    display: none !important;
+  }
+  .md\:flex {
+    display: flex !important;
+  }
+  .md\:grid {
+    display: grid !important;
+  }
+}
+
+@media (min-width: 640px) {
+  .sm\:block {
+    display: block !important;
+  }
+  .sm\:hidden {
+    display: none !important;
+  }
+}
+

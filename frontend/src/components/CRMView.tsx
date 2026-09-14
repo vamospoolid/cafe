@@ -379,7 +379,7 @@ const CRMView = () => {
           ) : (
             <>
               {/* Mobile Member Cards (< 768px) */}
-              <div className="md:hidden divide-y divide-slate-100">
+              <div className="crm-mobile-cards md:hidden divide-y divide-slate-100">
                 {customers.map((c) => {
                   const totalDebt = c.debts ? c.debts.reduce((sum: number, d: any) => sum + (Number(d.remaining) || 0), 0) : 0;
                   return (
@@ -470,7 +470,7 @@ const CRMView = () => {
               </div>
 
               {/* Desktop Table (>= 768px) */}
-              <div className="hidden md:block overflow-x-auto">
+              <div className="crm-desktop-table hidden md:block overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100">
