@@ -92,174 +92,249 @@ const ReservationView = () => {
   };
 
   return (
-    <div style={{ padding: '1.5rem', height: '100%', display: 'flex', flexDirection: 'column', background: '#f4f6f9', overflowY: 'auto', gap: '1.25rem' }}>
+    <div className="p-3.5 sm:p-6 pb-32 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-4">
 
-      {/* â”€â”€â”€ Header â”€â”€â”€ */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* ─── Header ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.4rem', color: 'var(--text-main)', margin: 0 }}>
-            <Calendar color="var(--primary)" size={24} /> Reservasi Meja
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
+            <Calendar className="text-primary" size={24} /> Reservasi Meja
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0.25rem 0 0' }}>Kelola booking dan pantau jadwal kedatangan tamu</p>
+          <p className="text-xs text-slate-500 mt-0.5">Kelola booking dan pantau jadwal kedatangan tamu</p>
         </div>
         <button
           onClick={() => { setSelectedReservation(null); setIsModalOpen(true); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 14px rgba(124,58,237,0.3)', fontSize: '0.9rem' }}
+          className="self-start sm:self-auto flex items-center gap-1.5 px-4 py-2.5 bg-primary text-white hover:bg-primary-hover rounded-xl font-bold text-xs shadow-md shadow-primary/20 transition-all active:scale-95"
         >
-          <Plus size={18} /> Buat Reservasi
+          <Plus size={16} /> Buat Reservasi
         </button>
       </div>
 
-      {/* â”€â”€â”€ Stats Row â”€â”€â”€ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.875rem' }}>
+      {/* ─── Stats Row ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
         {[
-          { label: 'Total Hari Ini', val: stats.total, color: '#7c3aed', bg: '#f5f3ff' },
-          { label: 'Menunggu', val: stats.booking, color: '#b45309', bg: '#fefce8' },
-          { label: 'DP Dibayar', val: stats.dp, color: '#1d4ed8', bg: '#eff6ff' },
-          { label: 'Selesai', val: stats.done, color: '#166534', bg: '#f0fdf4' },
+          { label: 'Total Hari Ini', val: stats.total, color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200' },
+          { label: 'Menunggu', val: stats.booking, color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
+          { label: 'DP Dibayar', val: stats.dp, color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
+          { label: 'Selesai', val: stats.done, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
         ].map(s => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: '1rem', padding: '1rem 1.25rem', border: `1px solid ${s.color}22` }}>
-            <div style={{ fontSize: '1.75rem', fontWeight: 900, color: s.color }}>{s.val}</div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: s.color, opacity: 0.8 }}>{s.label}</div>
+          <div key={s.label} className={`${s.bg} ${s.border} border rounded-2xl p-3.5 sm:p-4 shadow-sm`}>
+            <div className={`text-2xl sm:text-3xl font-black ${s.color}`}>{s.val}</div>
+            <div className={`text-xs font-bold ${s.color} opacity-80 mt-0.5`}>{s.label}</div>
           </div>
         ))}
       </div>
 
-      {/* â”€â”€â”€ Toolbar â”€â”€â”€ */}
-      <div style={{ background: 'white', borderRadius: '1rem', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      {/* ─── Toolbar ─── */}
+      <div className="bg-white rounded-2xl p-3 sm:p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border border-slate-200 shadow-sm shrink-0">
         {/* Date Navigator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button onClick={() => shiftDate(-1)} style={{ width: 32, height: 32, borderRadius: '0.5rem', border: '1.5px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+        <div className="flex items-center justify-between sm:justify-start gap-2">
+          <button onClick={() => shiftDate(-1)} className="w-8 h-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-colors">
             <ChevronLeft size={16} />
           </button>
-          <div style={{ textAlign: 'center', minWidth: 130 }}>
-            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)' }}>{formatDate(dateFilter)}</div>
-            {isToday && <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--primary)', background: 'var(--secondary)', padding: '0.05rem 0.4rem', borderRadius: '0.25rem', display: 'inline-block' }}>HARI INI</div>}
+          <div className="text-center min-w-[120px]">
+            <div className="font-extrabold text-xs sm:text-sm text-slate-800">{formatDate(dateFilter)}</div>
+            {isToday && <div className="text-[10px] font-black text-primary bg-primary/10 px-2 py-0.5 rounded-full inline-block mt-0.5">HARI INI</div>}
           </div>
-          <button onClick={() => shiftDate(1)} style={{ width: 32, height: 32, borderRadius: '0.5rem', border: '1.5px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+          <button onClick={() => shiftDate(1)} className="w-8 h-8 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition-colors">
             <ChevronRight size={16} />
           </button>
+          <input 
+            type="date" 
+            value={dateFilter} 
+            onChange={e => setDateFilter(e.target.value)}
+            className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-xs font-bold text-primary bg-slate-50 outline-none cursor-pointer" 
+          />
         </div>
 
-        <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
-          style={{ padding: '0.45rem 0.75rem', border: '1.5px solid #e2e8f0', borderRadius: '0.625rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--primary)', background: 'var(--secondary)', outline: 'none', cursor: 'pointer' }} />
-
-        <div style={{ flex: 1 }} />
-
         {/* Search */}
-        <div style={{ position: 'relative', minWidth: 220 }}>
-          <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+        <div className="relative flex-1 md:max-w-xs">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            type="text" placeholder="Cari nama / telepon..."
-            value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem 0.75rem 0.5rem 2.25rem', border: '1.5px solid #e2e8f0', borderRadius: '0.625rem', fontSize: '0.82rem', fontWeight: 500, outline: 'none', boxSizing: 'border-box' }}
+            type="text" 
+            placeholder="Cari nama / telepon..."
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-primary transition-colors"
           />
         </div>
       </div>
 
-      {/* â”€â”€â”€ Content Area â”€â”€â”€ */}
-      <div style={{ flex: 1, background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+      {/* ─── Content Area ─── */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col shrink-0">
         {loading ? (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', color: '#94a3b8', padding: '3rem' }}>
-            <div style={{ width: 36, height: 36, border: '3px solid #e2e8f0', borderTop: '3px solid var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>Memuat reservasi...</span>
+          <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <div className="w-8 h-8 border-3 border-slate-200 border-t-primary rounded-full animate-spin" />
+            <span className="font-bold text-xs">Memuat data reservasi...</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', color: '#94a3b8', padding: '3rem' }}>
-            <Calendar size={48} style={{ opacity: 0.3 }} />
-            <div style={{ fontWeight: 700, fontSize: '1rem' }}>Tidak ada reservasi</div>
-            <div style={{ fontSize: '0.82rem' }}>Tidak ada data untuk tanggal dan filter ini</div>
+          <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <Calendar size={40} className="opacity-30" />
+            <div className="font-extrabold text-sm text-slate-700">Tidak ada reservasi</div>
+            <div className="text-xs">Tidak ada jadwal reservasi untuk filter tanggal ini</div>
           </div>
         ) : (
-          <div style={{ overflowY: 'auto', flex: 1 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #f1f5f9' }}>
-                  {['WAKTU', 'PEMESAN', 'MEJA & TAMU', 'UANG MUKA', 'STATUS', 'AKSI'].map(h => (
-                    <th key={h} style={{ padding: '0.875rem 1.25rem', textAlign: 'left', fontSize: '0.68rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((resv, idx) => {
-                  const sc = statusConfig[resv.status] || statusConfig['Booking'];
-                  return (
-                    <tr key={resv.id} style={{ borderBottom: '1px solid #f8fafc', background: idx % 2 === 0 ? 'white' : '#fafafa', transition: 'background 0.12s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-                      onMouseLeave={e => (e.currentTarget.style.background = idx % 2 === 0 ? 'white' : '#fafafa')}
-                    >
-                      {/* Waktu */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--primary)' }}>{resv.time || '-'}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 500, marginTop: '0.1rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Clock size={10} /> {formatDate(resv.date)}
-                        </div>
-                      </td>
+          <>
+            {/* Mobile Cards View (< 640px) */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {filtered.map(resv => {
+                const sc = statusConfig[resv.status] || statusConfig['Booking'];
+                return (
+                  <div key={resv.id} className="p-4 space-y-3 bg-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-base text-primary">{resv.time || '-'}</span>
+                        <span className="text-[11px] text-slate-400 font-medium">({formatDate(resv.date)})</span>
+                      </div>
+                      <span 
+                        className="inline-flex items-center gap-1 font-bold text-[10px] px-2.5 py-0.5 rounded-full"
+                        style={{ backgroundColor: sc.bg, color: sc.text, border: `1px solid ${sc.border}` }}
+                      >
+                        {sc.icon} {sc.label}
+                      </span>
+                    </div>
 
-                      {/* Pemesan */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-main)' }}>{resv.customerName}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.2rem' }}>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-[11px] text-slate-400 block">Pemesan:</span>
+                        <span className="font-extrabold text-slate-800">{resv.customerName}</span>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                           <Phone size={11} /> {resv.phone}
                         </div>
-                        {resv.notes && <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontStyle: 'italic', marginTop: '0.25rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>"{resv.notes}"</div>}
-                      </td>
+                      </div>
 
-                      {/* Meja & Tamu */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#ede9fe', color: '#7c3aed', fontWeight: 700, fontSize: '0.8rem', padding: '0.3rem 0.65rem', borderRadius: '0.5rem', width: 'fit-content', border: '1px solid #ddd6fe' }}>
+                      <div>
+                        <span className="text-[11px] text-slate-400 block">Meja & Tamu:</span>
+                        <div className="font-bold text-indigo-700 flex items-center gap-1">
                           <MapPin size={12} /> Meja {resv.table?.tableNo}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                           <Users size={11} /> {resv.guests} Tamu
                         </div>
-                      </td>
+                      </div>
+                    </div>
 
-                      {/* DP */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        {resv.dpAmount > 0 ? (
-                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#166534' }}>{formatCurrency(resv.dpAmount)}</div>
-                        ) : (
-                          <span style={{ fontSize: '0.8rem', color: '#cbd5e1', fontStyle: 'italic' }}>Belum ada</span>
-                        )}
-                      </td>
+                    {resv.notes && (
+                      <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg italic">
+                        "{resv.notes}"
+                      </div>
+                    )}
 
-                      {/* Status */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, fontWeight: 700, fontSize: '0.72rem', padding: '0.3rem 0.65rem', borderRadius: '0.5rem' }}>
-                          {sc.icon} {sc.label}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Uang Muka (DP)</span>
+                        <span className="text-xs font-black text-emerald-700">
+                          {resv.dpAmount > 0 ? formatCurrency(resv.dpAmount) : '—'}
                         </span>
-                      </td>
+                      </div>
 
-                      {/* Aksi */}
-                      <td style={{ padding: '1rem 1.25rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button title="Edit" onClick={() => { setSelectedReservation(resv); setIsModalOpen(true); }}
-                            style={{ width: 32, height: 32, border: '1.5px solid #bfdbfe', background: '#eff6ff', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb', transition: 'all 0.12s' }}>
-                            <Edit size={14} />
-                          </button>
-                          <button title="Batalkan" onClick={() => handleDelete(resv.id)}
-                            style={{ width: 32, height: 32, border: '1.5px solid #fecaca', background: '#fff1f2', borderRadius: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', transition: 'all 0.12s' }}>
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      <div className="flex gap-1.5">
+                        <button 
+                          onClick={() => { setSelectedReservation(resv); setIsModalOpen(true); }}
+                          className="px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-bold text-xs flex items-center gap-1"
+                        >
+                          <Edit size={13} /> Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(resv.id)}
+                          className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 font-bold text-xs flex items-center gap-1"
+                        >
+                          <Trash2 size={13} /> Batal
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tablet & Desktop Table (>= 640px) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    {['WAKTU', 'PEMESAN', 'MEJA & TAMU', 'UANG MUKA', 'STATUS', 'AKSI'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-[11px] font-extrabold text-slate-400 tracking-wider whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map(resv => {
+                    const sc = statusConfig[resv.status] || statusConfig['Booking'];
+                    return (
+                      <tr key={resv.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3.5">
+                          <div className="font-black text-sm text-primary">{resv.time || '-'}</div>
+                          <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                            <Clock size={11} /> {formatDate(resv.date)}
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3.5">
+                          <div className="font-extrabold text-xs text-slate-800">{resv.customerName}</div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            <Phone size={11} /> {resv.phone}
+                          </div>
+                          {resv.notes && <div className="text-[10px] text-slate-400 italic mt-0.5 max-w-xs truncate">"{resv.notes}"</div>}
+                        </td>
+
+                        <td className="px-4 py-3.5">
+                          <div className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 font-bold text-xs px-2.5 py-1 rounded-lg border border-indigo-100">
+                            <MapPin size={12} /> Meja {resv.table?.tableNo}
+                          </div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                            <Users size={11} /> {resv.guests} Tamu
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3.5">
+                          {resv.dpAmount > 0 ? (
+                            <div className="font-black text-xs text-emerald-700">{formatCurrency(resv.dpAmount)}</div>
+                          ) : (
+                            <span className="text-xs text-slate-300 italic">Belum ada</span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3.5">
+                          <span 
+                            className="inline-flex items-center gap-1 font-bold text-xs px-2.5 py-1 rounded-lg"
+                            style={{ backgroundColor: sc.bg, color: sc.text, border: `1px solid ${sc.border}` }}
+                          >
+                            {sc.icon} {sc.label}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <button title="Edit" onClick={() => { setSelectedReservation(resv); setIsModalOpen(true); }}
+                              className="w-8 h-8 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 transition-colors">
+                              <Edit size={14} />
+                            </button>
+                            <button title="Batalkan" onClick={() => handleDelete(resv.id)}
+                              className="w-8 h-8 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 flex items-center justify-center text-rose-600 transition-colors">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         {/* Footer */}
-        <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+        <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
             <Calendar size={14} />
             <span>Menampilkan {filtered.length} dari {reservations.length} reservasi</span>
           </span>
-          <button onClick={() => setDateFilter(new Date().toISOString().split('T')[0])}
-            style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', background: 'var(--secondary)', border: 'none', padding: '0.3rem 0.75rem', borderRadius: '0.4rem', cursor: 'pointer' }}>
+          <button 
+            onClick={() => setDateFilter(new Date().toISOString().split('T')[0])}
+            className="text-xs font-bold text-primary hover:underline"
+          >
             Kembali ke Hari Ini
           </button>
         </div>

@@ -528,7 +528,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2.5 max-h-[60vh] overflow-y-auto pr-1">
               {checkAccess(['Admin']) && (
                 <NavLink 
                   to="/produk" 
@@ -564,6 +564,42 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                       {kdsCount}
                     </span>
                   )}
+                </NavLink>
+              )}
+
+              {/* Bahan Baku / Inventory */}
+              {checkAccess(['Admin', 'Dapur']) && (
+                <NavLink 
+                  to="/bahan-baku" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <PackageSearch size={18} className="text-indigo-600" />
+                  <span className="text-[10px] font-bold text-slate-700">Bahan Baku</span>
+                </NavLink>
+              )}
+
+              {/* Purchase Order */}
+              {checkAccess(['Admin', 'Dapur']) && (
+                <NavLink 
+                  to="/purchase-order" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <ClipboardList size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">PO / Belanja</span>
+                </NavLink>
+              )}
+
+              {/* Supplier */}
+              {checkAccess(['Admin', 'Dapur']) && (
+                <NavLink 
+                  to="/supplier" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Truck size={18} className="text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-700">Supplier</span>
                 </NavLink>
               )}
 

@@ -97,51 +97,49 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
   );
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1050 }}>
-      {/* Wide landscape modal */}
-      <div style={{
-        background: 'white', borderRadius: '1.5rem',
-        boxShadow: '0 30px 70px rgba(0,0,0,0.18)',
-        width: '100%', maxWidth: 820,
-        animation: 'modalIn 0.25s ease-out', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-      }}>
+    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+      {/* Modal Container */}
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
 
-        {/* â”€â”€â”€ Header â”€â”€â”€ */}
-        <div style={{
-          padding: '1.25rem 1.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'linear-gradient(135deg, var(--secondary) 0%, #f5f3ff 100%)',
-          borderBottom: '1px solid #e8e3ff',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ width: 40, height: 40, borderRadius: '0.875rem', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Calendar size={20} color="white" />
+        {/* ─── Header ─── */}
+        <div className="p-4 sm:p-5 flex items-center justify-between bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100/70 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center text-white shadow-md shadow-primary/20 shrink-0">
+              <Calendar size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-main)' }}>
+              <div className="font-extrabold text-sm sm:text-base text-slate-800">
                 {initialData ? 'Edit Data Reservasi' : 'Buat Reservasi Baru'}
               </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              <div className="text-[11px] text-slate-500">
                 Isi detail pemesanan meja untuk pelanggan
               </div>
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose} disabled={loading}><X size={20} /></button>
+          <button 
+            type="button" 
+            className="w-8 h-8 rounded-full bg-white/80 hover:bg-white text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors shadow-sm"
+            onClick={onClose} 
+            disabled={loading}
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        {/* â”€â”€â”€ Body â”€â”€â”€ */}
-        <form onSubmit={handleSave} style={{ display: 'flex', flex: 1 }}>
-          <div style={{ display: 'flex', flex: 1, gap: 0 }}>
+        {/* ─── Form Body ─── */}
+        <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-y-auto min-h-0">
+          <div className="flex flex-col md:flex-row flex-1 overflow-y-auto">
 
-            {/* LEFT COLUMN */}
-            <div style={{ flex: 1, padding: '1.5rem 1.75rem', borderRight: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* LEFT COLUMN: Customer Info & Timing */}
+            <div className="flex-1 p-4 sm:p-6 flex flex-col gap-4 md:border-r border-slate-100">
 
-              {sectionTitle(<User size={14} />, 'Identitas Pemesan')}
+              {sectionTitle(<User size={15} />, 'Identitas Pemesan')}
 
               {/* Nama */}
               <div>
-                <label style={labelStyle}>Nama Lengkap <span style={{ color: '#ef4444' }}>*</span></label>
-                <div style={{ position: 'relative' }}>
-                  <User size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <label style={labelStyle}>Nama Lengkap <span className="text-rose-500">*</span></label>
+                <div className="relative">
+                  <User size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="text" name="customerName" required value={formData.customerName} onChange={handleChange}
                     placeholder="cth: Budi Santoso" style={{ ...inputStyle, paddingLeft: '2.25rem' }} />
                 </div>
@@ -149,24 +147,24 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
 
               {/* Telepon */}
               <div>
-                <label style={labelStyle}>No. WhatsApp <span style={{ color: '#ef4444' }}>*</span></label>
-                <div style={{ position: 'relative' }}>
-                  <Phone size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <label style={labelStyle}>No. WhatsApp <span className="text-rose-500">*</span></label>
+                <div className="relative">
+                  <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="tel" name="phone" required value={formData.phone} onChange={handleChange}
                     placeholder="0812xxxxxx" style={{ ...inputStyle, paddingLeft: '2.25rem' }} />
                 </div>
               </div>
 
-              {sectionTitle(<Clock size={14} />, 'Jadwal Kedatangan')}
+              {sectionTitle(<Clock size={15} />, 'Jadwal Kedatangan')}
 
               {/* Tanggal + Jam */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label style={labelStyle}>Tanggal <span style={{ color: '#ef4444' }}>*</span></label>
+                  <label style={labelStyle}>Tanggal <span className="text-rose-500">*</span></label>
                   <input type="date" name="date" required value={formData.date} onChange={handleChange} style={inputStyle} />
                 </div>
                 <div>
-                  <label style={labelStyle}>Jam Kedatangan <span style={{ color: '#ef4444' }}>*</span></label>
+                  <label style={labelStyle}>Jam Kedatangan <span className="text-rose-500">*</span></label>
                   <input type="time" name="time" required value={formData.time} onChange={handleChange} style={inputStyle} />
                 </div>
               </div>
@@ -174,24 +172,24 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
               {/* Catatan */}
               <div>
                 <label style={labelStyle}>Catatan Khusus</label>
-                <div style={{ position: 'relative' }}>
-                  <FileText size={15} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
-                  <textarea name="notes" value={formData.notes} onChange={handleChange} rows={3}
+                <div className="relative">
+                  <FileText size={15} className="absolute left-3 top-3 text-slate-400" />
+                  <textarea name="notes" value={formData.notes} onChange={handleChange} rows={2}
                     placeholder="cth: Minta dekorasi ulang tahun, alergi kacang, dll..."
                     style={{ ...inputStyle, paddingLeft: '2.25rem', resize: 'none', paddingTop: '0.65rem', lineHeight: 1.5 }} />
                 </div>
               </div>
             </div>
 
-            {/* RIGHT COLUMN */}
-            <div style={{ width: 280, padding: '1.5rem', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* RIGHT COLUMN: Table, Guests & DP */}
+            <div className="w-full md:w-72 p-4 sm:p-6 bg-slate-50/70 flex flex-col gap-4 shrink-0">
 
-              {sectionTitle(<MapPin size={14} />, 'Detail Meja')}
+              {sectionTitle(<MapPin size={15} />, 'Detail Meja')}
 
               {/* Meja */}
               <div>
-                <label style={labelStyle}>Pilih Meja <span style={{ color: '#ef4444' }}>*</span></label>
-                <div style={{ position: 'relative' }}>
+                <label style={labelStyle}>Pilih Meja <span className="text-rose-500">*</span></label>
+                <div className="relative">
                   <select name="tableId" required value={formData.tableId} onChange={handleChange}
                     style={{ ...inputStyle, appearance: 'none', paddingRight: '2.25rem' }}>
                     <option value="">— Pilih Meja —</option>
@@ -199,27 +197,27 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
                       <option key={t.id} value={t.id}>Meja {t.tableNo} (Kap. {t.capacity})</option>
                     ))}
                   </select>
-                  <ChevronDown size={15} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+                  <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>
               </div>
 
               {/* Jumlah Tamu */}
               <div>
                 <label style={labelStyle}>Jumlah Tamu</label>
-                <div style={{ position: 'relative' }}>
-                  <Users size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <div className="relative">
+                  <Users size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="number" name="guests" min="1" value={formData.guests} onChange={handleChange}
                     style={{ ...inputStyle, paddingLeft: '2.25rem' }} />
                 </div>
               </div>
 
-              {sectionTitle(<CreditCard size={14} />, 'Pembayaran DP')}
+              {sectionTitle(<CreditCard size={15} />, 'Pembayaran DP')}
 
               {/* DP */}
               <div>
-                <label style={labelStyle}>Uang Muka <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 500, textTransform: 'none' }}>(opsional)</span></label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: '0.8rem', fontWeight: 700, color: '#94a3b8' }}>Rp</span>
+                <label style={labelStyle}>Uang Muka <span className="text-[11px] text-slate-400 font-normal lowercase">(opsional)</span></label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
                   <input type="number" name="dpAmount" value={formData.dpAmount} onChange={handleChange}
                     placeholder="0" style={{ ...inputStyle, paddingLeft: '2.5rem' }} />
                 </div>
@@ -229,41 +227,41 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
               {initialData && (
                 <div>
                   <label style={labelStyle}>Status Reservasi</label>
-                  <div style={{ position: 'relative' }}>
+                  <div className="relative">
                     <select name="status" value={formData.status} onChange={handleChange}
                       style={{ ...inputStyle, appearance: 'none', paddingRight: '2.25rem', fontWeight: 700 }}>
                       <option value="Booking">📋 Booking Baru</option>
                       <option value="DP Dibayar">💵 DP Dibayar</option>
                       <option value="Lunas">✅ Selesai (Lunas)</option>
                     </select>
-                    <ChevronDown size={15} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+                    <ChevronDown size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
               )}
 
               {/* Spacer */}
-              <div style={{ flex: 1 }} />
+              <div className="flex-1 hidden md:block" />
 
               {/* CTA */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
-                <button type="submit" disabled={loading} style={{
-                  padding: '0.875rem', borderRadius: '0.875rem', border: 'none',
-                  background: 'var(--primary)', color: 'white', fontWeight: 700,
-                  fontSize: '0.9rem', cursor: loading ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 14px rgba(124,58,237,0.3)', opacity: loading ? 0.7 : 1,
-                }}>
+              <div className="flex flex-col gap-2 pt-3 border-t border-slate-200/80">
+                <button 
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full py-3 rounded-2xl bg-primary hover:bg-primary-hover text-white font-extrabold text-xs shadow-md shadow-primary/25 transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                >
                   {loading ? 'Menyimpan...' : (
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
-                      <Check size={18} />
+                    <>
+                      <Check size={16} />
                       <span>{initialData ? 'Simpan Perubahan' : 'Buat Reservasi'}</span>
-                    </span>
+                    </>
                   )}
                 </button>
-                <button type="button" onClick={onClose} disabled={loading} style={{
-                  padding: '0.75rem', borderRadius: '0.875rem',
-                  border: '2px solid #e2e8f0', background: 'white',
-                  fontWeight: 600, cursor: 'pointer', color: '#64748b', fontSize: '0.875rem',
-                }}>
+                <button 
+                  type="button" 
+                  onClick={onClose} 
+                  disabled={loading} 
+                  className="w-full py-2.5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 font-bold text-xs transition-colors"
+                >
                   Batal
                 </button>
               </div>
