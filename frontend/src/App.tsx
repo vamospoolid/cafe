@@ -22,6 +22,7 @@ import IngredientView from './components/IngredientView';
 import SupplierView from './components/SupplierView';
 import PurchaseOrderView from './components/PurchaseOrderView';
 import StaffPWAView from './components/StaffPWAView';
+import WarehouseView from './components/WarehouseView';
 import { POSProvider, POSContext } from './context/POSContext';
 
 
@@ -81,6 +82,7 @@ const AppRoutes = () => {
         <Route path="/bahan-baku" element={<IngredientView />} />
         <Route path="/supplier" element={<SupplierView />} />
         <Route path="/purchase-order" element={<PurchaseOrderView />} />
+        <Route path="/gudang" element={<WarehouseView />} />
         <Route path="*" element={<div className="p-8 text-center text-muted">Halaman tidak ditemukan...</div>} />
       </Routes>
     </Layout>

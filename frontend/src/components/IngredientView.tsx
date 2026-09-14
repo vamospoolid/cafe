@@ -5,7 +5,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, Sparkles, Filter, DollarSign, ArrowRight, 
   ShieldAlert, FileText, Coffee, ShoppingBag, Truck, BarChart3, PieChart, 
   ArrowUpRight, ArrowDownRight, Layers, HelpCircle, Send, ShoppingCart,
-  Download, Printer, MessageCircle, Copy
+  Download, Printer, MessageCircle, Copy, Boxes
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -53,6 +53,10 @@ interface Ingredient {
   buyPrice: number;
   supplierId: number | null;
   supplier?: { id: number; name: string; phone?: string } | null;
+  purchaseUnit?: string | null;
+  conversionRatio?: number;
+  warehouseStock?: number;
+  warehouseMinStock?: number;
 }
 
 interface ProductionForecastItem {
@@ -468,7 +472,10 @@ export const IngredientView: React.FC = () => {
     stock: '', 
     minStock: '', 
     buyPrice: '', 
-    supplierId: '' 
+    supplierId: '',
+    purchaseUnit: '',
+    conversionRatio: '1',
+    warehouseMinStock: '0'
   });
   const [adjustForm, setAdjustForm] = useState<{ change: string; type: string; description: string; newBuyPrice?: string }>({ change: '', type: 'Restock', description: '', newBuyPrice: '' });
 
@@ -600,7 +607,7 @@ export const IngredientView: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditData(null);
-    setForm({ name: '', category: 'FOOD', subCategory: '', unit: 'gram', stock: '', minStock: '', buyPrice: '', supplierId: '' });
+    setForm({ name: '', category: 'FOOD', subCategory: '', unit: 'gram', stock: '', minStock: '', buyPrice: '', supplierId: '', purchaseUnit: 'Karton', conversionRatio: '1', warehouseMinStock: '0' });
     setShowModal(true);
   };
 
@@ -614,7 +621,10 @@ export const IngredientView: React.FC = () => {
       stock: ing.stock.toString(),
       minStock: ing.minStock.toString(),
       buyPrice: ing.buyPrice.toString(),
-      supplierId: ing.supplierId ? ing.supplierId.toString() : ''
+      supplierId: ing.supplierId ? ing.supplierId.toString() : '',
+      purchaseUnit: ing.purchaseUnit || '',
+      conversionRatio: (ing.conversionRatio || 1).toString(),
+      warehouseMinStock: (ing.warehouseMinStock || 0).toString()
     });
     setShowModal(true);
   };
@@ -631,7 +641,10 @@ export const IngredientView: React.FC = () => {
       stock: parseFloat(form.stock) || 0,
       minStock: parseFloat(form.minStock) || 0,
       buyPrice: parseFloat(form.buyPrice) || 0,
-      supplierId: form.supplierId ? parseInt(form.supplierId) : null
+      supplierId: form.supplierId ? parseInt(form.supplierId) : null,
+      purchaseUnit: form.purchaseUnit ? form.purchaseUnit.trim() : null,
+      conversionRatio: parseFloat(form.conversionRatio) > 0 ? parseFloat(form.conversionRatio) : 1,
+      warehouseMinStock: parseFloat(form.warehouseMinStock) || 0
     };
 
     try {
@@ -2631,6 +2644,50 @@ export const IngredientView: React.FC = () => {
                       onChange={e => setForm({ ...form, minStock: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                     />
+                  </div>
+                </div>
+
+                {/* Konversi Satuan Grosir (Gudang Pusat) */}
+                <div className="p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-100/90 space-y-3">
+                  <div className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                    <Boxes size={15} className="text-indigo-600" />
+                    Konversi Satuan Grosir (Gudang Pusat)
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Satuan Grosir / Kemasan Beli
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Karton, Dus, Karung"
+                        value={form.purchaseUnit}
+                        onChange={e => setForm({ ...form, purchaseUnit: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Isi per Satuan Grosir (ke {form.unit || 'unit'})
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Contoh: 12 (1 Karton = 12 Botol)"
+                        value={form.conversionRatio}
+                        onChange={e => setForm({ ...form, conversionRatio: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    {form.purchaseUnit && Number(form.conversionRatio) > 1 ? (
+                      <span className="text-indigo-700 font-bold">
+                        Rumus Konversi: 1 {form.purchaseUnit} = {form.conversionRatio} {form.unit}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">Rasio standar 1:1 (satuan grosir sama dengan satuan dapur)</span>
+                    )}
                   </div>
                 </div>
 

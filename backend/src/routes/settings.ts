@@ -75,6 +75,10 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     if (updateData.enableAlphaPenalty !== undefined) updateData.enableAlphaPenalty = Boolean(updateData.enableAlphaPenalty);
     if (updateData.alphaPenaltyAmount !== undefined) updateData.alphaPenaltyAmount = Number(updateData.alphaPenaltyAmount);
 
+    // Warehouse & Transfer Pricing
+    if (updateData.warehouseTransferPricing !== undefined) updateData.warehouseTransferPricing = String(updateData.warehouseTransferPricing);
+    if (updateData.warehouseMarkupPercent !== undefined) updateData.warehouseMarkupPercent = Number(updateData.warehouseMarkupPercent);
+
     let settings = await prisma.settings.findFirst();
     
     if (settings) {

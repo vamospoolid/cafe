@@ -66,6 +66,7 @@ import printerRoutes from './routes/printer';
 import debtsRoutes from './routes/debts';
 import uploadRoutes from './routes/upload';
 import databaseRoutes from './routes/database';
+import warehouseRoutes from './routes/warehouse';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -89,6 +90,7 @@ app.use('/api/printer', printerRoutes);
 app.use('/api/debts', debtsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/database', databaseRoutes);
+app.use('/api/warehouse', warehouseRoutes);
 
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'Backend is running' });

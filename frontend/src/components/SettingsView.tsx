@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -160,6 +160,8 @@ const SettingsView = () => {
     loyaltySilverMultiplier: 1.2,
     loyaltyGoldMultiplier: 1.5,
     ingredientTrackingEnabled: false,
+    warehouseTransferPricing: 'AT_COST',
+    warehouseMarkupPercent: 0,
     // Printer Kasir
     printerIp: '',
     printerPort: 9100,
@@ -1298,8 +1300,92 @@ const SettingsView = () => {
                 <Info size={18} color="#92400e" style={{ flexShrink: 0, marginTop: '.1rem' }} />
                 <p style={{ fontSize: '.8rem', color: '#78350f', lineHeight: 1.7, margin: 0 }}>
                   Mengubah mode tidak menghapus data. Menu <strong>Bahan Baku</strong> di sidebar hanya muncul jika Advanced Mode aktif.
-                  Isi resep menu di <strong>Produk â†’ Edit â†’ Tab Resep</strong> sebelum mengaktifkan Advanced Mode.
+                  Isi resep menu di <strong>Produk → Edit → Tab Resep</strong> sebelum mengaktifkan Advanced Mode.
                 </p>
+              </div>
+
+              {/* Warehouse & Transfer Pricing Settings */}
+              <div className="pt-6 border-t border-slate-100 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+                    <Boxes size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Gudang Pusat & Kebijakan Transfer Pricing ke Dapur</h4>
+                    <p className="text-xs text-slate-400">Tentukan harga transfer bahan baku saat dikirim dari Gudang Pusat ke Dapur Cabang.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div
+                    onClick={() => setFormData(p => ({ ...p, warehouseTransferPricing: 'AT_COST' }))}
+                    className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                      (formData.warehouseTransferPricing || 'AT_COST') === 'AT_COST'
+                        ? 'bg-amber-50/30 border-amber-500 shadow-sm'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                        <span>Harga Modal Asli (At Cost)</span>
+                      </span>
+                      {(formData.warehouseTransferPricing || 'AT_COST') === 'AT_COST' && (
+                        <span className="bg-amber-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">AKTIF</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Dapur dibebankan persis sesuai harga modal pembelian supplier tanpa margin keuntungan (Margin 0%). Standar resto keluarga.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => setFormData(p => ({ ...p, warehouseTransferPricing: 'MARKUP' }))}
+                    className={`cursor-pointer p-4 rounded-2xl border transition-all ${
+                      formData.warehouseTransferPricing === 'MARKUP'
+                        ? 'bg-amber-50/30 border-amber-500 shadow-sm'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                        <span>Markup Margin (+%)</span>
+                      </span>
+                      {formData.warehouseTransferPricing === 'MARKUP' && (
+                        <span className="bg-amber-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">AKTIF</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Gudang mengenakan selisih persentase keuntungan tertentu saat barang keluar diserahkan ke operasional dapur Muki Ramen.
+                    </p>
+                  </div>
+                </div>
+
+                {formData.warehouseTransferPricing === 'MARKUP' && (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-4 max-w-sm">
+                    <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Persentase Margin Markup:</label>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        name="warehouseMarkupPercent"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={formData.warehouseMarkupPercent || 0}
+                        onChange={handleChange}
+                        className="form-control font-bold text-sm bg-white pr-8"
+                        placeholder="Contoh: 5"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3.5 bg-sky-50/70 border border-sky-200 rounded-2xl flex items-start gap-2.5 text-xs text-sky-800">
+                  <Info size={16} className="text-sky-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Catatan Dana Pribadi Owner:</strong> Setiap pembelian stok partai besar ke gudang default tercatat menggunakan <em>Dana Pribadi Owner</em>. Kas operasional Muki Ramen tidak akan terpotong sampai barang ditransfer ke dapur atau owner melakukan reimbursement pengembalian dana.
+                  </div>
+                </div>
               </div>
             </div>
           )}

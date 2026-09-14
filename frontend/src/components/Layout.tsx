@@ -26,6 +26,7 @@ import {
   Award,
   ClipboardList,
   PackageSearch,
+  Boxes,
   Delete
 } from 'lucide-react';
 
@@ -273,6 +274,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <NavLink to="/purchase-order" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <ClipboardList size={20} />
                 <span>Purchase Order</span>
+              </NavLink>
+              <NavLink to="/gudang" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Boxes size={20} />
+                <span>Gudang Pusat</span>
               </NavLink>
               {posContext?.settings && (posContext.settings as any).ingredientTrackingEnabled && (
                 <NavLink to="/bahan-baku" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -579,6 +584,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                       {kdsCount}
                     </span>
                   )}
+                </NavLink>
+              )}
+
+              {/* Gudang Pusat */}
+              {checkAccess(['Admin', 'Dapur']) && (
+                <NavLink 
+                  to="/gudang" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <Boxes size={18} className="text-indigo-600" />
+                  <span className="text-[10px] font-bold text-slate-700">Gudang Pusat</span>
                 </NavLink>
               )}
 

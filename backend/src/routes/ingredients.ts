@@ -312,7 +312,7 @@ router.get('/low-stock', authenticateToken, async (req: Request, res: Response) 
 // POST create ingredient
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId } = req.body;
+    const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId, purchaseUnit, conversionRatio, warehouseMinStock } = req.body;
     const ingredient = await prisma.ingredient.create({
       data: {
         name: name ? name.trim() : '',
@@ -322,7 +322,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         stock: Number(stock) || 0,
         minStock: Number(minStock) || 0,
         buyPrice: Number(buyPrice) || 0,
-        supplierId: supplierId ? Number(supplierId) : null
+        supplierId: supplierId ? Number(supplierId) : null,
+        purchaseUnit: purchaseUnit ? purchaseUnit.trim() : null,
+        conversionRatio: Number(conversionRatio) > 0 ? Number(conversionRatio) : 1,
+        warehouseMinStock: Number(warehouseMinStock) || 0
       },
       include: { supplier: { select: { id: true, name: true } } }
     });
@@ -337,7 +340,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId } = req.body;
+    const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId, purchaseUnit, conversionRatio, warehouseMinStock } = req.body;
     const ingredient = await prisma.ingredient.update({
       where: { id: Number(id) },
       data: {
@@ -348,7 +351,10 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
         stock: stock !== undefined ? Number(stock) : undefined,
         minStock: minStock !== undefined ? Number(minStock) : undefined,
         buyPrice: buyPrice !== undefined ? Number(buyPrice) : undefined,
-        supplierId: supplierId !== undefined ? (supplierId ? Number(supplierId) : null) : undefined
+        supplierId: supplierId !== undefined ? (supplierId ? Number(supplierId) : null) : undefined,
+        purchaseUnit: purchaseUnit !== undefined ? (purchaseUnit ? purchaseUnit.trim() : null) : undefined,
+        conversionRatio: conversionRatio !== undefined ? (Number(conversionRatio) > 0 ? Number(conversionRatio) : 1) : undefined,
+        warehouseMinStock: warehouseMinStock !== undefined ? Number(warehouseMinStock) : undefined
       },
       include: { supplier: { select: { id: true, name: true } } }
     });
