@@ -297,7 +297,7 @@ const SettingsView = () => {
 
   return (
     <div 
-      className="p-3 sm:p-6 lg:p-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50/50 flex flex-col pb-36 sm:pb-12"
+      className="p-3 sm:p-6 lg:p-8 flex-1 min-h-0 w-full overflow-y-auto bg-slate-50/50 flex flex-col pb-44 sm:pb-20"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       {/* Header */}
@@ -319,7 +319,7 @@ const SettingsView = () => {
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 flex-1 h-full items-start">
+      <div className="flex flex-col lg:flex-row gap-6 w-full items-start">
         
         {/* Navigation Tabs (Scrollable pills on mobile, sidebar on desktop) */}
         <div className="w-full lg:w-72 shrink-0 flex lg:flex-col overflow-x-auto lg:overflow-visible gap-2 pb-2 lg:pb-0 no-scrollbar">
@@ -358,7 +358,7 @@ const SettingsView = () => {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-3xl overflow-hidden min-h-[500px]">
+        <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-3xl min-h-[500px]">
           
           {activeTab === 'profil' && (
             <div className="space-y-8 animate-fade-in">
@@ -1768,6 +1768,20 @@ const SettingsView = () => {
                 </div>
               </div>
               <TerminalConnectionConfig />
+            </div>
+          )}
+
+          {/* Bottom Save Action for settings tabs */}
+          {['profil', 'struk', 'pajak', 'bayar', 'fitur', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
+            <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-end">
+              <button 
+                type="button"
+                className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-6 py-3 rounded-xl transition-all font-bold text-xs sm:text-sm hover:scale-[1.02] w-full sm:w-auto" 
+                onClick={handleSave}
+                disabled={loading}
+              >
+                <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </button>
             </div>
           )}
 

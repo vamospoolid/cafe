@@ -90,10 +90,26 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     };
   }, [socket, posContext?.token]);
   const titleMap: Record<string, string> = {
+    '/dashboard': 'Dashboard',
     '/pos': 'POS - Point of Sale',
+    '/meja': 'Manajemen Meja',
+    '/riwayat': 'Riwayat Transaksi',
+    '/produk': 'Katalog Produk',
+    '/kategori': 'Kategori Menu',
+    '/reservasi': 'Buku Reservasi',
     '/kds': 'Dapur (KDS)',
+    '/bahan-baku': 'Manajemen Bahan Baku',
+    '/po': 'Purchase Order (PO)',
+    '/supplier': 'Supplier Bahan',
+    '/pengeluaran': 'Petty Cash & Biaya',
+    '/karyawan': 'Data Karyawan',
+    '/absensi': 'Absensi Karyawan',
+    '/shift': 'Riwayat Shift & Kasir',
+    '/crm': 'Pelanggan & CRM',
+    '/laporan': 'Laporan Penjualan',
+    '/pengaturan': 'Pengaturan Sistem',
   };
-  const pageTitle = titleMap[location.pathname] || 'Dashboard';
+  const pageTitle = titleMap[location.pathname] || 'SOL Cafe POS';
 
   // Quick PIN Switch States
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
