@@ -103,7 +103,7 @@ const ShiftHistoryView = () => {
 
   return (
     <div 
-      className="p-3 sm:p-6 pb-32 sm:pb-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
+      className="p-3 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-4"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">

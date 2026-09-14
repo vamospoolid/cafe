@@ -222,7 +222,7 @@ export const ReportView: React.FC = () => {
 
   return (
     <div 
-      className="p-3 sm:p-6 pb-28 sm:pb-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-5"
+      className="p-3 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50 flex flex-col gap-3.5 sm:gap-5"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       

@@ -168,7 +168,10 @@ const ProductView = () => {
   const activeCount = products.filter(p => p.status === 'Aktif').length;
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-50 overflow-y-auto">
+    <div 
+      className="p-3 sm:p-6 pb-44 sm:pb-16 flex-1 min-h-0 h-full w-full flex flex-col bg-slate-50 overflow-y-auto"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       
       {/* HEADER SECTION */}
       <div className="flex flex-wrap justify-between items-center gap-4 mb-6">

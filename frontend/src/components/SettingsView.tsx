@@ -297,7 +297,7 @@ const SettingsView = () => {
 
   return (
     <div 
-      className="p-3 sm:p-6 lg:p-8 flex-1 min-h-0 w-full overflow-y-auto bg-slate-50/50 flex flex-col pb-44 sm:pb-20"
+      className="p-3 sm:p-6 lg:p-8 flex-1 min-h-0 w-full overflow-y-auto bg-slate-50/50 flex flex-col pb-52 sm:pb-20"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       {/* Header */}
@@ -319,7 +319,7 @@ const SettingsView = () => {
         </button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 w-full items-start">
+      <div className="flex flex-col lg:flex-row gap-6 w-full items-start mb-6">
         
         {/* Navigation Tabs (Scrollable pills on mobile, sidebar on desktop) */}
         <div className="w-full lg:w-72 shrink-0 flex lg:flex-col overflow-x-auto lg:overflow-visible gap-2 pb-2 lg:pb-0 no-scrollbar">
@@ -358,7 +358,7 @@ const SettingsView = () => {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-3xl min-h-[500px]">
+        <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-3xl min-h-[500px] mb-8 sm:mb-0">
           
           {activeTab === 'profil' && (
             <div className="space-y-8 animate-fade-in">

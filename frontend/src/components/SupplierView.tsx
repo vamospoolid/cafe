@@ -111,7 +111,7 @@ const SupplierView: React.FC = () => {
 
   return (
     <div className="h-full flex-1 overflow-y-auto w-full bg-slate-50/50">
-      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto pb-32 sm:pb-24">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto pb-44 sm:pb-24">
         {/* HEADER UTAMA */}
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-sm">
           <div className="flex items-center gap-3.5">
@@ -301,25 +301,36 @@ const SupplierView: React.FC = () => {
 
         {/* MODAL FORM SUPPLIER */}
         {showModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-            <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-lg w-full border border-slate-100 shadow-2xl space-y-4 my-auto">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                    <Truck size={16} />
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in">
+            <div 
+              className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 max-w-lg w-full h-[95vh] sm:h-auto border border-slate-100 shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-bottom duration-200 sm:animate-none"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shadow-inner">
+                    <Truck size={18} />
                   </div>
-                  <h3 className="text-sm sm:text-base font-black text-slate-900">
-                    {editData ? 'Edit Data Supplier' : 'Tambah Supplier Baru'}
-                  </h3>
+                  <div>
+                    <h3 className="text-base font-black text-slate-800 tracking-tight">
+                      {editData ? 'Edit Data Pemasok' : 'Tambah Pemasok Baru'}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      Informasi kontak & alamat vendor bahan baku
+                    </p>
+                  </div>
                 </div>
-                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <button 
+                  onClick={() => setShowModal(false)} 
+                  className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors"
+                >
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="space-y-3 text-xs max-h-[70vh] overflow-y-auto pr-1">
+              <div className="space-y-4 text-xs flex-1 overflow-y-auto max-h-[calc(100vh-140px)] sm:max-h-[70vh] pr-1 py-3 pb-32 sm:pb-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Nama Perusahaan / Supplier *
                   </label>
                   <input
@@ -327,13 +338,13 @@ const SupplierView: React.FC = () => {
                     value={form.name}
                     onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                     placeholder="Contoh: CV. Sumber Biji Kopi Nusantara"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                       Nama PIC / Sales
                     </label>
                     <input
@@ -341,12 +352,12 @@ const SupplierView: React.FC = () => {
                       value={form.contact}
                       onChange={e => setForm(p => ({ ...p, contact: e.target.value }))}
                       placeholder="Budi Santoso"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                      className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                       Nomor Telepon / WA
                     </label>
                     <input
@@ -354,24 +365,24 @@ const SupplierView: React.FC = () => {
                       value={form.phone}
                       onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
                       placeholder="0812xxxxxxxx"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                      className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Email Vendor</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Email Vendor</label>
                   <input
                     type="email"
                     value={form.email}
                     onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                     placeholder="supplier@kopi.com"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Alamat Gudang / Kantor</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Alamat Gudang / Kantor</label>
                   <textarea
                     rows={2}
                     value={form.address}
@@ -382,7 +393,7 @@ const SupplierView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Catatan Tambahan (Term of Payment, dll)</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Catatan Tambahan (Term of Payment, dll)</label>
                   <textarea
                     rows={2}
                     value={form.notes}
@@ -393,19 +404,20 @@ const SupplierView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-3 pt-3.5 border-t border-slate-100 bg-white shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all active:scale-95"
                 >
                   Batal
                 </button>
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all"
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
+                  <Truck size={16} />
                   Simpan Data
                 </button>
               </div>

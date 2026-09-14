@@ -112,50 +112,71 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '500px' }}>
-        <div className="modal-header bg-slate-50 border-b border-gray-200">
-          <h2 className="modal-title flex items-center gap-2">
-            <UserCheck className="text-primary" /> {initialData ? 'Edit Karyawan' : 'Tambah Karyawan'}
-          </h2>
-          <button className="icon-btn" onClick={onClose} disabled={loading}><X size={20} /></button>
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto animate-fade-in">
+      <div 
+        className="bg-white w-full h-[95vh] md:h-auto md:max-w-xl rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none border border-slate-100"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner">
+              <UserCheck size={20} />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">
+                {initialData ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}
+              </h2>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Atur akun staf, PIN absensi, dan batasan hak akses fitur
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors shadow-sm" 
+            onClick={onClose} 
+            disabled={loading}
+          >
+            <X size={18} />
+          </button>
         </div>
         
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body space-y-4 max-h-[70vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] md:max-h-[72vh] pb-32 md:pb-6">
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Nama Lengkap</label>
-                <input type="text" name="name" className="form-control" value={formData.name} onChange={handleChange} required />
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Nama Lengkap *</label>
+                <input type="text" name="name" className="form-control" placeholder="Contoh: Sarah Angelina" value={formData.name} onChange={handleChange} required />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Username (Login)</label>
-                <input type="text" name="username" className="form-control" value={formData.username} onChange={handleChange} required />
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Username (Login) *</label>
+                <input type="text" name="username" className="form-control" placeholder="sarah_pos" value={formData.username} onChange={handleChange} required />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  Password Login {initialData && <span className="text-xs text-muted font-normal">(Kosongkan jika tak diubah)</span>}
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  Password Login {initialData && <span className="text-[10px] text-slate-400 font-normal lowercase">(kosongkan jika tak diubah)</span>}
                 </label>
                 <div className="relative">
-                  <Key size={16} className="absolute left-3 top-3 text-gray-400" />
+                  <Key size={16} className="absolute left-3 top-3 text-slate-400" />
                   <input type="password" name="password" className="form-control pl-9" style={{ paddingLeft: '2.5rem' }} placeholder="••••••" value={formData.password} onChange={handleChange} required={!initialData} />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  PIN Mesin Absensi {initialData && <span className="text-xs text-muted font-normal">(Opsional)</span>}
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                  PIN Absensi & Ganti Kasir {initialData && <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>}
                 </label>
                 <input type="password" name="pin" maxLength={6} className="form-control font-mono tracking-widest text-center" placeholder="123456" value={formData.pin} onChange={handleChange} required={!initialData} />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Role / Peran</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role / Peran Utama</label>
                 <select name="role" className="form-control" value={formData.role} onChange={handleChange}>
                   <option value="Kasir">Kasir</option>
                   <option value="Dapur">Dapur (KDS)</option>
@@ -164,7 +185,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Status Karyawan</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Status Karyawan</label>
                 <select name="status" className="form-control" value={formData.status} onChange={handleChange}>
                   <option value="Aktif">Aktif Bekerja</option>
                   <option value="Nonaktif">Nonaktif / Resign</option>
@@ -265,15 +286,28 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 <ShieldAlert className="text-indigo-600 mt-0.5 shrink-0" size={20} />
                 <div>
                   <h4 className="font-bold text-indigo-900 text-sm">Akses Penuh Superadmin</h4>
-                  <p className="text-xs text-indigo-700 mt-1">Role Admin memiliki kuasa tak terbatas untuk melihat, merubah, dan menghapus seluruh data pada sistem POOOS.</p>
+                  <p className="text-xs text-indigo-700 mt-1">Role Admin memiliki kuasa tak terbatas untuk melihat, merubah, dan menghapus seluruh data pada sistem POS.</p>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="modal-footer flex gap-3 bg-gray-50 border-t border-gray-200">
-            <button type="button" className="btn btn-outline flex-1 justify-center" onClick={onClose} disabled={loading}>Batal</button>
-            <button type="submit" className="btn btn-primary flex-1 justify-center" disabled={loading}>
+          {/* Footer actions */}
+          <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex items-center gap-3 shrink-0">
+            <button 
+              type="button" 
+              className="flex-1 py-3 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 font-bold text-xs transition-all active:scale-95" 
+              onClick={onClose} 
+              disabled={loading}
+            >
+              Batal
+            </button>
+            <button 
+              type="submit" 
+              className="flex-1 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all shadow-md shadow-indigo-600/20 active:scale-95 flex items-center justify-center gap-2" 
+              disabled={loading}
+            >
+              <UserCheck size={16} />
               {loading ? 'Menyimpan...' : 'Simpan Data Karyawan'}
             </button>
           </div>

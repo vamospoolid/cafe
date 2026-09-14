@@ -278,7 +278,7 @@ export const AttendanceView: React.FC = () => {
       className="h-full flex-1 overflow-y-auto w-full bg-slate-50/50"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
-      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto pb-36 sm:pb-24">
+      <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto pb-44 sm:pb-24">
         {/* HEADER UTAMA */}
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-sm">
           <div className="flex items-center gap-3.5">
