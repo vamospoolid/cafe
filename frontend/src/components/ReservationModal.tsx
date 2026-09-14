@@ -97,9 +97,9 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
   );
 
   return (
-    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
       {/* Modal Container */}
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white w-full h-full sm:h-auto sm:max-w-3xl sm:max-h-[92vh] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border-0 sm:border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
 
         {/* ─── Header ─── */}
         <div className="p-4 sm:p-5 flex items-center justify-between bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100/70 shrink-0">
@@ -128,7 +128,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({ isOpen, onClose, on
 
         {/* ─── Form Body ─── */}
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-y-auto min-h-0">
-          <div className="flex flex-col md:flex-row flex-1 overflow-y-auto">
+          <div className="flex flex-col md:flex-row flex-1 overflow-y-auto pb-16 sm:pb-0">
 
             {/* LEFT COLUMN: Customer Info & Timing */}
             <div className="flex-1 p-4 sm:p-6 flex flex-col gap-4 md:border-r border-slate-100">
