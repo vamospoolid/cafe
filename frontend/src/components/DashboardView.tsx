@@ -112,145 +112,143 @@ const DashboardView = () => {
   const serviceSpeed = getServiceStatus(summary.averageServiceTime);
 
   return (
-    <div style={{ padding: '1.5rem', height: '100%', display: 'flex', flexDirection: 'column', background: '#f4f6f9', overflowY: 'auto', gap: '1.5rem' }}>
+    <div className="p-3.5 sm:p-6 pb-28 sm:pb-8 h-full overflow-y-auto bg-slate-50 flex flex-col gap-4 sm:gap-6">
       
-      {/* â”€â”€â”€ Header â”€â”€â”€ */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* ─── Header ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
         <div>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.4rem', color: 'var(--text-main)', margin: 0 }}>
-            <Activity color="var(--primary)" size={24} /> Dashboard Executive
+          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
+            <Activity className="text-primary" size={24} /> Dashboard Executive
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0.25rem 0 0' }}>Ringkasan performa operasional, finansial, dan kitchen hari ini</p>
+          <p className="text-xs text-slate-500 mt-0.5">Ringkasan performa operasional, finansial, dan kitchen hari ini</p>
         </div>
         <button
           onClick={fetchAnalytics}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1rem', background: 'white', color: '#64748b', border: '1.5px solid #e2e8f0', borderRadius: '0.75rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem', transition: 'all 0.12s' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.color = 'var(--primary)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#64748b'; }}
+          className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 bg-white text-slate-600 hover:text-primary border border-slate-200 hover:border-primary/40 rounded-xl font-bold text-xs shadow-sm transition-all active:scale-95"
         >
           <RefreshCw size={14} /> Refresh Data
         </button>
       </div>
 
-      {/* â”€â”€â”€ Stats KPI Row (5 Cards) â”€â”€â”€ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* ─── Stats KPI Row (5 Cards) ─── */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 shrink-0">
         
         {/* Revenue */}
-        <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
+        <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-green-50 rounded-bl-full opacity-50 transition-transform group-hover:scale-110" />
-          <div className="flex justify-between items-start mb-3 relative z-10">
-            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center text-green-600 shadow-inner">
-              <DollarSign size={20} />
+          <div className="flex justify-between items-start mb-2 sm:mb-3 relative z-10">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-green-100 flex items-center justify-center text-green-600 shadow-inner">
+              <DollarSign size={18} />
             </div>
-            <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100">
-              <TrendingUp size={12} /> +12%
+            <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+              <TrendingUp size={11} /> +12%
             </div>
           </div>
           <div className="relative z-10">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pendapatan Kotor</div>
-            <div className="text-2xl font-black text-slate-800 tracking-tight">{formatCurrency(summary.revenue)}</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Pendapatan Kotor</div>
+            <div className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight truncate">{formatCurrency(summary.revenue)}</div>
           </div>
         </div>
 
         {/* Profit */}
-        <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-purple-50 rounded-bl-full opacity-50 transition-transform group-hover:scale-110" />
-          <div className="flex justify-between items-start mb-3 relative z-10">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-primary shadow-inner">
-              <Activity size={20} />
+          <div className="flex justify-between items-start mb-2 sm:mb-3 relative z-10">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-100 flex items-center justify-center text-primary shadow-inner">
+              <Activity size={18} />
             </div>
-            <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100">
-              <TrendingUp size={12} /> +8%
+            <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+              <TrendingUp size={11} /> +8%
             </div>
           </div>
           <div className="relative z-10">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Keuntungan Bersih</div>
-            <div className="text-2xl font-black text-primary tracking-tight">{formatCurrency(summary.profit)}</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Keuntungan Bersih</div>
+            <div className="text-lg sm:text-2xl font-black text-primary tracking-tight truncate">{formatCurrency(summary.profit)}</div>
           </div>
         </div>
 
         {/* Transactions */}
-        <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full opacity-50 transition-transform group-hover:scale-110" />
-          <div className="flex justify-between items-start mb-3 relative z-10">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 shadow-inner">
-              <ShoppingBag size={20} />
+          <div className="flex justify-between items-start mb-2 sm:mb-3 relative z-10">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 shadow-inner">
+              <ShoppingBag size={18} />
             </div>
           </div>
           <div className="relative z-10">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Transaksi (Struk)</div>
-            <div className="text-2xl font-black text-slate-800 tracking-tight">
-              {summary.transactions} <span className="text-sm font-semibold text-slate-500">nota</span>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Transaksi (Struk)</div>
+            <div className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight">
+              {summary.transactions} <span className="text-xs font-semibold text-slate-500">nota</span>
             </div>
           </div>
         </div>
 
         {/* Avg Ticket Size */}
-        <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-bl-full opacity-50 transition-transform group-hover:scale-110" />
-          <div className="flex justify-between items-start mb-3 relative z-10">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 shadow-inner">
-              <Layers size={20} />
+          <div className="flex justify-between items-start mb-2 sm:mb-3 relative z-10">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 shadow-inner">
+              <Layers size={18} />
             </div>
           </div>
           <div className="relative z-10">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Rerata Struk</div>
-            <div className="text-2xl font-black text-slate-800 tracking-tight">{formatCurrency(avgTicket)}</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Rerata Struk</div>
+            <div className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight truncate">{formatCurrency(avgTicket)}</div>
           </div>
         </div>
 
         {/* Table Occupancy */}
-        <div className="bg-white rounded-[1.25rem] p-5 border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
+        <div className="col-span-2 sm:col-span-2 md:col-span-3 lg:col-span-1 bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-bl-full opacity-50 transition-transform group-hover:scale-110" />
-          <div className="flex justify-between items-start mb-3 relative z-10">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 shadow-inner">
-              <Users size={20} />
+          <div className="flex justify-between items-start mb-2 sm:mb-3 relative z-10">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 shadow-inner">
+              <Users size={18} />
             </div>
-            <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-full border border-slate-200">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
               {summary.tableOccupancy?.occupied}/{summary.tableOccupancy?.total} Aktif
             </div>
           </div>
           <div className="relative z-10">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Keterisian Meja</div>
-            <div className="text-2xl font-black text-slate-800 tracking-tight">{summary.tableOccupancy?.percentage}%</div>
+            <div className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Keterisian Meja</div>
+            <div className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight">{summary.tableOccupancy?.percentage}%</div>
           </div>
         </div>
 
       </div>
 
-      {/* â”€â”€â”€ Baris 2: Grafik Utama & Pembayaran â”€â”€â”€ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+      {/* ─── Baris 2: Grafik Utama & Pembayaran ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         
         {/* Sales Chart Card */}
-        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <TrendingUp size={18} color="var(--primary)" /> Tren Penjualan Real-time
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <TrendingUp size={18} className="text-primary" /> Tren Penjualan Real-time
             </h3>
             {/* Toggle Modes */}
-            <div style={{ background: '#f1f5f9', padding: '0.25rem', borderRadius: '0.625rem', display: 'flex', gap: '0.12rem' }}>
+            <div className="bg-slate-100 p-1 rounded-xl flex gap-1 self-start sm:self-auto">
               <button
                 onClick={() => setChartMode('hourly')}
-                style={{ border: 'none', background: chartMode === 'hourly' ? 'white' : 'transparent', color: chartMode === 'hourly' ? 'var(--primary)' : '#64748b', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: chartMode === 'hourly' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.12s' }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${chartMode === 'hourly' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 Hari Ini
               </button>
               <button
                 onClick={() => setChartMode('weekly')}
-                style={{ border: 'none', background: chartMode === 'weekly' ? 'white' : 'transparent', color: chartMode === 'weekly' ? 'var(--primary)' : '#64748b', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: chartMode === 'weekly' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.12s' }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${chartMode === 'weekly' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 7 Hari
               </button>
               <button
                 onClick={() => setChartMode('monthly')}
-                style={{ border: 'none', background: chartMode === 'monthly' ? 'white' : 'transparent', color: chartMode === 'monthly' ? 'var(--primary)' : '#64748b', padding: '0.35rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: chartMode === 'monthly' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.12s' }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${chartMode === 'monthly' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 30 Hari
               </button>
             </div>
           </div>
 
-          <div style={{ height: 320, width: '100%' }}>
+          <div className="h-64 sm:h-80 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartMode === 'hourly' ? (summary.hourlySales?.filter((d: any) => d.sales > 0) || []) : salesChart} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
@@ -275,14 +273,14 @@ const DashboardView = () => {
         </div>
 
         {/* Payment Methods Breakdown */}
-        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <PieChartIcon size={18} color="var(--primary)" /> Metode Pembayaran
+        <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <PieChartIcon size={18} className="text-primary" /> Metode Pembayaran
           </h3>
           
-          <div style={{ height: 180, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="h-44 relative flex items-center justify-center">
             {paymentChartData.length === 0 ? (
-              <div style={{ textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8' }}>Belum ada pembayaran</div>
+              <div className="text-[11px] uppercase font-bold text-slate-400">Belum ada pembayaran</div>
             ) : (
               <>
                 <ResponsiveContainer width="100%" height="100%">
@@ -291,23 +289,23 @@ const DashboardView = () => {
                       data={paymentChartData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={55}
-                      outerRadius={75}
+                      innerRadius={50}
+                      outerRadius={70}
                       paddingAngle={4}
                       dataKey="value"
                       stroke="none"
                       cornerRadius={4}
                     >
-                      {paymentChartData.map((entry, index) => (
+                      {paymentChartData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(val: any) => [formatCurrency(Number(val)), 'Total']} contentStyle={{ borderRadius: '0.75rem', border: 'none', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' }} />
                   </PieChart>
                 </ResponsiveContainer>
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
-                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Total</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 900, color: '#1e293b' }}>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Total</div>
+                  <div className="text-base font-black text-slate-800">
                     {summary.transactions}
                   </div>
                 </div>
@@ -316,14 +314,14 @@ const DashboardView = () => {
           </div>
 
           {/* Payment Legends */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', flex: 1 }}>
+          <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
             {paymentChartData.map((item, index) => (
-              <div key={item.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fafafa', padding: '0.5rem 0.75rem', borderRadius: '0.625rem', border: '1px solid #f1f5f9' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: COLORS[index % COLORS.length] }} />
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>{item.name}</span>
+              <div key={item.name} className="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                  <span className="text-xs font-bold text-slate-700">{item.name}</span>
                 </div>
-                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#1e293b' }}>{formatCurrency(item.value)}</span>
+                <span className="text-xs font-black text-slate-900">{formatCurrency(item.value)}</span>
               </div>
             ))}
           </div>
@@ -331,65 +329,65 @@ const DashboardView = () => {
 
       </div>
 
-      {/* â”€â”€â”€ Baris 3: Low Stock & Best Sellers & Dapur â”€â”€â”€ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
+      {/* ─── Baris 3: Low Stock & Best Sellers & Dapur ─── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         
         {/* Dapur Speed Card */}
-        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Clock size={18} color="var(--primary)" /> Kecepatan Dapur
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <Clock size={18} className="text-primary" /> Kecepatan Dapur
           </h3>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', padding: '1.5rem 0' }}>
-            <div style={{ width: 80, height: 80, borderRadius: '50%', background: serviceSpeed.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1.5px dashed #cbd5e1' }}>
-              <div style={{ fontSize: '1.8rem', fontWeight: 900, color: serviceSpeed.color }}>{summary.averageServiceTime}</div>
-              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginTop: '-0.1rem' }}>Menit</div>
+          <div className="flex-1 flex flex-col justify-center items-center gap-3 py-4">
+            <div className="w-20 h-20 rounded-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200" style={{ background: serviceSpeed.bg }}>
+              <div className="text-2xl font-black" style={{ color: serviceSpeed.color }}>{summary.averageServiceTime}</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase -mt-1">Menit</div>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1e293b' }}>Rerata Sajian Masakan</div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: serviceSpeed.color, background: serviceSpeed.bg, padding: '0.15rem 0.5rem', borderRadius: '0.375rem', display: 'inline-block', marginTop: '0.25rem' }}>{serviceSpeed.label}</div>
+            <div className="text-center">
+              <div className="font-extrabold text-sm text-slate-800">Rerata Sajian Masakan</div>
+              <div className="text-xs font-bold px-2 py-0.5 rounded-md inline-block mt-1" style={{ color: serviceSpeed.color, background: serviceSpeed.bg }}>{serviceSpeed.label}</div>
             </div>
           </div>
 
-          <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.4, borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-            <Lightbulb size={12} className="text-amber-500" style={{ flexShrink: 0 }} />
+          <div className="text-[11px] text-slate-400 leading-snug border-t border-slate-100 pt-3 flex items-center gap-1.5">
+            <Lightbulb size={13} className="text-amber-500 shrink-0" />
             <span>Dihitung otomatis dari waktu order dibuat hingga barista/koki menandai "Served" di KDS.</span>
           </div>
         </div>
 
         {/* Low Stock Warning Card */}
-        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertTriangle size={18} color="#dc2626" /> Peringatan Stok Menipis
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <AlertTriangle size={18} className="text-rose-600" /> Peringatan Stok Menipis
           </h3>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+          <div className="flex-1 flex flex-col gap-2.5 max-h-60 overflow-y-auto pr-1">
             {summary.lowStockProducts?.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem', background: '#f8fafc', borderRadius: '1rem', padding: '2rem' }}>
-                <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#166534', boxShadow: '0 4px 10px rgba(22,101,52,0.1)' }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              <div className="flex flex-col items-center justify-center h-full gap-3 bg-slate-50 rounded-2xl p-6">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shadow-sm">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b' }}>Semua Stok Aman</div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 500, color: '#64748b', marginTop: '0.25rem' }}>Tidak ada bahan yang perlu direstock</div>
+                <div className="text-center">
+                  <div className="text-sm font-black text-slate-800">Semua Stok Aman</div>
+                  <div className="text-xs font-medium text-slate-500 mt-0.5">Tidak ada bahan yang perlu direstock</div>
                 </div>
               </div>
             ) : summary.lowStockProducts?.map((p: LowStockProduct) => (
-              <div key={p.id} className="group relative overflow-hidden flex items-center gap-3 p-2.5 bg-red-50 hover:bg-red-100 rounded-xl border border-red-100 transition-colors">
-                <div className="absolute top-0 left-0 w-1 h-full bg-red-500 rounded-l-xl" />
+              <div key={p.id} className="group relative overflow-hidden flex items-center gap-3 p-2.5 bg-rose-50/60 hover:bg-rose-100/60 rounded-xl border border-rose-100 transition-colors">
+                <div className="absolute top-0 left-0 w-1 h-full bg-rose-500 rounded-l-xl" />
                 {p.imageUrl ? (
-                  <img src={p.imageUrl} alt={p.name} style={{ width: 40, height: 40, borderRadius: '0.5rem', objectFit: 'cover', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }} />
+                  <img src={p.imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-cover shadow-sm" />
                 ) : (
-                  <div style={{ width: 40, height: 40, borderRadius: '0.5rem', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontWeight: 800, fontSize: '0.9rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-rose-500 font-extrabold text-sm shadow-sm">
                     <AlertTriangle size={18} />
                   </div>
                 )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#b91c1c', fontWeight: 700 }}>Sisa {p.stock} item</div>
-                    <div style={{ flex: 1, background: '#fca5a5', height: 4, borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.min(100, p.stock * 10)}%`, background: '#ef4444', height: '100%' }} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-slate-800 truncate">{p.name}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="text-[11px] text-rose-700 font-bold">Sisa {p.stock} item</div>
+                    <div className="flex-1 bg-rose-200 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-rose-500 h-full rounded-full" style={{ width: `${Math.min(100, p.stock * 10)}%` }} />
                     </div>
                   </div>
                 </div>
@@ -397,51 +395,49 @@ const DashboardView = () => {
             ))}
           </div>
 
-          <div style={{ fontSize: '0.72rem', color: '#94a3b8', borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="text-[11px] text-slate-400 border-t border-slate-100 pt-3 flex items-center justify-between">
             <span>Ambang batas minimal: 10 item</span>
-            <span style={{ fontWeight: 700, color: '#dc2626' }}>{summary.lowStockProducts?.length} produk menipis</span>
+            <span className="font-bold text-rose-600">{summary.lowStockProducts?.length} produk menipis</span>
           </div>
         </div>
 
         {/* Top 5 Best Sellers Card */}
-        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <PieChartIcon size={18} color="#e59e0b" /> Menu Paling Laris
+        <div className="md:col-span-2 lg:col-span-1 bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <PieChartIcon size={18} className="text-amber-500" /> Menu Paling Laris
           </h3>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          <div className="flex-1 flex flex-col gap-2.5 max-h-60 overflow-y-auto">
             {bestSellers.map((item, index) => {
-              // Calculate percentage based on the top item
               const maxQty = bestSellers[0]?.qty || 1;
               const percent = (item.qty / maxQty) * 100;
               
               return (
-                <div key={item.id} className="relative overflow-hidden rounded-xl bg-slate-50 border border-slate-100 p-3 flex items-center justify-between group hover:border-slate-200 transition-colors">
-                  {/* Background Progress Bar */}
-                  <div className="absolute top-0 left-0 h-full bg-slate-100 opacity-50" style={{ width: `${percent}%`, zIndex: 0, transition: 'width 1s ease-out' }} />
+                <div key={item.id} className="relative overflow-hidden rounded-xl bg-slate-50 border border-slate-100 p-2.5 flex items-center justify-between group hover:border-slate-200 transition-colors">
+                  <div className="absolute top-0 left-0 h-full bg-slate-100/70" style={{ width: `${percent}%`, zIndex: 0, transition: 'width 1s ease-out' }} />
                   
-                  <div className="flex items-center gap-3 relative z-10">
-                    <div className="w-7 h-7 rounded-lg bg-white shadow-sm border border-slate-100 flex items-center justify-center text-[10px] font-black" style={{ color: COLORS[index % COLORS.length] }}>
+                  <div className="flex items-center gap-2.5 relative z-10">
+                    <div className="w-6 h-6 rounded-lg bg-white shadow-sm border border-slate-100 flex items-center justify-center text-[10px] font-black" style={{ color: COLORS[index % COLORS.length] }}>
                       #{index + 1}
                     </div>
-                    <span className="text-sm font-bold text-slate-800">{item.name}</span>
+                    <span className="text-xs font-bold text-slate-800">{item.name}</span>
                   </div>
-                  <div className="relative z-10 text-xs font-black text-slate-700 bg-white shadow-sm border border-slate-100 px-2 py-1 rounded-md">
+                  <div className="relative z-10 text-xs font-black text-slate-700 bg-white shadow-sm border border-slate-100 px-2 py-0.5 rounded-md">
                     {item.qty} <span className="text-[9px] text-slate-400 font-bold uppercase">terjual</span>
                   </div>
                 </div>
               );
             })}
             {bestSellers.length === 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', gap: '0.75rem' }}>
-                <PieChartIcon size={32} opacity={0.3} />
-                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Belum ada penjualan</span>
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2 py-6">
+                <PieChartIcon size={28} className="opacity-30" />
+                <span className="text-xs font-bold">Belum ada penjualan</span>
               </div>
             )}
           </div>
 
-          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <div className="border-t border-slate-100 pt-3 flex justify-end">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1 font-semibold">
               Semua Kategori <ChevronRight size={12} />
             </span>
           </div>
@@ -450,37 +446,37 @@ const DashboardView = () => {
       </div>
 
       {/* ─── Baris 4: Recent Transactions & Recent Stock Mutations ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         
         {/* Recent Transactions Card */}
-        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Activity size={18} color="var(--primary)" /> Transaksi Terbaru (POS)
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <Activity size={18} className="text-primary" /> Transaksi Terbaru (POS)
           </h3>
           
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
+          <div className="flex-1 flex flex-col gap-2.5 max-h-72 overflow-y-auto">
             {(summary.recentTransactions || []).length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', padding: '2rem' }}>
-                <span>Belum ada transaksi</span>
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6">
+                <span className="text-xs font-semibold">Belum ada transaksi</span>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div className="flex flex-col gap-2">
                 {(summary.recentTransactions || []).map((t: any) => (
-                  <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                  <div key={t.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b' }}>{t.orderNumber}</span>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '0.25rem', background: t.status === 'Paid' ? '#dcfce7' : '#fef9c3', color: t.status === 'Paid' ? '#166534' : '#854d0e' }}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-xs text-slate-800">{t.orderNumber}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${t.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                           {t.status}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
-                        Pelanggan: <span style={{ fontWeight: 600 }}>{t.customerName}</span> • {t.paymentMethod || 'Belum Bayar'}
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        Pelanggan: <span className="font-semibold text-slate-700">{t.customerName}</span> • {t.paymentMethod || 'Belum Bayar'}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--primary)' }}>{formatCurrency(t.total)}</span>
-                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                    <div className="text-right">
+                      <span className="font-black text-xs text-primary">{formatCurrency(t.total)}</span>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
                         {new Date(t.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
@@ -492,36 +488,36 @@ const DashboardView = () => {
         </div>
 
         {/* Recent Stock Mutations Card */}
-        <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Layers size={18} color="var(--primary)" /> Aktivitas Mutasi Stok
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 flex flex-col gap-4 shadow-sm">
+          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <Layers size={18} className="text-primary" /> Aktivitas Mutasi Stok
           </h3>
           
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
+          <div className="flex-1 flex flex-col gap-2.5 max-h-72 overflow-y-auto">
             {(summary.recentStockLogs || []).length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8', padding: '2rem' }}>
-                <span>Belum ada aktivitas stok</span>
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6">
+                <span className="text-xs font-semibold">Belum ada aktivitas stok</span>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div className="flex flex-col gap-2">
                 {(summary.recentStockLogs || []).map((l: any) => (
-                  <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                  <div key={l.id} className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e293b' }}>{l.ingredient?.name}</span>
-                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: '0.25rem', background: ['Restock', 'PO'].includes(l.type) ? '#dcfce7' : l.type === 'Rusak' ? '#fee2e2' : '#f1f5f9', color: ['Restock', 'PO'].includes(l.type) ? '#166534' : l.type === 'Rusak' ? '#991b1b' : '#475569' }}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-xs text-slate-800">{l.ingredient?.name}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${['Restock', 'PO'].includes(l.type) ? 'bg-emerald-100 text-emerald-700' : l.type === 'Rusak' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700'}`}>
                           {l.type}
                         </span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+                      <div className="text-[11px] text-slate-500 mt-1">
                         Ket: {l.description || '—'} {l.referenceId ? `(${l.referenceId})` : ''}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontWeight: 800, fontSize: '0.9rem', color: l.change > 0 ? '#166534' : '#dc2626' }}>
+                    <div className="text-right">
+                      <span className={`font-black text-xs ${l.change > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
                         {l.change > 0 ? `+${l.change}` : l.change} {l.ingredient?.unit}
                       </span>
-                      <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
                         {new Date(l.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
