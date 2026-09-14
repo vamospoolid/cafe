@@ -300,9 +300,9 @@ const SupplierView: React.FC = () => {
 
         {/* MODAL FORM SUPPLIER */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in">
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in">
             <div 
-              className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 max-w-lg w-full h-[95vh] sm:h-auto border border-slate-100 shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-bottom duration-200 sm:animate-none"
+              className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:rounded-3xl p-5 sm:p-6 border-0 sm:border border-slate-100 shadow-2xl flex flex-col justify-between overflow-hidden animate-in fade-in zoom-in-95 duration-200"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-3.5 shrink-0">
@@ -327,7 +327,7 @@ const SupplierView: React.FC = () => {
                 </button>
               </div>
 
-              <div className="space-y-4 text-xs flex-1 overflow-y-auto max-h-[calc(100vh-140px)] sm:max-h-[70vh] pr-1 py-3 pb-32 sm:pb-4">
+              <div className="space-y-4 text-xs flex-1 overflow-y-auto max-h-[calc(100vh-140px)] sm:max-h-[70vh] pr-1 py-3 pb-20 sm:pb-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                     Nama Perusahaan / Supplier *

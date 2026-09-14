@@ -801,29 +801,31 @@ export const IngredientView: React.FC = () => {
             </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Action Buttons Toolbar */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleOpenAdd}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-purple-200 active:scale-95 transition-all"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 py-2.5 px-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-purple-200 active:scale-95 transition-all shrink-0"
             >
-              <Plus size={16} /> Tambah Bahan Baku
+              <Plus size={16} /> <span>Tambah Bahan</span>
+            </button>
+
+            <button
+              onClick={() => handleOpenLossModal()}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 py-2.5 px-3.5 bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-all shrink-0"
+            >
+              <TrendingDown size={15} /> <span>Catat Stock Loss</span>
             </button>
 
             {/* EXPORT LAPORAN PDF DROPDOWN */}
-            <div style={{ position: 'relative' }}>
+            <div className="relative flex-1 sm:flex-none">
               <button
                 onClick={() => setPdfDropdownOpen(!pdfDropdownOpen)}
                 disabled={generatingPdf}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1rem',
-                  background: 'white', color: '#334155', border: '1px solid #cbd5e1',
-                  borderRadius: '.75rem', fontWeight: 700, fontSize: '.82rem', cursor: 'pointer',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                }}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-all shrink-0"
               >
                 <FileText size={15} />
-                <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak Laporan PDF'}</span>
+                <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak PDF'}</span>
                 <ChevronDown size={14} className={`transition-transform ${pdfDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
@@ -908,18 +910,6 @@ export const IngredientView: React.FC = () => {
             </div>
 
             <button
-              onClick={() => handleOpenLossModal()}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.65rem 1rem',
-                background: 'white', color: '#e11d48', border: '1px solid #fecdd3',
-                borderRadius: '.75rem', fontWeight: 700, fontSize: '.82rem', cursor: 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-              }}
-            >
-              <TrendingDown size={15} /> Catat Stock Loss
-            </button>
-
-            <button
               onClick={() => {
                 fetchData();
                 if (activeTab === 'loss') fetchLossAnalytics();
@@ -930,11 +920,7 @@ export const IngredientView: React.FC = () => {
                 if (activeTab === 'daily_usage') fetchDailyUsage();
               }}
               title="Perbarui Data"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', width: 38, height: 38,
-                background: 'white', border: '1px solid #cbd5e1', borderRadius: '.75rem',
-                color: '#475569', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-              }}
+              className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
             >
               <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             </button>

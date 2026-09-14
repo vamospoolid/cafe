@@ -214,11 +214,11 @@ TTD Kasir:        TTD Supervisor:
   const isOpenMode = mode === 'open';
 
   return (
-    <div className="modal-overlay fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
-      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-100 overflow-hidden transform transition-all scale-100 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+    <div className="modal-overlay fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in">
+      <div className="bg-white w-full h-full sm:h-auto sm:max-w-md sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-100 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200 sm:max-h-[90vh] flex flex-col justify-between">
         
         {/* Header */}
-        <div className={`p-5 border-b border-slate-100 flex items-center justify-between shrink-0 ${isOpenMode ? 'bg-indigo-50/50' : 'bg-rose-50/50'}`}>
+        <div className={`p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 ${isOpenMode ? 'bg-indigo-50/50' : 'bg-rose-50/50'}`}>
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isOpenMode ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600'}`}>
               {isOpenMode ? <Unlock size={20} /> : <Lock size={20} />}
@@ -243,8 +243,8 @@ TTD Kasir:        TTD Supervisor:
         </div>
         
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col justify-between">
-          <div className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col justify-between min-h-0">
+          <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto pb-16 sm:pb-4">
             <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
               {isOpenMode 
                 ? 'Masukkan jumlah uang tunai fisik yang ada di laci kasir saat ini sebagai saldo modal awal untuk kembalian.'

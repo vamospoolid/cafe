@@ -112,9 +112,9 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-fade-in">
       <div 
-        className="bg-white w-full h-[95vh] md:h-auto md:max-w-xl rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-bottom duration-200 md:animate-none border border-slate-100"
+        className="bg-white w-full h-full md:h-auto md:max-w-xl md:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden animate-in fade-in zoom-in-95 duration-200 border-0 md:border border-slate-100"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -143,7 +143,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
         </div>
         
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden min-h-0">
-          <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] md:max-h-[72vh] pb-32 md:pb-6">
+          <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] md:max-h-[72vh] pb-24 md:pb-6">
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

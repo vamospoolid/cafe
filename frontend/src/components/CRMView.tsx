@@ -760,18 +760,18 @@ const CRMView = () => {
 
       {/* Register/Edit Member Modal Dialog */}
       {isModalOpen && (
-        <div className="modal-overlay z-20">
-          <div className="modal-content" style={{ maxWidth: '480px' }}>
-            <div className="modal-header bg-slate-50 border-b border-gray-100">
-              <h2 className="modal-title flex items-center gap-2">
-                {modalCustomer ? <Edit className="text-primary" /> : <UserPlus className="text-primary" />} 
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-md sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden border-0 sm:border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 bg-slate-50 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <h2 className="font-extrabold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                {modalCustomer ? <Edit className="text-primary" size={20} /> : <UserPlus className="text-primary" size={20} />} 
                 {modalCustomer ? 'Edit Data Member' : 'Pendaftaran Member Baru'}
               </h2>
-              <button className="icon-btn" onClick={() => setIsModalOpen(false)}><X size={20} /></button>
+              <button className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors shadow-sm" onClick={() => setIsModalOpen(false)}><X size={18} /></button>
             </div>
             
-            <form onSubmit={handleSaveCustomer}>
-              <div className="modal-body space-y-4">
+            <form onSubmit={handleSaveCustomer} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] sm:max-h-[70vh] pb-24 sm:pb-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Nama Lengkap *</label>
                   <input 
@@ -852,9 +852,9 @@ const CRMView = () => {
                 )}
               </div>
 
-              <div className="modal-footer flex gap-3 border-t border-gray-100 bg-slate-50">
-                <button type="button" className="btn btn-outline flex-1 justify-center" onClick={() => setIsModalOpen(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary flex-1 justify-center">Simpan Data</button>
+              <div className="p-4 sm:p-5 flex gap-3 border-t border-gray-100 bg-slate-50 shrink-0">
+                <button type="button" className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-95" onClick={() => setIsModalOpen(false)}>Batal</button>
+                <button type="submit" className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-200 transition-all active:scale-95">Simpan Data</button>
               </div>
             </form>
           </div>
@@ -863,17 +863,17 @@ const CRMView = () => {
 
       {/* Pay Debt Modal Dialog */}
       {isPayModalOpen && selectedDebt && (
-        <div className="modal-overlay z-20">
-          <div className="modal-content" style={{ maxWidth: '400px' }}>
-            <div className="modal-header bg-slate-50 border-b border-gray-100">
-              <h2 className="modal-title flex items-center gap-2">
-                <Wallet className="text-red-500" /> Bayar Piutang / Kasbon
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-md sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden border-0 sm:border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 bg-slate-50 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <h2 className="font-extrabold text-base sm:text-lg text-slate-800 flex items-center gap-2">
+                <Wallet className="text-red-500" size={20} /> Bayar Piutang / Kasbon
               </h2>
-              <button className="icon-btn" onClick={() => setIsPayModalOpen(false)}><X size={20} /></button>
+              <button className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors shadow-sm" onClick={() => setIsPayModalOpen(false)}><X size={18} /></button>
             </div>
             
-            <form onSubmit={handlePayDebt}>
-              <div className="modal-body space-y-4">
+            <form onSubmit={handlePayDebt} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] sm:max-h-[70vh] pb-24 sm:pb-4">
                 <div className="p-3 border border-red-100 bg-red-50/10 rounded-lg">
                   <div className="text-xs text-muted font-bold uppercase">No. Order</div>
                   <div className="text-sm font-mono font-bold text-gray-800">{selectedDebt.order?.orderNumber || 'Manual'}</div>
@@ -945,9 +945,9 @@ const CRMView = () => {
                 </div>
               </div>
 
-              <div className="modal-footer flex gap-3 border-t border-gray-100 bg-slate-50">
-                <button type="button" className="btn btn-outline flex-1 justify-center" onClick={() => setIsPayModalOpen(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary flex-1 justify-center" disabled={payLoading}>
+              <div className="p-4 sm:p-5 flex gap-3 border-t border-gray-100 bg-slate-50 shrink-0">
+                <button type="button" className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-95" onClick={() => setIsPayModalOpen(false)}>Batal</button>
+                <button type="submit" className="flex-1 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-xs shadow-md shadow-primary/20 transition-all active:scale-95" disabled={payLoading}>
                   {payLoading ? 'Memproses...' : 'Simpan Pembayaran'}
                 </button>
               </div>
