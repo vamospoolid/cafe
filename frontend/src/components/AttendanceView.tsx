@@ -795,33 +795,35 @@ export const AttendanceView: React.FC = () => {
 
         {/* MODAL DETAIL REKAP INDIVIDU KARYAWAN */}
         {selectedUserSummary && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 max-w-2xl w-full border border-slate-100 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white rounded-3xl p-4 sm:p-6 max-w-2xl w-full border border-slate-100 shadow-2xl space-y-4 max-h-[88vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="text-base font-black text-slate-900">
+                  <h3 className="text-sm sm:text-base font-black text-slate-900">
                     Rekap Absensi: {selectedUserSummary.user.name} ({selectedUserSummary.user.role})
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">Periode Bulan: {monthFilter}</p>
                 </div>
-                <button onClick={() => setSelectedUserSummary(null)} className="text-slate-400 p-1">
+                <button onClick={() => setSelectedUserSummary(null)} className="text-slate-400 hover:text-slate-600 p-1">
                   <X size={18} />
                 </button>
               </div>
 
-              {/* STATS TILES */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-100 text-center">
-                  <p className="text-[10px] font-bold text-emerald-600 uppercase">Total Hadir</p>
-                  <h4 className="text-lg font-black text-emerald-800 mt-0.5">{selectedUserSummary.stats.totalHadir} Hari</h4>
+              {/* STATS TILES (PROPORTIONAL 3 COLS OR 1 COL ON MOBILE) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                <div className="bg-emerald-50/80 p-3.5 rounded-2xl border border-emerald-100 text-center">
+                  <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Total Hadir</p>
+                  <h4 className="text-xl font-black text-emerald-800 mt-0.5">{selectedUserSummary.stats.totalHadir} Hari</h4>
                 </div>
-                <div className="bg-rose-50 p-3.5 rounded-2xl border border-rose-100 text-center">
-                  <p className="text-[10px] font-bold text-rose-600 uppercase">Terlambat</p>
-                  <h4 className="text-lg font-black text-rose-800 mt-0.5">{selectedUserSummary.stats.totalTerlambat} Kali ({selectedUserSummary.stats.totalLateMinutes} mnt)</h4>
+                <div className="bg-rose-50/80 p-3.5 rounded-2xl border border-rose-100 text-center">
+                  <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Terlambat</p>
+                  <h4 className="text-xl font-black text-rose-800 mt-0.5">{selectedUserSummary.stats.totalTerlambat} Kali</h4>
+                  <span className="text-[10px] text-rose-600 font-bold">({selectedUserSummary.stats.totalLateMinutes} menit akumulasi)</span>
                 </div>
-                <div className="bg-indigo-50 p-3.5 rounded-2xl border border-indigo-100 text-center">
-                  <p className="text-[10px] font-bold text-indigo-600 uppercase">Jam Kerja</p>
-                  <h4 className="text-lg font-black text-indigo-800 mt-0.5">{selectedUserSummary.stats.totalWorkHours} Jam</h4>
+                <div className="bg-indigo-50/80 p-3.5 rounded-2xl border border-indigo-100 text-center">
+                  <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Jam Kerja</p>
+                  <h4 className="text-xl font-black text-indigo-800 mt-0.5">{selectedUserSummary.stats.totalWorkHours} Jam</h4>
+                  <span className="text-[10px] text-indigo-600 font-bold">Durasi Efektif</span>
                 </div>
               </div>
 
@@ -831,10 +833,10 @@ export const AttendanceView: React.FC = () => {
                   <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                     <Sparkles size={14} className="text-amber-500" /> Rincian Reward & Punishment Kedisiplinan
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
                     <div className="p-3 bg-white rounded-xl border border-slate-100">
                       <p className="text-[10px] font-bold text-slate-400 uppercase">Bonus Zero Late</p>
-                      <p className={`font-black mt-1 ${
+                      <p className={`font-black text-sm mt-1 ${
                         selectedUserSummary.discipline.zeroLateStatus === 'ELIGIBLE' ? 'text-emerald-600' :
                         selectedUserSummary.discipline.zeroLateStatus === 'ON_TRACK' ? 'text-blue-600' : 'text-slate-400 line-through'
                       }`}>
@@ -849,7 +851,7 @@ export const AttendanceView: React.FC = () => {
 
                     <div className="p-3 bg-white rounded-xl border border-slate-100">
                       <p className="text-[10px] font-bold text-slate-400 uppercase">Potongan Telat</p>
-                      <p className="font-black text-rose-600 mt-1">
+                      <p className="font-black text-sm text-rose-600 mt-1">
                         -Rp {(selectedUserSummary.discipline.totalLatePenalty || 0).toLocaleString()}
                       </p>
                       <span className="text-[10px] text-slate-500 block mt-0.5">

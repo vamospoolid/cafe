@@ -92,7 +92,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const titleMap: Record<string, string> = {
     '/pos': 'POS - Point of Sale',
     '/kds': 'Dapur (KDS)',
-    '/crm': 'CRM & Loyalitas Pelanggan',
   };
   const pageTitle = titleMap[location.pathname] || 'Dashboard';
 
@@ -475,32 +474,32 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         </div>
       )}
 
-      {/* Floating Bottom Navigation Bar for Mobile */}
+      {/* Docked Native-style Bottom Navigation Bar for Mobile */}
       {isMobile && (
-        <div className="fixed bottom-4 left-4 right-4 h-16 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-100/80 shadow-lg flex items-center justify-around px-4 z-40 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <NavLink to="/dashboard" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+        <div className="fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 z-40 pb-[env(safe-area-inset-bottom)]">
+          <NavLink to="/dashboard" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
             <LayoutDashboard size={20} className="transition-transform active:scale-95" />
-            <span className="text-[9px] tracking-wide font-black">Home</span>
+            <span className="text-[10px] tracking-tight">Home</span>
           </NavLink>
-          <NavLink to="/pos" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+          <NavLink to="/pos" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
             <ShoppingCart size={20} className="transition-transform active:scale-95" />
-            <span className="text-[9px] tracking-wide font-black">POS</span>
+            <span className="text-[10px] tracking-tight">POS</span>
           </NavLink>
-          <NavLink to="/meja" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+          <NavLink to="/meja" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
             <Grid size={20} className="transition-transform active:scale-95" />
-            <span className="text-[9px] tracking-wide font-black">Meja</span>
+            <span className="text-[10px] tracking-tight">Meja</span>
           </NavLink>
-          <NavLink to="/riwayat" className={({isActive}) => `flex flex-col items-center justify-center gap-1 transition-all ${isActive ? 'text-indigo-600 scale-105 font-bold' : 'text-slate-400'}`}>
+          <NavLink to="/riwayat" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
             <History size={20} className="transition-transform active:scale-95" />
-            <span className="text-[9px] tracking-wide font-black">Riwayat</span>
+            <span className="text-[10px] tracking-tight">Riwayat</span>
           </NavLink>
           <button 
             type="button" 
             onClick={() => setIsMoreMenuOpen(true)}
-            className="flex flex-col items-center justify-center gap-1 text-slate-400 focus:outline-none"
+            className="flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl text-slate-400 font-medium focus:outline-none"
           >
             <Menu size={20} className="transition-transform active:scale-95" />
-            <span className="text-[9px] tracking-wide font-black">Lainnya</span>
+            <span className="text-[10px] tracking-tight">Lainnya</span>
           </button>
         </div>
       )}

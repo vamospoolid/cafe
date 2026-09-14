@@ -2443,172 +2443,192 @@ export const IngredientView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          MODAL 1: TAMBAH / EDIT BAHAN BAKU
+          MODAL 1: TAMBAH / EDIT BAHAN BAKU (FULL-PAGE MOBILE VIEW)
       ───────────────────────────────────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-scale-up">
-            <h3 className="text-lg font-black text-slate-900">
-              {editData ? 'Edit Bahan Baku' : 'Tambah Bahan Baku Baru'}
-            </h3>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Nama Bahan Baku</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Daging Chicken Chashu, Tomat Segar"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Klasifikasi / Kategori Utama</label>
-                  <select
-                    value={form.category}
-                    onChange={e => setForm({ ...form, category: e.target.value, subCategory: '' })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                  >
-                    <option value="FOOD">🍲 Bahan Dapur (Makanan & Sayuran)</option>
-                    <option value="DRINK">☕ Bahan Bar (Minuman Racikan)</option>
-                    <option value="PACKAGING">📦 Packaging & Showcase (Display)</option>
-                  </select>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-xl md:rounded-3xl shadow-2xl flex flex-col md:overflow-hidden max-h-screen md:max-h-[92vh] animate-in fade-in duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-slate-200 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+                  <Package size={22} />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Sub-Kategori Bahan</label>
-                  <div className="space-y-1.5">
-                    <select
-                      value={
-                        (INGREDIENT_SUB_CATEGORIES[form.category] || []).includes(form.subCategory)
-                          ? form.subCategory
-                          : (form.subCategory ? '__CUSTOM__' : '')
-                      }
-                      onChange={e => {
-                        const val = e.target.value;
-                        if (val === '__CUSTOM__') {
-                          setForm({ ...form, subCategory: form.subCategory || 'Lainnya' });
-                        } else {
-                          setForm({ ...form, subCategory: val });
-                        }
-                      }}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                    >
-                      <option value="">-- Pilih Sub-Kategori --</option>
-                      {(INGREDIENT_SUB_CATEGORIES[form.category] || []).map(sc => (
-                        <option key={sc} value={sc}>{sc}</option>
-                      ))}
-                      <option value="__CUSTOM__">✍️ Input Sub-Kategori Kustom / Lainnya...</option>
-                    </select>
-
-                    {/* Show text input if custom subcategory is selected or active */}
-                    {(!(INGREDIENT_SUB_CATEGORIES[form.category] || []).includes(form.subCategory) && form.subCategory !== '') && (
-                      <input
-                        type="text"
-                        placeholder="Ketik nama sub-kategori khusus..."
-                        value={form.subCategory}
-                        onChange={e => setForm({ ...form, subCategory: e.target.value })}
-                        className="w-full px-3.5 py-2 bg-amber-50/50 border border-amber-300 rounded-xl text-xs font-bold text-slate-800"
-                        autoFocus
-                      />
-                    )}
-                  </div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                    {editData ? 'Edit Bahan Baku' : 'Tambah Bahan Baku Baru'}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {editData ? `Perbarui data & HPP ${editData.name}` : 'Katalog persediaan bahan dapur & bar'}
+                  </p>
                 </div>
               </div>
+              <button 
+                type="button"
+                className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors"
+                onClick={() => setShowModal(false)}
+              >
+                <XCircle size={18} />
+              </button>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] md:max-h-[72vh] pb-32 md:pb-6">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Satuan (Unit)</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Nama Bahan Baku <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
-                    placeholder="gram, ml, buah, kg"
-                    value={form.unit}
-                    onChange={e => setForm({ ...form, unit: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                    placeholder="Contoh: Daging Chicken Chashu, Biji Kopi Arabica"
+                    value={form.name}
+                    onChange={e => setForm({ ...form, name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Kategori Utama</label>
+                    <select
+                      value={form.category}
+                      onChange={e => setForm({ ...form, category: e.target.value, subCategory: '' })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    >
+                      <option value="FOOD">🍲 Bahan Dapur (Makanan & Sayur)</option>
+                      <option value="DRINK">☕ Bahan Bar (Minuman Racikan)</option>
+                      <option value="PACKAGING">📦 Packaging & Showcase (Display)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Sub-Kategori Bahan</label>
+                    <div className="space-y-1.5">
+                      <select
+                        value={
+                          (INGREDIENT_SUB_CATEGORIES[form.category] || []).includes(form.subCategory)
+                            ? form.subCategory
+                            : (form.subCategory ? '__CUSTOM__' : '')
+                        }
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === '__CUSTOM__') {
+                            setForm({ ...form, subCategory: form.subCategory || 'Lainnya' });
+                          } else {
+                            setForm({ ...form, subCategory: val });
+                          }
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                      >
+                        <option value="">-- Pilih Sub-Kategori --</option>
+                        {(INGREDIENT_SUB_CATEGORIES[form.category] || []).map(sc => (
+                          <option key={sc} value={sc}>{sc}</option>
+                        ))}
+                        <option value="__CUSTOM__">✍️ Input Sub-Kategori Kustom / Lainnya...</option>
+                      </select>
+
+                      {/* Show text input if custom subcategory is selected or active */}
+                      {(!(INGREDIENT_SUB_CATEGORIES[form.category] || []).includes(form.subCategory) && form.subCategory !== '') && (
+                        <input
+                          type="text"
+                          placeholder="Ketik nama sub-kategori khusus..."
+                          value={form.subCategory}
+                          onChange={e => setForm({ ...form, subCategory: e.target.value })}
+                          className="w-full px-3.5 py-2 bg-amber-50/50 border border-amber-300 rounded-xl text-xs font-bold text-slate-800"
+                          autoFocus
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Satuan / Unit <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="gram, ml, pcs, kg, porsi"
+                      value={form.unit}
+                      onChange={e => setForm({ ...form, unit: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">
+                      Harga Beli / Unit (Rp) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      placeholder="0"
+                      value={form.buyPrice}
+                      onChange={e => setForm({ ...form, buyPrice: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-black text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Stok Awal</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="0"
+                      value={form.stock}
+                      onChange={e => setForm({ ...form, stock: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Batas Minimum Stok (Alert)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="0"
+                      value={form.minStock}
+                      onChange={e => setForm({ ...form, minStock: e.target.value })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Harga Beli / Unit (Rp)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    placeholder="0"
-                    value={form.buyPrice}
-                    onChange={e => setForm({ ...form, buyPrice: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                  />
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Supplier / Mitra Langganan</label>
+                  <select
+                    value={form.supplierId}
+                    onChange={e => setForm({ ...form, supplierId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                  >
+                    <option value="">-- Pilih Supplier --</option>
+                    {suppliers.map(s => (
+                      <option key={s.id} value={s.id.toString()}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Stok Awal</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="0"
-                    value={form.stock}
-                    onChange={e => setForm({ ...form, stock: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Batas Min. Stok (Alert)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="0"
-                    value={form.minStock}
-                    onChange={e => setForm({ ...form, minStock: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Supplier Langganan</label>
-                <select
-                  value={form.supplierId}
-                  onChange={e => setForm({ ...form, supplierId: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                >
-                  <option value="">-- Pilih Supplier --</option>
-                  {suppliers.map(s => (
-                    <option key={s.id} value={s.id.toString()}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {/* Sticky Bottom Actions */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                  className="py-2.5 px-5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  style={{
-                    padding: '.65rem 1.25rem',
-                    background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '.75rem',
-                    fontWeight: 800,
-                    fontSize: '.85rem',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(124,58,237,0.3)'
-                  }}
+                  className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-1.5"
                 >
+                  <CheckCircle2 size={16} />
                   Simpan Bahan Baku
                 </button>
               </div>

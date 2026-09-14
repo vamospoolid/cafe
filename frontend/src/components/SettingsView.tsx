@@ -296,7 +296,10 @@ const SettingsView = () => {
   };
 
   return (
-    <div className="p-3 sm:p-6 lg:p-8 h-full flex flex-col bg-slate-50/50 overflow-y-auto pb-32 sm:pb-8">
+    <div 
+      className="p-3 sm:p-6 lg:p-8 flex-1 min-h-0 h-full w-full overflow-y-auto bg-slate-50/50 flex flex-col pb-36 sm:pb-12"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
         <div>
