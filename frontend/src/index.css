@@ -340,6 +340,12 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+@media (max-width: 768px) {
+  .page-content {
+    padding-bottom: 6.5rem !important;
+  }
+}
+
 /* POS Specific Layout */
 .pos-layout {
   display: flex;
