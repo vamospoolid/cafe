@@ -238,7 +238,8 @@ router.post('/stock-opname', authenticateToken, async (req: Request, res: Respon
               change: variance,
               type: 'Stock Opname',
               description: `[${opnameRef}] ${reasonLabel}${noteText}${lossText} | Auditor: ${auditorName || 'Admin'} | Sistem: ${systemStock} ${ing.unit} ➔ Fisik: ${physicalStock} ${ing.unit}`,
-              referenceId: opnameRef
+              referenceId: opnameRef,
+              userId: (req as any).user?.id || null
             }
           });
         }
@@ -847,7 +848,8 @@ router.post('/:id/adjust', authenticateToken, async (req: Request, res: Response
           ingredientId: Number(id),
           change: amount,
           type: type || 'Penyesuaian',
-          description: (description || 'Penyesuaian stok') + wacNote
+          description: (description || 'Penyesuaian stok') + wacNote,
+          userId: (req as any).user?.id || null
         }
       });
       return ingredient;
