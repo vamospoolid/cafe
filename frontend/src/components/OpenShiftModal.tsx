@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { X, Lock, Unlock, Printer, FileText } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
-import { toast } from '../utils/alert';
+import { toast, confirmAlert } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
 import { exportShiftSettlementPDF } from '../utils/pdfGenerator';
 
@@ -183,9 +183,9 @@ TTD Kasir:        TTD Supervisor:
 
     try {
       const url = mode === 'open' ? '/api/shifts/open' : '/api/shifts/close';
-      const body = mode === 'open' ? { saldoAwal: amount } : { saldoFisikLaci: amount };
+      let body: any = mode === 'open' ? { saldoAwal: amount } : { saldoFisikLaci: amount };
 
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -194,8 +194,35 @@ TTD Kasir:        TTD Supervisor:
         body: JSON.stringify(body)
       });
       
-      const data = await res.json();
+      let data = await res.json();
+
+      // Jika ada pesanan belum lunas saat tutup shift
+      if (!res.ok && data?.hasPendingOrders) {
+        const confirm = await confirmAlert(
+          'Pesanan Belum Lunas Terdeteksi',
+          `${data.error}\n\nApakah Anda yakin ingin TETAP MEMAKSA menutup shift? (Pesanan yang belum lunas akan tetap berstatus Pending untuk shift berikutnya).`
+        );
+
+        if (confirm.isConfirmed) {
+          // Kirim ulang dengan forceClose = true
+          body.forceClose = true;
+          res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${posContext?.token}`
+            },
+            body: JSON.stringify(body)
+          });
+          data = await res.json();
+        } else {
+          setLoading(false);
+          return;
+        }
+      }
+
       if (res.ok) {
+        toast(mode === 'open' ? 'Shift berhasil dibuka' : 'Shift berhasil ditutup', 'success');
         onSuccess();
         onClose();
       } else {

@@ -545,8 +545,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <input
                   type="number"
                   placeholder="0"
+                  max={Math.max(0, total + parentDiscount - currentDiscount)}
                   value={manualDiscount || ''}
-                  onChange={e => setManualDiscount(Math.max(0, Number(e.target.value)))}
+                  onChange={e => {
+                    const maxAllowed = Math.max(0, total + parentDiscount - currentDiscount);
+                    const val = Number(e.target.value) || 0;
+                    setManualDiscount(Math.max(0, Math.min(val, maxAllowed)));
+                  }}
                   className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
                 />
               </div>

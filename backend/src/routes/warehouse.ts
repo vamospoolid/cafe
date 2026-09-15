@@ -487,6 +487,45 @@ router.put('/transfers/:id/approve', authenticateToken, async (req: Request, res
   }
 });
 
+// Batalkan Permintaan Bahan yang masih PENDING (Dibatalkan oleh Koki / Pemohon)
+router.post('/transfers/:id/cancel', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const { reason } = req.body;
+    const userId = (req as any).user.id;
+
+    const reqDoc = await prisma.warehouseRequisition.findUnique({
+      where: { id },
+      include: { items: true }
+    });
+
+    if (!reqDoc) return res.status(404).json({ error: 'Dokumen permintaan tidak ditemukan' });
+    if (reqDoc.status !== 'PENDING') {
+      return res.status(400).json({ error: `Permintaan sudah berstatus ${reqDoc.status} dan tidak dapat dibatalkan.` });
+    }
+
+    const updated = await prisma.warehouseRequisition.update({
+      where: { id },
+      data: {
+        status: 'VOIDED',
+        isVoided: true,
+        voidReason: reason || 'Dibatalkan oleh pemohon',
+        approvedById: userId
+      }
+    });
+
+    if (io) {
+      io.emit('warehouse:transfer_cancelled', updated);
+      io.emit('warehouse:stock_updated', { type: 'TRANSFER_CANCELLED', reqNumber: reqDoc.reqNumber });
+    }
+
+    res.json({ message: `Permintaan ${reqDoc.reqNumber} berhasil dibatalkan.`, requisition: updated });
+  } catch (error: any) {
+    console.error('Error cancelling transfer:', error);
+    res.status(500).json({ error: 'Gagal membatalkan permintaan: ' + error.message });
+  }
+});
+
 // Receive transfer items in Kitchen (Dapur Muki)
 // Trigger: Deduct warehouse stock, increase kitchen stock, record Muki expense / owner payable
 router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res: Response) => {

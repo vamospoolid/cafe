@@ -316,6 +316,35 @@ export default function WarehouseView() {
     }
   };
 
+  const handleCancelTransfer = async (id: number, reqNumber: string) => {
+    const confirm = await confirmAlert(
+      'Batalkan Permintaan Bahan',
+      `Apakah Anda yakin ingin membatalkan permintaan ${reqNumber}? Permintaan yang dibatalkan tidak akan diproses oleh gudang pusat.`
+    );
+    if (!confirm.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/warehouse/transfers/${id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ reason: 'Dibatalkan oleh staf' })
+      });
+      if (res.ok) {
+        toast(`Permintaan ${reqNumber} berhasil dibatalkan`, 'success');
+        fetchData();
+      } else {
+        const data = await res.json();
+        toast(data.error || 'Gagal membatalkan permintaan', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan jaringan', 'error');
+    }
+  };
+
   const handleReceiveTransfer = async (id: number, reqNumber: string) => {
     const confirm = await confirmAlert(
       'Konfirmasi Terima Bahan di Cabang',
@@ -1094,20 +1123,37 @@ export default function WarehouseView() {
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : tr.status === 'APPROVED'
                                 ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : tr.status === 'VOIDED'
+                                ? 'bg-rose-50 text-rose-600 border-rose-200 line-through'
                                 : 'bg-amber-50 text-amber-700 border-amber-200'
                             }`}>
-                              {tr.status === 'RECEIVED' ? 'Diterima Cabang' : tr.status === 'APPROVED' ? 'Disetujui Gudang' : 'Menunggu Approval'}
+                              {tr.status === 'RECEIVED'
+                                ? 'Diterima Cabang'
+                                : tr.status === 'APPROVED'
+                                ? 'Disetujui Gudang'
+                                : tr.status === 'VOIDED'
+                                ? 'Dibatalkan'
+                                : 'Menunggu Approval'}
                             </span>
                           </td>
                           <td className="p-3.5 text-right">
                             <div className="flex justify-end gap-1.5">
                               {tr.status === 'PENDING' && (
-                                <button
-                                  onClick={() => handleApproveTransfer(tr.id)}
-                                  className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200"
-                                >
-                                  Setujui &amp; Kirim
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleApproveTransfer(tr.id)}
+                                    className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200"
+                                  >
+                                    Setujui &amp; Kirim
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelTransfer(tr.id, tr.reqNumber)}
+                                    className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200"
+                                    title="Batalkan permintaan ini"
+                                  >
+                                    Batal
+                                  </button>
+                                </>
                               )}
                               {tr.status === 'APPROVED' && (
                                 <button
@@ -1120,6 +1166,11 @@ export default function WarehouseView() {
                               {tr.status === 'RECEIVED' && (
                                 <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1 justify-end">
                                   <CheckCircle2 size={13} /> Selesai
+                                </span>
+                              )}
+                              {tr.status === 'VOIDED' && (
+                                <span className="text-[11px] text-slate-400 font-semibold italic flex items-center gap-1 justify-end">
+                                  {tr.voidReason || 'Dibatalkan'}
                                 </span>
                               )}
                             </div>

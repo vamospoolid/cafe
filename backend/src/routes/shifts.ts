@@ -270,7 +270,7 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
 // Close active shift
 router.post('/close', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { saldoFisikLaci } = req.body;
+    const { saldoFisikLaci, forceClose } = req.body;
 
     const activeShift = await prisma.shift.findFirst({
       where: { status: 'Open' }
@@ -278,6 +278,25 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
 
     if (!activeShift) {
       return res.status(400).json({ error: 'Tidak ada shift yang aktif untuk ditutup.' });
+    }
+
+    // 1. Proteksi Pesanan Belum Lunas (Unpaid / Pending Dine-In Orders)
+    const pendingOrders = await prisma.order.findMany({
+      where: {
+        status: 'Pending',
+        createdAt: { gte: activeShift.waktuBuka }
+      },
+      include: { table: true }
+    });
+
+    if (pendingOrders.length > 0 && !forceClose) {
+      const pendingTableNames = pendingOrders.map(o => o.table?.tableNo ? `Meja ${o.table.tableNo}` : `#${o.orderNumber}`).join(', ');
+      return res.status(400).json({
+        error: `Masih terdapat ${pendingOrders.length} pesanan aktif belum lunas (${pendingTableNames}). Harap selesaikan pembayaran terlebih dahulu sebelum menutup shift.`,
+        hasPendingOrders: true,
+        pendingOrdersCount: pendingOrders.length,
+        pendingTables: pendingTableNames
+      });
     }
 
     // Proteksi rentang waktu

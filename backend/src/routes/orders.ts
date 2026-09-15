@@ -725,6 +725,12 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const nowPaid = isActuallyPaid ? new Date() : null;
 
       // 1. Buat Order Induk
+      const numSubtotal = Math.max(0, Number(subtotal) || 0);
+      const safeDiscount = Math.max(0, Math.min(Number(discount) || 0, numSubtotal));
+      const numTax = Math.max(0, Number(tax) || 0);
+      const numService = Math.max(0, Number(serviceCharge) || 0);
+      const safeTotal = Math.max(0, Number(total) || (numSubtotal - safeDiscount + numTax + numService));
+
       const order = await tx.order.create({
         data: {
           orderNumber,
@@ -733,11 +739,11 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           customerId: finalCustomerId,
           tableId: tableId ? Number(tableId) : null,
           userId,
-          subtotal: Number(subtotal),
-          discount: Number(discount) || 0,
-          tax: Number(tax),
-          serviceCharge: Number(serviceCharge),
-          total: Number(total),
+          subtotal: numSubtotal,
+          discount: safeDiscount,
+          tax: numTax,
+          serviceCharge: numService,
+          total: safeTotal,
           paymentMethod: isActuallyPaid ? paymentMethod : null,
           status: isActuallyPaid ? 'Paid' : 'Pending',
           kdsStatus: (isActuallyPaid && shouldAutoServe) ? 'Served' : 'Pending',
@@ -909,8 +915,13 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
           updateData.kdsStatus = 'Served';
           updateData.servedAt = paidNow;
         }
-        if (passedDiscount !== undefined) updateData.discount = passedDiscount;
-        if (passedTotal !== undefined) updateData.total = passedTotal;
+        if (passedDiscount !== undefined) {
+          const safePassedDiscount = Math.max(0, Math.min(passedDiscount, order.subtotal || order.total));
+          updateData.discount = safePassedDiscount;
+        }
+        if (passedTotal !== undefined) {
+          updateData.total = Math.max(0, passedTotal);
+        }
         if (finalCustomerId) updateData.customerId = finalCustomerId;
 
         const updated = await tx.order.update({
