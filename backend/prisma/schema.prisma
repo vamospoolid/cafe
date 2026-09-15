@@ -11,32 +11,33 @@ datasource db {
 }
 
 model User {
-  id             Int             @id @default(autoincrement())
-  name           String
-  username       String          @unique
-  passwordHash   String
-  pin            String          @default("123456")
-  role           String          // Admin, Kasir, Dapur, Waiter
-  permissions    String          // JSON stringified
-  status         String          @default("Aktif")
-  
-  orders         Order[]
-  cashFlows      CashFlow[]
-  attendances    Attendance[]
-  shifts         Shift[]
-  purchaseOrders PurchaseOrder[]
-  debtPayments   DebtPayment[]
-  ingredientLogs IngredientLog[]
-  leaveRequests  LeaveRequest[]
-  shiftHandovers ShiftHandover[]
+  id           Int    @id @default(autoincrement())
+  name         String
+  username     String @unique
+  passwordHash String
+  pin          String @default("123456")
+  role         String // Admin, Kasir, Dapur, Waiter
+  permissions  String // JSON stringified
+  status       String @default("Aktif")
+
+  orders            Order[]
+  cashFlows         CashFlow[]
+  attendances       Attendance[]
+  shifts            Shift[]
+  purchaseOrders    PurchaseOrder[]
+  debtPayments      DebtPayment[]
+  ingredientLogs    IngredientLog[]
+  leaveRequests     LeaveRequest[]
+  shiftHandovers    ShiftHandover[]
   kitchenChecklists KitchenChecklist[]
   warehouseInbounds WarehouseInbound[]
+  warehouseSales    WarehouseSale[]        @relation("WarehouseSaleSoldBy")
   reqsRequested     WarehouseRequisition[] @relation("ReqRequestedBy")
   reqsApproved      WarehouseRequisition[] @relation("ReqApprovedBy")
   ownerFundTxns     OwnerFundTransaction[]
-  
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Category {
@@ -46,126 +47,126 @@ model Category {
   parentId      Int?
   parent        Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   subCategories Category[] @relation("CategoryHierarchy")
-  
-  products      Product[]  @relation("ProductCategory")
-  subProducts   Product[]  @relation("ProductSubCategory")
+
+  products    Product[] @relation("ProductCategory")
+  subProducts Product[] @relation("ProductSubCategory")
 }
 
 model Product {
-  id            Int                 @id @default(autoincrement())
-  barcode       String?             @unique
+  id            Int       @id @default(autoincrement())
+  barcode       String?   @unique
   name          String
-  category      Category            @relation("ProductCategory", fields: [categoryId], references: [id])
+  category      Category  @relation("ProductCategory", fields: [categoryId], references: [id])
   categoryId    Int
-  subCategory   Category?           @relation("ProductSubCategory", fields: [subCategoryId], references: [id])
+  subCategory   Category? @relation("ProductSubCategory", fields: [subCategoryId], references: [id])
   subCategoryId Int?
-  buyPrice      Float               @default(0)
+  buyPrice      Float     @default(0)
   sellPrice     Float
-  stock         Int                 @default(0)
-  minStock      Int                 @default(1)
+  stock         Int       @default(0)
+  minStock      Int       @default(1)
   imageUrl      String?
-  status        String              @default("Aktif")
-  
-  orderItems    OrderItem[]
-  recipes       RecipeItem[]        // Komposisi bahan baku (Advanced Mode)
-  poItems       PurchaseOrderItem[] // Referensi PO (Simple Mode)
-  
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  status        String    @default("Aktif")
+
+  orderItems OrderItem[]
+  recipes    RecipeItem[] // Komposisi bahan baku (Advanced Mode)
+  poItems    PurchaseOrderItem[] // Referensi PO (Simple Mode)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Table {
-  id           Int           @id @default(autoincrement())
-  tableNo      String        @unique
-  name         String?       // Keterangan Lokasi
-  capacity     Int           @default(2)
-  status       String        @default("Aktif") // Aktif, Perbaikan
-  qrUrl        String?
-  
-  posX         Float?        @default(10)     // Posisi X dalam persentase canvas (0-100)
-  posY         Float?        @default(10)     // Posisi Y dalam persentase canvas (0-100)
-  shape        String        @default("square") // Bentuk: 'square' atau 'circle'
-  
+  id       Int     @id @default(autoincrement())
+  tableNo  String  @unique
+  name     String? // Keterangan Lokasi
+  capacity Int     @default(2)
+  status   String  @default("Aktif") // Aktif, Perbaikan
+  qrUrl    String?
+
+  posX  Float? @default(10) // Posisi X dalam persentase canvas (0-100)
+  posY  Float? @default(10) // Posisi Y dalam persentase canvas (0-100)
+  shape String @default("square") // Bentuk: 'square' atau 'circle'
+
   orders       Order[]
   reservations Reservation[]
 }
 
 model Reservation {
-  id           Int      @id @default(autoincrement())
+  id           Int     @id @default(autoincrement())
   customerName String
   phone        String
-  date         String   // YYYY-MM-DD
-  time         String   // HH:mm
-  table        Table    @relation(fields: [tableId], references: [id])
+  date         String // YYYY-MM-DD
+  time         String // HH:mm
+  table        Table   @relation(fields: [tableId], references: [id])
   tableId      Int
   guests       Int
-  dpAmount     Float    @default(0)
-  status       String   @default("Booking") // Booking, DP Dibayar, Lunas
+  dpAmount     Float   @default(0)
+  status       String  @default("Booking") // Booking, DP Dibayar, Lunas
   notes        String?
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Customer {
-  id           Int        @id @default(autoincrement())
-  name         String
-  phone        String     @unique
-  email        String?    @unique
-  birthday     String?
-  points       Int        @default(0)
-  tier         String     @default("Bronze") // Bronze, Silver, Gold
-  totalSpent   Float      @default(0)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  
-  orders       Order[]
-  pointLogs    PointLog[]
-  debts        Debt[]
+  id         Int      @id @default(autoincrement())
+  name       String
+  phone      String   @unique
+  email      String?  @unique
+  birthday   String?
+  points     Int      @default(0)
+  tier       String   @default("Bronze") // Bronze, Silver, Gold
+  totalSpent Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  orders    Order[]
+  pointLogs PointLog[]
+  debts     Debt[]
 }
 
 model PointLog {
   id          Int      @id @default(autoincrement())
   customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerId  Int
-  points      Int      // Positif untuk Earn/Refund, Negatif untuk Redeem/Void
-  type        String   // 'Earn', 'Redeem', 'Refund', 'Manual'
+  points      Int // Positif untuk Earn/Refund, Negatif untuk Redeem/Void
+  type        String // 'Earn', 'Redeem', 'Refund', 'Manual'
   description String?
   createdAt   DateTime @default(now())
 }
 
 model Order {
-  id            Int         @id @default(autoincrement())
-  orderNumber   String      @unique
-  offlineId     String?     @unique
+  id            Int     @id @default(autoincrement())
+  orderNumber   String  @unique
+  offlineId     String? @unique
   customerName  String
   customerPhone String?
-  
-  customer      Customer?   @relation(fields: [customerId], references: [id])
-  customerId    Int?
-  
-  table         Table?      @relation(fields: [tableId], references: [id])
-  tableId       Int?
-  
-  user          User        @relation(fields: [userId], references: [id])
-  userId        Int
-  
+
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId Int?
+
+  table   Table? @relation(fields: [tableId], references: [id])
+  tableId Int?
+
+  user   User @relation(fields: [userId], references: [id])
+  userId Int
+
   subtotal      Float
-  discount      Float       @default(0)
+  discount      Float     @default(0)
   tax           Float
   serviceCharge Float
   total         Float
   paymentMethod String?
-  status        String      @default("Pending") // Pending, Paid, Void
-  kdsStatus     String      @default("Pending") // Pending, Cooking, Ready, Served
+  status        String    @default("Pending") // Pending, Paid, Void
+  kdsStatus     String    @default("Pending") // Pending, Cooking, Ready, Served
   servedAt      DateTime?
-  paidAt        DateTime?   // Waktu transaksi pembayaran diselesaikan (untuk rekonsiliasi shift akurat)
-  
-  items         OrderItem[]
-  debt          Debt?
-  
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  paidAt        DateTime? // Waktu transaksi pembayaran diselesaikan (untuk rekonsiliasi shift akurat)
+
+  items OrderItem[]
+  debt  Debt?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model OrderItem {
@@ -183,7 +184,7 @@ model OrderItem {
 
 model CashFlow {
   id          Int      @id @default(autoincrement())
-  type        String   // Pemasukan, Pengeluaran
+  type        String // Pemasukan, Pengeluaran
   category    String
   amount      Float
   description String
@@ -193,159 +194,160 @@ model CashFlow {
 }
 
 model Attendance {
-  id             Int      @id @default(autoincrement())
-  user           User     @relation(fields: [userId], references: [id])
+  id             Int       @id @default(autoincrement())
+  user           User      @relation(fields: [userId], references: [id])
   userId         Int
-  clockIn        DateTime @default(now())
+  clockIn        DateTime  @default(now())
   clockOut       DateTime?
-  date           String   // YYYY-MM-DD
-  shiftName      String?  // e.g. "Shift Pagi (08:00 - 16:00)"
-  photoIn        String?  // Data URL / Base64 foto selfie saat masuk
-  photoOut       String?  // Data URL / Base64 foto selfie saat pulang
+  date           String // YYYY-MM-DD
+  shiftName      String? // e.g. "Shift Pagi (08:00 - 16:00)"
+  photoIn        String? // Data URL / Base64 foto selfie saat masuk
+  photoOut       String? // Data URL / Base64 foto selfie saat pulang
   latitudeIn     Float?
   longitudeIn    Float?
   latitudeOut    Float?
   longitudeOut   Float?
-  distanceIn     Float?   // Jarak dalam meter dari toko saat clock in
-  isWithinRadius Boolean  @default(true)
-  status         String   @default("Hadir") // Hadir, Terlambat, Di Luar Radius
-  lateMinutes    Int      @default(0)       // Jumlah menit keterlambatan
+  distanceIn     Float? // Jarak dalam meter dari toko saat clock in
+  isWithinRadius Boolean   @default(true)
+  status         String    @default("Hadir") // Hadir, Terlambat, Di Luar Radius
+  lateMinutes    Int       @default(0) // Jumlah menit keterlambatan
   notes          String?
 }
 
 model Settings {
-  id                      Int      @id @default(autoincrement())
-  storeName               String   @default("DEMO CAFE")
-  phone                   String   @default("")
-  address                 String   @default("")
-  logoUrl                 String   @default("")
-  receiptHeader           String   @default("")
-  receiptFooter           String   @default("")
-  taxRate                 Float    @default(0)
-  serviceCharge           Float    @default(0)
-  includeTax              Boolean  @default(false)
-  bankName                String   @default("")
-  accountNumber           String   @default("")
-  accountName             String   @default("")
-  qrisUrl                 String   @default("")
-  qrCodeBaseUrl           String   @default("")
+  id                       Int     @id @default(autoincrement())
+  storeName                String  @default("DEMO CAFE")
+  phone                    String  @default("")
+  address                  String  @default("")
+  logoUrl                  String  @default("")
+  receiptHeader            String  @default("")
+  receiptFooter            String  @default("")
+  taxRate                  Float   @default(0)
+  serviceCharge            Float   @default(0)
+  includeTax               Boolean @default(false)
+  bankName                 String  @default("")
+  accountNumber            String  @default("")
+  accountName              String  @default("")
+  qrisUrl                  String  @default("")
+  qrCodeBaseUrl            String  @default("")
   enableDrinkCustomization Boolean @default(false)
-  
-  loyaltyEnabled             Boolean  @default(true)
-  loyaltyEarnPerAmount       Float    @default(10000)
-  loyaltyPointValue          Float    @default(100)
-  loyaltySilverThreshold     Float    @default(1000000)
-  loyaltyGoldThreshold       Float    @default(3000000)
-  loyaltySilverMultiplier    Float    @default(1.2)
-  loyaltyGoldMultiplier      Float    @default(1.5)
+
+  loyaltyEnabled          Boolean @default(true)
+  loyaltyEarnPerAmount    Float   @default(10000)
+  loyaltyPointValue       Float   @default(100)
+  loyaltySilverThreshold  Float   @default(1000000)
+  loyaltyGoldThreshold    Float   @default(3000000)
+  loyaltySilverMultiplier Float   @default(1.2)
+  loyaltyGoldMultiplier   Float   @default(1.5)
 
   // Mode Inventaris: false = Simple (HPP manual), true = Advanced (HPP dari resep bahan baku)
-  ingredientTrackingEnabled  Boolean  @default(false)
+  ingredientTrackingEnabled Boolean @default(false)
 
   // Konfigurasi Printer Kasir 80mm
-  printerIp          String   @default("")    // IP Address printer kasir
-  printerPort        Int      @default(9100)  // Port ESC/POS (default 9100)
-  windowsPrinterName String   @default("")
-  autoPrintKDS       Boolean  @default(false) // Legacy toggle
-  autoPrintReceipt   Boolean  @default(false) // Auto-print struk saat pembayaran selesai
+  printerIp          String  @default("") // IP Address printer kasir
+  printerPort        Int     @default(9100) // Port ESC/POS (default 9100)
+  windowsPrinterName String  @default("")
+  autoPrintKDS       Boolean @default(false) // Legacy toggle
+  autoPrintReceipt   Boolean @default(false) // Auto-print struk saat pembayaran selesai
 
   // Konfigurasi Printer Dapur (Kitchen / KOT)
-  kitchenPrinterIp   String   @default("")
-  kitchenPrinterPort Int      @default(9100)
-  autoPrintKitchen   Boolean  @default(false)
+  kitchenPrinterIp   String  @default("")
+  kitchenPrinterPort Int     @default(9100)
+  autoPrintKitchen   Boolean @default(false)
 
   // Konfigurasi Printer Bar (Drinks / BOT)
-  barPrinterIp       String   @default("")
-  barPrinterPort     Int      @default(9100)
-  autoPrintBar       Boolean  @default(false)
+  barPrinterIp   String  @default("")
+  barPrinterPort Int     @default(9100)
+  autoPrintBar   Boolean @default(false)
 
   // Konfigurasi Layar Dapur (KDS)
-  enableKDS          Boolean  @default(true)
+  enableKDS            Boolean @default(true)
   autoCompleteKDSOnPay Boolean @default(true)
 
   // Konfigurasi Absensi & GPS Geofencing Toko
-  storeLatitude      Float    @default(-6.200000)  // Default koordinat Jakarta / lokasi toko
-  storeLongitude     Float    @default(106.816666)
-  gpsRadiusMeters    Float    @default(100)        // Radius toleransi kehadiran dalam meter
-  enableGpsValidation Boolean @default(true)       // Validasi radius GPS
-  enableCameraPhoto  Boolean  @default(true)       // Wajib foto selfie kamera saat absen
-  workShifts         String?                       // JSON list shift kerja [{ id, name, start, end, lateTolerance }]
+  storeLatitude       Float   @default(-6.200000) // Default koordinat Jakarta / lokasi toko
+  storeLongitude      Float   @default(106.816666)
+  gpsRadiusMeters     Float   @default(100) // Radius toleransi kehadiran dalam meter
+  enableGpsValidation Boolean @default(true) // Validasi radius GPS
+  enableCameraPhoto   Boolean @default(true) // Wajib foto selfie kamera saat absen
+  workShifts          String? // JSON list shift kerja [{ id, name, start, end, lateTolerance }]
 
   // Konfigurasi Reward & Punishment Karyawan
-  enableZeroLateBonus     Boolean  @default(true)     // Aktifkan Bonus Zero Late
-  zeroLateBonusAmount     Float    @default(200000)   // Nominal bonus (Rp) jika 0 keterlambatan
-  zeroLateMinAttendance   Int      @default(20)       // Syarat minimal hari hadir dalam 1 bulan
-  zeroLateMaxLateAllowed  Int      @default(0)        // Maksimal frekuensi telat yang ditoleransi (0 = mutlak on-time)
-  enableLatePenalty       Boolean  @default(false)    // Aktifkan pemotongan keterlambatan
-  latePenaltyType         String   @default("FLAT")   // "FLAT" (per kejadian) atau "PER_MINUTE" (per menit telat)
-  latePenaltyAmount       Float    @default(10000)    // Nilai denda/potongan (Rp)
-  enableAlphaPenalty      Boolean  @default(false)    // Aktifkan potongan alpa
-  alphaPenaltyAmount      Float    @default(50000)    // Nilai denda per alpa (Rp)
+  enableZeroLateBonus    Boolean @default(true) // Aktifkan Bonus Zero Late
+  zeroLateBonusAmount    Float   @default(200000) // Nominal bonus (Rp) jika 0 keterlambatan
+  zeroLateMinAttendance  Int     @default(20) // Syarat minimal hari hadir dalam 1 bulan
+  zeroLateMaxLateAllowed Int     @default(0) // Maksimal frekuensi telat yang ditoleransi (0 = mutlak on-time)
+  enableLatePenalty      Boolean @default(false) // Aktifkan pemotongan keterlambatan
+  latePenaltyType        String  @default("FLAT") // "FLAT" (per kejadian) atau "PER_MINUTE" (per menit telat)
+  latePenaltyAmount      Float   @default(10000) // Nilai denda/potongan (Rp)
+  enableAlphaPenalty     Boolean @default(false) // Aktifkan potongan alpa
+  alphaPenaltyAmount     Float   @default(50000) // Nilai denda per alpa (Rp)
 
   // Konfigurasi Gudang Pusat & Transfer Pricing
-  warehouseTransferPricing String  @default("AT_COST") // "AT_COST" atau "MARKUP"
-  warehouseMarkupPercent   Float   @default(0)         // Margin % jika transfer ke resto memakai markup
+  warehouseTransferPricing String @default("AT_COST") // "AT_COST" atau "MARKUP"
+  warehouseMarkupPercent   Float  @default(0) // Margin % jika transfer ke resto memakai markup
 }
 
 model Shift {
-  id             Int       @id @default(autoincrement())
-  userId         Int
-  user           User      @relation(fields: [userId], references: [id])
-  waktuBuka      DateTime  @default(now())
-  waktuTutup     DateTime?
-  saldoAwal      Float
-  saldoSistem    Float?
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  waktuBuka       DateTime  @default(now())
+  waktuTutup      DateTime?
+  saldoAwal       Float
+  saldoSistem     Float?
   saldoElektronik Float?
-  saldoFisikLaci Float?
-  selisih        Float?
-  status         String    @default("Open") // Open, Closed
+  saldoFisikLaci  Float?
+  selisih         Float?
+  status          String    @default("Open") // Open, Closed
 }
 
 // ─── Inventaris & Pembelian ────────────────────────────────────────────
 
 model Supplier {
-  id             Int             @id @default(autoincrement())
-  name           String
-  contact        String?         // Nama PIC
-  phone          String?
-  email          String?
-  address        String?
-  notes          String?
+  id      Int     @id @default(autoincrement())
+  name    String
+  contact String? // Nama PIC
+  phone   String?
+  email   String?
+  address String?
+  notes   String?
 
-  ingredients    Ingredient[]
-  purchaseOrders PurchaseOrder[]
+  ingredients       Ingredient[]
+  purchaseOrders    PurchaseOrder[]
   warehouseInbounds WarehouseInbound[]
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Ingredient {
-  id           Int               @id @default(autoincrement())
-  name         String
-  category     String            @default("FOOD") // FOOD (Dapur), DRINK (Bar), PACKAGING (Kemasan/Showcase)
-  subCategory  String?           // Sub-kategori: Daging & Seafood, Sayuran Segar, Biji Kopi, dsb.
-  unit         String            // gram, ml, buah, liter, kg
-  stock        Float             @default(0)
-  minStock     Float             @default(0)  // Batas minimum → alert stok menipis
-  buyPrice     Float             @default(0)  // Harga beli per unit (untuk HPP otomatis)
-  supplier     Supplier?         @relation(fields: [supplierId], references: [id])
-  supplierId   Int?
+  id          Int       @id @default(autoincrement())
+  name        String
+  category    String    @default("FOOD") // FOOD (Dapur), DRINK (Bar), PACKAGING (Kemasan/Showcase)
+  subCategory String? // Sub-kategori: Daging & Seafood, Sayuran Segar, Biji Kopi, dsb.
+  unit        String // gram, ml, buah, liter, kg
+  stock       Float     @default(0)
+  minStock    Float     @default(0) // Batas minimum → alert stok menipis
+  buyPrice    Float     @default(0) // Harga beli per unit (untuk HPP otomatis)
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  supplierId  Int?
 
   // Konversi Satuan Grosir & Gudang Pusat
-  purchaseUnit        String?           // Karton, Dus, Karung, Bal, Jerigen
-  conversionRatio     Float             @default(1) // 1 purchaseUnit = X base unit (contoh: 1 Karton = 12 Botol)
-  warehouseStock      Float             @default(0) // Stok fisik di Gudang Pusat dalam base unit
-  warehouseMinStock   Float             @default(0) // Batas minimum stok di Gudang Pusat
+  purchaseUnit      String? // Karton, Dus, Karung, Bal, Jerigen
+  conversionRatio   Float   @default(1) // 1 purchaseUnit = X base unit (contoh: 1 Karton = 12 Botol)
+  warehouseStock    Float   @default(0) // Stok fisik di Gudang Pusat dalam base unit
+  warehouseMinStock Float   @default(0) // Batas minimum stok di Gudang Pusat
 
   recipes                   RecipeItem[]
   stockLogs                 IngredientLog[]
   poItems                   PurchaseOrderItem[]
   warehouseInboundItems     WarehouseInboundItem[]
   warehouseRequisitionItems WarehouseRequisitionItem[]
+  warehouseSaleItems        WarehouseSaleItem[]
 
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model RecipeItem {
@@ -354,7 +356,7 @@ model RecipeItem {
   productId     Int
   ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
   ingredientId  Int
-  qtyPerServing Float      // Qty bahan baku per 1 sajian
+  qtyPerServing Float // Qty bahan baku per 1 sajian
 
   @@unique([productId, ingredientId])
 }
@@ -363,71 +365,71 @@ model IngredientLog {
   id           Int        @id @default(autoincrement())
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   ingredientId Int
-  change       Float      // (+) restock/refund, (-) produksi/rusak
+  change       Float // (+) restock/refund, (-) produksi/rusak
   cost         Float      @default(0) // Nilai rupiah mutasi / kerugian (change * buyPrice)
-  type         String     // 'Produksi', 'Restock', 'Penyesuaian', 'Rusak', 'PO', 'Void', 'Distribusi'
-  reason       String?    // 'Busuk / Kadaluarsa', 'Tumpah / Rusak', 'Sisa Trimming / Kupas', 'Kesalahan Masak', 'Lainnya'
+  type         String // 'Produksi', 'Restock', 'Penyesuaian', 'Rusak', 'PO', 'Void', 'Distribusi'
+  reason       String? // 'Busuk / Kadaluarsa', 'Tumpah / Rusak', 'Sisa Trimming / Kupas', 'Kesalahan Masak', 'Lainnya'
   description  String?
-  referenceId  String?    // Order number / PO number
+  referenceId  String? // Order number / PO number
   user         User?      @relation(fields: [userId], references: [id])
   userId       Int?
   createdAt    DateTime   @default(now())
 }
 
 model PurchaseOrder {
-  id          Int                 @id @default(autoincrement())
-  poNumber    String              @unique // PO-20240628-001
-  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  id          Int      @id @default(autoincrement())
+  poNumber    String   @unique // PO-20240628-001
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
   supplierId  Int
-  user        User                @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
   userId      Int
-  status      String              @default("Draft") // Draft, Dikirim, Diterima, Diterima Sebagian, Dibatalkan
+  status      String   @default("Draft") // Draft, Dikirim, Diterima, Diterima Sebagian, Dibatalkan
   notes       String?
-  totalAmount Float               @default(0)
+  totalAmount Float    @default(0)
 
-  items       PurchaseOrderItem[]
+  items PurchaseOrderItem[]
 
-  orderedAt   DateTime            @default(now())
-  receivedAt  DateTime?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  orderedAt  DateTime  @default(now())
+  receivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model PurchaseOrderItem {
-  id           Int            @id @default(autoincrement())
-  po           PurchaseOrder  @relation(fields: [poId], references: [id], onDelete: Cascade)
-  poId         Int
+  id   Int           @id @default(autoincrement())
+  po   PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  poId Int
 
   // Simple Mode: tautkan ke produk jadi
-  product      Product?       @relation(fields: [productId], references: [id])
-  productId    Int?
+  product   Product? @relation(fields: [productId], references: [id])
+  productId Int?
 
   // Advanced Mode: tautkan ke bahan baku
-  ingredient   Ingredient?    @relation(fields: [ingredientId], references: [id])
+  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id])
   ingredientId Int?
 
-  itemName     String         // Snapshot nama saat PO dibuat
-  unit         String
-  qtyOrdered   Float
-  qtyReceived  Float          @default(0)
-  unitPrice    Float
-  subtotal     Float
+  itemName    String // Snapshot nama saat PO dibuat
+  unit        String
+  qtyOrdered  Float
+  qtyReceived Float  @default(0)
+  unitPrice   Float
+  subtotal    Float
 }
 
 model Debt {
-  id           Int           @id @default(autoincrement())
-  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  customerId   Int
-  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  orderId      Int?          @unique
-  amount       Float         // Jumlah piutang awal
-  remaining    Float         // Sisa piutang yang belum dibayar
-  status       String        @default("Belum Lunas") // "Belum Lunas", "Lunas"
-  dueDate      DateTime?     // Tanggal jatuh tempo
-  notes        String?
-  payments     DebtPayment[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id         Int           @id @default(autoincrement())
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId Int
+  order      Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId    Int?          @unique
+  amount     Float // Jumlah piutang awal
+  remaining  Float // Sisa piutang yang belum dibayar
+  status     String        @default("Belum Lunas") // "Belum Lunas", "Lunas"
+  dueDate    DateTime? // Tanggal jatuh tempo
+  notes      String?
+  payments   DebtPayment[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 }
 
 model DebtPayment {
@@ -435,7 +437,7 @@ model DebtPayment {
   debt          Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
   debtId        Int
   amountPaid    Float
-  paymentMethod String   // Tunai, Transfer, Kartu
+  paymentMethod String // Tunai, Transfer, Kartu
   user          User     @relation(fields: [userId], references: [id])
   userId        Int
   createdAt     DateTime @default(now())
@@ -444,30 +446,30 @@ model DebtPayment {
 // ─── Administrasi Staf, Cuti/Izin, Handover & SOP Dapur ─────────────────
 
 model LeaveRequest {
-  id          Int      @id @default(autoincrement())
-  user        User     @relation(fields: [userId], references: [id])
-  userId      Int
-  type        String   // 'Izin', 'Sakit', 'Cuti', 'Tukar Shift', 'Lainnya'
-  startDate   String   // YYYY-MM-DD
-  endDate     String   // YYYY-MM-DD
-  reason      String
-  photoUrl    String?  // Bukti surat dokter / lampiran foto
-  status      String   @default("Pending") // 'Pending', 'Approved', 'Rejected'
-  approvedBy  String?  // Nama Admin / Manager yang menyetujui
-  adminNotes  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     Int
+  type       String // 'Izin', 'Sakit', 'Cuti', 'Tukar Shift', 'Lainnya'
+  startDate  String // YYYY-MM-DD
+  endDate    String // YYYY-MM-DD
+  reason     String
+  photoUrl   String? // Bukti surat dokter / lampiran foto
+  status     String   @default("Pending") // 'Pending', 'Approved', 'Rejected'
+  approvedBy String? // Nama Admin / Manager yang menyetujui
+  adminNotes String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model ShiftHandover {
   id              Int      @id @default(autoincrement())
   user            User     @relation(fields: [userId], references: [id])
   userId          Int
-  shiftName       String   // e.g. "Shift Pagi -> Shift Siang"
-  date            String   // YYYY-MM-DD
+  shiftName       String // e.g. "Shift Pagi -> Shift Siang"
+  date            String // YYYY-MM-DD
   cashBalance     Float    @default(0) // Sisa uang kas kecil / laci
-  equipmentStatus String?  // e.g. "Semua mesin normal, grinder 2 kalibrasi aman"
-  notes           String   // Catatan tugas / pesanan titipan
+  equipmentStatus String? // e.g. "Semua mesin normal, grinder 2 kalibrasi aman"
+  notes           String // Catatan tugas / pesanan titipan
   createdAt       DateTime @default(now())
 }
 
@@ -475,10 +477,10 @@ model KitchenChecklist {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
-  type      String   // 'OPENING' atau 'CLOSING'
-  date      String   // YYYY-MM-DD
+  type      String // 'OPENING' atau 'CLOSING'
+  date      String // YYYY-MM-DD
   shiftName String?
-  itemsJson String   // JSON array [{ title, checked, note }]
+  itemsJson String // JSON array [{ title, checked, note }]
   notes     String?
   createdAt DateTime @default(now())
 }
@@ -486,24 +488,24 @@ model KitchenChecklist {
 // ─── Manajemen Gudang Pusat (Central Warehouse) & Multi-Satuan ─────────────
 
 model WarehouseInbound {
-  id             Int                    @id @default(autoincrement())
-  invoiceNumber  String                 @unique // INB-YYYYMMDD-XXX
-  supplier       Supplier?              @relation(fields: [supplierId], references: [id])
-  supplierId     Int?
-  supplierName   String?                // Fallback nama toko/pasar offline
-  user           User                   @relation(fields: [userId], references: [id])
-  userId         Int
-  totalAmount    Float                  // Total modal belanja
-  paymentSource  String                 @default("DANA_PRIBADI_OWNER") // DANA_PRIBADI_OWNER, KAS_MUKI
-  notes          String?
-  date           DateTime               @default(now())
-  isVoided       Boolean                @default(false)  // Dibatalkan / koreksi salah input
-  voidReason     String?                // Alasan pembatalan (audit trail)
-  voidedAt       DateTime?              // Waktu pembatalan
-  items          WarehouseInboundItem[]
+  id            Int                    @id @default(autoincrement())
+  invoiceNumber String                 @unique // INB-YYYYMMDD-XXX
+  supplier      Supplier?              @relation(fields: [supplierId], references: [id])
+  supplierId    Int?
+  supplierName  String? // Fallback nama toko/pasar offline
+  user          User                   @relation(fields: [userId], references: [id])
+  userId        Int
+  totalAmount   Float // Total modal belanja
+  paymentSource String                 @default("DANA_PRIBADI_OWNER") // DANA_PRIBADI_OWNER, KAS_MUKI
+  notes         String?
+  date          DateTime               @default(now())
+  isVoided      Boolean                @default(false) // Dibatalkan / koreksi salah input
+  voidReason    String? // Alasan pembatalan (audit trail)
+  voidedAt      DateTime? // Waktu pembatalan
+  items         WarehouseInboundItem[]
 
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WarehouseInboundItem {
@@ -513,13 +515,13 @@ model WarehouseInboundItem {
   ingredient      Ingredient       @relation(fields: [ingredientId], references: [id])
   ingredientId    Int
   itemName        String
-  purchaseUnit    String           // Karton, Karung, Bal, Jerigen
-  purchaseQty     Float            // Qty belanja grosir (misal 2 Karton)
+  purchaseUnit    String // Karton, Karung, Bal, Jerigen
+  purchaseQty     Float // Qty belanja grosir (misal 2 Karton)
   conversionRatio Float            @default(1) // 12
-  baseQty         Float            // purchaseQty * conversionRatio (24 Botol)
-  purchasePrice   Float            // Harga per karton (misal Rp 240.000)
-  basePrice       Float            // purchasePrice / conversionRatio (Rp 20.000)
-  subtotal        Float            // purchaseQty * purchasePrice (Rp 480.000)
+  baseQty         Float // purchaseQty * conversionRatio (24 Botol)
+  purchasePrice   Float // Harga per karton (misal Rp 240.000)
+  basePrice       Float // purchasePrice / conversionRatio (Rp 20.000)
+  subtotal        Float // purchaseQty * purchasePrice (Rp 480.000)
 }
 
 model WarehouseRequisition {
@@ -539,8 +541,8 @@ model WarehouseRequisition {
   voidReason        String?
   items             WarehouseRequisitionItem[]
 
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WarehouseRequisitionItem {
@@ -550,24 +552,65 @@ model WarehouseRequisitionItem {
   ingredient    Ingredient           @relation(fields: [ingredientId], references: [id])
   ingredientId  Int
   itemName      String
-  requestedUnit String               // Satuan yg dipilih saat request (Karton atau Botol)
-  requestedQty  Float                // Jumlah yang diminta
-  baseQty       Float                // Konversi ke base unit yang keluar gudang & masuk dapur
-  transferPrice Float                // Harga per base unit
-  subtotal      Float                // baseQty * transferPrice
+  requestedUnit String // Satuan yg dipilih saat request (Karton atau Botol)
+  requestedQty  Float // Jumlah yang diminta
+  baseQty       Float // Konversi ke base unit yang keluar gudang & masuk dapur
+  transferPrice Float // Harga per base unit
+  subtotal      Float // baseQty * transferPrice
 }
 
 model OwnerFundTransaction {
   id            Int      @id @default(autoincrement())
-  type          String   // CAPITAL_IN, TRANSFER_TO_RESTO, REIMBURSEMENT_PAID
+  type          String // CAPITAL_IN, TRANSFER_TO_RESTO, REIMBURSEMENT_PAID
   amount        Float
-  referenceType String?  // INBOUND, REQUISITION, REIMBURSEMENT
-  referenceId   String?  // Invoice / Req number
+  referenceType String? // INBOUND, REQUISITION, REIMBURSEMENT
+  referenceId   String? // Invoice / Req number
   description   String
   date          DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id])
   userId        Int
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 }
 
+model WarehouseSale {
+  id              Int                 @id @default(autoincrement())
+  invoiceNumber   String              @unique // INV-B2B-YYYYMMDD-XXX
+  customerName    String // Nama Toko / Mitra / Umum
+  customerPhone   String?
+  customerAddress String?
+  saleDate        DateTime            @default(now())
+  paymentMethod   String              @default("TRANSFER") // TRANSFER, CASH_OWNER, TEMPO
+  paymentStatus   String              @default("PAID") // PAID, UNPAID
+  totalAmount     Float // Total Nilai Penjualan
+  totalHppCost    Float // Total Modal Beli (HPP)
+  grossProfit     Float // totalAmount - totalHppCost
+  notes           String?
+  isVoided        Boolean             @default(false)
+  voidReason      String?
+  voidedAt        DateTime?
+  items           WarehouseSaleItem[]
+  soldBy          User                @relation("WarehouseSaleSoldBy", fields: [soldById], references: [id])
+  soldById        Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WarehouseSaleItem {
+  id              Int           @id @default(autoincrement())
+  sale            WarehouseSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  saleId          Int
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+  ingredientId    Int
+  itemName        String
+  saleUnit        String // Karton, Dus, Karung, Jerigen, Botol, dsb.
+  saleQty         Float // Jumlah unit yang dijual
+  conversionRatio Float         @default(1)
+  baseQty         Float // saleQty * conversionRatio (satuan dasar yg dipotong dari gudang)
+  unitCostPrice   Float // HPP beli per saleUnit
+  unitSalePrice   Float // Harga jual per saleUnit
+  subtotalCost    Float // saleQty * unitCostPrice
+  subtotal        Float // saleQty * unitSalePrice
+  profit          Float // subtotal - subtotalCost
+}

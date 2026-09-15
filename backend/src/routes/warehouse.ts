@@ -678,4 +678,302 @@ router.post('/owner-finance/reimburse', authenticateToken, async (req: Request, 
   }
 });
 
+// ─── 5. PENJUALAN UMUM & B2B GUDANG PUSAT (WHOLESALE SALES) ────────────────
+// Mengeluarkan bahan baku dari Gudang Pusat ke pihak luar/mitra tanpa mengganggu arus kas kasir
+
+// GET all B2B sales
+router.get('/sales', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const sales = await (prisma as any).warehouseSale.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        soldBy: { select: { id: true, name: true } },
+        items: {
+          include: {
+            ingredient: { select: { id: true, name: true, unit: true } }
+          }
+        }
+      }
+    });
+    res.json(sales);
+  } catch (error: any) {
+    console.error('Error fetching warehouse sales:', error);
+    res.status(500).json({ error: 'Gagal memuat riwayat penjualan gudang: ' + error.message });
+  }
+});
+
+// GET single B2B sale by ID
+router.get('/sales/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const sale = await (prisma as any).warehouseSale.findUnique({
+      where: { id },
+      include: {
+        soldBy: { select: { id: true, name: true } },
+        items: {
+          include: {
+            ingredient: { select: { id: true, name: true, unit: true } }
+          }
+        }
+      }
+    });
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Faktur penjualan B2B tidak ditemukan' });
+    }
+
+    res.json(sale);
+  } catch (error: any) {
+    console.error('Error fetching sale detail:', error);
+    res.status(500).json({ error: 'Gagal memuat detail penjualan: ' + error.message });
+  }
+});
+
+// CREATE B2B Sale
+router.post('/sales', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const {
+      customerName,
+      customerPhone,
+      customerAddress,
+      paymentMethod = 'TRANSFER',
+      paymentStatus = 'PAID',
+      notes,
+      items
+    } = req.body;
+    const userId = (req as any).user.id;
+
+    if (!customerName || !customerName.trim()) {
+      return res.status(400).json({ error: 'Nama pembeli / mitra wajib diisi' });
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Pilih minimal satu item barang yang dijual' });
+    }
+
+    const invoiceNumber = generateDocNumber('INV-B2B');
+
+    // Process & calculate items
+    let totalAmount = 0;
+    let totalHppCost = 0;
+    const processedItems: any[] = [];
+
+    for (const it of items) {
+      const ingId = Number(it.ingredientId);
+      const saleQty = Number(it.saleQty) || 0;
+      const unitSalePrice = Number(it.unitSalePrice) || 0;
+
+      if (!ingId || saleQty <= 0) continue;
+
+      const ing = await prisma.ingredient.findUnique({ where: { id: ingId } });
+      if (!ing) continue;
+
+      const conversionRatio = Number(it.conversionRatio) || ing.conversionRatio || 1;
+      const baseQty = saleQty * conversionRatio;
+
+      // Check warehouse stock availability
+      if (ing.warehouseStock < baseQty) {
+        return res.status(400).json({
+          error: `Stok gudang untuk ${ing.name} tidak mencukupi. Tersedia: ${ing.warehouseStock} ${ing.unit}, Dibutuhkan: ${baseQty} ${ing.unit}`
+        });
+      }
+
+      // HPP calculation per sale unit
+      const unitCostPrice = Number(it.unitCostPrice) || (ing.buyPrice * conversionRatio);
+      const subtotalCost = saleQty * unitCostPrice;
+      const subtotal = saleQty * unitSalePrice;
+      const profit = subtotal - subtotalCost;
+
+      totalAmount += subtotal;
+      totalHppCost += subtotalCost;
+
+      processedItems.push({
+        ingredientId: ingId,
+        itemName: ing.name,
+        saleUnit: it.saleUnit || ing.purchaseUnit || ing.unit,
+        saleQty,
+        conversionRatio,
+        baseQty,
+        unitCostPrice,
+        unitSalePrice,
+        subtotalCost,
+        subtotal,
+        profit
+      });
+    }
+
+    if (processedItems.length === 0) {
+      return res.status(400).json({ error: 'Item penjualan tidak valid' });
+    }
+
+    const grossProfit = totalAmount - totalHppCost;
+
+    // Atomic transaction
+    const saleResult = await prisma.$transaction(async (tx: any) => {
+      // 1. Create WarehouseSale
+      const createdSale = await tx.warehouseSale.create({
+        data: {
+          invoiceNumber,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone ? customerPhone.trim() : null,
+          customerAddress: customerAddress ? customerAddress.trim() : null,
+          paymentMethod,
+          paymentStatus,
+          totalAmount,
+          totalHppCost,
+          grossProfit,
+          notes,
+          soldById: userId,
+          items: {
+            create: processedItems
+          }
+        },
+        include: {
+          items: true,
+          soldBy: { select: { id: true, name: true } }
+        }
+      });
+
+      // 2. Decrement warehouse stock & write IngredientLog
+      for (const it of processedItems) {
+        await tx.ingredient.update({
+          where: { id: it.ingredientId },
+          data: {
+            warehouseStock: { decrement: it.baseQty }
+          }
+        });
+
+        await tx.ingredientLog.create({
+          data: {
+            ingredientId: it.ingredientId,
+            change: -it.baseQty,
+            cost: it.subtotalCost,
+            type: 'Penjualan B2B',
+            referenceId: invoiceNumber,
+            description: `Penjualan grosir B2B ke ${customerName}: ${it.saleQty} ${it.saleUnit} (${it.baseQty} dasar)`,
+            userId
+          }
+        });
+      }
+
+      // 3. Catat penerimaan ke Rekening Pusat / Owner Fund (jika status PAID)
+      // ARUS KAS KAFE (CashFlow) SAMA SEKALI TIDAK TERSENTUH!
+      if (paymentStatus === 'PAID') {
+        await tx.ownerFundTransaction.create({
+          data: {
+            type: 'B2B_SALES_REVENUE',
+            amount: totalAmount,
+            referenceType: 'WAREHOUSE_SALE',
+            referenceId: invoiceNumber,
+            description: `Penerimaan Penjualan B2B dari ${customerName} (${paymentMethod}) - Laba: Rp ${grossProfit.toLocaleString('id-ID')}`,
+            userId,
+            date: new Date()
+          }
+        });
+      }
+
+      return createdSale;
+    });
+
+    if (io) {
+      io.emit('warehouse:sale_created', saleResult);
+      io.emit('warehouse:stock_updated', { type: 'SALE_B2B', invoiceNumber });
+    }
+
+    res.status(201).json({
+      message: `Penjualan B2B (${invoiceNumber}) berhasil disimpan`,
+      sale: saleResult
+    });
+  } catch (error: any) {
+    console.error('Error creating warehouse sale:', error);
+    res.status(500).json({ error: 'Gagal membuat penjualan B2B: ' + error.message });
+  }
+});
+
+// VOID B2B Sale (Koreksi salah input)
+router.post('/sales/:id/void', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const { voidReason } = req.body;
+    const userId = (req as any).user.id;
+
+    if (!voidReason || !voidReason.trim()) {
+      return res.status(400).json({ error: 'Alasan pembatalan penjualan wajib diisi' });
+    }
+
+    const sale = await (prisma as any).warehouseSale.findUnique({
+      where: { id },
+      include: { items: true }
+    });
+
+    if (!sale) return res.status(404).json({ error: 'Faktur penjualan tidak ditemukan' });
+    if (sale.isVoided) return res.status(400).json({ error: 'Faktur penjualan ini sudah pernah dibatalkan' });
+
+    const result = await prisma.$transaction(async (tx: any) => {
+      // 1. Kembalikan stok ke Gudang Pusat
+      for (const it of sale.items) {
+        await tx.ingredient.update({
+          where: { id: it.ingredientId },
+          data: {
+            warehouseStock: { increment: it.baseQty }
+          }
+        });
+
+        await tx.ingredientLog.create({
+          data: {
+            ingredientId: it.ingredientId,
+            change: it.baseQty,
+            cost: it.subtotalCost,
+            type: 'Void Penjualan B2B',
+            referenceId: sale.invoiceNumber,
+            description: `Void Penjualan B2B (${sale.invoiceNumber}): ${voidReason}`,
+            userId
+          }
+        });
+      }
+
+      // 2. Tandai sale isVoided
+      const updatedSale = await tx.warehouseSale.update({
+        where: { id },
+        data: {
+          isVoided: true,
+          voidReason: voidReason.trim(),
+          voidedAt: new Date()
+        }
+      });
+
+      // 3. Batalkan di OwnerFund jika sebelumnya terbayar
+      if (sale.paymentStatus === 'PAID') {
+        await tx.ownerFundTransaction.create({
+          data: {
+            type: 'VOID_B2B_SALES',
+            amount: -sale.totalAmount,
+            referenceType: 'WAREHOUSE_SALE_VOID',
+            referenceId: sale.invoiceNumber,
+            description: `Koreksi/Batal Penjualan B2B ${sale.invoiceNumber}: ${voidReason}`,
+            userId,
+            date: new Date()
+          }
+        });
+      }
+
+      return updatedSale;
+    });
+
+    if (io) {
+      io.emit('warehouse:sale_voided', result);
+      io.emit('warehouse:stock_updated', { type: 'SALE_B2B_VOIDED', invoiceNumber: sale.invoiceNumber });
+    }
+
+    res.json({
+      message: `Faktur penjualan ${sale.invoiceNumber} berhasil dibatalkan dan stok dikembalikan`,
+      sale: result
+    });
+  } catch (error: any) {
+    console.error('Error voiding warehouse sale:', error);
+    res.status(500).json({ error: 'Gagal membatalkan penjualan: ' + error.message });
+  }
+});
+
 export default router;
+

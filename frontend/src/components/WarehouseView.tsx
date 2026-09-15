@@ -36,10 +36,12 @@ import {
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
+import WarehouseSaleModal from './WarehouseSaleModal';
+import WarehouseSaleInvoiceModal from './WarehouseSaleInvoiceModal';
 
 export default function WarehouseView() {
   const posContext = useContext(POSContext);
-  const [activeTab, setActiveTab] = useState<'stock' | 'inbound' | 'transfers' | 'finance'>('stock');
+  const [activeTab, setActiveTab] = useState<'stock' | 'inbound' | 'transfers' | 'finance' | 'sales'>('stock');
 
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -47,6 +49,7 @@ export default function WarehouseView() {
   const [stockList, setStockList] = useState<any[]>([]);
   const [inbounds, setInbounds] = useState<any[]>([]);
   const [transfers, setTransfers] = useState<any[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
   const [financeData, setFinanceData] = useState<any>(null);
   const [suppliers, setSuppliers] = useState<any[]>([]);
 
@@ -61,6 +64,15 @@ export default function WarehouseView() {
   const [showOpnameModal, setShowOpnameModal] = useState(false);
   const [selectedIngredientForOpname, setSelectedIngredientForOpname] = useState<any>(null);
   const [actualOpnameStock, setActualOpnameStock] = useState<number>(0);
+
+  // B2B Sales Modals
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [showSaleInvoiceModal, setShowSaleInvoiceModal] = useState(false);
+  const [selectedSaleForPrint, setSelectedSaleForPrint] = useState<any>(null);
+  const [showVoidSaleModal, setShowVoidSaleModal] = useState(false);
+  const [voidSaleTarget, setVoidSaleTarget] = useState<any>(null);
+  const [voidSaleReason, setVoidSaleReason] = useState('');
+  const [voidSaleLoading, setVoidSaleLoading] = useState(false);
 
   // Void Inbound Modal State
   const [showVoidModal, setShowVoidModal] = useState(false);
@@ -104,13 +116,14 @@ export default function WarehouseView() {
     try {
       const headers = { Authorization: `Bearer ${posContext?.token}` };
       
-      const [dashRes, stockRes, inbRes, transRes, finRes, supRes] = await Promise.all([
+      const [dashRes, stockRes, inbRes, transRes, finRes, supRes, salesRes] = await Promise.all([
         fetch('/api/warehouse/dashboard', { headers }),
         fetch('/api/warehouse/stock', { headers }),
         fetch('/api/warehouse/inbounds', { headers }),
         fetch('/api/warehouse/transfers', { headers }),
         fetch('/api/warehouse/owner-finance', { headers }),
-        fetch('/api/suppliers', { headers })
+        fetch('/api/suppliers', { headers }),
+        fetch('/api/warehouse/sales', { headers })
       ]);
 
       if (dashRes.ok) setDashboardData(await dashRes.json());
@@ -119,6 +132,7 @@ export default function WarehouseView() {
       if (transRes.ok) setTransfers(await transRes.json());
       if (finRes.ok) setFinanceData(await finRes.json());
       if (supRes.ok) setSuppliers(await supRes.json());
+      if (salesRes.ok) setSales(await salesRes.json());
     } catch (err) {
       console.error(err);
       toast('Gagal memuat data gudang', 'error');
@@ -400,6 +414,42 @@ export default function WarehouseView() {
     }
   };
 
+  // ─── VOID B2B SALE (Koreksi Penjualan Grosir) ───────────────────────────
+  const submitVoidSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voidSaleTarget) return;
+    if (!voidSaleReason.trim()) {
+      toast('Alasan pembatalan penjualan wajib diisi', 'warning');
+      return;
+    }
+    setVoidSaleLoading(true);
+    try {
+      const res = await fetch(`/api/warehouse/sales/${voidSaleTarget.id}/void`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ voidReason: voidSaleReason })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`✅ ${data.message}`, 'success');
+        setShowVoidSaleModal(false);
+        setVoidSaleTarget(null);
+        setVoidSaleReason('');
+        fetchData();
+      } else {
+        toast(data.error || 'Gagal membatalkan penjualan B2B', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan jaringan', 'error');
+    } finally {
+      setVoidSaleLoading(false);
+    }
+  };
+
   // ─── OPNAME ACTIONS ────────────────────────────────────────────────────
 
   const submitOpname = async (e: React.FormEvent) => {
@@ -455,13 +505,19 @@ export default function WarehouseView() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowInboundModal(true)}
-            className="btn btn-primary shadow-sm hover:shadow flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold"
+            className="btn btn-primary shadow-sm hover:shadow flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold cursor-pointer"
           >
             <Plus size={15} /> + Penerimaan Pasokan Masuk
           </button>
           <button
+            onClick={() => setShowSaleModal(true)}
+            className="btn bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
+          >
+            <TrendingUp size={15} /> + Penjualan Grosir (B2B)
+          </button>
+          <button
             onClick={() => setShowTransferModal(true)}
-            className="btn bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold"
+            className="btn bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold cursor-pointer"
           >
             <ArrowRightLeft size={15} /> Request Bahan ke Dapur
           </button>
@@ -545,6 +601,17 @@ export default function WarehouseView() {
           }`}
         >
           <Truck size={16} /> Penerimaan Pasokan ({inbounds.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sales')}
+          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'sales'
+              ? 'border-emerald-600 text-emerald-700'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <TrendingUp size={16} /> Penjualan Keluar (B2B) ({sales.length})
         </button>
 
         <button
@@ -769,6 +836,191 @@ export default function WarehouseView() {
                           {inb.isVoided && inb.voidReason && (
                             <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[180px] ml-auto">
                               Alasan: {inb.voidReason}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── TAB PENJUALAN KELUAR B2B / PIHAK LUAR ─────────────────────────── */}
+      {activeTab === 'sales' && (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+            <div>
+              <h3 className="text-sm font-black text-slate-800">
+                Riwayat Penjualan Grosir B2B &bull; Pihak Luar &amp; Mitra
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Transaksi penjualan bahan baku langsung dari Gudang Pusat (Kasir Kafe tidak terganggu)
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSaleModal(true)}
+              className="btn bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <TrendingUp size={14} /> + Transaksi Penjualan B2B
+            </button>
+          </div>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <Coins size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Omzet Penjualan B2B</div>
+                <div className="text-base font-black text-slate-900">
+                  {formatCurrency(sales.filter(s => !s.isVoided).reduce((sum, s) => sum + s.totalAmount, 0))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <TrendingUp size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase">Akumulasi Laba Kotor Grosir</div>
+                <div className="text-base font-black text-emerald-600">
+                  +{formatCurrency(sales.filter(s => !s.isVoided).reduce((sum, s) => sum + s.grossProfit, 0))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Package size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Faktur Diterbitkan</div>
+                <div className="text-base font-black text-slate-900">
+                  {sales.filter(s => !s.isVoided).length} Faktur Aktif
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sales Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
+            {sales.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs font-medium flex flex-col items-center gap-2">
+                <TrendingUp size={32} className="text-slate-300" />
+                <span>Belum ada transaksi penjualan bahan baku ke pihak luar/B2B.</span>
+                <button
+                  onClick={() => setShowSaleModal(true)}
+                  className="mt-2 text-emerald-600 font-bold hover:underline"
+                >
+                  + Buat Penjualan Grosir Pertama
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase">
+                      <th className="p-3.5">No. Faktur B2B</th>
+                      <th className="p-3.5">Tanggal</th>
+                      <th className="p-3.5">Pembeli / Kafe Mitra</th>
+                      <th className="p-3.5">Bahan Yang Dijual</th>
+                      <th className="p-3.5 text-right">Nilai Transaksi</th>
+                      <th className="p-3.5 text-right">Laba Grosir</th>
+                      <th className="p-3.5 text-center">Status</th>
+                      <th className="p-3.5 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {sales.map(s => (
+                      <tr key={s.id} className={`hover:bg-slate-50 transition-colors ${s.isVoided ? 'opacity-50' : ''}`}>
+                        <td className="p-3.5">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-mono font-bold text-indigo-700">{s.invoiceNumber}</span>
+                            {s.isVoided && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
+                                <Ban size={9} /> DIBATALKAN
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3.5 text-slate-500 whitespace-nowrap">
+                          {new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </td>
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-800">{s.customerName}</div>
+                          {s.customerPhone && (
+                            <div className="text-[10px] text-slate-400">{s.customerPhone}</div>
+                          )}
+                        </td>
+                        <td className="p-3.5">
+                          <div className="flex flex-col gap-0.5 max-w-xs">
+                            {(s.items || []).map((it: any) => (
+                              <span key={it.id} className="text-[11px] text-slate-700">
+                                &bull; {it.itemName}: <strong>{it.saleQty} {it.saleUnit}</strong> ({it.baseQty} {it.ingredient?.unit || 'dasar'})
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-3.5 text-right font-black text-slate-900 text-sm whitespace-nowrap">
+                          <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                            {formatCurrency(s.totalAmount)}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right font-black text-emerald-600 text-xs whitespace-nowrap">
+                          <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                            +{formatCurrency(s.grossProfit)}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-center whitespace-nowrap">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            s.isVoided
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : s.paymentStatus === 'PAID'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {s.isVoided ? 'Batal (Void)' : s.paymentStatus === 'PAID' ? 'Lunas' : 'Pending'}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                setSelectedSaleForPrint(s);
+                                setShowSaleInvoiceModal(true);
+                              }}
+                              title="Lihat & Cetak Faktur / Surat Jalan"
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Printer size={12} /> Cetak
+                            </button>
+                            {!s.isVoided && (
+                              <button
+                                onClick={() => {
+                                  setVoidSaleTarget(s);
+                                  setVoidSaleReason('');
+                                  setShowVoidSaleModal(true);
+                                }}
+                                title="Batalkan / Koreksi Penjualan"
+                                className="p-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors cursor-pointer"
+                              >
+                                <Ban size={13} />
+                              </button>
+                            )}
+                          </div>
+                          {s.isVoided && s.voidReason && (
+                            <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[160px] ml-auto">
+                              Alasan: {s.voidReason}
                             </div>
                           )}
                         </td>
@@ -1780,6 +2032,96 @@ export default function WarehouseView() {
                 >
                   <Ban size={13} />
                   {voidLoading ? 'Memproses...' : 'Konfirmasi Batalkan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: FORM PENJUALAN GROSIR B2B (FULL SCREEN) ───────────────── */}
+      <WarehouseSaleModal
+        isOpen={showSaleModal}
+        onClose={() => setShowSaleModal(false)}
+        onSuccess={() => {
+          fetchData();
+          setActiveTab('sales');
+        }}
+        stockList={stockList}
+        token={posContext?.token}
+      />
+
+      {/* ─── MODAL: PREVIEW & CETAK FAKTUR PENJUALAN B2B ──────────────────── */}
+      <WarehouseSaleInvoiceModal
+        isOpen={showSaleInvoiceModal}
+        onClose={() => {
+          setShowSaleInvoiceModal(false);
+          setSelectedSaleForPrint(null);
+        }}
+        sale={selectedSaleForPrint}
+      />
+
+      {/* ─── MODAL: VOID / KOREKSI PENJUALAN B2B ──────────────────────────── */}
+      {showVoidSaleModal && voidSaleTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-red-100 p-6 flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <Ban className="text-red-500" size={20} />
+                Batalkan Penjualan B2B
+              </h3>
+              <button onClick={() => setShowVoidSaleModal(false)} className="icon-btn hover:bg-slate-100">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Info alert */}
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex gap-2.5 text-xs text-amber-900">
+              <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <strong>Data tidak akan dihapus — hanya ditandai VOID.</strong>
+                <br/>Stok gudang akan dikembalikan otomatis dan mutasi pembatalan dicatat.
+              </div>
+            </div>
+
+            {/* Target info */}
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs">
+              <div className="font-mono font-black text-indigo-700 text-sm mb-1">{voidSaleTarget.invoiceNumber}</div>
+              <div className="text-slate-600">Pembeli: <strong>{voidSaleTarget.customerName}</strong></div>
+              <div className="text-slate-600">Total: <strong className="text-red-600">{formatCurrency(voidSaleTarget.totalAmount)}</strong></div>
+              <div className="text-slate-600 mt-1">Item: {voidSaleTarget.items?.length || 0} item bahan baku</div>
+            </div>
+
+            <form onSubmit={submitVoidSale} className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Alasan Pembatalan <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  className="w-full px-3 py-2.5 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 outline-none resize-none"
+                  rows={3}
+                  placeholder="Contoh: Salah pilih item, pembeli membatalkan pesanan grosir..."
+                  value={voidSaleReason}
+                  onChange={e => setVoidSaleReason(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowVoidSaleModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={voidSaleLoading || !voidSaleReason.trim()}
+                  className="px-5 py-2 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-black text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Ban size={13} />
+                  {voidSaleLoading ? 'Memproses...' : 'Konfirmasi Batalkan Penjualan'}
                 </button>
               </div>
             </form>
