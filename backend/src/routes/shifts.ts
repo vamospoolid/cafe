@@ -91,11 +91,17 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 
     // Hitung data finansial per shift
     const enrichedShifts = shifts.map(shift => {
-      const shiftStart = shift.waktuBuka;
-      const shiftEnd = shift.waktuTutup || now;
+      // Proteksi jika waktu buka dan tutup terbalik karena timezone/device clock
+      const rawStart = new Date(shift.waktuBuka).getTime();
+      const rawEnd = new Date(shift.waktuTutup || now).getTime();
+      const shiftStart = new Date(Math.min(rawStart, rawEnd));
+      const shiftEnd = new Date(Math.max(rawStart, rawEnd));
 
-      const inRange = (ts: Date | null | undefined): boolean =>
-        ts != null && ts >= shiftStart && ts <= shiftEnd;
+      const inRange = (ts: Date | null | undefined): boolean => {
+        if (!ts) return false;
+        const t = new Date(ts).getTime();
+        return t >= shiftStart.getTime() && t <= shiftEnd.getTime();
+      };
 
       // Order dalam shift ini
       const shiftOrders = allOrders.filter(o => inRange(o.paidAt ?? o.createdAt));
@@ -274,13 +280,19 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Tidak ada shift yang aktif untuk ditutup.' });
     }
 
+    // Proteksi rentang waktu
+    const shiftOpenTime = new Date(activeShift.waktuBuka);
+    const shiftCloseTime = new Date();
+    const effectiveStart = shiftOpenTime < shiftCloseTime ? shiftOpenTime : shiftCloseTime;
+    const effectiveEnd = shiftOpenTime < shiftCloseTime ? shiftCloseTime : shiftOpenTime;
+
     // Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
         OR: [
-          { paidAt: { gte: activeShift.waktuBuka } },
-          { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
+          { paidAt: { gte: effectiveStart, lte: effectiveEnd } },
+          { paidAt: null, createdAt: { gte: effectiveStart, lte: effectiveEnd } }
         ]
       }
     });
