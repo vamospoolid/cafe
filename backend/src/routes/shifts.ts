@@ -33,7 +33,7 @@ const getNonCashPortion = (paymentMethod: string | null, total: number): number 
 };
 
 // Get active shift for logged in user (or any active open shift)
-router.get('/current', authenticateToken, async (req: Request, res: Response) => {
+const handleGetActiveShift = async (req: Request, res: Response) => {
   try {
     const activeShift = await prisma.shift.findFirst({
       where: { status: 'Open' },
@@ -44,7 +44,11 @@ router.get('/current', authenticateToken, async (req: Request, res: Response) =>
     console.error(error);
     res.status(500).json({ error: 'Gagal mengecek shift aktif' });
   }
-});
+};
+
+router.get('/current', authenticateToken, handleGetActiveShift);
+router.get('/active', authenticateToken, handleGetActiveShift);
+
 
 // Get all shifts (for admin / supervisor history) — dengan rekap finansial lengkap
 router.get('/', authenticateToken, async (req: Request, res: Response) => {

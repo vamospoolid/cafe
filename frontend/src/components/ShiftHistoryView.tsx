@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { History, Clock, FileText, CheckCircle, Play, Square, Download } from 'lucide-react';
+import { History, Clock, FileText, CheckCircle, Play, Square, Download, RefreshCw, AlertCircle, Timer } from 'lucide-react';
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
@@ -44,15 +44,19 @@ const ShiftHistoryView = () => {
 
   const fetchActiveShift = async () => {
     try {
-      const res = await fetch('/api/shifts/active', {
+      // Use /current endpoint (the correct one)
+      const res = await fetch('/api/shifts/current', {
         headers: { Authorization: `Bearer ${posContext?.token}` }
       });
       if (res.ok) {
         const data = await res.json();
         setActiveShift(data);
+      } else {
+        setActiveShift(null); // No active shift
       }
     } catch (e) {
       console.error(e);
+      setActiveShift(null);
     }
   };
 
@@ -124,43 +128,65 @@ const ShiftHistoryView = () => {
           <p className="text-xs text-slate-500 mt-0.5">Kelola pembukaan dan penutupan shift kasir setiap harinya</p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button 
-            className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2.5 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all" 
+          <button
+            className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 py-2.5 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all"
+            onClick={fetchData}
+            title="Refresh data shift"
+          >
+            <RefreshCw size={14} className="text-slate-400" /> Refresh
+          </button>
+          <button
+            className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2.5 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all"
             onClick={exportPDF}
           >
             <FileText size={15} className="text-rose-500" /> Export PDF
           </button>
-          {!activeShift ? (
-            <button 
-              className="flex-1 sm:flex-initial btn btn-primary py-2.5 px-4 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all" 
-              onClick={handleOpenShift}
-            >
-              <Play size={16} /> Buka Shift
-            </button>
-          ) : (
-            <button 
-              className="flex-1 sm:flex-initial btn bg-rose-600 text-white hover:bg-rose-700 py-2.5 px-4 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all" 
-              onClick={handleCloseShift}
-            >
-              <Square size={16} /> Tutup Shift
-            </button>
-          )}
         </div>
       </div>
 
-      {activeShift && (
-        <div className="bg-indigo-50 border border-indigo-200/80 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 shadow-sm shrink-0">
-          <div>
-            <h3 className="font-extrabold text-indigo-950 flex items-center gap-2 text-sm">
-              <Clock size={16} className="text-indigo-600" /> Shift Aktif Saat Ini
-            </h3>
-            <p className="text-xs text-indigo-700 mt-0.5">
-              Dibuka sejak <span className="font-bold">{formatTime(activeShift.waktuBuka)}</span> • Modal Awal: <span className="font-bold">{formatCurrency(activeShift.saldoAwal)}</span>
-            </p>
+      {/* ── STATUS SHIFT BANNER ─────────────────────────────────────────────── */}
+      {activeShift ? (
+        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 border border-indigo-500/50 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-lg shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+              <Timer size={20} className="text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-black text-sm">Shift Aktif Sedang Berjalan</span>
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <p className="text-indigo-200 text-xs mt-0.5">
+                Dibuka sejak <strong className="text-white">{new Date(activeShift.waktuBuka).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}</strong>
+                {' '}• Kasir: <strong className="text-white">{activeShift.user?.name || 'Admin'}</strong>
+                {' '}• Modal Awal: <strong className="text-white">{formatCurrency(activeShift.saldoAwal)}</strong>
+              </p>
+            </div>
           </div>
-          <span className="self-start sm:self-center px-3 py-1 rounded-full bg-indigo-600 text-white text-[10px] font-black tracking-wider uppercase shadow-sm animate-pulse">
-            SEDANG BERJALAN
-          </span>
+          <button
+            onClick={handleCloseShift}
+            className="self-start sm:self-center shrink-0 px-5 py-2.5 rounded-xl bg-white text-indigo-700 font-black text-xs shadow hover:bg-indigo-50 active:scale-95 transition-all flex items-center gap-2"
+          >
+            <Square size={14} /> Tutup Shift & Rekap
+          </button>
+        </div>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+              <AlertCircle size={18} className="text-amber-600" />
+            </div>
+            <div>
+              <div className="font-extrabold text-amber-900 text-sm">Tidak Ada Shift Aktif</div>
+              <p className="text-amber-700 text-xs mt-0.5">Buka shift terlebih dahulu sebelum kasir mulai menerima transaksi.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleOpenShift}
+            className="self-start sm:self-center shrink-0 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md active:scale-95 transition-all flex items-center gap-2"
+          >
+            <Play size={14} /> Buka Shift Sekarang
+          </button>
         </div>
       )}
 
