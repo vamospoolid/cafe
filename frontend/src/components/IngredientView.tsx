@@ -130,6 +130,9 @@ export const IngredientView: React.FC = () => {
   // Stock Loss Data & Analytics
   const [lossData, setLossData] = useState<any>(null);
   const [lossLoading, setLossLoading] = useState(false);
+  const [lossPreset, setLossPreset] = useState<'today' | 'yesterday' | 'last7' | 'this_month' | 'custom'>('this_month');
+  const [lossStartDate, setLossStartDate] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+  const [lossEndDate, setLossEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showLossModal, setShowLossModal] = useState(false);
   const [lossForm, setLossForm] = useState({
     ingredientId: '',
@@ -142,10 +145,14 @@ export const IngredientView: React.FC = () => {
   // Shopping & Restock Analytics
   const [shoppingData, setShoppingData] = useState<any>(null);
   const [shoppingLoading, setShoppingLoading] = useState(false);
+  const [shoppingHorizonDays, setShoppingHorizonDays] = useState<number>(14);
 
   // Stock Movements Ledger
   const [movements, setMovements] = useState<any[]>([]);
   const [movementsLoading, setMovementsLoading] = useState(false);
+  const [movementPreset, setMovementPreset] = useState<'all' | 'today' | 'yesterday' | 'last7' | 'this_month' | 'custom'>('all');
+  const [movementStartDate, setMovementStartDate] = useState<string>('');
+  const [movementEndDate, setMovementEndDate] = useState<string>('');
   const [movementTypeFilter, setMovementTypeFilter] = useState<string>('ALL');
   const [movementIngredientFilter, setMovementIngredientFilter] = useState<string>('ALL');
 
@@ -191,8 +198,10 @@ export const IngredientView: React.FC = () => {
       setGeneratingPdf(true);
       let raw = lossData;
       if (!raw) {
-        // Fix URL: endpoint yang benar adalah /loss-analytics (bukan /loss/analytics)
-        const res = await fetch(`${API}/ingredients/loss-analytics`, { headers });
+        const url = new URL(`${window.location.origin}${API}/ingredients/loss-analytics`);
+        if (lossStartDate) url.searchParams.set('startDate', `${lossStartDate}T00:00:00.000Z`);
+        if (lossEndDate) url.searchParams.set('endDate', `${lossEndDate}T23:59:59.999Z`);
+        const res = await fetch(url.toString(), { headers });
         if (res.ok) raw = await res.json();
       }
       // Mapping field API -> format yang diexpect exportStockLossAuditPDF
@@ -206,7 +215,7 @@ export const IngredientView: React.FC = () => {
           name: t.name,
           unit: t.unit,
           totalQty: t.totalQty,
-          totalRupiah: t.totalCost  // API pakai totalCost, PDF expect totalRupiah
+          totalRupiah: t.totalCost
         })),
         lossLogs: (raw.logs || []).map((l: any) => ({
           date: l.createdAt,
@@ -233,8 +242,9 @@ export const IngredientView: React.FC = () => {
       setGeneratingPdf(true);
       let raw = shoppingData;
       if (!raw) {
-        // Fix URL: endpoint yang benar adalah /shopping-analytics (bukan /shopping/analytics)
-        const res = await fetch(`${API}/ingredients/shopping-analytics`, { headers });
+        const url = new URL(`${window.location.origin}${API}/ingredients/shopping-analytics`);
+        if (shoppingHorizonDays) url.searchParams.set('days', shoppingHorizonDays.toString());
+        const res = await fetch(url.toString(), { headers });
         if (res.ok) raw = await res.json();
       }
       // Mapping field API -> format yang diexpect exportProcurementForecastPDF
@@ -499,10 +509,16 @@ export const IngredientView: React.FC = () => {
     }
   };
 
-  const fetchLossAnalytics = async () => {
+  const fetchLossAnalytics = async (start?: string, end?: string) => {
     setLossLoading(true);
     try {
-      const res = await fetch(`${API}/ingredients/loss-analytics`, { headers });
+      const s = start !== undefined ? start : lossStartDate;
+      const e = end !== undefined ? end : lossEndDate;
+      const url = new URL(`${window.location.origin}${API}/ingredients/loss-analytics`);
+      if (s) url.searchParams.set('startDate', `${s}T00:00:00.000Z`);
+      if (e) url.searchParams.set('endDate', `${e}T23:59:59.999Z`);
+
+      const res = await fetch(url.toString(), { headers });
       if (res.ok) {
         const data = await res.json();
         setLossData(data);
@@ -514,10 +530,38 @@ export const IngredientView: React.FC = () => {
     }
   };
 
-  const fetchShoppingAnalytics = async () => {
+  const setLossPresetDate = (preset: 'today' | 'yesterday' | 'last7' | 'this_month') => {
+    setLossPreset(preset);
+    const now = new Date();
+    let s = new Date();
+    let e = new Date();
+
+    if (preset === 'today') {
+      // today
+    } else if (preset === 'yesterday') {
+      s.setDate(now.getDate() - 1);
+      e.setDate(now.getDate() - 1);
+    } else if (preset === 'last7') {
+      s.setDate(now.getDate() - 6);
+    } else if (preset === 'this_month') {
+      s = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const startStr = s.toISOString().split('T')[0];
+    const endStr = e.toISOString().split('T')[0];
+    setLossStartDate(startStr);
+    setLossEndDate(endStr);
+    fetchLossAnalytics(startStr, endStr);
+  };
+
+  const fetchShoppingAnalytics = async (days?: number) => {
     setShoppingLoading(true);
     try {
-      const res = await fetch(`${API}/ingredients/shopping-analytics`, { headers });
+      const d = days !== undefined ? days : shoppingHorizonDays;
+      const url = new URL(`${window.location.origin}${API}/ingredients/shopping-analytics`);
+      if (d) url.searchParams.set('days', d.toString());
+
+      const res = await fetch(url.toString(), { headers });
       if (res.ok) {
         const data = await res.json();
         setShoppingData(data);
@@ -529,12 +573,19 @@ export const IngredientView: React.FC = () => {
     }
   };
 
-  const fetchMovements = async () => {
+  const fetchMovements = async (start?: string, end?: string, type?: string, ingredientId?: string) => {
     setMovementsLoading(true);
     try {
+      const s = start !== undefined ? start : movementStartDate;
+      const e = end !== undefined ? end : movementEndDate;
+      const t = type !== undefined ? type : movementTypeFilter;
+      const ingId = ingredientId !== undefined ? ingredientId : movementIngredientFilter;
+
       const url = new URL(`${window.location.origin}${API}/ingredients/stock-movements`);
-      if (movementTypeFilter !== 'ALL') url.searchParams.set('type', movementTypeFilter);
-      if (movementIngredientFilter !== 'ALL') url.searchParams.set('ingredientId', movementIngredientFilter);
+      if (s) url.searchParams.set('startDate', `${s}T00:00:00.000Z`);
+      if (e) url.searchParams.set('endDate', `${e}T23:59:59.999Z`);
+      if (t !== 'ALL') url.searchParams.set('type', t);
+      if (ingId !== 'ALL') url.searchParams.set('ingredientId', ingId);
       
       const res = await fetch(url.toString(), { headers });
       if (res.ok) {
@@ -546,6 +597,36 @@ export const IngredientView: React.FC = () => {
     } finally {
       setMovementsLoading(false);
     }
+  };
+
+  const setMovementPresetDate = (preset: 'all' | 'today' | 'yesterday' | 'last7' | 'this_month') => {
+    setMovementPreset(preset);
+    if (preset === 'all') {
+      setMovementStartDate('');
+      setMovementEndDate('');
+      fetchMovements('', '', movementTypeFilter, movementIngredientFilter);
+      return;
+    }
+    const now = new Date();
+    let s = new Date();
+    let e = new Date();
+
+    if (preset === 'today') {
+      // today
+    } else if (preset === 'yesterday') {
+      s.setDate(now.getDate() - 1);
+      e.setDate(now.getDate() - 1);
+    } else if (preset === 'last7') {
+      s.setDate(now.getDate() - 6);
+    } else if (preset === 'this_month') {
+      s = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const startStr = s.toISOString().split('T')[0];
+    const endStr = e.toISOString().split('T')[0];
+    setMovementStartDate(startStr);
+    setMovementEndDate(endStr);
+    fetchMovements(startStr, endStr, movementTypeFilter, movementIngredientFilter);
   };
 
   const fetchForecast = async () => {
@@ -998,21 +1079,9 @@ export const IngredientView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 7 TAB UTAMA BAHAN BAKU
+          2. NAVIGASI 7 TAB UTAMA BAHAN BAKU (RESPONSIVE)
       ────────────────────────────────────────────────────────────── */}
-      <div 
-        style={{ 
-          background: 'white', 
-          borderRadius: '1.15rem', 
-          padding: '.5rem', 
-          border: '1px solid #e2e8f0', 
-          boxShadow: '0 2px 8px rgba(0,0,0,0.03)', 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: '.5rem', 
-          flexShrink: 0
-        }}
-      >
+      <div className="bg-white rounded-2xl p-1.5 sm:p-2 border border-slate-200 shadow-sm flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-1.5 sm:gap-2 shrink-0">
         {[
           { 
             id: 'master', 
@@ -1085,6 +1154,8 @@ export const IngredientView: React.FC = () => {
                 transition: 'all 0.15s ease',
                 textAlign: 'left',
                 boxShadow: isSelected ? '0 4px 12px rgba(124, 58, 237, 0.25)' : 'none',
+                minWidth: '150px',
+                flexShrink: 0
               }}
             >
               <div 
@@ -1778,10 +1849,83 @@ export const IngredientView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          TAB 2: STOCK LOSS & ANALISIS KERUSAKAN
+          TAB 3: STOCK LOSS & ANALISIS KERUSAKAN
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'loss' && (
         <div className="space-y-6 animate-fade-in">
+          {/* RESPONSIVE DATE FILTER & ACTION BAR */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+              {/* Quick Date Presets */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full pb-1 sm:pb-0">
+                <span className="text-[11px] font-bold text-slate-400 mr-1 shrink-0">Periode:</span>
+                {[
+                  { id: 'today', label: 'Hari Ini' },
+                  { id: 'yesterday', label: 'Kemarin' },
+                  { id: 'last7', label: '7 Hari' },
+                  { id: 'this_month', label: 'Bulan Ini' },
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setLossPresetDate(p.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                      lossPreset === p.id
+                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/20'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Date Range Picker */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs w-full sm:w-auto justify-between sm:justify-start">
+                <span className="text-[10px] font-bold text-slate-400">Dari:</span>
+                <input
+                  type="date"
+                  value={lossStartDate}
+                  onChange={e => {
+                    setLossPreset('custom' as any);
+                    setLossStartDate(e.target.value);
+                    fetchLossAnalytics(e.target.value, lossEndDate);
+                  }}
+                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                />
+                <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
+                <input
+                  type="date"
+                  value={lossEndDate}
+                  onChange={e => {
+                    setLossPreset('custom' as any);
+                    setLossEndDate(e.target.value);
+                    fetchLossAnalytics(lossStartDate, e.target.value);
+                  }}
+                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 self-stretch sm:self-end lg:self-auto justify-end flex-wrap">
+              <button
+                onClick={handleExportLossPDF}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                title="Cetak Laporan Audit Kerusakan (PDF)"
+              >
+                <Printer size={14} />
+                <span>Cetak PDF</span>
+              </button>
+              <button
+                onClick={() => handleOpenLossModal()}
+                className="flex-1 sm:flex-none px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Plus size={15} />
+                <span>Catat Loss</span>
+              </button>
+            </div>
+          </div>
+
           {/* LOSS SUMMARY METRICS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-rose-500 to-rose-600 p-6 rounded-3xl text-white shadow-lg shadow-rose-500/20">
@@ -1847,7 +1991,7 @@ export const IngredientView: React.FC = () => {
               <div className="space-y-3">
                 {lossData?.topLossItems?.length === 0 ? (
                   <div className="text-center py-8 text-xs text-slate-400">
-                    Belum ada data kerugian tercatat 🎉
+                    Belum ada data kerugian pada periode ini 🎉
                   </div>
                 ) : (
                   lossData?.topLossItems?.map((item: any, idx: number) => (
@@ -1880,23 +2024,7 @@ export const IngredientView: React.FC = () => {
                     <History size={18} className="text-indigo-600" />
                     Riwayat Pencatatan Kerusakan & Pembuangan (Loss Log)
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Jejak audit insiden bahan busuk, kadaluarsa, atau rusak.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleExportLossPDF}
-                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                    title="Cetak Laporan Audit Kerusakan (PDF)"
-                  >
-                    <Printer size={14} />
-                    <span>Cetak PDF</span>
-                  </button>
-                  <button
-                    onClick={() => handleOpenLossModal()}
-                    className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                  >
-                    + Catat Loss
-                  </button>
+                  <p className="text-xs text-slate-500 mt-0.5">Jejak audit insiden bahan busuk, kadaluarsa, atau rusak periode ini.</p>
                 </div>
               </div>
 
@@ -1922,7 +2050,7 @@ export const IngredientView: React.FC = () => {
                     ) : lossData?.logs?.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-8 text-center text-slate-400">
-                          Belum ada log stock loss yang tercatat.
+                          Belum ada log stock loss yang tercatat pada rentang tanggal ini.
                         </td>
                       </tr>
                     ) : (
@@ -1960,43 +2088,106 @@ export const IngredientView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          TAB 3: KARTU STOK & ALUR DISTRIBUSI
+          TAB 4: KARTU STOK & ALUR DISTRIBUSI
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'movements' && (
         <div className="space-y-6 animate-fade-in">
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <History size={20} className="text-indigo-600" />
-                Kartu Stok Digital & Alur Mutasi
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">Jejak lengkap keluar/masuk stok: Restock PO, Produksi POS, Stock Loss, dan Opname.</p>
+          {/* RESPONSIVE FILTER BAR */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <History size={20} className="text-indigo-600" />
+                  Kartu Stok Digital & Alur Mutasi
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Jejak lengkap keluar/masuk stok: Restock PO, Produksi POS, Stock Loss, dan Opname.</p>
+              </div>
+
+              {/* Dropdown Filters */}
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                <select
+                  className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none"
+                  value={movementIngredientFilter}
+                  onChange={e => {
+                    setMovementIngredientFilter(e.target.value);
+                    fetchMovements(movementStartDate, movementEndDate, movementTypeFilter, e.target.value);
+                  }}
+                >
+                  <option value="ALL">Semua Bahan Baku</option>
+                  {ingredients.map(i => (
+                    <option key={i.id} value={i.id.toString()}>{i.name}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none"
+                  value={movementTypeFilter}
+                  onChange={e => {
+                    setMovementTypeFilter(e.target.value);
+                    fetchMovements(movementStartDate, movementEndDate, e.target.value, movementIngredientFilter);
+                  }}
+                >
+                  <option value="ALL">Semua Jenis Mutasi</option>
+                  <option value="Produksi">🍳 Produksi (POS Sale)</option>
+                  <option value="Restock">📥 Restock / Pembelian</option>
+                  <option value="Rusak">🗑️ Stock Loss / Rusak</option>
+                  <option value="Stock Opname">⚖️ Stock Opname Audit</option>
+                  <option value="Penyesuaian">🔧 Penyesuaian Manual</option>
+                </select>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <select
-                className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                value={movementIngredientFilter}
-                onChange={e => setMovementIngredientFilter(e.target.value)}
-              >
-                <option value="ALL">Semua Bahan Baku</option>
-                {ingredients.map(i => (
-                  <option key={i.id} value={i.id.toString()}>{i.name}</option>
+            {/* Date Filters Row */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 flex-wrap">
+              {/* Quick Date Presets */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full pb-1 sm:pb-0">
+                <span className="text-[11px] font-bold text-slate-400 mr-1 shrink-0">Tanggal:</span>
+                {[
+                  { id: 'all', label: 'Semua Waktu' },
+                  { id: 'today', label: 'Hari Ini' },
+                  { id: 'yesterday', label: 'Kemarin' },
+                  { id: 'last7', label: '7 Hari' },
+                  { id: 'this_month', label: 'Bulan Ini' },
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setMovementPresetDate(p.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                      movementPreset === p.id
+                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
                 ))}
-              </select>
+              </div>
 
-              <select
-                className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl"
-                value={movementTypeFilter}
-                onChange={e => setMovementTypeFilter(e.target.value)}
-              >
-                <option value="ALL">Semua Jenis Mutasi</option>
-                <option value="Produksi">🍳 Produksi (POS Sale)</option>
-                <option value="Restock">📥 Restock / Pembelian</option>
-                <option value="Rusak">🗑️ Stock Loss / Rusak</option>
-                <option value="Stock Opname">⚖️ Stock Opname Audit</option>
-                <option value="Penyesuaian">🔧 Penyesuaian Manual</option>
-              </select>
+              {/* Custom Date Inputs */}
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs w-full sm:w-auto justify-between sm:justify-start">
+                <span className="text-[10px] font-bold text-slate-400">Dari:</span>
+                <input
+                  type="date"
+                  value={movementStartDate}
+                  onChange={e => {
+                    setMovementPreset('custom' as any);
+                    setMovementStartDate(e.target.value);
+                    fetchMovements(e.target.value, movementEndDate, movementTypeFilter, movementIngredientFilter);
+                  }}
+                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                />
+                <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
+                <input
+                  type="date"
+                  value={movementEndDate}
+                  onChange={e => {
+                    setMovementPreset('custom' as any);
+                    setMovementEndDate(e.target.value);
+                    fetchMovements(movementStartDate, e.target.value, movementTypeFilter, movementIngredientFilter);
+                  }}
+                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                />
+              </div>
             </div>
           </div>
 
@@ -2081,19 +2272,72 @@ export const IngredientView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          TAB 4: ANALISIS BELANJA & STOK MINIM
+          TAB 5: ANALISIS BELANJA & STOK MINIM
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'shopping' && (
         <div className="space-y-6 animate-fade-in">
+          {/* HORIZON SELECTOR & ACTIONS HEADER BAR */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1.5">
+                <Sparkles size={16} className="text-emerald-600" />
+                Horizon Pemakaian:
+              </span>
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full pb-1 sm:pb-0">
+                {[
+                  { days: 3, label: '3 Hari' },
+                  { days: 7, label: '7 Hari (1 Mgg)' },
+                  { days: 14, label: '14 Hari (Standar)' },
+                  { days: 30, label: '30 Hari (1 Bln)' },
+                ].map(h => (
+                  <button
+                    key={h.days}
+                    onClick={() => {
+                      setShoppingHorizonDays(h.days);
+                      fetchShoppingAnalytics(h.days);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                      shoppingHorizonDays === h.days
+                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex items-center gap-2 self-stretch sm:self-end lg:self-auto justify-end flex-wrap">
+              <button
+                onClick={copyAllShoppingToWA}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                title="Salin Semua Daftar Belanja ke Format WhatsApp"
+              >
+                <MessageCircle size={14} />
+                <span>Salin WA</span>
+              </button>
+              <button
+                onClick={handleExportShoppingPDF}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                title="Cetak Laporan Rencana Anggaran Belanja (PDF)"
+              >
+                <Printer size={14} />
+                <span>Cetak PDF</span>
+              </button>
+            </div>
+          </div>
+
           {/* SHOPPING SUMMARY CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 rounded-3xl text-white shadow-lg shadow-emerald-600/20">
-              <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Estimasi Modal Belanja Restock</p>
+              <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Estimasi Modal Belanja ({shoppingHorizonDays} Hari)</p>
               <h3 className="text-2xl sm:text-3xl font-black mt-1">
                 Rp {(shoppingData?.summary?.totalRestockCost || 0).toLocaleString('id-ID')}
               </h3>
               <p className="text-xs text-emerald-100/80 mt-1">
-                Untuk mengembalikan seluruh stok menipis ke batas aman optimal.
+                Untuk mengembalikan seluruh stok menipis ke batas aman optimal {shoppingHorizonDays} hari ke depan.
               </p>
             </div>
 
@@ -2128,28 +2372,13 @@ export const IngredientView: React.FC = () => {
 
           {/* REKOMENDASI BELANJA PER SUPPLIER */}
           <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <Truck size={18} className="text-emerald-600" />
-                Rekomendasi Pengadaan Cerdas per Supplier
-              </h3>
-              <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-                <button
-                  onClick={copyAllShoppingToWA}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-                  title="Salin Semua Daftar Belanja ke Format WhatsApp"
-                >
-                  <MessageCircle size={14} />
-                  <span>Salin Format WA</span>
-                </button>
-                <button
-                  onClick={handleExportShoppingPDF}
-                  className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-                  title="Cetak Laporan Rencana Anggaran Belanja (PDF)"
-                >
-                  <Printer size={14} />
-                  <span>Cetak PDF</span>
-                </button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Truck size={18} className="text-emerald-600" />
+                  Rekomendasi Pengadaan Cerdas per Supplier
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Dikelompokkan otomatis per vendor untuk kemudahan pembuatan Surat PO dan Order WhatsApp.</p>
               </div>
             </div>
 

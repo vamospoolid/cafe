@@ -424,11 +424,15 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
       type: { in: ['Rusak', 'Loss'] }
     };
 
+    let sDate: Date | null = null;
+    let eDate: Date | null = null;
+
     if (startDate && endDate) {
-      whereCondition.createdAt = {
-        gte: new Date(startDate as string),
-        lte: new Date(new Date(endDate as string).setHours(23, 59, 59, 999))
-      };
+      sDate = new Date(startDate as string);
+      sDate.setHours(0, 0, 0, 0);
+      eDate = new Date(endDate as string);
+      eDate.setHours(23, 59, 59, 999);
+      whereCondition.createdAt = { gte: sDate, lte: eDate };
     }
 
     const lossLogs = await prisma.ingredientLog.findMany({
@@ -448,12 +452,7 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
     const productionLogs = await prisma.ingredientLog.findMany({
       where: {
         type: 'Produksi',
-        ...(startDate && endDate ? {
-          createdAt: {
-            gte: new Date(startDate as string),
-            lte: new Date(new Date(endDate as string).setHours(23, 59, 59, 999))
-          }
-        } : {})
+        ...(sDate && eDate ? { createdAt: { gte: sDate, lte: eDate } } : {})
       },
       include: { ingredient: { select: { buyPrice: true } } }
     });
@@ -500,7 +499,9 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
         totalLossCount,
         totalProductionCost,
         lossPercentage: Math.round(lossPercentage * 10) / 10,
-        efficiencyPercentage: Math.round(efficiencyPercentage * 10) / 10
+        efficiencyPercentage: Math.round(efficiencyPercentage * 10) / 10,
+        startDate: startDate || null,
+        endDate: endDate || null
       },
       reasons: reasonMap,
       topLossItems,
@@ -515,19 +516,22 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
 // GET Analisis Belanja Cerdas & Restock
 router.get('/shopping-analytics', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const horizonDays = Math.max(1, Number(req.query.days) || 14);
+
     const ingredients = await prisma.ingredient.findMany({
       include: { supplier: true },
       orderBy: { name: 'asc' }
     });
 
-    // Ambil pemakaian 14 hari terakhir untuk hitung burn rate
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    // Ambil pemakaian sesuai horizon hari yang dipilih (default: 14 hari)
+    const horizonAgo = new Date();
+    horizonAgo.setDate(horizonAgo.getDate() - horizonDays);
+    horizonAgo.setHours(0, 0, 0, 0);
 
     const recentLogs = await prisma.ingredientLog.findMany({
       where: {
         type: 'Produksi',
-        createdAt: { gte: fourteenDaysAgo }
+        createdAt: { gte: horizonAgo }
       }
     });
 
@@ -538,8 +542,8 @@ router.get('/shopping-analytics', authenticateToken, async (req: Request, res: R
 
     let totalRestockCost = 0;
     const recommendations = ingredients.map(ing => {
-      const total14DayUsage = usageMap[ing.id] || 0;
-      const dailyBurnRate = Math.round((total14DayUsage / 14) * 10) / 10;
+      const totalHorizonUsage = usageMap[ing.id] || 0;
+      const dailyBurnRate = Math.round((totalHorizonUsage / horizonDays) * 10) / 10;
       
       let status = 'Aman';
       if (ing.stock === 0) status = 'Kritis (Habis)';
@@ -593,7 +597,8 @@ router.get('/shopping-analytics', authenticateToken, async (req: Request, res: R
       summary: {
         totalLowStockCount: lowStockItems.length,
         totalCriticalCount: lowStockItems.filter(i => i.stock === 0).length,
-        totalRestockCost
+        totalRestockCost,
+        horizonDays
       },
       lowStockItems,
       allRecommendations: recommendations,
@@ -608,12 +613,18 @@ router.get('/shopping-analytics', authenticateToken, async (req: Request, res: R
 // GET Riwayat Mutasi & Distribusi Stok
 router.get('/stock-movements', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { ingredientId, type, date, limit = 100 } = req.query;
+    const { ingredientId, type, date, startDate, endDate, limit = 200 } = req.query;
     const where: any = {};
-    if (ingredientId) where.ingredientId = Number(ingredientId);
-    if (type) where.type = type as string;
+    if (ingredientId && ingredientId !== 'ALL') where.ingredientId = Number(ingredientId);
+    if (type && type !== 'ALL') where.type = type as string;
 
-    if (date) {
+    if (startDate && endDate) {
+      const dStart = new Date(startDate as string);
+      dStart.setHours(0, 0, 0, 0);
+      const dEnd = new Date(endDate as string);
+      dEnd.setHours(23, 59, 59, 999);
+      where.createdAt = { gte: dStart, lte: dEnd };
+    } else if (date) {
       const dStart = new Date(date as string);
       dStart.setHours(0, 0, 0, 0);
       const dEnd = new Date(date as string);
