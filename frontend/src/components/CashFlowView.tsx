@@ -8,6 +8,7 @@ import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast, confirmAlert } from '../utils/alert';
+import { exportPettyCashPDF } from '../utils/pdfGenerator';
 
 const CashFlowView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -154,61 +155,27 @@ const CashFlowView = () => {
     return map;
   }, [cashflows]);
 
-  const exportPDF = () => {
-    const doc = new jsPDF();
-    
-    // Header
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('LAPORAN BUKU KAS & ARUS KAS (PETTY CASH)', 14, 15);
-    
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Tanggal Cetak : ${new Date().toLocaleString('id-ID')}`, 14, 22);
-    doc.text(`Filter Kategori : ${selectedMainCat === 'ALL' ? 'Semua Kategori' : selectedMainCat} | Jenis: ${filterType || 'Semua'}`, 14, 27);
-
-    const tableColumn = ["Tanggal", "Jenis", "Kategori Utama", "Sub Kategori", "Keterangan", "Nominal", "Kasir"];
-    const tableRows: any[] = [];
-
-    filteredCashflows.forEach((cf) => {
-      const { main, sub } = parseCategory(cf.category);
-      const amt = Number(cf.amount) || 0;
-      tableRows.push([
-        formatDate(cf.date),
-        cf.type || 'Pengeluaran',
-        main,
-        sub || '-',
-        cf.description || '-',
-        cf.type === 'Pemasukan' ? `+${formatCurrency(amt)}` : `-${formatCurrency(amt)}`,
-        cf.user?.name || '-'
-      ]);
-    });
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 32,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-      columnStyles: {
-        5: { halign: 'right', fontStyle: 'bold' }
-      }
-    });
-
-    const finalY = (doc as any).lastAutoTable?.finalY || 40;
-    
-    // Summary Box
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Ringkasan Arus Kas:', 14, finalY + 10);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.text(`Total Pemasukan (In)   : ${formatCurrency(totalIn)}`, 14, finalY + 16);
-    doc.text(`Total Pengeluaran (Out) : ${formatCurrency(totalOut)}`, 14, finalY + 21);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Saldo Kas Bersih       : ${formatCurrency(balance)}`, 14, finalY + 27);
-
-    doc.save(`Laporan_Kas_${Date.now()}.pdf`);
+  const exportPDF = async () => {
+    if (filteredCashflows.length === 0) {
+      toast('Tidak ada data transaksi kas untuk diekspor.', 'error');
+      return;
+    }
+    try {
+      await exportPettyCashPDF(
+        filteredCashflows,
+        posContext?.settings || { storeName: 'MUKI RAMEN' },
+        {
+          category: selectedMainCat === 'ALL' ? 'Semua Kategori' : selectedMainCat,
+          type: filterType || 'Semua',
+          searchQuery: searchQuery
+        },
+        posContext?.user?.username || 'Administrator'
+      );
+      toast('Laporan Buku Kas & Arus Kas berhasil diunduh!', 'success');
+    } catch (err) {
+      console.error('Gagal export PDF kas:', err);
+      toast('Terjadi kesalahan saat membuat dokumen PDF.', 'error');
+    }
   };
 
   const categoryIcons: Record<string, any> = {

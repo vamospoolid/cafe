@@ -2818,4 +2818,372 @@ export const exportIndividualAppraisalPDF = async (
   doc.save(`Rapor_Kinerja_${(u.name || 'Karyawan').replace(/\s+/g, '_')}_${(monthStr || 'Periode').replace(/\s+/g, '_')}.pdf`);
 };
 
+export const exportPettyCashPDF = async (
+  cashflows: any[],
+  settings: VenueSettings,
+  filterInfo: { category?: string; type?: string; searchQuery?: string },
+  userName?: string
+) => {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  let logoBase64 = '';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {
+      console.warn('Failed to load logo, using fallback', e);
+    }
+  }
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+
+  // Compute metrics
+  const totalIn = cashflows.filter(c => c.type === 'Pemasukan').reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+  const totalOut = cashflows.filter(c => c.type === 'Pengeluaran').reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+  const netBalance = totalIn - totalOut;
+  const inCount = cashflows.filter(c => c.type === 'Pemasukan').length;
+  const outCount = cashflows.filter(c => c.type === 'Pengeluaran').length;
+
+  // Determine earliest and latest dates
+  let minDate = '';
+  let maxDate = '';
+  if (cashflows.length > 0) {
+    const dates = cashflows.map(c => new Date(c.date).getTime()).filter(t => !isNaN(t));
+    if (dates.length > 0) {
+      minDate = new Date(Math.min(...dates)).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+      maxDate = new Date(Math.max(...dates)).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+  }
+  const dateRangeStr = minDate && maxDate ? (minDate === maxDate ? minDate : `${minDate} s/d ${maxDate}`) : 'Semua Periode';
+
+  // 1. Header Callback
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 15, 15);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(30, 58, 138); // navy
+      pdfDoc.rect(margin, 11, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    // Store Details
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
+    pdfDoc.text(`WhatsApp / Telp: ${settings?.phone || '081298765432'}`, textXOffset, 25);
+
+    // Title & Doc Info
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(11);
+    pdfDoc.setTextColor(30, 58, 138);
+    pdfDoc.text('LAPORAN BUKU KAS & ARUS KAS (PETTY CASH)', pageWidth - margin, 16, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Periode: ${dateRangeStr}`, pageWidth - margin, 20.5, { align: 'right' });
+    pdfDoc.text(`Filter Kategori: ${filterInfo.category || 'Semua'} | Jenis: ${filterInfo.type || 'Semua'}`, pageWidth - margin, 24.5, { align: 'right' });
+    pdfDoc.text(`Dicetak Oleh: ${userName || 'Administrator'} | ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 28.5, { align: 'right' });
+
+    // Divider Line
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 32, pageWidth - margin, 32);
+  };
+
+  // 2. Footer Callback
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+
+    pdfDoc.text(
+      `Sistem Akuntansi Kas & Laporan POS ${settings?.storeName || 'MUKI RAMEN'} — Dokumen Keuangan Resmi.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(
+      `Halaman ${pageNum} dari ${totalPages}`,
+      pageWidth - margin,
+      pageHeight - 8,
+      { align: 'right' }
+    );
+  };
+
+  // 3. Render Executive KPI Summary Cards on First Page
+  addHeader(doc);
+
+  let curY = 36;
+  const cardGap = 3.5;
+  const cardWidth = (pageWidth - margin * 2 - cardGap * 3) / 4;
+  const cardHeight = 18;
+
+  // Card 1: Total Pemasukan (Inflow)
+  doc.setFillColor(240, 253, 244); // emerald-50
+  doc.setDrawColor(187, 247, 208); // emerald-200
+  doc.roundedRect(margin, curY, cardWidth, cardHeight, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(22, 101, 52); // emerald-800
+  doc.text('TOTAL KAS MASUK', margin + 3, curY + 5);
+  doc.setFontSize(9.5);
+  doc.text(`+${formatCurrency(totalIn)}`, margin + 3, curY + 11.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(21, 128, 61);
+  doc.text(`${inCount} Transaksi Masuk`, margin + 3, curY + 15.5);
+
+  // Card 2: Total Pengeluaran (Outflow)
+  const c2X = margin + cardWidth + cardGap;
+  doc.setFillColor(254, 242, 242); // rose-50
+  doc.setDrawColor(254, 205, 211); // rose-200
+  doc.roundedRect(c2X, curY, cardWidth, cardHeight, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(159, 18, 57); // rose-800
+  doc.text('TOTAL KAS KELUAR', c2X + 3, curY + 5);
+  doc.setFontSize(9.5);
+  doc.text(`-${formatCurrency(totalOut)}`, c2X + 3, curY + 11.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(190, 18, 60);
+  doc.text(`${outCount} Transaksi Keluar`, c2X + 3, curY + 15.5);
+
+  // Card 3: Saldo Kas Bersih (Net)
+  const c3X = margin + (cardWidth + cardGap) * 2;
+  const isSurplus = netBalance >= 0;
+  doc.setFillColor(isSurplus ? 239 : 255, isSurplus ? 246 : 241, isSurplus ? 255 : 242);
+  doc.setDrawColor(isSurplus ? 191 : 254, isSurplus ? 219 : 205, isSurplus ? 254 : 211);
+  doc.roundedRect(c3X, curY, cardWidth, cardHeight, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(isSurplus ? 30 : 159, isSurplus ? 58 : 18, isSurplus ? 138 : 57);
+  doc.text('SALDO KAS BERSIH', c3X + 3, curY + 5);
+  doc.setFontSize(9.5);
+  doc.text(formatCurrency(netBalance), c3X + 3, curY + 11.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.text(isSurplus ? 'Surplus Kas Positif' : 'Defisit Kas Berjalan', c3X + 3, curY + 15.5);
+
+  // Card 4: Total Mutasi / Transaksi
+  const c4X = margin + (cardWidth + cardGap) * 3;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(c4X, curY, cardWidth, cardHeight, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(51, 65, 85);
+  doc.text('TOTAL PERPUTARAN KAS', c4X + 3, curY + 5);
+  doc.setFontSize(9.5);
+  doc.text(formatCurrency(totalIn + totalOut), c4X + 3, curY + 11.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.text(`${cashflows.length} Total Mutasi`, c4X + 3, curY + 15.5);
+
+  curY += cardHeight + 6;
+
+  // 4. Data Table
+  const tableColumn = ['NO', 'TANGGAL & WAKTU', 'JENIS', 'KATEGORI UTAMA', 'SUB-KATEGORI', 'KETERANGAN / DESKRIPSI', 'NOMINAL (RP)', 'PIC / KASIR'];
+  const tableRows: any[] = [];
+
+  cashflows.forEach((cf, idx) => {
+    let main = 'Umum';
+    let sub = '-';
+    if (cf.category && typeof cf.category === 'string') {
+      const parts = cf.category.split(' - ');
+      main = parts[0]?.trim() || 'Umum';
+      sub = parts.slice(1).join(' - ').trim() || '-';
+    }
+
+    const amt = Number(cf.amount) || 0;
+    const isIncome = cf.type === 'Pemasukan';
+    let dateFmt = '-';
+    if (cf.date) {
+      try {
+        const d = new Date(cf.date);
+        dateFmt = `${d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}\n${d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`;
+      } catch {
+        dateFmt = String(cf.date);
+      }
+    }
+
+    tableRows.push([
+      String(idx + 1),
+      dateFmt,
+      cf.type || 'Pengeluaran',
+      main,
+      sub,
+      cf.description || '-',
+      isIncome ? `+${formatCurrency(amt)}` : `-${formatCurrency(amt)}`,
+      cf.user?.name || cf.user?.username || '-'
+    ]);
+  });
+
+  autoTable(doc, {
+    head: [tableColumn],
+    body: tableRows,
+    startY: curY,
+    margin: { top: 35, bottom: 20, left: margin, right: margin },
+    styles: { fontSize: 7.5, cellPadding: 2, font: 'helvetica', textColor: [51, 65, 85], overflow: 'linebreak' },
+    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 24, fontSize: 7 },
+      2: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+      3: { cellWidth: 26 },
+      4: { cellWidth: 26 },
+      5: { cellWidth: 'auto' },
+      6: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
+      7: { cellWidth: 20 }
+    },
+    didParseCell: (cellData: any) => {
+      if (cellData.section === 'body') {
+        if (cellData.column.index === 2) {
+          const val = cellData.cell.raw;
+          if (val === 'Pemasukan') {
+            cellData.cell.styles.textColor = [22, 101, 52];
+            cellData.cell.styles.fillColor = [240, 253, 244];
+          } else {
+            cellData.cell.styles.textColor = [159, 18, 57];
+            cellData.cell.styles.fillColor = [254, 242, 242];
+          }
+        }
+        if (cellData.column.index === 6) {
+          const val = String(cellData.cell.raw || '');
+          if (val.startsWith('+')) {
+            cellData.cell.styles.textColor = [22, 101, 52];
+          } else {
+            cellData.cell.styles.textColor = [220, 38, 38];
+          }
+        }
+      }
+    }
+  });
+
+  let nextY = (doc as any).lastAutoTable?.finalY || 100;
+
+  // 5. Rekonsiliasi & Ringkasan Keuangan Box
+  if (nextY + 30 > pageHeight - 35) {
+    doc.addPage();
+    nextY = 35;
+  } else {
+    nextY += 6;
+  }
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin, nextY, pageWidth - margin * 2, 26, 2, 2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('REKONSILIASI AKHIR ARUS KAS (PETTY CASH SUMMARY)', margin + 4, nextY + 6);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Total Penerimaan Kas Operasional & Penjualan (Inflow):', margin + 4, nextY + 12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(22, 101, 52);
+  doc.text(`+${formatCurrency(totalIn)}`, margin + 110, nextY + 12, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text('Total Pembelanjaan Kas & Beban Operasional (Outflow):', margin + 4, nextY + 17);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(220, 38, 38);
+  doc.text(`-${formatCurrency(totalOut)}`, margin + 110, nextY + 17, { align: 'right' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text('SALDO AKHIR KAS BERSIH (NET CASH BALANCE):', margin + 4, nextY + 22);
+  doc.setTextColor(netBalance >= 0 ? 22 : 220, netBalance >= 0 ? 101 : 38, netBalance >= 0 ? 52 : 38);
+  doc.setFontSize(9);
+  doc.text(formatCurrency(netBalance), margin + 110, nextY + 22, { align: 'right' });
+
+  // Additional note on right side of summary box
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  const infoX = margin + 120;
+  doc.text('Status Audit:', infoX, nextY + 10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 58, 138);
+  doc.text('TERVERIFIKASI SISTEM POS', infoX + 22, nextY + 10);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text('Metode Pencatatan:', infoX, nextY + 15);
+  doc.text('Imprest / Fluktuasi Kas Kecil', infoX + 28, nextY + 15);
+
+  doc.text('Keterangan Dokumen:', infoX, nextY + 20);
+  doc.text('Sah sebagai bukti pertanggungjawaban kas.', infoX + 30, nextY + 20);
+
+  // 6. Signature Block
+  let sigY = nextY + 34;
+  if (sigY + 32 > pageHeight - 15) {
+    doc.addPage();
+    sigY = 35;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 3;
+  const roles = [
+    { title: 'Dibuat Oleh (Kasir / PIC Kas)', name: userName || 'Petugas Kasir' },
+    { title: 'Diperiksa Oleh (Supervisor)', name: 'Supervisor Operasional' },
+    { title: 'Disetujui Oleh (Owner / Finance)', name: 'Manajemen / Direksi' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, sigY, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, sigY + 5, { align: 'center' });
+
+    // Signature dotted line
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 10, sigY + 22, x + sigColWidth - 10, sigY + 22);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, sigY + 26, { align: 'center' });
+  });
+
+  // 7. Apply Header & Footer to all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) {
+      addHeader(doc);
+    }
+    addFooter(doc, i, totalPages);
+  }
+
+  const timestamp = Date.now();
+  doc.save(`Laporan_Buku_Kas_${settings?.storeName ? settings.storeName.replace(/\s+/g, '_') : 'MUKI_RAMEN'}_${timestamp}.pdf`);
+};
+
 
