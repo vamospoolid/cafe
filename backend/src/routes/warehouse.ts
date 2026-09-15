@@ -192,7 +192,7 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
         });
       }
 
-      // 3. If funded by Owner, record to Owner Fund Ledger
+      // 3. If funded by Central/Holding Capital, record to Owner/Central Fund Ledger
       if ((paymentSource || 'DANA_PRIBADI_OWNER') === 'DANA_PRIBADI_OWNER') {
         await tx.ownerFundTransaction.create({
           data: {
@@ -200,7 +200,7 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
             amount: totalAmount,
             referenceType: 'INBOUND',
             referenceId: invoiceNumber,
-            description: `Belanja stok gudang via dana pribadi (${processedItems.length} item - ${invoiceNumber})`,
+            description: `Penerimaan pasokan gudang via modal pusat (${processedItems.length} item - ${invoiceNumber})`,
             userId,
             date: date ? new Date(date) : new Date()
           }
@@ -470,14 +470,14 @@ router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res
         });
       }
 
-      // 2. Catat ke Rekonsiliasi Dana Owner: Penyerapan Bahan oleh Resto
+      // 2. Catat ke Rekonsiliasi Settlement Modal Pusat: Distribusi Bahan ke Unit Operasional
       await tx.ownerFundTransaction.create({
         data: {
           type: 'TRANSFER_TO_RESTO',
           amount: reqDoc.totalTransferCost,
           referenceType: 'REQUISITION',
           referenceId: reqDoc.reqNumber,
-          description: `Bahan masuk Dapur Muki Ramen via ${reqDoc.reqNumber} (${reqDoc.items.length} item)`,
+          description: `Distribusi bahan ke Dapur Cabang via ${reqDoc.reqNumber} (${reqDoc.items.length} item)`,
           userId,
           date: new Date()
         }
@@ -507,7 +507,7 @@ router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res
     }
 
     res.json({
-      message: 'Bahan baku berhasil diterima di Dapur Muki Ramen dan tercatat sebagai pembelian/hutang ke owner',
+      message: 'Bahan baku berhasil diterima di Dapur Cabang dan tercatat dalam settlement distribusi modal pusat',
       requisition: result
     });
   } catch (error: any) {
@@ -516,11 +516,11 @@ router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res
   }
 });
 
-// ─── 6. REKONSILIASI DANA PRIBADI OWNER & PEMBAYARAN BALIK (REIMBURSE) ────
+// ─── 6. REKONSILIASI & SETTLEMENT MODAL PUSAT ─────────────────────────────
 router.get('/owner-finance', authenticateToken, async (req: Request, res: Response) => {
   try {
     const transactions = await prisma.ownerFundTransaction.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { date: 'desc' },
       include: {
         user: { select: { id: true, name: true, role: true } }
       }
@@ -551,45 +551,46 @@ router.get('/owner-finance', authenticateToken, async (req: Request, res: Respon
     });
   } catch (error: any) {
     console.error('Error fetching owner finance ledger:', error);
-    res.status(500).json({ error: 'Gagal memuat buku rekonsiliasi dana owner' });
+    res.status(500).json({ error: 'Gagal mengambil data buku besar modal: ' + error.message });
   }
 });
 
-// Reimburse / Bayar balik uang owner dari omset Muki Ramen
+// Settlement / Pencairan pengembalian dana ke entitas pusat
 router.post('/owner-finance/reimburse', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { amount, paymentMethod, deductFromMukiCash, notes } = req.body;
+    const { amount, paymentMethod, deductFromMukiCash, deductFromBranchCash, notes } = req.body;
+    const shouldDeductCash = deductFromBranchCash || deductFromMukiCash;
     const userId = (req as any).user.id;
     const numAmount = Number(amount);
 
     if (!numAmount || numAmount <= 0) {
-      return res.status(400).json({ error: 'Jumlah pembayaran tidak valid' });
+      return res.status(400).json({ error: 'Jumlah pembayaran settlement tidak valid' });
     }
 
-    const refNumber = generateDocNumber('PAY-OWNER');
+    const refNumber = generateDocNumber('SETTLE');
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Catat transaksi pelunasan modal owner
+      // 1. Catat transaksi settlement modal pusat
       const txn = await tx.ownerFundTransaction.create({
         data: {
           type: 'REIMBURSEMENT_PAID',
           amount: numAmount,
           referenceType: 'REIMBURSEMENT',
           referenceId: refNumber,
-          description: `Pengembalian dana modal ke Owner (${paymentMethod || 'Transfer'}): ${notes || 'Pelunasan bahan baku diserap resto'}`,
+          description: `Settlement / Pengembalian ke Pusat (${paymentMethod || 'Transfer'}): ${notes || 'Penyelesaian bahan baku didistribusikan ke outlet'}`,
           userId,
           date: new Date()
         }
       });
 
-      // 2. Jika dipilih potong kas operasional Muki Ramen
-      if (deductFromMukiCash) {
+      // 2. Jika dipilih potong kas operasional cabang
+      if (shouldDeductCash) {
         await tx.cashFlow.create({
           data: {
             type: 'Pengeluaran',
-            category: 'Setor Modal Owner',
+            category: 'Settlement Modal Pusat',
             amount: numAmount,
-            description: `Pembayaran bahan baku ke Owner (${refNumber}) - ${notes || ''}`,
+            description: `Settlement bahan baku ke Entitas Pusat (${refNumber}) - ${notes || ''}`,
             userId,
             date: new Date()
           }

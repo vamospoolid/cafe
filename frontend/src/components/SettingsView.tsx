@@ -1334,7 +1334,7 @@ const SettingsView = () => {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Dapur dibebankan persis sesuai harga modal pembelian supplier tanpa margin keuntungan (Margin 0%). Standar resto keluarga.
+                      Unit operasional cabang dibebankan persis sesuai harga modal pembelian supplier tanpa margin keuntungan (Margin 0%). Standar multi-outlet terintegrasi.
                     </p>
                   </div>
 
@@ -1355,7 +1355,7 @@ const SettingsView = () => {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Gudang mengenakan selisih persentase keuntungan tertentu saat barang keluar diserahkan ke operasional dapur Muki Ramen.
+                      Gudang mengenakan selisih persentase keuntungan tertentu saat barang didistribusikan ke unit operasional cabang.
                     </p>
                   </div>
                 </div>
@@ -1383,7 +1383,7 @@ const SettingsView = () => {
                 <div className="p-3.5 bg-sky-50/70 border border-sky-200 rounded-2xl flex items-start gap-2.5 text-xs text-sky-800">
                   <Info size={16} className="text-sky-600 shrink-0 mt-0.5" />
                   <div>
-                    <strong>Catatan Dana Pribadi Owner:</strong> Setiap pembelian stok partai besar ke gudang default tercatat menggunakan <em>Dana Pribadi Owner</em>. Kas operasional Muki Ramen tidak akan terpotong sampai barang ditransfer ke dapur atau owner melakukan reimbursement pengembalian dana.
+                    <strong>Catatan Modal Pengadaan Pusat:</strong> Setiap penerimaan pasokan stok partai besar ke gudang default tercatat menggunakan <em>Modal Pengadaan Pusat</em>. Kas operasional cabang tidak akan terpotong sampai barang didistribusikan ke unit operasional atau dilakukan proses settlement pengembalian.
                   </div>
                 </div>
               </div>

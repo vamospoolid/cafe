@@ -80,11 +80,11 @@ export default function WarehouseView() {
     ]
   });
 
-  // Reimburse Form State
+  // Reimburse / Settlement Form State
   const [reimburseForm, setReimburseForm] = useState({
     amount: 0,
     paymentMethod: 'Transfer Bank',
-    deductFromMukiCash: false,
+    deductFromBranchCash: false,
     notes: ''
   });
 
@@ -273,7 +273,7 @@ export default function WarehouseView() {
   const handleApproveTransfer = async (id: number) => {
     const confirm = await confirmAlert(
       'Setujui Pengiriman Bahan',
-      'Apakah Anda yakin menyetujui pengiriman bahan baku ini ke Dapur Muki?'
+      'Apakah Anda yakin menyetujui distribusi bahan baku ini ke Dapur Cabang?'
     );
     if (!confirm.isConfirmed) return;
 
@@ -296,8 +296,8 @@ export default function WarehouseView() {
 
   const handleReceiveTransfer = async (id: number, reqNumber: string) => {
     const confirm = await confirmAlert(
-      'Konfirmasi Terima Bahan di Dapur',
-      `Konfirmasi penerimaan barang untuk ${reqNumber}? Stok fisik dapur akan bertambah, stok gudang berkurang, dan tagihan ke owner akan tercatat otomatis.`
+      'Konfirmasi Terima Bahan di Cabang',
+      `Konfirmasi penerimaan barang untuk ${reqNumber}? Stok fisik dapur cabang akan bertambah, stok gudang berkurang, dan settlement modal pusat akan dibukukan secara otomatis.`
     );
     if (!confirm.isConfirmed) return;
 
@@ -307,7 +307,7 @@ export default function WarehouseView() {
         headers: { Authorization: `Bearer ${posContext?.token}` }
       });
       if (res.ok) {
-        toast('Bahan berhasil diterima di dapur!', 'success');
+        toast('Bahan berhasil diterima di dapur cabang!', 'success');
         fetchData();
       } else {
         const data = await res.json();
@@ -318,7 +318,7 @@ export default function WarehouseView() {
     }
   };
 
-  // ─── REIMBURSE ACTIONS ─────────────────────────────────────────────────
+  // ─── REIMBURSE / SETTLEMENT ACTIONS ────────────────────────────────────
   const submitReimburse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (reimburseForm.amount <= 0) {
@@ -338,17 +338,17 @@ export default function WarehouseView() {
 
       const data = await res.json();
       if (res.ok) {
-        toast('Pembayaran pengembalian dana ke owner berhasil dicatat!', 'success');
+        toast('Penyelesaian settlement kas ke entitas pusat berhasil dicatat!', 'success');
         setShowReimburseModal(false);
         setReimburseForm({
           amount: 0,
           paymentMethod: 'Transfer Bank',
-          deductFromMukiCash: false,
+          deductFromBranchCash: false,
           notes: ''
         });
         fetchData();
       } else {
-        toast(data.error || 'Gagal mencatat pengembalian dana', 'error');
+        toast(data.error || 'Gagal mencatat settlement dana', 'error');
       }
     } catch (err) {
       console.error(err);
@@ -404,7 +404,7 @@ export default function WarehouseView() {
             <Boxes className="text-indigo-600" size={26} /> Manajemen Gudang Bahan Baku
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Central Warehouse &bull; Suplai Modal Pribadi Owner &bull; Konversi Grosir ke Dapur Muki
+            Central Warehouse Management &bull; Multi-Unit Supply Chain &bull; Rekonsiliasi Settlement
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -412,13 +412,13 @@ export default function WarehouseView() {
             onClick={() => setShowInboundModal(true)}
             className="btn btn-primary shadow-sm hover:shadow flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold"
           >
-            <Plus size={15} /> + Belanja Masuk Gudang
+            <Plus size={15} /> + Penerimaan Pasokan Masuk
           </button>
           <button
             onClick={() => setShowTransferModal(true)}
             className="btn bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold"
           >
-            <ArrowRightLeft size={15} /> Request Bahan Dapur
+            <ArrowRightLeft size={15} /> Request Bahan ke Dapur
           </button>
         </div>
       </div>
@@ -438,39 +438,39 @@ export default function WarehouseView() {
           </div>
         </div>
 
-        {/* Modal Owner Masuk */}
+        {/* Investasi Pengadaan Pusat */}
         <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <ArrowDownLeft size={22} />
           </div>
           <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Modal Owner Masuk</div>
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Investasi Pengadaan Pusat</div>
             <div className="text-base sm:text-xl font-black text-slate-900">
               {formatCurrency(dashboardData?.totalCapitalIn || 0)}
             </div>
           </div>
         </div>
 
-        {/* Diserap Dapur Muki */}
+        {/* Realisasi Distribusi Outlet */}
         <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
             <ArrowUpRight size={22} />
           </div>
           <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Diserap Dapur Muki</div>
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Realisasi Distribusi Outlet</div>
             <div className="text-base sm:text-xl font-black text-slate-900">
               {formatCurrency(dashboardData?.totalTransferredToResto || 0)}
             </div>
           </div>
         </div>
 
-        {/* Sisa Piutang Owner */}
+        {/* Kewajiban Settlement Cabang */}
         <div className="card p-4 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-md shadow-amber-200 rounded-2xl flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
             <Wallet size={22} />
           </div>
           <div>
-            <div className="text-[10px] text-amber-100 font-bold uppercase tracking-wider">Tagihan Resto ke Owner</div>
+            <div className="text-[10px] text-amber-100 font-bold uppercase tracking-wider">Kewajiban Settlement Cabang</div>
             <div className="text-base sm:text-xl font-black text-white">
               {formatCurrency(dashboardData?.currentOwnerPayable || 0)}
             </div>
@@ -499,7 +499,7 @@ export default function WarehouseView() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Truck size={16} /> Barang Masuk / Belanja ({inbounds.length})
+          <Truck size={16} /> Penerimaan Pasokan ({inbounds.length})
         </button>
 
         <button
@@ -510,7 +510,7 @@ export default function WarehouseView() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <ArrowRightLeft size={16} /> Transfer ke Dapur Muki ({transfers.length})
+          <ArrowRightLeft size={16} /> Distribusi ke Dapur Cabang ({transfers.length})
           {transfers.filter(t => t.status === 'PENDING').length > 0 && (
             <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black">
               {transfers.filter(t => t.status === 'PENDING').length}
@@ -526,7 +526,7 @@ export default function WarehouseView() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Coins size={16} /> Rekonsiliasi Modal Owner
+          <Coins size={16} /> Rekonsiliasi &amp; Settlement Finansial
         </button>
       </div>
 
@@ -574,7 +574,7 @@ export default function WarehouseView() {
                       <th className="p-3.5">Kategori</th>
                       <th className="p-3.5">Satuan Konversi</th>
                       <th className="p-3.5 text-right">Stok Fisik Gudang</th>
-                      <th className="p-3.5 text-right">Stok di Dapur Muki</th>
+                      <th className="p-3.5 text-right">Stok di Dapur Cabang</th>
                       <th className="p-3.5 text-right">Nilai Modal / Aset</th>
                       <th className="p-3.5 text-right">Aksi</th>
                     </tr>
@@ -652,12 +652,12 @@ export default function WarehouseView() {
       {activeTab === 'inbound' && (
         <div className="flex flex-col gap-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-black text-slate-800">Riwayat Belanja Masuk Gudang (Modal Owner)</h3>
+            <h3 className="text-sm font-black text-slate-800">Riwayat Penerimaan Pasokan Masuk Gudang</h3>
             <button
               onClick={() => setShowInboundModal(true)}
               className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1"
             >
-              <Plus size={14} /> Tambah Belanja Masuk
+              <Plus size={14} /> + Penerimaan Pasokan Masuk
             </button>
           </div>
 
@@ -685,7 +685,7 @@ export default function WarehouseView() {
                         <td className="p-3.5 font-bold text-slate-800">{inb.supplier?.name || inb.supplierName || 'Toko Bebas'}</td>
                         <td className="p-3.5">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {inb.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Dana Pribadi Owner' : 'Kas Muki'}
+                            {inb.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Modal Pusat' : 'Kas Operasional'}
                           </span>
                         </td>
                         <td className="p-3.5">
@@ -710,16 +710,16 @@ export default function WarehouseView() {
         </div>
       )}
 
-      {/* ─── TAB 3: PERMINTAAN & TRANSFER KE DAPUR MUKI ────────────────────── */}
+      {/* ─── TAB 3: PERMINTAAN & DISTRIBUSI KE DAPUR CABANG ────────────────── */}
       {activeTab === 'transfers' && (
         <div className="flex flex-col gap-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-black text-slate-800">Riwayat Pengajuan &amp; Transfer Bahan ke Dapur</h3>
+            <h3 className="text-sm font-black text-slate-800">Riwayat Pengajuan &amp; Distribusi Bahan ke Dapur Cabang</h3>
             <button
               onClick={() => setShowTransferModal(true)}
               className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1"
             >
-              <Plus size={14} /> + Buat Permintaan Dapur
+              <Plus size={14} /> + Permintaan Bahan Baru
             </button>
           </div>
 
@@ -772,7 +772,7 @@ export default function WarehouseView() {
                                 ? 'bg-blue-50 text-blue-700 border-blue-200'
                                 : 'bg-amber-50 text-amber-700 border-amber-200'
                             }`}>
-                              {tr.status === 'RECEIVED' ? 'Diterima Dapur' : tr.status === 'APPROVED' ? 'Disetujui Gudang' : 'Menunggu Approval'}
+                              {tr.status === 'RECEIVED' ? 'Diterima Cabang' : tr.status === 'APPROVED' ? 'Disetujui Gudang' : 'Menunggu Approval'}
                             </span>
                           </td>
                           <td className="p-3.5 text-right">
@@ -790,7 +790,7 @@ export default function WarehouseView() {
                                   onClick={() => handleReceiveTransfer(tr.id, tr.reqNumber)}
                                   className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs"
                                 >
-                                  Terima di Dapur ✓
+                                  Konfirmasi Terima di Cabang ✓
                                 </button>
                               )}
                               {tr.status === 'RECEIVED' && (
@@ -811,18 +811,18 @@ export default function WarehouseView() {
         </div>
       )}
 
-      {/* ─── TAB 4: REKONSILIASI DANA PRIBADI OWNER ───────────────────────── */}
+      {/* ─── TAB 4: REKONSILIASI & SETTLEMENT FINANSIAL ───────────────────── */}
       {activeTab === 'finance' && (
         <div className="flex flex-col gap-4">
           {/* Summary Box */}
           <div className="card p-5 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-3xl shadow-lg border border-slate-800 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
             <div>
-              <div className="text-xs font-bold uppercase tracking-wider text-indigo-300">Status Saldo Hutang Muki ke Owner</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-indigo-300">Status Saldo Kewajiban Settlement Cabang</div>
               <div className="text-2xl sm:text-3xl font-black mt-1 text-white">
                 {formatCurrency(financeData?.summary?.currentOwnerPayable || 0)}
               </div>
               <p className="text-xs text-slate-400 mt-1 max-w-md">
-                Akumulasi nilai bahan baku yang sudah diambil &amp; diserap Dapur Muki Ramen dari gudang owner, yang belum disetor balik ke rekening pribadi owner.
+                Akumulasi nilai bahan baku yang telah didistribusikan ke unit operasional dapur cabang yang belum diselesaikan (settled) kembali ke entitas modal pusat.
               </p>
             </div>
             <button
@@ -835,14 +835,14 @@ export default function WarehouseView() {
               }}
               className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2"
             >
-              <Coins size={16} /> Setor / Bayar Balik ke Owner
+              <Coins size={16} /> Proses Settlement / Pencairan Balik
             </button>
           </div>
 
           {/* Ledger Table */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             <div className="p-3.5 bg-slate-50 border-b border-slate-100 font-black text-xs text-slate-700 uppercase">
-              Buku Kas Rekonsiliasi Modal Owner
+              Buku Rekonsiliasi Settlement Pengadaan
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -872,7 +872,7 @@ export default function WarehouseView() {
                               ? 'bg-amber-50 text-amber-700 border-amber-200'
                               : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           }`}>
-                            {isPlus ? 'Modal Beli Masuk' : isDiserap ? 'Diserap Dapur Muki' : 'Reimburse Terbayar'}
+                            {isPlus ? 'Pasokan Modal Pusat' : isDiserap ? 'Distribusi ke Cabang' : 'Settlement Selesai'}
                           </span>
                         </td>
                         <td className="p-3.5 font-medium text-slate-800">{t.description}</td>
@@ -912,7 +912,7 @@ export default function WarehouseView() {
                   <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-700">
                     <Truck size={18} />
                   </span>
-                  <span>Form Belanja Barang Masuk Gudang</span>
+                  <span>Form Penerimaan Pasokan Masuk Gudang Pusat</span>
                 </h1>
                 <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
                   Pencatatan pasokan partai besar / grosir ke Central Warehouse (Bahan Baku)
@@ -923,7 +923,7 @@ export default function WarehouseView() {
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-black bg-emerald-50 text-emerald-800 border-emerald-200">
                 <span>Sumber:</span>
-                <span>{inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Dana Pribadi Owner' : 'Kas Operasional Muki'}</span>
+                <span>{inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Modal Pusat' : 'Kas Operasional'}</span>
               </div>
               <button
                 type="button"
@@ -1011,8 +1011,8 @@ export default function WarehouseView() {
                       value={inboundForm.paymentSource}
                       onChange={e => setInboundForm({ ...inboundForm, paymentSource: e.target.value })}
                     >
-                      <option value="DANA_PRIBADI_OWNER">💰 Dana Pribadi Owner (Rekomendasi)</option>
-                      <option value="KAS_MUKI">🏪 Kas Operasional Muki Ramen</option>
+                      <option value="DANA_PRIBADI_OWNER">🏢 Modal Pengadaan Pusat (Non-Operasional Cabang)</option>
+                      <option value="KAS_MUKI">🏪 Kas Operasional Outlet / Cabang</option>
                     </select>
                   </div>
 
@@ -1036,11 +1036,11 @@ export default function WarehouseView() {
                   <div>
                     {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? (
                       <span>
-                        <strong>Mode Dana Pribadi Owner Aktif:</strong> Nilai total belanja barang ini akan dicatat sebagai penambahan <strong>Investasi / Modal Owner di Gudang</strong>. Kas harian kasir Muki Ramen <u>sama sekali tidak berkurang</u> hingga barang keluar diserap oleh dapur.
+                        <strong>Mode Modal Pengadaan Pusat Aktif:</strong> Nilai total belanja barang ini akan dicatat sebagai penambahan <strong>Investasi Pengadaan Pusat di Gudang</strong>. Kas harian kasir cabang <u>sama sekali tidak berkurang</u> hingga barang didistribusikan ke unit operasional dapur cabang.
                       </span>
                     ) : (
                       <span>
-                        <strong>Mode Kas Operasional Muki:</strong> Nilai total belanja akan langsung dipotong dari arus kas harian operasional Muki Ramen.
+                        <strong>Mode Kas Operasional Cabang:</strong> Nilai total belanja akan langsung dipotong dari arus kas harian operasional cabang.
                       </span>
                     )}
                   </div>
@@ -1239,7 +1239,7 @@ export default function WarehouseView() {
                     <div className="flex justify-between text-slate-300">
                       <span>Metode Pembebanan:</span>
                       <strong className="text-emerald-400">
-                        {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Buku Besar Modal Owner' : 'Kas Toko Langsung'}
+                        {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Buku Besar Modal Pusat' : 'Kas Operasional Outlet'}
                       </strong>
                     </div>
                     <div className="pt-3 border-t border-slate-800 flex justify-between items-baseline">
@@ -1275,7 +1275,7 @@ export default function WarehouseView() {
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                   : 'bg-amber-50 text-amber-700 border border-amber-200'
               }`}>
-                {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Dana Pribadi Owner' : 'Kas Muki'}
+                {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Modal Pusat' : 'Kas Operasional'}
               </span>
             </div>
 
@@ -1421,13 +1421,13 @@ export default function WarehouseView() {
         </div>
       )}
 
-      {/* ─── MODAL: REIMBURSE OWNER ──────────────────────────────────────── */}
+      {/* ─── MODAL: SETTLEMENT / PENGEMBALIAN MODAL PUSAT ────────────────── */}
       {showReimburseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-100 p-5 sm:p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
-                <Coins className="text-amber-500" size={20} /> Pengembalian Modal ke Owner
+                <Coins className="text-amber-500" size={20} /> Settlement Kas ke Entitas Pusat
               </h3>
               <button onClick={() => setShowReimburseModal(false)} className="icon-btn hover:bg-slate-100">
                 <X size={18} />
@@ -1436,7 +1436,7 @@ export default function WarehouseView() {
 
             <form onSubmit={submitReimburse} className="flex flex-col gap-3.5">
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nominal Pembayaran (Rp)</label>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Nominal Settlement (Rp)</label>
                 <input
                   type="number"
                   className="w-full px-3 py-2.5 text-sm font-black text-indigo-700 bg-slate-50 rounded-xl border border-slate-200 outline-none"
@@ -1453,8 +1453,8 @@ export default function WarehouseView() {
                   value={reimburseForm.paymentMethod}
                   onChange={e => setReimburseForm({ ...reimburseForm, paymentMethod: e.target.value })}
                 >
-                  <option value="Transfer Bank">Transfer Bank ke Rekening Owner</option>
-                  <option value="Tunai">Uang Tunai Laci Kasir</option>
+                  <option value="Transfer Bank">Transfer Bank (Rekening Induk / Penampung)</option>
+                  <option value="Tunai">Kas Tunai Cabang (Cash On Hand)</option>
                 </select>
               </div>
 
@@ -1463,19 +1463,19 @@ export default function WarehouseView() {
                   type="checkbox"
                   id="deductCash"
                   className="mt-0.5 w-4 h-4 rounded text-amber-600 cursor-pointer"
-                  checked={reimburseForm.deductFromMukiCash}
-                  onChange={e => setReimburseForm({ ...reimburseForm, deductFromMukiCash: e.target.checked })}
+                  checked={reimburseForm.deductFromBranchCash}
+                  onChange={e => setReimburseForm({ ...reimburseForm, deductFromBranchCash: e.target.checked })}
                 />
                 <label htmlFor="deductCash" className="text-xs font-semibold text-amber-900 cursor-pointer">
-                  Catat Otomatis di Arus Kas / Petty Cash Muki
+                  Catat Otomatis di Arus Kas / Petty Cash Cabang
                   <span className="block text-[10px] text-amber-700 font-normal mt-0.5">
-                    Centang ini jika pembayaran diambil langsung dari kas operasional Muki Ramen (kategori: Setor Modal Owner).
+                    Centang ini jika pembayaran settlement diambil langsung dari kas operasional cabang (kategori: Settlement Modal Pusat).
                   </span>
                 </label>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Catatan / Bukti Bayar</label>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Catatan / Bukti Referensi</label>
                 <input
                   type="text"
                   className="w-full px-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 outline-none"
