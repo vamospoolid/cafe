@@ -30,7 +30,9 @@ import {
   Building2,
   Store,
   Info,
-  Check
+  Check,
+  Ban,
+  AlertCircle
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -59,6 +61,12 @@ export default function WarehouseView() {
   const [showOpnameModal, setShowOpnameModal] = useState(false);
   const [selectedIngredientForOpname, setSelectedIngredientForOpname] = useState<any>(null);
   const [actualOpnameStock, setActualOpnameStock] = useState<number>(0);
+
+  // Void Inbound Modal State
+  const [showVoidModal, setShowVoidModal] = useState(false);
+  const [voidTarget, setVoidTarget] = useState<any>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidLoading, setVoidLoading] = useState(false);
 
   // Inbound Form State
   const [inboundForm, setInboundForm] = useState({
@@ -356,7 +364,44 @@ export default function WarehouseView() {
     }
   };
 
+  // ─── VOID INBOUND (Koreksi Salah Input) ────────────────────────────────
+  const submitVoid = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voidTarget) return;
+    if (!voidReason.trim()) {
+      toast('Alasan pembatalan wajib diisi', 'warning');
+      return;
+    }
+    setVoidLoading(true);
+    try {
+      const res = await fetch(`/api/warehouse/inbounds/${voidTarget.id}/void`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ voidReason })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`✅ ${data.message}`, 'success');
+        setShowVoidModal(false);
+        setVoidTarget(null);
+        setVoidReason('');
+        fetchData();
+      } else {
+        toast(data.error || 'Gagal membatalkan penerimaan', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan jaringan', 'error');
+    } finally {
+      setVoidLoading(false);
+    }
+  };
+
   // ─── OPNAME ACTIONS ────────────────────────────────────────────────────
+
   const submitOpname = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedIngredientForOpname) return;
@@ -679,8 +724,17 @@ export default function WarehouseView() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
                     {inbounds.map(inb => (
-                      <tr key={inb.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3.5 font-mono font-bold text-indigo-700">{inb.invoiceNumber}</td>
+                      <tr key={inb.id} className={`hover:bg-slate-50 transition-colors ${inb.isVoided ? 'opacity-50' : ''}`}>
+                        <td className="p-3.5">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-mono font-bold text-indigo-700">{inb.invoiceNumber}</span>
+                            {inb.isVoided && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
+                                <Ban size={9} /> DIBATALKAN
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-3.5 text-slate-500">{new Date(inb.date).toLocaleDateString('id-ID')}</td>
                         <td className="p-3.5 font-bold text-slate-800">{inb.supplier?.name || inb.supplierName || 'Toko Bebas'}</td>
                         <td className="p-3.5">
@@ -698,7 +752,25 @@ export default function WarehouseView() {
                           </div>
                         </td>
                         <td className="p-3.5 text-right font-black text-slate-900 text-sm">
-                          {formatCurrency(inb.totalAmount)}
+                          <div className="flex items-center justify-end gap-2">
+                            <span className={inb.isVoided ? 'line-through text-slate-400' : ''}>
+                              {formatCurrency(inb.totalAmount)}
+                            </span>
+                            {!inb.isVoided && (
+                              <button
+                                onClick={() => { setVoidTarget(inb); setVoidReason(''); setShowVoidModal(true); }}
+                                title="Batalkan / Koreksi Salah Input"
+                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors flex-shrink-0"
+                              >
+                                <Ban size={13} />
+                              </button>
+                            )}
+                          </div>
+                          {inb.isVoided && inb.voidReason && (
+                            <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[180px] ml-auto">
+                              Alasan: {inb.voidReason}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1548,6 +1620,74 @@ export default function WarehouseView() {
                 </button>
                 <button type="submit" className="btn btn-primary px-4 py-2 rounded-xl text-xs font-bold">
                   Simpan Penyesuaian
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: VOID / KOREKSI PENERIMAAN BARANG ──────────────────────── */}
+      {showVoidModal && voidTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-red-100 p-6 flex flex-col gap-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <Ban className="text-red-500" size={20} />
+                Batalkan Penerimaan
+              </h3>
+              <button onClick={() => setShowVoidModal(false)} className="icon-btn hover:bg-slate-100">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Info alert */}
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex gap-2.5 text-xs text-amber-900">
+              <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <strong>Data tidak akan dihapus — hanya ditandai VOID.</strong>
+                <br/>Stok gudang akan dikembalikan otomatis. Riwayat tetap tersimpan untuk keperluan audit.
+              </div>
+            </div>
+
+            {/* Target info */}
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs">
+              <div className="font-mono font-black text-indigo-700 text-sm mb-1">{voidTarget.invoiceNumber}</div>
+              <div className="text-slate-600">Supplier: <strong>{voidTarget.supplier?.name || voidTarget.supplierName || 'Toko Bebas'}</strong></div>
+              <div className="text-slate-600">Total: <strong className="text-red-600">{formatCurrency(voidTarget.totalAmount)}</strong></div>
+              <div className="text-slate-600 mt-1">Item: {voidTarget.items?.length || 0} jenis bahan baku</div>
+            </div>
+
+            <form onSubmit={submitVoid} className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Alasan Pembatalan <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  className="w-full px-3 py-2.5 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 outline-none resize-none"
+                  rows={3}
+                  placeholder="Contoh: Salah input jumlah, supplier tidak jadi kirim, invoice ganda..."
+                  value={voidReason}
+                  onChange={e => setVoidReason(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowVoidModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={voidLoading || !voidReason.trim()}
+                  className="px-5 py-2 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-black text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <Ban size={13} />
+                  {voidLoading ? 'Memproses...' : 'Konfirmasi Batalkan'}
                 </button>
               </div>
             </form>

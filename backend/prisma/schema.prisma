@@ -493,10 +493,13 @@ model WarehouseInbound {
   supplierName   String?                // Fallback nama toko/pasar offline
   user           User                   @relation(fields: [userId], references: [id])
   userId         Int
-  totalAmount    Float                  // Total modal belanja owner
+  totalAmount    Float                  // Total modal belanja
   paymentSource  String                 @default("DANA_PRIBADI_OWNER") // DANA_PRIBADI_OWNER, KAS_MUKI
   notes          String?
   date           DateTime               @default(now())
+  isVoided       Boolean                @default(false)  // Dibatalkan / koreksi salah input
+  voidReason     String?                // Alasan pembatalan (audit trail)
+  voidedAt       DateTime?              // Waktu pembatalan
   items          WarehouseInboundItem[]
 
   createdAt      DateTime               @default(now())
@@ -526,12 +529,14 @@ model WarehouseRequisition {
   requestedById     Int
   approvedBy        User?                      @relation("ReqApprovedBy", fields: [approvedById], references: [id])
   approvedById      Int?
-  status            String                     @default("PENDING") // PENDING, APPROVED, RECEIVED, REJECTED
-  totalTransferCost Float                      @default(0) // Total nilai HPP barang yang masuk dapur Muki
+  status            String                     @default("PENDING") // PENDING, APPROVED, RECEIVED, REJECTED, VOIDED
+  totalTransferCost Float                      @default(0) // Total nilai HPP barang yang masuk dapur cabang
   notes             String?
   requestedAt       DateTime                   @default(now())
   approvedAt        DateTime?
   receivedAt        DateTime?
+  isVoided          Boolean                    @default(false)
+  voidReason        String?
   items             WarehouseRequisitionItem[]
 
   createdAt         DateTime                   @default(now())

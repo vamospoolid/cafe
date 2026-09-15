@@ -243,7 +243,71 @@ router.get('/inbounds', authenticateToken, async (req: Request, res: Response) =
   }
 });
 
+// ─── VOID / KOREKSI INBOUND (tidak hapus — audit trail tetap ada) ─────────
+router.post('/inbounds/:id/void', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const inboundId = Number(req.params.id);
+    const { voidReason } = req.body;
+    const userId = (req as any).user.id;
+
+    if (!voidReason || !voidReason.trim()) {
+      return res.status(400).json({ error: 'Alasan pembatalan wajib diisi untuk keperluan audit.' });
+    }
+
+    const inbound = await prisma.warehouseInbound.findUnique({
+      where: { id: inboundId },
+      include: { items: true }
+    });
+
+    if (!inbound) return res.status(404).json({ error: 'Data penerimaan tidak ditemukan.' });
+    if (inbound.isVoided) return res.status(400).json({ error: 'Penerimaan ini sudah dibatalkan sebelumnya.' });
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Mark inbound as voided
+      await tx.warehouseInbound.update({
+        where: { id: inboundId },
+        data: {
+          isVoided: true,
+          voidReason: voidReason.trim(),
+          voidedAt: new Date()
+        }
+      });
+
+      // 2. Reverse warehouse stock untuk setiap item
+      for (const it of inbound.items) {
+        await tx.ingredient.update({
+          where: { id: it.ingredientId },
+          data: { warehouseStock: { decrement: it.baseQty } }
+        });
+      }
+
+      // 3. Reverse ledger modal pusat jika sumber dana adalah Modal Pusat
+      if (inbound.paymentSource === 'DANA_PRIBADI_OWNER') {
+        await tx.ownerFundTransaction.create({
+          data: {
+            type: 'CAPITAL_IN',
+            amount: -inbound.totalAmount, // Negatif = reversal
+            referenceType: 'VOID_INBOUND',
+            referenceId: inbound.invoiceNumber,
+            description: `KOREKSI/VOID: Pembatalan penerimaan ${inbound.invoiceNumber} — ${voidReason}`,
+            userId,
+            date: new Date()
+          }
+        });
+      }
+    });
+
+    if (io) io.emit('warehouse:stock_updated', { type: 'VOID_INBOUND', invoiceNumber: inbound.invoiceNumber });
+
+    res.json({ message: `Penerimaan ${inbound.invoiceNumber} berhasil dibatalkan. Stok sudah dikembalikan.` });
+  } catch (error: any) {
+    console.error('Error voiding inbound:', error);
+    res.status(500).json({ error: 'Gagal membatalkan penerimaan: ' + error.message });
+  }
+});
+
 // ─── 4. STOCK OPNAME GUDANG PUSAT ─────────────────────────────────────────
+
 router.post('/opname', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { ingredientId, actualStock, reason, notes } = req.body;
