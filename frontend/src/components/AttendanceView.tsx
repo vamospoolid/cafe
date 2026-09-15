@@ -8,6 +8,8 @@ import ClockInModal from './ClockInModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { toast } from '../utils/alert';
+import { exportIndividualAppraisalPDF } from '../utils/pdfGenerator';
 
 import { getTodayStr, formatLocalDate } from '../utils/dateUtils';
 
@@ -42,7 +44,35 @@ interface IndividualSummary {
     totalLatePenalty: number;
     netDisciplineAmount: number;
   };
+  cashierStats?: {
+    totalShifts: number;
+    closedShiftsCount: number;
+    balancedShifts: number;
+    cashAccuracyRate: number;
+    totalShortage: number;
+    totalOverage: number;
+    totalSalesHandled: number;
+    totalOrdersHandled: number;
+    voidCount: number;
+    voidAmount: number;
+  };
+  kitchenStats?: {
+    totalLossIncidents: number;
+    totalLossCost: number;
+    humanErrorLossCost: number;
+    spoilageLossCost: number;
+  };
+  kpi?: {
+    score: number;
+    grade: 'A' | 'B' | 'C' | 'D';
+    label: string;
+    attendanceScore: number;
+    cashierScore: number;
+    kitchenScore: number;
+  };
   recentLogs: any[];
+  recentShifts?: any[];
+  recentLossLogs?: any[];
 }
 
 export const AttendanceView: React.FC = () => {
@@ -261,6 +291,21 @@ export const AttendanceView: React.FC = () => {
       startY: 32,
     });
     doc.save(`Rekapitulasi_Absensi_Karyawan_${monthFilter}.pdf`);
+  };
+
+  const handleExportAppraisalPDF = async (s: IndividualSummary) => {
+    try {
+      await exportIndividualAppraisalPDF(
+        posContext?.settings || {},
+        s,
+        monthFilter,
+        (posContext?.user as any)?.name || (posContext?.user as any)?.username || 'Owner / Management'
+      );
+      toast(`Rapor Kinerja ${s.user.name} berhasil diunduh!`, 'success');
+    } catch (err) {
+      console.error(err);
+      toast('Gagal mengunduh rapor kinerja PDF', 'error');
+    }
   };
 
   // Metrics for Tab 1 (Log Harian)
@@ -666,72 +711,97 @@ export const AttendanceView: React.FC = () => {
                     <p className="text-xs">Tidak ada data staf yang ditemukan.</p>
                   </div>
                 ) : (
-                  summaries.map(s => (
-                    <div key={s.user.id} className="p-3.5 space-y-3 bg-white">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h4 className="font-black text-sm text-slate-900 leading-tight">{s.user.name}</h4>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold inline-block mt-1">
-                            {s.user.role}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => setSelectedUserSummary(s)}
-                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0"
-                        >
-                          <Eye size={12} /> Detail
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block font-bold">Total Hadir</span>
-                          <span className="font-bold text-emerald-600">{s.stats.totalHadir} Hari</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-400 block font-bold">Terlambat</span>
-                          <span className={`font-bold ${s.stats.totalTerlambat > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                            {s.stats.totalTerlambat} Kali {s.stats.totalLateMinutes ? `(${s.stats.totalLateMinutes}m)` : ''}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Reward & Penalty Badges */}
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                        <div className="space-y-0.5">
-                          {s.discipline?.enableZeroLateBonus && (
-                            <div>
-                              {s.discipline.zeroLateStatus === 'ELIGIBLE' ? (
-                                <span className="text-[10px] text-emerald-700 font-black">⭐ Bonus Rp {(s.discipline.zeroLateBonusEarned || 0).toLocaleString()}</span>
-                              ) : s.discipline.zeroLateStatus === 'ON_TRACK' ? (
-                                <span className="text-[10px] text-blue-700 font-bold">🎯 On Track ({s.stats.totalHadir}/{s.discipline.zeroLateMinAttendance})</span>
-                              ) : (
-                                <span className="text-[10px] text-rose-500 font-bold">❌ Bonus Hangus</span>
-                              )}
+                  summaries.map(s => {
+                    const grade = s.kpi?.grade || 'B';
+                    const gradeBg = grade === 'A' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                    grade === 'B' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                    grade === 'C' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+                    return (
+                      <div key={s.user.id} className="p-3.5 space-y-3 bg-white">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-black text-sm text-slate-900 leading-tight">{s.user.name}</h4>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${gradeBg}`}>
+                                KPI {s.kpi?.score || 80}/100 ({grade})
+                              </span>
                             </div>
-                          )}
-                          {s.discipline?.enableLatePenalty && (s.discipline.totalLatePenalty || 0) > 0 && (
-                            <div className="text-[10px] text-rose-600 font-bold">
-                              Denda: -Rp {(s.discipline.totalLatePenalty || 0).toLocaleString()}
-                            </div>
-                          )}
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold inline-block mt-1">
+                              {s.user.role}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={() => handleExportAppraisalPDF(s)}
+                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all active:scale-95"
+                              title="Cetak Rapor Kinerja PDF"
+                            >
+                              <FileText size={14} />
+                            </button>
+                            <button
+                              onClick={() => setSelectedUserSummary(s)}
+                              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                            >
+                              <Eye size={12} /> Detail
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block font-bold">Estimasi Bersih</span>
-                          <span className={`font-black text-sm ${
-                            (s.discipline?.netDisciplineAmount || 0) > 0 
-                              ? 'text-emerald-600' 
-                              : (s.discipline?.netDisciplineAmount || 0) < 0 
-                              ? 'text-rose-600' 
-                              : 'text-slate-700'
-                          }`}>
-                            Rp {(s.discipline?.netDisciplineAmount || 0).toLocaleString()}
-                          </span>
+                        {/* Quick KPI Stats Summary */}
+                        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block font-bold">Presensi</span>
+                            <span className="font-bold text-slate-800">{s.stats.totalHadir} Hadir / {s.stats.totalTerlambat}x Telat</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block font-bold">Audit Finansial Kas</span>
+                            {s.cashierStats && s.cashierStats.totalShifts > 0 ? (
+                              <span className={`font-bold ${s.cashierStats.totalShortage > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {s.cashierStats.totalShortage > 0 ? `Tekor Rp ${s.cashierStats.totalShortage.toLocaleString()}` : `${s.cashierStats.cashAccuracyRate}% Pas`}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-medium">Non-Kasir</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Reward & Penalty Badges */}
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                          <div className="space-y-0.5">
+                            {s.discipline?.enableZeroLateBonus && (
+                              <div>
+                                {s.discipline.zeroLateStatus === 'ELIGIBLE' ? (
+                                  <span className="text-[10px] text-emerald-700 font-black">⭐ Bonus Rp {(s.discipline.zeroLateBonusEarned || 0).toLocaleString()}</span>
+                                ) : s.discipline.zeroLateStatus === 'ON_TRACK' ? (
+                                  <span className="text-[10px] text-blue-700 font-bold">🎯 On Track ({s.stats.totalHadir}/{s.discipline.zeroLateMinAttendance})</span>
+                                ) : (
+                                  <span className="text-[10px] text-rose-500 font-bold">❌ Bonus Hangus</span>
+                                )}
+                              </div>
+                            )}
+                            {s.kitchenStats && s.kitchenStats.totalLossIncidents > 0 && (
+                              <div className="text-[10px] text-amber-600 font-bold">
+                                🍳 Loss Dapur: Rp {s.kitchenStats.totalLossCost.toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block font-bold">Estimasi Bersih HR</span>
+                            <span className={`font-black text-sm ${
+                              (s.discipline?.netDisciplineAmount || 0) > 0 
+                                ? 'text-emerald-600' 
+                                : (s.discipline?.netDisciplineAmount || 0) < 0 
+                                ? 'text-rose-600' 
+                                : 'text-slate-700'
+                            }`}>
+                              Rp {(s.discipline?.netDisciplineAmount || 0).toLocaleString()}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
@@ -741,12 +811,12 @@ export const AttendanceView: React.FC = () => {
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase tracking-wider">
                       <th className="py-3.5 px-4">Nama Karyawan</th>
-                      <th className="py-3.5 px-4">Role / Posisi</th>
-                      <th className="py-3.5 px-4 text-center">Total Hadir</th>
-                      <th className="py-3.5 px-4 text-center">Terlambat</th>
-                      <th className="py-3.5 px-4 text-center">Bonus Zero Late</th>
-                      <th className="py-3.5 px-4 text-center">Potongan Denda</th>
-                      <th className="py-3.5 px-4 text-center">Estimasi Bonus</th>
+                      <th className="py-3.5 px-4">Posisi</th>
+                      <th className="py-3.5 px-4 text-center">Skor KPI</th>
+                      <th className="py-3.5 px-4 text-center">Presensi</th>
+                      <th className="py-3.5 px-4 text-center">Akurasi Kasir</th>
+                      <th className="py-3.5 px-4 text-center">Loss Dapur</th>
+                      <th className="py-3.5 px-4 text-center">Bonus / Denda HR</th>
                       <th className="py-3.5 px-4 text-center">Aksi</th>
                     </tr>
                   </thead>
@@ -766,77 +836,96 @@ export const AttendanceView: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      summaries.map(s => (
-                        <tr key={s.user.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3.5 px-4 font-black text-slate-800">{s.user.name}</td>
-                          <td className="py-3.5 px-4">
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
-                              {s.user.role}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-center font-bold text-emerald-600">
-                            {s.stats.totalHadir} Hari
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            <span
-                              className={`font-black px-2 py-0.5 rounded-full text-xs ${
-                                s.stats.totalTerlambat > 0
-                                  ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                                  : 'text-slate-400'
-                              }`}
-                            >
-                              {s.stats.totalTerlambat} Kali {s.stats.totalLateMinutes ? `(${s.stats.totalLateMinutes}m)` : ''}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            {s.discipline?.enableZeroLateBonus ? (
-                              s.discipline.zeroLateStatus === 'ELIGIBLE' ? (
-                                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full font-black text-[10px] border border-emerald-200 inline-flex items-center gap-1">
-                                  ⭐ Dapat Rp {(s.discipline.zeroLateBonusEarned || 0).toLocaleString()}
-                                </span>
-                              ) : s.discipline.zeroLateStatus === 'ON_TRACK' ? (
-                                <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full font-bold text-[10px] border border-blue-200 inline-flex items-center gap-1">
-                                  🎯 On Track ({s.stats.totalHadir}/{s.discipline.zeroLateMinAttendance})
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-full font-bold text-[10px] border border-rose-200 inline-flex items-center gap-1">
-                                  ❌ Hangus
-                                </span>
-                              )
-                            ) : (
-                              <span className="text-slate-300 text-[10px]">Nonaktif</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            {s.discipline?.enableLatePenalty && (s.discipline.totalLatePenalty || 0) > 0 ? (
-                              <span className="font-black text-rose-600 text-xs">
-                                -Rp {(s.discipline.totalLatePenalty || 0).toLocaleString()}
+                      summaries.map(s => {
+                        const grade = s.kpi?.grade || 'B';
+                        const gradeBg = grade === 'A' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                        grade === 'B' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                        grade === 'C' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+                        return (
+                          <tr key={s.user.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3.5 px-4 font-black text-slate-800">
+                              <div>{s.user.name}</div>
+                              <span className="text-[10px] text-slate-400 font-medium">@{s.user.username}</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
+                                {s.user.role}
                               </span>
-                            ) : (
-                              <span className="text-slate-400 text-xs">Rp 0</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            <span className={`font-black text-xs ${
-                              (s.discipline?.netDisciplineAmount || 0) > 0 
-                                ? 'text-emerald-600' 
-                                : (s.discipline?.netDisciplineAmount || 0) < 0 
-                                ? 'text-rose-600' 
-                                : 'text-slate-700'
-                            }`}>
-                              Rp {(s.discipline?.netDisciplineAmount || 0).toLocaleString()}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            <button
-                              onClick={() => setSelectedUserSummary(s)}
-                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 mx-auto"
-                            >
-                              <Eye size={13} /> Rincian
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black border ${gradeBg}`}>
+                                {s.kpi?.score || 80}/100 ({grade})
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <div className="font-bold text-emerald-600">{s.stats.totalHadir} Hari</div>
+                              {s.stats.totalTerlambat > 0 && (
+                                <span className="text-[10px] text-rose-500 font-bold block">
+                                  {s.stats.totalTerlambat}x telat ({s.stats.totalLateMinutes}m)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              {s.cashierStats && s.cashierStats.totalShifts > 0 ? (
+                                <div>
+                                  <span className={`font-black text-xs ${s.cashierStats.totalShortage > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    {s.cashierStats.cashAccuracyRate}% Akurat
+                                  </span>
+                                  {s.cashierStats.totalShortage > 0 && (
+                                    <span className="text-[10px] text-rose-600 font-bold block">
+                                      Tekor: -Rp {s.cashierStats.totalShortage.toLocaleString()}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              {s.kitchenStats && s.kitchenStats.totalLossIncidents > 0 ? (
+                                <div>
+                                  <span className="font-bold text-xs text-rose-600">
+                                    Rp {s.kitchenStats.totalLossCost.toLocaleString()}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 block font-medium">
+                                    {s.kitchenStats.totalLossIncidents} insiden
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <span className={`font-black text-xs ${
+                                (s.discipline?.netDisciplineAmount || 0) > 0 
+                                  ? 'text-emerald-600' 
+                                  : (s.discipline?.netDisciplineAmount || 0) < 0 
+                                  ? 'text-rose-600' 
+                                  : 'text-slate-700'
+                              }`}>
+                                Rp {(s.discipline?.netDisciplineAmount || 0).toLocaleString()}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => handleExportAppraisalPDF(s)}
+                                  className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all active:scale-95"
+                                  title="Unduh Rapor Evaluasi Kinerja (PDF)"
+                                >
+                                  <FileText size={14} />
+                                </button>
+                                <button
+                                  onClick={() => setSelectedUserSummary(s)}
+                                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                                >
+                                  <Eye size={13} /> Rincian
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -850,7 +939,7 @@ export const AttendanceView: React.FC = () => {
             ───────────────────────────────────────────────────────────── */}
         {selectedUserSummary && (
           <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto">
-            <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:rounded-3xl shadow-2xl flex flex-col md:overflow-hidden max-h-screen md:max-h-[90vh] animate-in fade-in duration-150">
+            <div className="bg-white w-full h-full md:h-auto md:max-w-3xl md:rounded-3xl shadow-2xl flex flex-col md:overflow-hidden max-h-screen md:max-h-[90vh] animate-in fade-in duration-150">
               {/* Header */}
               <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-slate-200 shrink-0">
                 <div className="flex items-center gap-3">
@@ -858,10 +947,15 @@ export const AttendanceView: React.FC = () => {
                     <User size={22} />
                   </div>
                   <div>
-                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
-                      {selectedUserSummary.user.name} ({selectedUserSummary.user.role})
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium">Periode Rekapitulasi: {monthFilter}</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                        {selectedUserSummary.user.name}
+                      </h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold">
+                        {selectedUserSummary.user.role}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium">Periode Evaluasi: {monthFilter}</p>
                   </div>
                 </div>
                 <button 
@@ -874,76 +968,144 @@ export const AttendanceView: React.FC = () => {
               </div>
 
               {/* Body */}
-              <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto pb-28 md:pb-6">
-                {/* STATS TILES */}
-                <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-                  <div className="bg-emerald-50/80 p-3.5 rounded-2xl border border-emerald-100 text-center">
-                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Total Hadir</p>
-                    <h4 className="text-lg sm:text-xl font-black text-emerald-800 mt-0.5">{selectedUserSummary.stats.totalHadir} Hari</h4>
+              <div className="p-4 sm:p-6 space-y-5 flex-1 overflow-y-auto pb-28 md:pb-6">
+                {/* SCORECARD KPI HEADER BANNER */}
+                <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-5 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <span className="text-[11px] font-bold text-indigo-200 uppercase tracking-wider block">Indeks Kinerja Karyawan (KPI)</span>
+                    <h2 className="text-2xl sm:text-3xl font-black mt-0.5 flex items-center gap-2">
+                      <span>{selectedUserSummary.kpi?.score || 80} / 100</span>
+                      <span className="text-xs font-black px-2.5 py-1 rounded-full bg-white/20 text-white">
+                        GRADE {selectedUserSummary.kpi?.grade || 'B'}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-indigo-200 mt-1">
+                      {selectedUserSummary.kpi?.label || 'Kinerja Baik & Disiplin'}
+                    </p>
                   </div>
-                  <div className="bg-rose-50/80 p-3.5 rounded-2xl border border-rose-100 text-center">
-                    <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Terlambat</p>
-                    <h4 className="text-lg sm:text-xl font-black text-rose-800 mt-0.5">{selectedUserSummary.stats.totalTerlambat} Kali</h4>
-                    <span className="text-[10px] text-rose-600 font-bold block">({selectedUserSummary.stats.totalLateMinutes} menit)</span>
-                  </div>
-                  <div className="bg-indigo-50/80 p-3.5 rounded-2xl border border-indigo-100 text-center">
-                    <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Jam Kerja</p>
-                    <h4 className="text-lg sm:text-xl font-black text-indigo-800 mt-0.5">{selectedUserSummary.stats.totalWorkHours} Jam</h4>
-                    <span className="text-[10px] text-indigo-600 font-bold block">Durasi Efektif</span>
-                  </div>
+                  <button
+                    onClick={() => handleExportAppraisalPDF(selectedUserSummary)}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-2 transition-all active:scale-95 shrink-0"
+                  >
+                    <FileText size={15} /> Cetak Rapor PDF
+                  </button>
                 </div>
 
-                {/* REWARD & PUNISHMENT BREAKDOWN TILE */}
-                {selectedUserSummary.discipline && (
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3">
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles size={14} className="text-amber-500" /> Rincian Reward & Punishment Kedisiplinan
+                {/* 3 PILAR EVALUASI KINERJA */}
+                <div className="space-y-4">
+                  {/* PILAR 1: PRESENSI & DISIPLIN KERJA */}
+                  <div className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <h4 className="text-xs font-black text-indigo-900 uppercase tracking-wider flex items-center gap-2">
+                      <Clock size={16} className="text-indigo-600" />
+                      1. Pilar Kedisiplinan & Presensi HR
                     </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                       <div className="p-3 bg-white rounded-xl border border-slate-100">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Bonus Zero Late</p>
-                        <p className={`font-black text-sm mt-1 ${
-                          selectedUserSummary.discipline.zeroLateStatus === 'ELIGIBLE' ? 'text-emerald-600' :
-                          selectedUserSummary.discipline.zeroLateStatus === 'ON_TRACK' ? 'text-blue-600' : 'text-slate-400 line-through'
-                        }`}>
-                          Rp {(selectedUserSummary.discipline.zeroLateBonusAmount || 0).toLocaleString()}
-                        </p>
-                        <span className="text-[10px] text-slate-500 block mt-0.5">
-                          {selectedUserSummary.discipline.zeroLateStatus === 'ELIGIBLE' ? '✓ Memenuhi syarat' :
-                           selectedUserSummary.discipline.zeroLateStatus === 'ON_TRACK' ? `Progress: ${selectedUserSummary.stats.totalHadir}/${selectedUserSummary.discipline.zeroLateMinAttendance} Hari` :
-                           '❌ Hangus (Ada keterlambatan)'}
-                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Total Hadir</span>
+                        <span className="text-base font-black text-emerald-700">{selectedUserSummary.stats.totalHadir} Hari</span>
                       </div>
-
                       <div className="p-3 bg-white rounded-xl border border-slate-100">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Potongan Telat</p>
-                        <p className="font-black text-sm text-rose-600 mt-1">
-                          -Rp {(selectedUserSummary.discipline.totalLatePenalty || 0).toLocaleString()}
-                        </p>
-                        <span className="text-[10px] text-slate-500 block mt-0.5">
-                          {selectedUserSummary.discipline.enableLatePenalty 
-                            ? `${selectedUserSummary.stats.totalTerlambat}x telat (${selectedUserSummary.discipline.latePenaltyType === 'PER_MINUTE' ? 'Per Menit' : 'Flat/Kejadian'})`
-                            : 'Denda nonaktif'}
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Terlambat</span>
+                        <span className={`text-base font-black ${selectedUserSummary.stats.totalTerlambat > 0 ? 'text-rose-600' : 'text-slate-700'}`}>
+                          {selectedUserSummary.stats.totalTerlambat} Kali
                         </span>
+                        <span className="text-[10px] text-slate-400 block">({selectedUserSummary.stats.totalLateMinutes} menit)</span>
                       </div>
-
-                      <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-                        <p className="text-[10px] font-bold text-indigo-600 uppercase">Estimasi Bersih</p>
-                        <p className="font-black text-indigo-900 mt-1 text-sm">
-                          Rp {(selectedUserSummary.discipline.netDisciplineAmount || 0).toLocaleString()}
-                        </p>
-                        <span className="text-[10px] text-indigo-500 block mt-0.5">
-                          Reward bersih bulan ini
+                      <div className="p-3 bg-white rounded-xl border border-slate-100">
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Total Jam Kerja</span>
+                        <span className="text-base font-black text-indigo-700">{selectedUserSummary.stats.totalWorkHours} Jam</span>
+                      </div>
+                      <div className="p-3 bg-white rounded-xl border border-slate-100">
+                        <span className="text-[10px] text-slate-400 font-bold block uppercase">Reward Zero Late</span>
+                        <span className={`text-xs font-black ${selectedUserSummary.discipline?.zeroLateStatus === 'ELIGIBLE' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {selectedUserSummary.discipline?.zeroLateStatus === 'ELIGIBLE' ? `+Rp ${(selectedUserSummary.discipline.zeroLateBonusEarned || 0).toLocaleString()}` : 'Tidak Dapat'}
                         </span>
                       </div>
                     </div>
                   </div>
-                )}
+
+                  {/* PILAR 2: KINERJA & AKURASI FINANSIAL KASIR */}
+                  <div className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <h4 className="text-xs font-black text-emerald-900 uppercase tracking-wider flex items-center gap-2">
+                      <Fingerprint size={16} className="text-emerald-600" />
+                      2. Pilar Integritas & Akurasi Finansial Kasir
+                    </h4>
+                    {selectedUserSummary.cashierStats && selectedUserSummary.cashierStats.totalShifts > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Shift Dijalankan</span>
+                          <span className="text-base font-black text-slate-900">
+                            {selectedUserSummary.cashierStats.totalShifts} Shift
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">({selectedUserSummary.cashierStats.closedShiftsCount} ditutup)</span>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Akurasi Kas Laci</span>
+                          <span className={`text-base font-black ${selectedUserSummary.cashierStats.cashAccuracyRate >= 95 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {selectedUserSummary.cashierStats.cashAccuracyRate}% Pas
+                          </span>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Uang Tekor (Minus)</span>
+                          <span className={`text-sm font-black ${selectedUserSummary.cashierStats.totalShortage > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {selectedUserSummary.cashierStats.totalShortage > 0 ? `-Rp ${selectedUserSummary.cashierStats.totalShortage.toLocaleString()}` : 'Rp 0 (Aman)'}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Omzet Ditangani</span>
+                          <span className="text-sm font-black text-indigo-700">
+                            Rp {selectedUserSummary.cashierStats.totalSalesHandled.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">({selectedUserSummary.cashierStats.totalOrdersHandled} orders)</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-white rounded-xl border border-slate-100 text-center text-xs text-slate-400">
+                        Karyawan ini tidak menjalankan shift kasir pada periode ini.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* PILAR 3: EFISIENSI & STOCK LOSS DAPUR */}
+                  <div className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <h4 className="text-xs font-black text-rose-900 uppercase tracking-wider flex items-center gap-2">
+                      <TrendingUp size={16} className="text-rose-600" />
+                      3. Pilar Pengendalian Stock Loss & Dapur
+                    </h4>
+                    {selectedUserSummary.kitchenStats && selectedUserSummary.kitchenStats.totalLossIncidents > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Insiden Kerusakan</span>
+                          <span className="text-base font-black text-rose-600">
+                            {selectedUserSummary.kitchenStats.totalLossIncidents} Kali
+                          </span>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Total Valuasi Rugi</span>
+                          <span className="text-base font-black text-rose-700">
+                            Rp {selectedUserSummary.kitchenStats.totalLossCost.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="p-3 bg-white rounded-xl border border-slate-100">
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">Loss Human Error</span>
+                          <span className="text-sm font-black text-amber-700">
+                            Rp {selectedUserSummary.kitchenStats.humanErrorLossCost.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">(Gosong / Salah Resep / Tumpah)</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-white rounded-xl border border-slate-100 text-center text-xs text-slate-400">
+                        Tidak ada catatan insiden stock loss / waste dapur untuk karyawan ini. 🎉
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* LOGS LIST WITH PHOTOS */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-black text-slate-800">Riwayat Log Kehadiran Terakhir:</h4>
-                  <div className="space-y-2.5 divide-y divide-slate-100">
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <h4 className="text-xs font-black text-slate-800">Riwayat Presensi Foto Selfie:</h4>
+                  <div className="space-y-2.5 divide-y divide-slate-100 max-h-48 overflow-y-auto">
                     {selectedUserSummary.recentLogs?.map(log => (
                       <div key={log.id} className="pt-2.5 first:pt-0 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
@@ -991,7 +1153,14 @@ export const AttendanceView: React.FC = () => {
               </div>
 
               {/* Sticky Footer */}
-              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleExportAppraisalPDF(selectedUserSummary)}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 transition-all active:scale-95"
+                >
+                  <FileText size={15} /> Cetak Rapor PDF
+                </button>
                 <button
                   type="button"
                   onClick={() => setSelectedUserSummary(null)}

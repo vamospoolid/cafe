@@ -352,6 +352,122 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
 
         const netDisciplineAmount = zeroLateBonusEarned - totalLatePenalty;
 
+        // ─────────────────────────────────────────────────────────────
+        // 2. KINERJA FINANSIAL KASIR (SHIFTS & ORDERS)
+        // ─────────────────────────────────────────────────────────────
+        const shiftWhere: any = { userId: u.id };
+        if (dateFilter.gte) {
+          shiftWhere.waktuBuka = dateFilter;
+        }
+
+        const orderWhere: any = { userId: u.id };
+        if (dateFilter.gte) {
+          orderWhere.createdAt = dateFilter;
+        }
+
+        const [userShifts, userOrders, userLossLogs] = await Promise.all([
+          prisma.shift.findMany({
+            where: shiftWhere,
+            orderBy: { waktuBuka: 'desc' }
+          }),
+          prisma.order.findMany({
+            where: orderWhere,
+            select: { id: true, total: true, status: true, discount: true, createdAt: true }
+          }),
+          prisma.ingredientLog.findMany({
+            where: {
+              userId: u.id,
+              type: 'Rusak',
+              ...(dateFilter.gte ? { createdAt: dateFilter } : {})
+            },
+            include: { ingredient: true }
+          })
+        ]);
+
+        // Rekap Shift Kasir
+        const totalShifts = userShifts.length;
+        const closedShifts = userShifts.filter((s: any) => s.status === 'Closed');
+        const balancedShifts = closedShifts.filter((s: any) => (s.selisih === 0 || s.selisih === null)).length;
+        const cashAccuracyRate = closedShifts.length > 0 ? Math.round((balancedShifts / closedShifts.length) * 100) : 100;
+        
+        let totalShortage = 0; // Uang minus (kasir tekor)
+        let totalOverage = 0;  // Uang lebih
+        userShifts.forEach((s: any) => {
+          if (s.selisih !== null && s.selisih !== undefined) {
+            if (s.selisih < 0) totalShortage += Math.abs(s.selisih);
+            else if (s.selisih > 0) totalOverage += s.selisih;
+          }
+        });
+
+        // Rekap Order & Omzet Kasir
+        const completedOrders = userOrders.filter((o: any) => o.status === 'COMPLETED');
+        const voidOrders = userOrders.filter((o: any) => o.status === 'CANCELLED' || o.status === 'VOID');
+        const totalSalesHandled = completedOrders.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
+        const totalOrdersHandled = completedOrders.length;
+        const voidCount = voidOrders.length;
+        const voidAmount = voidOrders.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
+
+        // ─────────────────────────────────────────────────────────────
+        // 3. KINERJA STOCK LOSS & WASTE DAPUR
+        // ─────────────────────────────────────────────────────────────
+        const totalLossIncidents = userLossLogs.length;
+        let totalLossCost = 0;
+        let humanErrorLossCost = 0;
+        let spoilageLossCost = 0;
+
+        userLossLogs.forEach((m: any) => {
+          const itemCost = m.cost || (Math.abs(m.change) * (m.ingredient?.buyPrice || 0));
+          totalLossCost += itemCost;
+          const r = (m.reason || '').toLowerCase();
+          if (r.includes('gosong') || r.includes('salah') || r.includes('tumpah') || r.includes('rusak fisik') || r.includes('kelalaian')) {
+            humanErrorLossCost += itemCost;
+          } else {
+            spoilageLossCost += itemCost;
+          }
+        });
+
+        // ─────────────────────────────────────────────────────────────
+        // 4. OVERALL SCORECARD & KPI GRADE (0 - 100)
+        // ─────────────────────────────────────────────────────────────
+        // Skor Disiplin Waktu (Bobot 40%)
+        const attendanceBase = totalEntries > 0 ? (totalHadir / totalEntries) * 100 : 100;
+        const lateDeduction = (totalTerlambat * 4) + Math.min(20, Math.floor(totalLateMinutes / 15));
+        const attendanceScore = Math.max(0, Math.min(100, Math.round(attendanceBase - lateDeduction)));
+
+        // Skor Akurasi Kasir (Bobot 30%)
+        let cashierScore = 100;
+        if (totalShifts > 0) {
+          const shortageDeduction = Math.min(40, Math.floor(totalShortage / 20000) * 5);
+          const voidDeduction = Math.min(20, voidCount * 5);
+          cashierScore = Math.max(0, Math.min(100, Math.round(cashAccuracyRate - shortageDeduction - voidDeduction)));
+        }
+
+        // Skor Pengendalian Dapur (Bobot 30%)
+        let kitchenScore = 100;
+        if (totalLossIncidents > 0) {
+          const incidentDeduction = totalLossIncidents * 5;
+          const humanErrorDeduction = Math.min(40, Math.floor(humanErrorLossCost / 25000) * 5);
+          kitchenScore = Math.max(0, Math.min(100, Math.round(100 - incidentDeduction - humanErrorDeduction)));
+        }
+
+        const kpiScore = Math.round((attendanceScore * 0.4) + (cashierScore * 0.3) + (kitchenScore * 0.3));
+        let kpiGrade: 'A' | 'B' | 'C' | 'D' = 'B';
+        let kpiLabel = 'Baik & Produktif';
+
+        if (kpiScore >= 90) {
+          kpiGrade = 'A';
+          kpiLabel = 'Sangat Baik / Teladan';
+        } else if (kpiScore >= 75) {
+          kpiGrade = 'B';
+          kpiLabel = 'Baik & Disiplin';
+        } else if (kpiScore >= 60) {
+          kpiGrade = 'C';
+          kpiLabel = 'Cukup / Perlu Evaluasi';
+        } else {
+          kpiGrade = 'D';
+          kpiLabel = 'Kurang / Butuh Pembinaan';
+        }
+
         return {
           user: u,
           stats: {
@@ -376,7 +492,35 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
             totalLatePenalty,
             netDisciplineAmount
           },
-          recentLogs: logs.slice(0, 10)
+          cashierStats: {
+            totalShifts,
+            closedShiftsCount: closedShifts.length,
+            balancedShifts,
+            cashAccuracyRate,
+            totalShortage,
+            totalOverage,
+            totalSalesHandled,
+            totalOrdersHandled,
+            voidCount,
+            voidAmount
+          },
+          kitchenStats: {
+            totalLossIncidents,
+            totalLossCost,
+            humanErrorLossCost,
+            spoilageLossCost
+          },
+          kpi: {
+            score: kpiScore,
+            grade: kpiGrade,
+            label: kpiLabel,
+            attendanceScore,
+            cashierScore,
+            kitchenScore
+          },
+          recentLogs: logs.slice(0, 10),
+          recentShifts: userShifts.slice(0, 5),
+          recentLossLogs: userLossLogs.slice(0, 5)
         };
       })
     );

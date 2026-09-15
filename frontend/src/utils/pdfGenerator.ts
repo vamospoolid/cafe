@@ -2526,4 +2526,287 @@ export const exportShiftSettlementPDF = async (
   doc.save(`Shift_Settlement_Shift${shiftData.id || Date.now()}_${(cashierName || 'Kasir').replace(/\s+/g, '_')}.pdf`);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. RAPOR EVALUASI KINERJA KARYAWAN (INDIVIDUAL EMPLOYEE APPRAISAL)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportIndividualAppraisalPDF = async (
+  settings: VenueSettings,
+  summary: any,
+  monthStr?: string,
+  reviewerName?: string
+) => {
+  let logoBase64 = '';
+  if (settings?.logoUrl) {
+    try {
+      logoBase64 = await getImageDataUrl(settings.logoUrl);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+  const currentTitle = 'RAPOR EVALUASI KINERJA KARYAWAN (KPI APPRAISAL)';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(79, 70, 229); // Indigo 600
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(9.5);
+    pdfDoc.setTextColor(79, 70, 229);
+    pdfDoc.text(currentTitle, pageWidth - margin, 17, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Periode Evaluasi: ${monthStr || 'Bulan Berjalan'}`, pageWidth - margin, 21, { align: 'right' });
+    pdfDoc.text(`Penilai: ${reviewerName || 'Owner / Management'}`, pageWidth - margin, 25, { align: 'right' });
+    pdfDoc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 29, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 33, pageWidth - margin, 33);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text(
+      `Dokumen Resmi Evaluasi Kinerja Karyawan ${settings?.storeName || 'SOL CAFE'} — Rahasia & Terarsip HRD.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  let nextY = 38;
+
+  // 1. Profil Karyawan & Scorecard KPI Box
+  const u = summary?.user || {};
+  const kpi = summary?.kpi || { score: 85, grade: 'B', label: 'Baik & Disiplin' };
+  const stats = summary?.stats || {};
+  const discipline = summary?.discipline || {};
+  const cashier = summary?.cashierStats || {};
+  const kitchen = summary?.kitchenStats || {};
+
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 22, 2, 2, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 22, 2, 2, 'S');
+
+  // Left side - User Info
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text(u.name || 'Nama Karyawan', margin + 5, nextY + 7);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Posisi / Jabatan: ${u.role || 'Staf'}  |  Username: @${u.username || '-'}  |  Status: ${u.status || 'Aktif'}`, margin + 5, nextY + 12);
+  doc.text(`Total Kehadiran Kerja: ${stats.totalHadir || 0} Hari (${stats.totalWorkHours || 0} Total Jam Kerja)`, margin + 5, nextY + 17);
+
+  // Right side - KPI Badge Card
+  const badgeW = 48;
+  const badgeX = pageWidth - margin - badgeW - 4;
+  const gradeColor = kpi.grade === 'A' ? [16, 185, 129] : kpi.grade === 'B' ? [79, 70, 229] : kpi.grade === 'C' ? [217, 119, 6] : [225, 29, 72];
+  
+  doc.setFillColor(gradeColor[0], gradeColor[1], gradeColor[2]);
+  doc.roundedRect(badgeX, nextY + 3, badgeW, 16, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('SKOR KPI KESELURUHAN', badgeX + (badgeW / 2), nextY + 7.5, { align: 'center' });
+
+  doc.setFontSize(12);
+  doc.text(`${kpi.score}/100 (GRADE ${kpi.grade})`, badgeX + (badgeW / 2), nextY + 14, { align: 'center' });
+
+  nextY += 27;
+
+  // 2. Tiga Tabel Evaluasi Pilar Kinerja
+  // PILAR 1: Presensi & Kedisiplinan Waktu
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('1. PILAR KEDISIPLINAN & PRESENSI KERJA (HR ATTENDANCE)', margin, nextY + 4);
+
+  const attendanceRows = [
+    ['Total Kehadiran (Hari Masuk)', `${stats.totalHadir || 0} Hari`, 'Status Reward Zero Late', discipline.zeroLateStatus === 'ELIGIBLE' ? 'TERCAPAI (BONUS)' : discipline.zeroLateStatus === 'ON_TRACK' ? 'ON TRACK' : 'TIDAK ELIGIBLE'],
+    ['Keterlambatan (Frekuensi & Durasi)', `${stats.totalTerlambat || 0} Kali (${stats.totalLateMinutes || 0} Menit)`, 'Nominal Bonus Zero Late', formatCurrency(discipline.zeroLateBonusEarned || 0)],
+    ['Presensi di Luar Radius GPS', `${stats.totalLuarRadius || 0} Kali`, 'Potongan Denda Terlambat', `-${formatCurrency(discipline.totalLatePenalty || 0)}`],
+    ['Total Jam Kerja Riil', `${stats.totalWorkHours || 0} Jam`, 'ESTIMASI BERSIH DISIPLIN', formatCurrency(discipline.netDisciplineAmount || 0)]
+  ];
+
+  autoTable(doc, {
+    head: [['Indikator Kehadiran', 'Capaian Riil', 'Evaluasi Finansial Kedisiplinan', 'Nominal']],
+    body: attendanceRows,
+    startY: nextY + 7,
+    margin: { left: margin, right: margin },
+    theme: 'grid',
+    styles: { fontSize: 7.5, cellPadding: 1.8, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50 },
+      1: { cellWidth: 40 },
+      2: { fontStyle: 'bold', cellWidth: 55 },
+      3: { halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  nextY = (doc as any).lastAutoTable?.finalY + 6;
+
+  // PILAR 2: Integritas & Kinerja Kasir
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('2. PILAR INTEGRITAS & AKURASI FINANSIAL KASIR (CASHIER PERFORMANCE)', margin, nextY + 4);
+
+  const cashierRows = [
+    ['Total Shift Kasir Dijalankan', `${cashier.totalShifts || 0} Shift (${cashier.closedShiftsCount || 0} Shift Ditutup)`, 'Akurasi Kas Laci (% Shift Pas)', `${cashier.cashAccuracyRate || 100}% Akurat`],
+    ['Total Transaksi Selesai Dilayani', `${cashier.totalOrdersHandled || 0} Transaksi Penjualan`, 'Akumulasi Uang Minus (Shortage)', cashier.totalShortage > 0 ? `-${formatCurrency(cashier.totalShortage)} (TEKOR)` : 'Rp 0 (AMAN)'],
+    ['Total Omzet Penjualan Ditangani', formatCurrency(cashier.totalSalesHandled || 0), 'Akumulasi Uang Lebih (Overage)', formatCurrency(cashier.totalOverage || 0)],
+    ['Transaksi Batal / Void oleh Kasir', `${cashier.voidCount || 0} Order`, 'Nilai Transaksi Void', formatCurrency(cashier.voidAmount || 0)]
+  ];
+
+  autoTable(doc, {
+    head: [['Indikator Operasional Kasir', 'Capaian Riil', 'Indikator Audit Keamanan Kas', 'Hasil Audit']],
+    body: cashierRows,
+    startY: nextY + 7,
+    margin: { left: margin, right: margin },
+    theme: 'grid',
+    styles: { fontSize: 7.5, cellPadding: 1.8, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50 },
+      1: { cellWidth: 40 },
+      2: { fontStyle: 'bold', cellWidth: 55 },
+      3: { halign: 'right', fontStyle: 'bold' }
+    },
+    didParseCell: (hookData) => {
+      if (hookData.section === 'body') {
+        if (hookData.row.index === 1 && cashier.totalShortage > 0 && hookData.column.index === 3) {
+          hookData.cell.styles.textColor = [225, 29, 72]; // red
+          hookData.cell.styles.fillColor = [254, 242, 242];
+        }
+      }
+    }
+  });
+
+  nextY = (doc as any).lastAutoTable?.finalY + 6;
+
+  // PILAR 3: Efisiensi Bahan & Dapur
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('3. PILAR EFISIENSI & PENGENDALIAN LOSS BAHAN BAKU (KITCHEN & BAR CONTROL)', margin, nextY + 4);
+
+  const kitchenRows = [
+    ['Total Insiden Kerusakan Tercatat', `${kitchen.totalLossIncidents || 0} Insiden Rusak/Basi`, 'Loss Akibat Human Error (Masak)', formatCurrency(kitchen.humanErrorLossCost || 0)],
+    ['Total Valuasi Kerugian Bahan (Rp)', formatCurrency(kitchen.totalLossCost || 0), 'Loss Akibat Kadaluarsa/Expired', formatCurrency(kitchen.spoilageLossCost || 0)]
+  ];
+
+  autoTable(doc, {
+    head: [['Indikator Pengendalian Bahan', 'Capaian Riil', 'Klasifikasi Kerugian Dapur', 'Valuasi']],
+    body: kitchenRows,
+    startY: nextY + 7,
+    margin: { left: margin, right: margin },
+    theme: 'grid',
+    styles: { fontSize: 7.5, cellPadding: 1.8, font: 'helvetica', textColor: [51, 65, 85] },
+    headStyles: { fillColor: [190, 18, 60], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50 },
+      1: { cellWidth: 40 },
+      2: { fontStyle: 'bold', cellWidth: 55 },
+      3: { halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  nextY = (doc as any).lastAutoTable?.finalY + 6;
+
+  // 3. Catatan Evaluasi & Rekomendasi
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 20, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('CATATAN EVALUASI & REKOMENDASI MANAJEMEN / OWNER:', margin + 4, nextY + 5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  const evaluationNotes = kpi.score >= 90
+    ? `Karyawan menunjukkan performa istimewa (Grade A) dengan tingkat kehadiran disiplin tinggi dan integritas operasional yang sangat baik. Sangat direkomendasikan untuk apresiasi bonus bulanan.`
+    : kpi.score >= 75
+    ? `Performa kerja baik dan stabil (Grade B). Menjaga kepatuhan SOP dengan baik. Pertahankan ketelitian dan konsistensi jam kerja di bulan mendatang.`
+    : kpi.score >= 60
+    ? `Performa kerja cukup (Grade C). Perlu evaluasi terkait ${stats.totalTerlambat > 0 ? 'keterlambatan jam kerja' : ''} ${cashier.totalShortage > 0 ? 'dan selisih kas kasir' : ''}. Diperlukan pembinaan SOP.`
+    : `Performa kerja di bawah standar (Grade D). Terdapat catatan penting pada ${cashier.totalShortage > 0 ? 'selisih minus kas kasir' : 'kedisiplinan kerja'}. Surat Peringatan (SP) atau sesi konseling 1-on-1 disarankan.`;
+
+  doc.text(doc.splitTextToSize(evaluationNotes, pageWidth - (margin * 2) - 8), margin + 4, nextY + 10);
+
+  nextY += 26;
+
+  // 4. Kolom Tanda Tangan 3 Pihak
+  const sigW = (pageWidth - (margin * 2)) / 3;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(71, 85, 105);
+
+  // Karyawan
+  doc.text('Karyawan Yang Dinilai,', margin + 6, nextY);
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin + 6, nextY + 16, margin + sigW - 6, nextY + 16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(u.name || 'Karyawan', margin + 6, nextY + 20);
+
+  // Supervisor / HR
+  doc.setFont('helvetica', 'normal');
+  doc.text('Supervisor / HRD,', margin + sigW + 6, nextY);
+  doc.line(margin + sigW + 6, nextY + 16, margin + (sigW * 2) - 6, nextY + 16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Supervisor Toko / HR', margin + sigW + 6, nextY + 20);
+
+  // Owner / GM
+  doc.setFont('helvetica', 'normal');
+  doc.text('Mengetahui (Owner / GM),', margin + (sigW * 2) + 6, nextY);
+  doc.line(margin + (sigW * 2) + 6, nextY + 16, pageWidth - margin - 6, nextY + 16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(reviewerName || 'Owner / General Manager', margin + (sigW * 2) + 6, nextY + 20);
+
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Rapor_Kinerja_${(u.name || 'Karyawan').replace(/\s+/g, '_')}_${(monthStr || 'Periode').replace(/\s+/g, '_')}.pdf`);
+};
+
 
