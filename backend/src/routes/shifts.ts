@@ -337,6 +337,66 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       }
     });
 
+    // ── AUTO-CATAT ke Arus Kas / Petty Cash ─────────────────────────────
+    // Agar halaman Arus Kas menampilkan pemasukan lengkap (bukan selalu minus)
+    const userId = (req as any).user.id;
+
+    const cashFlowEntries: any[] = [];
+
+    // 1. Saldo awal shift (modal kasir buka)
+    if (activeShift.saldoAwal > 0) {
+      cashFlowEntries.push({
+        type: 'Pemasukan',
+        category: 'Saldo Awal Shift',
+        amount: activeShift.saldoAwal,
+        description: `Modal awal kasir saat buka shift — tutup shift #${closedShift.id}`,
+        userId,
+        date: activeShift.waktuBuka
+      });
+    }
+
+    // 2. Omset tunai dari POS
+    if (cashSalesIncome > 0) {
+      cashFlowEntries.push({
+        type: 'Pemasukan',
+        category: 'Omset POS - Tunai',
+        amount: cashSalesIncome,
+        description: `Omset penjualan tunai (${activeOrders.filter(o => getCashPortion(o.paymentMethod, o.total) > 0).length} transaksi) — shift #${closedShift.id}`,
+        userId,
+        date: closedShift.waktuTutup || new Date()
+      });
+    }
+
+    // 3. Omset non-tunai (QRIS / Transfer / Debit) — dicatat informatif
+    if (nonCashSalesIncome > 0) {
+      cashFlowEntries.push({
+        type: 'Pemasukan',
+        category: 'Omset POS - Non Tunai (QRIS/Transfer)',
+        amount: nonCashSalesIncome,
+        description: `Omset penjualan non-tunai/QRIS/transfer — shift #${closedShift.id} (tidak mempengaruhi kas laci)`,
+        userId,
+        date: closedShift.waktuTutup || new Date()
+      });
+    }
+
+    // 4. Pelunasan piutang tunai (jika ada)
+    if (cashDebtIncome > 0) {
+      cashFlowEntries.push({
+        type: 'Pemasukan',
+        category: 'Pelunasan Piutang - Tunai',
+        amount: cashDebtIncome,
+        description: `Pembayaran piutang tunai yang diterima — shift #${closedShift.id}`,
+        userId,
+        date: closedShift.waktuTutup || new Date()
+      });
+    }
+
+    // Bulk create semua entri CashFlow sekaligus
+    if (cashFlowEntries.length > 0) {
+      await prisma.cashFlow.createMany({ data: cashFlowEntries });
+    }
+    // ── END AUTO-CATAT ───────────────────────────────────────────────────
+
     res.json({
       ...closedShift,
       cashSales: cashSalesIncome,
@@ -356,3 +416,4 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
 });
 
 export default router;
+

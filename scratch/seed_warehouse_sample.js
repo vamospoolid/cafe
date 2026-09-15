@@ -8,7 +8,7 @@ const http = require('http');
 
 const BASE_URL = 'https://cafe.codenusa.id';
 const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'admin123';
+const ADMIN_PASSWORD = '123456';  // PIN / password admin
 
 function request(method, path, body, token) {
   return new Promise((resolve, reject) => {
