@@ -8,7 +8,7 @@ import {
   FileText, ClipboardList, Send, Upload, FileCheck, CheckCheck, RefreshCcw,
   Smartphone, UserCheck, KeyRound, ArrowRight, CornerDownLeft, Sparkles, Activity,
   Lock, Eye, EyeOff, QrCode, Share2, Download, Shield, ShieldAlert,
-  Sliders, Thermometer, Flame, Star, BadgeCheck, HelpCircle
+  Sliders, Thermometer, Flame, Star, BadgeCheck, HelpCircle, Timer, Compass
 } from 'lucide-react';
 import { toast, confirmAlert } from '../utils/alert';
 
@@ -64,6 +64,13 @@ interface SOPCheckItem {
   category: 'bar' | 'clean' | 'cash' | 'chiller';
 }
 
+const DEFAULT_SHIFTS: WorkShift[] = [
+  { id: 'pagi', name: 'Shift Pagi', start: '08:00', end: '16:00', lateTolerance: 15 },
+  { id: 'siang', name: 'Shift Siang / Sore', start: '14:00', end: '22:00', lateTolerance: 15 },
+  { id: 'middle', name: 'Shift Middle', start: '11:00', end: '19:00', lateTolerance: 15 },
+  { id: 'full', name: 'Shift Full Day', start: '09:00', end: '18:00', lateTolerance: 15 },
+];
+
 const DEFAULT_OPENING_SOP: SOPCheckItem[] = [
   { id: 'op1', text: 'Kalibrasi Grinder & Cek Rasa Espresso (Dose & Yield)', checked: false, category: 'bar' },
   { id: 'op2', text: 'Periksa Suhu Chiller / Kulkas Susu (< 4°C)', checked: false, category: 'chiller' },
@@ -106,12 +113,14 @@ export const StaffPWAView: React.FC = () => {
 
   // Live Digital Time
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [currentSeconds, setCurrentSeconds] = useState<string>('');
   const [currentDateStr, setCurrentDateStr] = useState<string>('');
 
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
+      setCurrentSeconds(now.toLocaleTimeString('id-ID', { second: '2-digit' }));
       setCurrentDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }));
     };
     updateTime();
@@ -121,7 +130,7 @@ export const StaffPWAView: React.FC = () => {
 
   // Store Settings & Shifts
   const [settings, setSettings] = useState<any>(null);
-  const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [shifts, setShifts] = useState<WorkShift[]>(DEFAULT_SHIFTS);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('pagi');
 
   // GPS State
@@ -216,7 +225,7 @@ export const StaffPWAView: React.FC = () => {
   const [profileNameInput, setProfileNameInput] = useState('');
   const [submittingProfile, setSubmittingProfile] = useState(false);
 
-  // Helper avatar styling based on role (using brand & warm tones)
+  // Helper styling
   const getAvatarGradient = (role: string = '') => {
     const r = role.toLowerCase();
     if (r.includes('barista') || r.includes('kopi')) return 'bg-gradient-to-tr from-[#7C3AED] to-[#A78BFA] text-white';
@@ -235,6 +244,9 @@ export const StaffPWAView: React.FC = () => {
     if (r.includes('waiter')) return 'bg-cyan-50 text-cyan-700 border border-cyan-200';
     return 'bg-slate-100 text-slate-700 border border-slate-200';
   };
+
+  // Selected shift helper
+  const currentShift = shifts.find(s => s.id === selectedShiftId) || shifts[0] || DEFAULT_SHIFTS[0];
 
   // Calculate Distance (Haversine)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -261,8 +273,10 @@ export const StaffPWAView: React.FC = () => {
       if (setRes.ok) setSettings(await setRes.json());
       if (shiftRes.ok) {
         const shiftData = await shiftRes.json();
-        setShifts(shiftData);
-        if (shiftData.length > 0 && !selectedShiftId) setSelectedShiftId(shiftData[0].id);
+        if (Array.isArray(shiftData) && shiftData.length > 0) {
+          setShifts(shiftData);
+          setSelectedShiftId(shiftData[0].id);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -553,12 +567,12 @@ export const StaffPWAView: React.FC = () => {
 
     setClockLoading(true);
     try {
-      const selectedShift = shifts.find(s => s.id === selectedShiftId);
+      const selectedShift = shifts.find(s => s.id === selectedShiftId) || DEFAULT_SHIFTS[0];
       const payload = {
         pin: user?.pin || '',
         type,
         shiftId: selectedShiftId,
-        shiftName: selectedShift ? `${selectedShift.name} (${selectedShift.start} - ${selectedShift.end})` : 'Shift Bertugas',
+        shiftName: `${selectedShift.name} (${selectedShift.start} - ${selectedShift.end})`,
         latitude: gpsLocation?.lat,
         longitude: gpsLocation?.lng,
         photo: capturedPhoto,
@@ -883,7 +897,7 @@ export const StaffPWAView: React.FC = () => {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 1. RENDER UN-AUTHENTICATED LOGIN SCREEN (MATCHING BRAND PALETTE)
+  // 1. RENDER UN-AUTHENTICATED LOGIN SCREEN
   // ─────────────────────────────────────────────────────────────
   if (!token || !user) {
     return (
@@ -904,7 +918,7 @@ export const StaffPWAView: React.FC = () => {
             Portal Staf Operasional
           </h1>
           <p className="text-xs text-purple-200/70">
-            Presensi, Checklist SOP, Serah Terima Shift & Inventaris
+            Presensi, Jadwal Shift, SOP, Serah Terima & Inventaris
           </p>
         </div>
 
@@ -1028,33 +1042,33 @@ export const StaffPWAView: React.FC = () => {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 2. RENDER AUTHENTICATED STAFF APP (PROFESSIONAL & SOFT LUXURY)
+  // 2. RENDER AUTHENTICATED STAFF APP (HIGH-END & PROFESSIONAL UX)
   // ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#1A1033] flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
       <div className="w-full sm:max-w-[430px] min-h-screen sm:min-h-[880px] bg-[#F4F6F9] sm:rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
         
         {/* ── TOP DEEP PLUM HEADER BANNER ── */}
-        <header className="bg-[#1A1033] text-white px-5 pt-4 pb-12 shrink-0 relative">
+        <header className="bg-[#1A1033] text-white px-5 pt-4 pb-10 shrink-0 relative">
           
-          {/* Top Info Bar */}
+          {/* Top Bar */}
           <div className="flex items-center justify-between text-xs text-purple-200/80 font-medium mb-3">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#FFD600] animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#FFD600] animate-pulse" />
               <span className="font-bold text-white uppercase tracking-wider text-[11px]">
                 {settings?.storeName || 'DEMO CAFE'}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {/* Quick ID Card Modal Button (Gold Accent) */}
+            <div className="flex items-center gap-2">
+              {/* Quick ID Card Modal Button */}
               <button
                 type="button"
                 onClick={() => setShowIDCardModal(true)}
-                className="px-2.5 py-1 rounded-full bg-[#FFD600] text-[#1A1033] font-bold text-[10px] flex items-center gap-1 shadow-sm hover:bg-[#FACC15] active:scale-95 transition-all"
+                className="px-3 py-1 rounded-full bg-[#FFD600] text-[#1A1033] font-bold text-[10px] flex items-center gap-1 shadow-sm hover:bg-[#FACC15] active:scale-95 transition-all"
                 title="Buka Kartu ID Digital"
               >
-                <QrCode size={12} />
+                <QrCode size={13} />
                 <span>ID Card</span>
               </button>
 
@@ -1082,14 +1096,17 @@ export const StaffPWAView: React.FC = () => {
               </h1>
             </div>
             <div className="text-right">
-              <div className="text-base font-bold text-white font-mono">{currentTime}</div>
+              <div className="text-base font-bold text-white font-mono flex items-baseline justify-end gap-0.5">
+                <span>{currentTime}</span>
+                <span className="text-[10px] text-purple-300/80 font-normal">.{currentSeconds}</span>
+              </div>
               <div className="text-[10px] text-purple-200/70">{currentDateStr}</div>
             </div>
           </div>
         </header>
 
         {/* ── FLOATING SHEET CONTAINER ── */}
-        <div className="-mt-7 bg-[#F4F6F9] rounded-t-[32px] sm:rounded-3xl flex-1 flex flex-col relative z-10 overflow-hidden">
+        <div className="-mt-6 bg-[#F4F6F9] rounded-t-[32px] sm:rounded-3xl flex-1 flex flex-col relative z-10 overflow-hidden">
           
           {/* ── PROFILE & STATS SUMMARY BAR ── */}
           <div className="bg-white px-5 pt-3.5 pb-4 rounded-b-[28px] shadow-[0_4px_25px_rgba(124,58,237,0.06)] border-b border-slate-100">
@@ -1165,44 +1182,105 @@ export const StaffPWAView: React.FC = () => {
           <main className="flex-1 overflow-y-auto px-4 py-4 pb-28 space-y-4">
             
             {/* ══════════════════════════════════════════════════════════════
-                TAB 1: PRESENSI, BIOMETRIC SELFIE & SOP CHECKLIST
+                TAB 1: PRESENSI, JADWAL SHIFT, BIOMETRIC & SOP
                ══════════════════════════════════════════════════════════════ */}
             {activeTab === 'attendance' && (
               <div className="space-y-4">
                 
-                {/* Shift Selector */}
-                {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
-                  <div className="bg-white rounded-3xl p-3.5 border border-slate-100 shadow-sm space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-[#1A1033]">
-                      <span className="flex items-center gap-1.5">
-                        <Clock size={14} className="text-[#7C3AED]" /> Pilih Shift Bertugas Hari Ini:
-                      </span>
+                {/* ── JADWAL & JAM SHIFT KERJA HERO CARD ── */}
+                <div className="bg-gradient-to-br from-white to-[#F5F3FF] rounded-3xl p-4 border border-[#DDD6FE] shadow-sm space-y-3 relative overflow-hidden">
+                  
+                  {/* Decorative ambient badge */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="p-1.5 rounded-xl bg-[#7C3AED] text-white">
+                        <Clock size={14} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-[#1A1033]">Jadwal Shift Kerja</h4>
+                        <p className="text-[10px] text-slate-500">Pilih & pantau jam kerja bertugas</p>
+                      </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      {shifts.map(s => {
-                        const isSelected = selectedShiftId === s.id;
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => setSelectedShiftId(s.id)}
-                            className={`flex-1 py-2 px-2 rounded-2xl text-center border transition-all ${
-                              isSelected
-                                ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-sm font-bold'
-                                : 'bg-[#F4F6F9] text-slate-600 border-slate-200 hover:bg-slate-100 font-medium'
-                            }`}
-                          >
-                            <div className="text-xs truncate">{s.name.split('(')[0].trim()}</div>
-                            <div className={`text-[10px] font-mono mt-0.5 ${isSelected ? 'text-purple-100' : 'text-slate-400'}`}>
-                              {s.start}-{s.end}
-                            </div>
-                          </button>
-                        );
-                      })}
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#F5F3FF] text-[#7C3AED] font-bold text-[10px] border border-[#DDD6FE]">
+                      Toleransi: +{currentShift?.lateTolerance || 15}m
+                    </span>
+                  </div>
+
+                  {/* Selected Shift Highlight Banner */}
+                  <div className="p-3 bg-[#1A1033] text-white rounded-2xl shadow-sm flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] text-purple-200 font-semibold uppercase tracking-wider">
+                        {currentShift.name}
+                      </div>
+                      <div className="text-base font-extrabold text-white font-mono mt-0.5 flex items-center gap-1.5">
+                        <span className="text-[#FFD600]">{currentShift.start}</span>
+                        <span className="text-purple-300 text-xs font-sans">s/d</span>
+                        <span className="text-[#FFD600]">{currentShift.end}</span>
+                        <span className="text-xs font-normal text-purple-200 font-sans">WIB</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] text-purple-300 block">Durasi Kerja:</span>
+                      <span className="text-xs font-bold text-[#FFD600] font-mono">
+                        8 Jam Kerja
+                      </span>
                     </div>
                   </div>
-                )}
+
+                  {/* Shift Selection Tabs */}
+                  {!mySummary?.todayStatus?.clockedIn && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[10px] font-bold text-slate-500 block px-0.5">
+                        Ganti Shift Bertugas Hari Ini:
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {shifts.map(s => {
+                          const isSelected = selectedShiftId === s.id;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => setSelectedShiftId(s.id)}
+                              className={`py-2 px-2.5 rounded-2xl text-left border transition-all ${
+                                isSelected
+                                  ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-sm font-bold'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-medium'
+                              }`}
+                            >
+                              <div className="text-xs truncate">{s.name}</div>
+                              <div className={`text-[10px] font-mono mt-0.5 ${isSelected ? 'text-purple-100' : 'text-[#7C3AED] font-semibold'}`}>
+                                {s.start} - {s.end}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* If Already Clocked In: Show Live Shift Status */}
+                  {mySummary?.todayStatus?.clockedIn && (
+                    <div className="p-2.5 rounded-2xl bg-white border border-[#DDD6FE] text-xs space-y-1">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-slate-500">Jam Masuk (Clock In):</span>
+                        <span className="font-bold text-emerald-700 font-mono">
+                          {mySummary?.todayStatus?.todayLog?.clockIn 
+                            ? new Date(mySummary.todayStatus.todayLog.clockIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB'
+                            : '-'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-slate-500">Shift Terdaftar:</span>
+                        <span className="font-bold text-[#1A1033]">
+                          {mySummary?.todayStatus?.todayLog?.shiftName || currentShift.name}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
 
                 {/* Hero Biometric Camera Card */}
                 <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-[0_4px_20px_rgba(124,58,237,0.04)] space-y-3">
@@ -1375,7 +1453,7 @@ export const StaffPWAView: React.FC = () => {
                       className="w-full py-4 bg-[#7C3AED] hover:bg-[#6D28D9] active:bg-[#5B21B6] disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#7C3AED]/25 active:scale-98"
                     >
                       <CheckCircle2 size={16} className="text-[#FFD600]" />
-                      <span>{clockLoading ? 'Memproses Presensi...' : 'Presensi Masuk (Clock In)'}</span>
+                      <span>{clockLoading ? 'Memproses Presensi...' : `Presensi Masuk (${currentShift.name})`}</span>
                     </button>
                   ) : !mySummary?.todayStatus?.clockedOut ? (
                     <button
