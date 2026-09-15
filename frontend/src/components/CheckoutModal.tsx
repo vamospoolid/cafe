@@ -114,7 +114,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         
         await connectBluetoothPrinter(macAddress);
         await printBluetoothReceipt(orderData, {
-          name: posContext?.settings?.storeName || 'SOL CAFE',
+          name: posContext?.settings?.storeName || 'MUKI RAMEN',
           address: posContext?.settings?.address || 'Jl. Kopi No.1',
           footer: posContext?.settings?.receiptFooter || 'Terima kasih!'
         });

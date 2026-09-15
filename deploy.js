@@ -86,7 +86,8 @@ if (target === 'backend') {
     cd backend
     npm install
     npx prisma db push --accept-data-loss
-    node update_gps.js
+    node update_muki_ramen_settings.js
+    node update_gps.js 2>/dev/null || true
     npx tsc
     pm2 restart poscafe-backend
     

@@ -124,7 +124,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/laporan': 'Laporan Penjualan',
     '/pengaturan': 'Pengaturan Sistem',
   };
-  const pageTitle = titleMap[location.pathname] || 'SOL Cafe POS';
+  const pageTitle = titleMap[location.pathname] || 'MUKI RAMEN POS';
 
   // Quick PIN Switch States
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -196,17 +196,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         <aside className="sidebar">
           <div className="sidebar-header flex items-center justify-between">
             <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={toggleSidebar} title={isCollapsed ? "Klik untuk memperluas sidebar" : ""}>
-              <div className="brand-logo shrink-0" style={{ overflow: 'hidden', background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="brand-logo shrink-0" style={{ overflow: 'hidden', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', padding: '2px' }}>
                 {posContext?.settings?.logoUrl ? (
-                  <img src={posContext.settings.logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={posContext.settings.logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 ) : (
-                  <ShoppingCart size={24} />
+                  <img src="/logo-muki-ramen.png" alt="MUKI RAMEN" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 )}
               </div>
               {!isCollapsed && (
                 <div className="brand-text truncate">
-                  <div className="brand-title truncate">{posContext?.settings?.storeName || 'SOL Cafe'}</div>
-                  <div className="brand-subtitle truncate">Point of Sale System</div>
+                  <div className="brand-title truncate">{posContext?.settings?.storeName || 'MUKI RAMEN'}</div>
+                  <div className="brand-subtitle truncate">Japanese Ramen POS</div>
                 </div>
               )}
             </div>

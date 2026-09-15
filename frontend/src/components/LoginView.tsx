@@ -57,14 +57,14 @@ const LoginView = () => {
 
         {/* Content Box with glassmorphism */}
         <div className="relative z-10 p-16 max-w-xl text-white">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-black rounded-3xl border border-white/10 mb-8 overflow-hidden shadow-inner">
-            <img src="/logo-sol-cafe.png" alt="SOL Cafe Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-3xl border border-white/20 mb-8 overflow-hidden shadow-2xl p-2">
+            <img src="/logo-muki-ramen.png" alt="MUKI RAMEN Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight mb-4 leading-tight">
-            SOL Cafe <span className="text-indigo-400 font-medium text-2xl block mt-1">Cafe Management Platform</span>
+            MUKI RAMEN <span className="text-amber-400 font-semibold text-2xl block mt-1">Japanese Ramen & Dining Platform</span>
           </h1>
           <p className="text-slate-300 leading-relaxed font-medium mb-8 text-sm">
-            Platform modern untuk mengelola operasional kasir, Kitchen Display System (KDS), tata letak meja pelanggan, inventaris bahan baku, hingga jurnal akuntansi otomatis dalam satu dashboard terintegrasi.
+            Platform modern untuk mengelola operasional kasir POS, Kitchen Display System (KDS), tata letak meja pelanggan, inventaris bahan baku ramen, hingga jurnal akuntansi terintegrasi.
           </p>
           
           <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 shadow-sm max-w-sm">
@@ -79,11 +79,11 @@ const LoginView = () => {
         <div className="w-full max-w-md bg-white p-8 sm:p-10 rounded-[2rem] shadow-xl border border-slate-100/80 transition-all duration-300 hover:shadow-2xl">
           {/* Logo Header */}
           <div className="text-center lg:text-left mb-8">
-            <div className="lg:hidden inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-black mb-4 overflow-hidden shadow-sm">
-              <img src="/logo-sol-cafe.png" alt="SOL Cafe Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <div className="lg:hidden inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border border-slate-200 mb-4 overflow-hidden shadow-sm p-2">
+              <img src="/logo-muki-ramen.png" alt="MUKI RAMEN Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Selamat Datang</h2>
-            <p className="text-slate-500 mt-2 font-medium text-sm">Masuk untuk mengakses kasir dan back-office</p>
+            <p className="text-slate-500 mt-2 font-medium text-sm">Masuk untuk mengakses kasir dan back-office MUKI RAMEN</p>
           </div>
 
           {/* Error Alert */}

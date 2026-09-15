@@ -940,7 +940,7 @@ export const IngredientView: React.FC = () => {
           <div className="hidden sm:block">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 bg-purple-50 text-indigo-700 rounded-lg text-xs font-extrabold">
-                {posContext?.settings?.storeName || 'SOL CAFE & EATERY'}
+                {posContext?.settings?.storeName || 'MUKI RAMEN'}
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
                 Master Bahan Baku & Intelijen Stok

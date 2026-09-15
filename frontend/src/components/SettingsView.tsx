@@ -419,17 +419,17 @@ const SettingsView = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">URL Logo Kafe (Path / Link)</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">URL Logo Restoran / Kedai (Path / Link)</label>
                     <div className="relative">
                       <ImageIcon size={16} className="absolute left-3 top-3.5 text-slate-400" />
                       <input 
                         type="text" 
                         name="logoUrl" 
                         className="form-control pl-10" 
-                        style={{ paddingLeft: '2.5rem' }}
+                        style={{ paddingLeft: '2.5rem' }} 
                         value={formData.logoUrl} 
                         onChange={handleChange} 
-                        placeholder="/logo-sol-cafe.png"
+                        placeholder="/logo-muki-ramen.png"
                       />
                     </div>
                   </div>
@@ -441,24 +441,52 @@ const SettingsView = () => {
                         type="text" 
                         name="qrCodeBaseUrl" 
                         className="form-control pl-10" 
-                        style={{ paddingLeft: '2.5rem' }}
+                        style={{ paddingLeft: '2.5rem' }} 
                         value={formData.qrCodeBaseUrl || ''} 
                         onChange={handleChange} 
-                        placeholder="Contoh: http://app.solcafe.com"
+                        placeholder="Contoh: http://mukiramen.com"
                       />
                     </div>
                   </div>
                 </div>
                 
                 <div className="flex flex-col">
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Logo Toko (Opsional)</label>
-                  <div className="flex-1 border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-2xl bg-slate-50/50 hover:bg-indigo-50/20 p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 group min-h-[180px]">
-                    <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600 group-hover:scale-110 transition-all mb-3">
-                      <ImageIcon size={22} />
-                    </div>
-                    <span className="text-xs font-bold text-slate-700">Pilih atau Seret Foto Logo</span>
-                    <span className="text-[10px] text-slate-400 mt-1">Format: JPG/PNG (Dimensi 1:1 direkomendasikan)</span>
-                  </div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Logo Toko (Pratinjau & Unggah)</label>
+                  <label className="flex-1 border-2 border-dashed border-indigo-200 hover:border-indigo-500 rounded-2xl bg-indigo-50/20 hover:bg-indigo-50/40 p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 group min-h-[180px] relative overflow-hidden">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const result = event.target?.result as string;
+                            setFormData((prev: any) => ({ ...prev, logoUrl: result }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    {formData.logoUrl ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200 shadow-md p-2 flex items-center justify-center overflow-hidden">
+                          <img src={formData.logoUrl} alt="Preview Logo" className="w-full h-full object-contain" />
+                        </div>
+                        <span className="text-xs font-bold text-indigo-600 group-hover:underline mt-1">Klik untuk mengganti logo</span>
+                        <span className="text-[10px] text-slate-400">Dimensi 1:1 direkomendasikan</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600 group-hover:scale-105 transition-all mb-2">
+                          <ImageIcon size={26} />
+                        </div>
+                        <span className="text-xs font-bold text-slate-700">Pilih atau Seret Foto Logo</span>
+                        <span className="text-[10px] text-slate-400 mt-1">Format: JPG/PNG (Dimensi 1:1 direkomendasikan)</span>
+                      </>
+                    )}
+                  </label>
                 </div>
               </div>
             </div>

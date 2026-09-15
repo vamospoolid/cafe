@@ -55,9 +55,10 @@ export const exportFinancialPDF = async (
   userName?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {
       console.warn('Failed to load logo, using fallback', e);
     }
@@ -101,12 +102,12 @@ export const exportFinancialPDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(14);
     pdfDoc.setTextColor(30, 41, 59); // slate-800
-    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 116, 139); // slate-500
-    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
     pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
 
     // Document Title & Metadata (Right side)
@@ -138,7 +139,7 @@ export const exportFinancialPDF = async (
     pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
 
     pdfDoc.text(
-      `Sistem Laporan POS ${settings?.storeName || 'SOL CAFE'} — Dokumen ini sah dan dicatat secara terkomputerisasi.`,
+      `Sistem Laporan POS ${settings?.storeName || 'MUKI RAMEN'} — Dokumen ini sah dan dicatat secara terkomputerisasi.`,
       margin,
       pageHeight - 8
     );
@@ -1190,9 +1191,10 @@ export const exportIngredientValuationPDF = async (
   userName?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -1216,12 +1218,12 @@ export const exportIngredientValuationPDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(14);
     pdfDoc.setTextColor(30, 41, 59);
-    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 116, 139);
-    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
     pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
 
     pdfDoc.setFont('helvetica', 'bold');
@@ -1248,7 +1250,7 @@ export const exportIngredientValuationPDF = async (
     pdfDoc.setDrawColor(241, 245, 249);
     pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
     pdfDoc.text(
-      `Sistem Akuntansi Persediaan ${settings?.storeName || 'SOL CAFE'} — Dokumen Aset Lancar Resmi.`,
+      `Sistem Akuntansi Persediaan ${settings?.storeName || 'MUKI RAMEN'} — Dokumen Aset Lancar Resmi.`,
       margin,
       pageHeight - 8
     );
@@ -1387,9 +1389,10 @@ export const exportStockLossAuditPDF = async (
   endDate?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -1413,12 +1416,12 @@ export const exportStockLossAuditPDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(14);
     pdfDoc.setTextColor(30, 41, 59);
-    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 116, 139);
-    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
     pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
 
     pdfDoc.setFont('helvetica', 'bold');
@@ -1445,7 +1448,7 @@ export const exportStockLossAuditPDF = async (
     pdfDoc.setDrawColor(241, 245, 249);
     pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
     pdfDoc.text(
-      `Sistem Audit HPP & Kerusakan Bahan ${settings?.storeName || 'SOL CAFE'} — Dokumen Pengawasan Biaya.`,
+      `Sistem Audit HPP & Kerusakan Bahan ${settings?.storeName || 'MUKI RAMEN'} — Dokumen Pengawasan Biaya.`,
       margin,
       pageHeight - 8
     );
@@ -1598,9 +1601,10 @@ export const exportProcurementForecastPDF = async (
   userName?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -1624,12 +1628,12 @@ export const exportProcurementForecastPDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(14);
     pdfDoc.setTextColor(30, 41, 59);
-    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 116, 139);
-    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
     pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
 
     pdfDoc.setFont('helvetica', 'bold');
@@ -1656,7 +1660,7 @@ export const exportProcurementForecastPDF = async (
     pdfDoc.setDrawColor(241, 245, 249);
     pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
     pdfDoc.text(
-      `Sistem Perencanaan Pengadaan ${settings?.storeName || 'SOL CAFE'} — Dokumen Proyeksi Arus Kas Keluar.`,
+      `Sistem Perencanaan Pengadaan ${settings?.storeName || 'MUKI RAMEN'} — Dokumen Proyeksi Arus Kas Keluar.`,
       margin,
       pageHeight - 8
     );
@@ -1781,9 +1785,10 @@ export const exportStockOpnameVariancePDF = async (
   generalNotes?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -1807,12 +1812,12 @@ export const exportStockOpnameVariancePDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(14);
     pdfDoc.setTextColor(30, 41, 59);
-    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 116, 139);
-    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
     pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
 
     pdfDoc.setFont('helvetica', 'bold');
@@ -1839,7 +1844,7 @@ export const exportStockOpnameVariancePDF = async (
     pdfDoc.setDrawColor(241, 245, 249);
     pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
     pdfDoc.text(
-      `Sistem Audit Persediaan Fisik ${settings?.storeName || 'SOL CAFE'} — Berita Acara Rekonsiliasi Resmi.`,
+      `Sistem Audit Persediaan Fisik ${settings?.storeName || 'MUKI RAMEN'} — Berita Acara Rekonsiliasi Resmi.`,
       margin,
       pageHeight - 8
     );
@@ -1977,9 +1982,10 @@ export const exportDailyMaterialConsumptionPDF = async (
   endDate?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -2003,12 +2009,12 @@ export const exportDailyMaterialConsumptionPDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(14);
     pdfDoc.setTextColor(30, 41, 59);
-    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 116, 139);
-    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
     pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
 
     pdfDoc.setFont('helvetica', 'bold');
@@ -2035,7 +2041,7 @@ export const exportDailyMaterialConsumptionPDF = async (
     pdfDoc.setDrawColor(241, 245, 249);
     pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
     pdfDoc.text(
-      `Laporan Analisis Konsumsi Bahan Baku ${settings?.storeName || 'SOL CAFE'} — Dokumen Pengawasan HPP & Bahan Baku.`,
+      `Laporan Analisis Konsumsi Bahan Baku ${settings?.storeName || 'MUKI RAMEN'} — Dokumen Pengawasan HPP & Bahan Baku.`,
       margin,
       pageHeight - 8
     );
@@ -2164,9 +2170,10 @@ export const exportSimplePurchaseOrderPDF = async (
   userName?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -2191,12 +2198,12 @@ export const exportSimplePurchaseOrderPDF = async (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(30, 41, 59);
-  doc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+  doc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+  doc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
   doc.text(`Kontak Toko: ${settings?.phone || '-'}`, textXOffset, 25);
 
   doc.setFont('helvetica', 'bold');
@@ -2227,7 +2234,7 @@ export const exportSimplePurchaseOrderPDF = async (
     body: [
       [
         `Nama Vendor: ${poData.supplierName}\nKontak / WA: ${poData.supplierPhone || '-'}\nStatus: Vendor Resmi Terdaftar`,
-        `Toko: ${settings?.storeName || 'SOL CAFE'}\nAlamat: ${settings?.address || 'Alamat Toko'}\nPIC Pemesan: ${userName || 'Bagian Purchasing'}`
+        `Toko: ${settings?.storeName || 'MUKI RAMEN'}\nAlamat: ${settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352'}\nPIC Pemesan: ${userName || 'Bagian Purchasing'}`
       ]
     ],
     startY: 38,
@@ -2313,7 +2320,7 @@ export const exportSimplePurchaseOrderPDF = async (
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
   doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
-  doc.text(`Dokumen resmi pesanan pembelian ${settings?.storeName || 'SOL CAFE'}. Dicetak otomatis oleh sistem.`, margin, pageHeight - 8);
+  doc.text(`Dokumen resmi pesanan pembelian ${settings?.storeName || 'MUKI RAMEN'}. Dicetak otomatis oleh sistem.`, margin, pageHeight - 8);
 
   doc.save(`Purchase_Order_${poNumber}_${poData.supplierName.replace(/\s+/g, '_')}.pdf`);
 };
@@ -2324,9 +2331,10 @@ export const exportShiftSettlementPDF = async (
   cashierName?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -2350,7 +2358,7 @@ export const exportShiftSettlementPDF = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(15, 23, 42);
-      doc.text((settings?.storeName || 'SOL CAFE & EATERY').toUpperCase(), margin + 22, nextY + 6);
+      doc.text((settings?.storeName || 'MUKI RAMEN').toUpperCase(), margin + 22, nextY + 6);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
@@ -2361,7 +2369,7 @@ export const exportShiftSettlementPDF = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(15, 23, 42);
-      doc.text((settings?.storeName || 'SOL CAFE & EATERY').toUpperCase(), margin, nextY + 4);
+      doc.text((settings?.storeName || 'MUKI RAMEN').toUpperCase(), margin, nextY + 4);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
@@ -2372,7 +2380,7 @@ export const exportShiftSettlementPDF = async (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(15, 23, 42);
-    doc.text((settings?.storeName || 'SOL CAFE & EATERY').toUpperCase(), margin, nextY + 4);
+    doc.text((settings?.storeName || 'MUKI RAMEN').toUpperCase(), margin, nextY + 4);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
@@ -2536,9 +2544,10 @@ export const exportIndividualAppraisalPDF = async (
   reviewerName?: string
 ) => {
   let logoBase64 = '';
-  if (settings?.logoUrl) {
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
     try {
-      logoBase64 = await getImageDataUrl(settings.logoUrl);
+      logoBase64 = await getImageDataUrl(logoSrc);
     } catch (e) {}
   }
 
@@ -2562,12 +2571,12 @@ export const exportIndividualAppraisalPDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(14);
     pdfDoc.setTextColor(30, 41, 59);
-    pdfDoc.text(settings?.storeName || 'SOL CAFE', textXOffset, 16);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 116, 139);
-    pdfDoc.text(settings?.address || 'Alamat Kafe Belum Ditentukan', textXOffset, 21);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Polman, Sulbar 91352', textXOffset, 21);
     pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
 
     pdfDoc.setFont('helvetica', 'bold');
@@ -2594,7 +2603,7 @@ export const exportIndividualAppraisalPDF = async (
     pdfDoc.setDrawColor(241, 245, 249);
     pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
     pdfDoc.text(
-      `Dokumen Resmi Evaluasi Kinerja Karyawan ${settings?.storeName || 'SOL CAFE'} — Rahasia & Terarsip HRD.`,
+      `Dokumen Resmi Evaluasi Kinerja Karyawan ${settings?.storeName || 'MUKI RAMEN'} — Rahasia & Terarsip HRD.`,
       margin,
       pageHeight - 8
     );

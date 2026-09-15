@@ -12,11 +12,15 @@ async function seedMukiRamen() {
       data: {
         storeName: 'MUKI RAMEN',
         phone: '081298765432',
-        address: 'Jl. Senopati No. 88, Jakarta Selatan',
+        address: 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Kabupaten Polewali Mandar, Sulawesi Barat 91352',
+        logoUrl: '/logo-muki-ramen.png',
         taxRate: 10,
         serviceCharge: 5,
-        receiptHeader: 'MUKI RAMEN - Authentic Japanese Ramen Bar',
-        receiptFooter: 'Arigatou Gozaimasu!\nFollow Instagram kami: @mukiramen.id',
+        receiptHeader: 'MUKI RAMEN - Japanese Ramen Bar\nJl. Kesadaran No. 3, Wonomulyo',
+        receiptFooter: 'Arigatou Gozaimasu!\nTerima Kasih Atas Kunjungan Anda',
+        storeLatitude: -3.4026521,
+        storeLongitude: 119.2137757,
+        gpsRadiusMeters: 200,
       }
     });
   } else {
@@ -24,11 +28,15 @@ async function seedMukiRamen() {
       data: {
         storeName: 'MUKI RAMEN',
         phone: '081298765432',
-        address: 'Jl. Senopati No. 88, Jakarta Selatan',
+        address: 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Kabupaten Polewali Mandar, Sulawesi Barat 91352',
+        logoUrl: '/logo-muki-ramen.png',
         taxRate: 10,
         serviceCharge: 5,
-        receiptHeader: 'MUKI RAMEN - Authentic Japanese Ramen Bar',
-        receiptFooter: 'Arigatou Gozaimasu!\nFollow Instagram kami: @mukiramen.id',
+        receiptHeader: 'MUKI RAMEN - Japanese Ramen Bar\nJl. Kesadaran No. 3, Wonomulyo',
+        receiptFooter: 'Arigatou Gozaimasu!\nTerima Kasih Atas Kunjungan Anda',
+        storeLatitude: -3.4026521,
+        storeLongitude: 119.2137757,
+        gpsRadiusMeters: 200,
       }
     });
   }

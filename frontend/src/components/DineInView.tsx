@@ -271,17 +271,18 @@ const DineInView = () => {
     );
   }
 
+  // ─── TAMPILAN LANDING PAGE (WELCOME & SELF-ORDER INFO) ───
   if (isLandingPage) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col font-sans relative overflow-hidden">
-        {/* Ambient background glows */}
-        <div className="absolute top-[-20%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-500/10 blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-amber-500/10 blur-[100px] pointer-events-none" />
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans relative overflow-hidden">
+        {/* Background Ambient Glow */}
+        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-500/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-indigo-500/10 blur-[100px] pointer-events-none" />
 
         {/* Top Navbar */}
         <header className="p-5 flex justify-between items-center z-10 max-w-md mx-auto w-full">
           <span className="text-xl font-black tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-            SOL CAFE
+            MUKI RAMEN
           </span>
           <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-black text-emerald-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
@@ -295,15 +296,15 @@ const DineInView = () => {
           <div className="relative group mx-auto w-full max-w-[280px] aspect-[4/3] rounded-3xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-xl p-5 flex flex-col justify-between shadow-2xl shadow-black/40">
             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 pointer-events-none" />
             <div className="flex justify-between items-start">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-amber-400">
-                <Coffee size={22} />
+              <div className="w-12 h-12 rounded-2xl bg-white p-1.5 flex items-center justify-center overflow-hidden">
+                <img src="/logo-muki-ramen.png" alt="MUKI RAMEN" className="w-full h-full object-contain" />
               </div>
               <span className="text-[10px] font-bold text-white/40 tracking-widest uppercase">Self-Order QR</span>
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-black text-white/90">Waktu Kopi Santai</h3>
+              <h3 className="text-sm font-black text-white/90">Authentic Japanese Ramen</h3>
               <p className="text-[10px] text-white/50 leading-relaxed">
-                Pesan kopi hangat dan makanan penutup langsung dari HP Anda.
+                Pesan ramen lezat dan menu favorit langsung dari HP Anda.
               </p>
             </div>
           </div>
@@ -311,10 +312,10 @@ const DineInView = () => {
           {/* Titles */}
           <div className="text-center space-y-3">
             <h2 className="text-2xl font-black tracking-tight leading-tight">
-              Selamat Datang di <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-200">SOL Cafe</span>
+              Selamat Datang di <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-200">MUKI RAMEN</span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
-              Pesan menu favorit Anda langsung dari meja tanpa perlu mengantre. Makanan dan minuman akan disajikan hangat ke meja Anda!
+              Pesan menu favorit Anda langsung dari meja tanpa perlu mengantre. Ramen dan hidangan lezat akan disajikan hangat ke meja Anda!
             </p>
           </div>
 
@@ -375,7 +376,7 @@ const DineInView = () => {
 
         {/* Footer */}
         <footer className="p-6 text-center text-[10px] text-white/30 z-10">
-          &copy; 2026 SOL Cafe &bull; Premium QR Ordering System
+          &copy; 2026 MUKI RAMEN &bull; Premium QR Ordering System
         </footer>
       </div>
     );
@@ -387,11 +388,11 @@ const DineInView = () => {
       <header className="sticky top-0 bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80 z-10 p-4 text-white">
         <div className="flex justify-between items-center max-w-3xl mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-800 text-amber-400 flex items-center justify-center">
-              <Coffee size={20} />
+            <div className="w-10 h-10 rounded-xl bg-white p-1 text-slate-900 flex items-center justify-center overflow-hidden">
+              <img src="/logo-muki-ramen.png" alt="MUKI RAMEN" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-base font-black text-white leading-tight">SOL CAFE</h1>
+              <h1 className="text-base font-black text-white leading-tight">MUKI RAMEN</h1>
               <p className="text-xs text-slate-400 font-medium flex items-center gap-1">
                 <MapPin size={12} className="text-slate-500" />
                 <span>Dine-In &bull; <strong className="text-amber-400">Meja {tableRef}</strong></span>

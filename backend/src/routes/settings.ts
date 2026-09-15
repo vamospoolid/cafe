@@ -14,12 +14,17 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     if (!settings) {
       settings = await prisma.settings.create({
         data: {
-          storeName: 'SOL CAFE',
-          phone: '081234567890',
-          address: 'Jl. Utama No 1',
-          logoUrl: '/logo-sol-cafe.png',
-          taxRate: 11,
+          storeName: 'MUKI RAMEN',
+          phone: '081298765432',
+          address: 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Kabupaten Polewali Mandar, Sulawesi Barat 91352',
+          logoUrl: '/logo-muki-ramen.png',
+          taxRate: 10,
           serviceCharge: 5,
+          receiptHeader: 'MUKI RAMEN\nJl. Kesadaran No. 3, Wonomulyo, Polman',
+          receiptFooter: 'Arigatou Gozaimasu!\nTerima Kasih Atas Kunjungan Anda',
+          storeLatitude: -3.4026521,
+          storeLongitude: 119.2137757,
+          gpsRadiusMeters: 200,
         }
       });
     }

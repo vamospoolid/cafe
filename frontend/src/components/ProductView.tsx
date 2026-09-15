@@ -472,7 +472,7 @@ const ProductView = () => {
             <Package size={14} className="text-slate-400" />
             <span>Menampilkan {filteredProducts.length} dari {products.length} produk</span>
           </span>
-          <span>{posContext?.settings?.storeName || 'SOL Cafe'} Inventory</span>
+          <span>{posContext?.settings?.storeName || 'MUKI RAMEN'} Inventory</span>
         </div>
       </div>
 

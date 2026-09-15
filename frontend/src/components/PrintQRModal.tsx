@@ -30,7 +30,7 @@ const PrintQRModal: React.FC<PrintQRModalProps> = ({ isOpen, onClose, tableData 
  
           {/* Simulasi Kertas Struk / Akrilik Meja */}
           <div className="bg-white border-2 border-gray-300 border-dashed rounded-lg p-6 flex flex-col items-center" style={{ width: '220px' }}>
-            <div className="font-bold text-xl mb-1 text-black">{posContext?.settings?.storeName || 'SOL CAFE'}</div>
+            <div className="font-bold text-xl mb-1 text-black">{posContext?.settings?.storeName || 'MUKI RAMEN'}</div>
             <div className="text-xs text-black mb-4">Scan untuk Memesan</div>
             
             {/* Mock QR Code */}

@@ -39,17 +39,18 @@ async function main() {
 
   const setting = await prisma.settings.create({
     data: {
-      storeName: 'SOL CAFE & EATERY',
-      phone: '0812-3456-7890',
-      address: 'Jl. Senopati No. 45, Kebayoran Baru, Jakarta Selatan',
-      taxRate: 11, // PPN 11%
-      serviceCharge: 5, // Service Charge 5%
+      storeName: 'MUKI RAMEN',
+      phone: '081298765432',
+      address: 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Kabupaten Polewali Mandar, Sulawesi Barat 91352',
+      logoUrl: '/logo-muki-ramen.png',
+      taxRate: 10,
+      serviceCharge: 5,
       includeTax: false,
-      receiptHeader: 'SOL CAFE & EATERY\nGood Vibe, Great Taste\nIG: @solcafe.id',
-      receiptFooter: 'Terima kasih atas kunjungan Anda!\nBarang yang sudah dibeli tidak dapat ditukar.\nWiFi: SolCafe_Guest / solcafe2026',
+      receiptHeader: 'MUKI RAMEN - Japanese Ramen Bar\nJl. Kesadaran No. 3, Wonomulyo, Polman',
+      receiptFooter: 'Arigatou Gozaimasu!\nTerima Kasih Atas Kunjungan Anda',
       bankName: 'BCA',
       accountNumber: '8830-1928-11',
-      accountName: 'SOL CAFE INDONESIA',
+      accountName: 'MUKI RAMEN',
       enableDrinkCustomization: true,
       loyaltyEnabled: true,
       loyaltyEarnPerAmount: 10000,

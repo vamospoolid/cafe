@@ -1,9 +1,9 @@
 {
-  "name": "sol-cafe-pos",
+  "name": "muki-ramen-pos",
   "version": "1.0.0",
-  "description": "SOL CAFE POS Desktop - Aplikasi kasir dengan raw thermal printing",
+  "description": "MUKI RAMEN POS Desktop - Aplikasi kasir dengan raw thermal printing",
   "main": "main.js",
-  "author": "SOL CAFE",
+  "author": "MUKI RAMEN",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
@@ -11,8 +11,8 @@
     "build:portable": "electron-builder --win portable"
   },
   "build": {
-    "appId": "com.solcafe.pos",
-    "productName": "SOL CAFE POS",
+    "appId": "com.mukiramen.pos",
+    "productName": "MUKI RAMEN POS",
     "directories": {
       "output": "dist"
     },
@@ -24,7 +24,7 @@
     "nsis": {
       "oneClick": true,
       "allowToChangeInstallationDirectory": false,
-      "shortcutName": "SOL CAFE POS"
+      "shortcutName": "MUKI RAMEN POS"
     },
     "files": [
       "main.js",
