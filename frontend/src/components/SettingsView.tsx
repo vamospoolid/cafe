@@ -2023,16 +2023,31 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
         throw new Error('Gagal melakukan backup database');
       }
 
+      // Deteksi nama file dari response header jika ada
+      let filename = `backup-poscafe-${new Date().toISOString().slice(0,10)}.sql`;
+      const disposition = response.headers.get('content-disposition');
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      } else {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          filename = `backup-poscafe-${new Date().toISOString().slice(0,10)}.json`;
+        }
+      }
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `backup-poscafe-${new Date().toISOString().slice(0,10)}.db`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      toast('Backup database berhasil diunduh!', 'success');
+      toast(`Backup database (${filename}) berhasil diunduh!`, 'success');
     } catch (err: any) {
       toast(err.message || 'Terjadi kesalahan saat mengunduh backup', 'error');
     } finally {

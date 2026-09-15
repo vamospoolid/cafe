@@ -27,7 +27,7 @@ const deployCommands = [
     `echo "🛠️ [2/5] Setup Backend & Database..."`,
     `cd ${appDir}/backend && npm install`,
     `if [ ! -f "${appDir}/backend/.env" ]; then
-        echo 'DATABASE_URL="file:/var/www/poscafe/backend/prisma/dev.db"' > ${appDir}/backend/.env
+        echo 'DATABASE_URL="postgresql://poscafe_user:poscafe_secure_pass_2026@localhost:5432/poscafe_db?schema=public"' > ${appDir}/backend/.env
         echo 'JWT_SECRET="poscafe_super_secret_123"' >> ${appDir}/backend/.env
         echo "✅ File .env berhasil dibuat."
     fi`,

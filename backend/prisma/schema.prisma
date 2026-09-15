@@ -167,6 +167,12 @@ model Order {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([userId])
+  @@index([tableId])
+  @@index([customerId])
 }
 
 model OrderItem {
@@ -180,6 +186,9 @@ model OrderItem {
   buyPrice  Float   @default(0)
   subtotal  Float
   notes     String?
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model CashFlow {
@@ -191,6 +200,10 @@ model CashFlow {
   user        User     @relation(fields: [userId], references: [id])
   userId      Int
   date        DateTime @default(now())
+
+  @@index([date])
+  @@index([userId])
+  @@index([type])
 }
 
 model Attendance {
@@ -212,6 +225,9 @@ model Attendance {
   status         String    @default("Hadir") // Hadir, Terlambat, Di Luar Radius
   lateMinutes    Int       @default(0) // Jumlah menit keterlambatan
   notes          String?
+
+  @@index([userId, date])
+  @@index([date])
 }
 
 model Settings {
@@ -300,6 +316,10 @@ model Shift {
   saldoFisikLaci  Float?
   selisih         Float?
   status          String    @default("Open") // Open, Closed
+
+  @@index([userId])
+  @@index([status])
+  @@index([waktuBuka])
 }
 
 // ─── Inventaris & Pembelian ────────────────────────────────────────────
@@ -348,6 +368,9 @@ model Ingredient {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([supplierId])
 }
 
 model RecipeItem {
@@ -374,6 +397,10 @@ model IngredientLog {
   user         User?      @relation(fields: [userId], references: [id])
   userId       Int?
   createdAt    DateTime   @default(now())
+
+  @@index([ingredientId])
+  @@index([createdAt])
+  @@index([type])
 }
 
 model PurchaseOrder {
@@ -393,6 +420,9 @@ model PurchaseOrder {
   receivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
+  @@index([supplierId])
+  @@index([status])
 }
 
 model PurchaseOrderItem {
@@ -414,6 +444,10 @@ model PurchaseOrderItem {
   qtyReceived Float  @default(0)
   unitPrice   Float
   subtotal    Float
+
+  @@index([poId])
+  @@index([ingredientId])
+  @@index([productId])
 }
 
 model Debt {
@@ -506,6 +540,10 @@ model WarehouseInbound {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([supplierId])
+  @@index([userId])
 }
 
 model WarehouseInboundItem {
@@ -522,6 +560,9 @@ model WarehouseInboundItem {
   purchasePrice   Float // Harga per karton (misal Rp 240.000)
   basePrice       Float // purchasePrice / conversionRatio (Rp 20.000)
   subtotal        Float // purchaseQty * purchasePrice (Rp 480.000)
+
+  @@index([inboundId])
+  @@index([ingredientId])
 }
 
 model WarehouseRequisition {
@@ -543,6 +584,10 @@ model WarehouseRequisition {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([requestedAt])
+  @@index([status])
+  @@index([requestedById])
 }
 
 model WarehouseRequisitionItem {
@@ -557,6 +602,9 @@ model WarehouseRequisitionItem {
   baseQty       Float // Konversi ke base unit yang keluar gudang & masuk dapur
   transferPrice Float // Harga per base unit
   subtotal      Float // baseQty * transferPrice
+
+  @@index([requisitionId])
+  @@index([ingredientId])
 }
 
 model OwnerFundTransaction {
@@ -571,6 +619,9 @@ model OwnerFundTransaction {
   userId        Int
 
   createdAt DateTime @default(now())
+
+  @@index([date])
+  @@index([userId])
 }
 
 model WarehouseSale {
@@ -595,6 +646,10 @@ model WarehouseSale {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([saleDate])
+  @@index([soldById])
+  @@index([paymentStatus])
 }
 
 model WarehouseSaleItem {
@@ -613,4 +668,7 @@ model WarehouseSaleItem {
   subtotalCost    Float // saleQty * unitCostPrice
   subtotal        Float // saleQty * unitSalePrice
   profit          Float // subtotal - subtotalCost
+
+  @@index([saleId])
+  @@index([ingredientId])
 }

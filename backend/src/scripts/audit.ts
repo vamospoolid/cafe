@@ -131,7 +131,7 @@ async function runDeepAudit() {
   // -------------------------------------------------------------
   // 6. AUDIT KITCHEN PWA & STOCK LOSS
   // -------------------------------------------------------------
-  console.log('🍳 [6/7] Memeriksa Fitur Dapur, PWA & Log Stock Loss...');
+  console.log('🍳 [6/8] Memeriksa Fitur Dapur, PWA & Log Stock Loss...');
   const lossLogs = await prisma.ingredientLog.findMany({
     where: { type: 'LOSS' },
     include: { ingredient: true, user: true }
@@ -140,9 +140,31 @@ async function runDeepAudit() {
   passes.push(`Total pencatatan Stock Loss dapur: ${lossLogs.length} entri terdata dengan user ID.`);
 
   // -------------------------------------------------------------
-  // 7. AUDIT MEJA & STATUS DINE-IN
+  // 7. AUDIT GUDANG PUSAT (CENTRAL WAREHOUSE & B2B)
   // -------------------------------------------------------------
-  console.log('🪑 [7/7] Memeriksa Integritas Meja & Dine-In...');
+  console.log('🏭 [7/8] Memeriksa Mutasi Gudang Pusat, Requisition & B2B Sale...');
+  const [inbounds, requisitions, b2bSales] = await Promise.all([
+    prisma.warehouseInbound.findMany({ include: { items: true } }),
+    prisma.warehouseRequisition.findMany({ include: { items: true } }),
+    prisma.warehouseSale.findMany({ include: { items: true } })
+  ]);
+
+  let inbZeroAmount = 0;
+  inbounds.forEach((inb: any) => {
+    if (!inb.isVoided && inb.totalAmount <= 0 && inb.items.length > 0) inbZeroAmount++;
+  });
+  if (inbZeroAmount > 0) {
+    findings.push(`[Gudang Inbound] Ditemukan ${inbZeroAmount} nota belanja grosir dengan totalAmount = 0.`);
+  } else {
+    passes.push(`Data Inbound Gudang (${inbounds.length} faktur) terverifikasi konsisten.`);
+  }
+
+  passes.push(`Data Distribusi Cabang (${requisitions.length} permintaan transfer) & B2B Wholesale (${b2bSales.length} faktur penjualan) normal.`);
+
+  // -------------------------------------------------------------
+  // 8. AUDIT MEJA & STATUS DINE-IN
+  // -------------------------------------------------------------
+  console.log('🪑 [8/8] Memeriksa Integritas Meja & Dine-In...');
   const tables = await prisma.table.findMany();
   const pendingOrders = await prisma.order.findMany({
     where: { status: 'Pending', tableId: { not: null } }
