@@ -14,6 +14,115 @@ const isAdmin = (req: Request, res: Response, next: Function) => {
   next();
 };
 
+// GET current logged-in user profile
+router.get('/me', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        pin: true,
+        status: true,
+        permissions: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+
+    res.json({
+      ...user,
+      permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Gagal mengambil profil akun' });
+  }
+});
+
+// PUT update current staff security credentials (PIN / Password)
+router.put('/me/security', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { oldPin, newPin, oldPassword, newPassword } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+
+    const updateData: any = {};
+
+    // Update PIN
+    if (newPin) {
+      if (newPin.length < 4 || newPin.length > 8) {
+        return res.status(400).json({ error: 'PIN harus terdiri dari 4-8 digit angka.' });
+      }
+      updateData.pin = String(newPin);
+    }
+
+    // Update Password
+    if (newPassword) {
+      if (newPassword.length < 4) {
+        return res.status(400).json({ error: 'Password baru minimal 4 karakter.' });
+      }
+      if (oldPassword) {
+        const isMatch = await bcrypt.compare(oldPassword, user.passwordHash);
+        if (!isMatch && user.pin !== oldPassword) {
+          return res.status(400).json({ error: 'Password lama tidak cocok.' });
+        }
+      }
+      updateData.passwordHash = await bcrypt.hash(newPassword, 10);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'Tidak ada data keamanan yang diubah.' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: { id: true, name: true, username: true, role: true, pin: true }
+    });
+
+    res.json({ message: 'Keamanan akun berhasil diperbarui', user: updated });
+  } catch (error) {
+    console.error('Update security error:', error);
+    res.status(500).json({ error: 'Gagal memperbarui keamanan akun' });
+  }
+});
+
+// PUT update current staff profile details
+router.put('/me/profile', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Nama tidak boleh kosong' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { name: name.trim() },
+      select: { id: true, name: true, username: true, role: true, pin: true }
+    });
+
+    res.json({ message: 'Profil berhasil diperbarui', user: updated });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Gagal memperbarui profil' });
+  }
+});
+
 // GET all users (only Admin can view full list)
 router.get('/', authenticateToken, isAdmin, async (req: Request, res: Response) => {
   try {

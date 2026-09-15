@@ -47,7 +47,23 @@ export const POSView = () => {
   
   const [orderType, setOrderType] = useState<'Dine In' | 'Take Away'>('Take Away');
   const [tables, setTables] = useState<any[]>([]);
-  const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
+  const [selectedTableIds, setSelectedTableIds] = useState<number[]>([]);
+  const selectedTableId = selectedTableIds.length > 0 ? selectedTableIds[0] : null;
+
+  const toggleTableSelection = (tId: number) => {
+    posContext?.triggerHaptic(10);
+    setSelectedTableIds(prev => {
+      if (prev.includes(tId)) {
+        return prev.filter(id => id !== tId);
+      } else {
+        return [...prev, tId];
+      }
+    });
+  };
+
+  const clearSelectedTables = () => {
+    setSelectedTableIds([]);
+  };
 
   const [drinkModalOpen, setDrinkModalOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<any>(null);
@@ -61,7 +77,7 @@ export const POSView = () => {
     if (paramTableId) {
       const tId = Number(paramTableId);
       if (!isNaN(tId)) {
-        setSelectedTableId(tId);
+        setSelectedTableIds([tId]);
         setOrderType('Dine In');
       }
     }
@@ -308,13 +324,14 @@ export const POSView = () => {
   const total = subtotal - discount + tax + serviceCharge;
 
   const handleSaveBill = async () => {
-    if (cart.length === 0 || !selectedTableId) return;
+    if (cart.length === 0 || selectedTableIds.length === 0) return;
 
     try {
       const payload = {
         customerName: customer ? customer.name : 'Pelanggan Dine-In',
         customerPhone: customer?.phone || '',
-        tableId: selectedTableId,
+        tableId: selectedTableIds[0],
+        joinedTableIds: selectedTableIds.length > 1 ? selectedTableIds.slice(1) : undefined,
         items: cart.map(item => ({
           productId: item.product.id,
           qty: item.qty,
@@ -345,7 +362,7 @@ export const POSView = () => {
         toast('Bill berhasil disimpan! Pesanan dikirim ke Dapur.', 'success');
         setCart([]);
         setCustomer(null);
-        setSelectedTableId(null);
+        setSelectedTableIds([]);
         fetchProducts(); // Refresh stock
       } else {
         const data = await res.json();
@@ -825,7 +842,7 @@ export const POSView = () => {
               <div className="flex gap-2">
                 <button 
                   className={`flex-1 py-2 text-sm font-bold rounded-md border transition-all ${orderType === 'Take Away' ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
-                  onClick={() => { setOrderType('Take Away'); setSelectedTableId(null); }}
+                  onClick={() => { setOrderType('Take Away'); clearSelectedTables(); }}
                 >
                   Take Away
                 </button>
@@ -840,31 +857,44 @@ export const POSView = () => {
               {orderType === 'Dine In' && (
                 <div className="space-y-2 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <span>Pilih Meja ({tables.length} Meja)</span>
-                    {selectedTableId && (
+                    <span>Pilih Meja ({tables.length})</span>
+                    {selectedTableIds.length > 0 && (
                       <button 
                         type="button" 
-                        onClick={() => setSelectedTableId(null)}
+                        onClick={clearSelectedTables}
                         className="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold lowercase underline"
                       >
-                        batal pilih
+                        batal ({selectedTableIds.length})
                       </button>
                     )}
                   </div>
+
+                  {selectedTableIds.length > 1 && (
+                    <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 text-xs flex items-center justify-between shadow-sm animate-in fade-in">
+                      <div className="flex items-center gap-1.5 font-bold text-indigo-900 truncate">
+                        <span className="text-sm">🔗</span>
+                        <span className="truncate">
+                          Gabung: {tables.filter(t => selectedTableIds.includes(t.id)).map(t => `#${t.tableNo}`).join(' + ')}
+                        </span>
+                      </div>
+                      <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-sm">
+                        {tables.filter(t => selectedTableIds.includes(t.id)).reduce((sum, t) => sum + (t.capacity || 0), 0)} Pax
+                      </span>
+                    </div>
+                  )}
+
                   {tables.length > 0 ? (
                     <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50/80 rounded-xl border border-slate-200 scrollbar-none">
                       {tables.map(t => {
-                        const isSelected = selectedTableId === t.id;
+                        const isSelected = selectedTableIds.includes(t.id);
                         const isOccupied = t.status === 'Terisi';
+                        const selectIndex = selectedTableIds.indexOf(t.id) + 1;
                         return (
                           <button
                             key={t.id}
                             type="button"
-                            onClick={() => {
-                              setSelectedTableId(isSelected ? null : t.id);
-                              posContext?.triggerHaptic(10);
-                            }}
-                            className={`py-1.5 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center ${
+                            onClick={() => toggleTableSelection(t.id)}
+                            className={`py-1.5 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center relative ${
                               isSelected
                                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 ring-2 ring-indigo-400 scale-[1.03]'
                                 : isOccupied
@@ -872,6 +902,11 @@ export const POSView = () => {
                                   : 'bg-white text-slate-700 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/30 shadow-sm'
                             }`}
                           >
+                            {isSelected && selectedTableIds.length > 1 && (
+                              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center shadow">
+                                {selectIndex}
+                              </span>
+                            )}
                             <span>#{t.tableNo}</span>
                             <span className={`text-[9px] font-medium ${isSelected ? 'text-indigo-100' : isOccupied ? 'text-amber-700' : 'text-slate-400'}`}>
                               {isOccupied ? 'Terisi' : `${t.capacity}p`}
@@ -891,20 +926,20 @@ export const POSView = () => {
 
             {orderType === 'Dine In' && (
               <button 
-                className={`w-full font-bold rounded-lg py-3 mb-2 flex items-center justify-center gap-2 border-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all shadow-sm ${cart.length === 0 || !selectedTableId ? 'opacity-50 cursor-not-allowed' : ''}`}
-                disabled={cart.length === 0 || !selectedTableId}
+                className={`w-full font-bold rounded-lg py-3 mb-2 flex items-center justify-center gap-2 border-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all shadow-sm ${cart.length === 0 || selectedTableIds.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={cart.length === 0 || selectedTableIds.length === 0}
                 onClick={handleSaveBill}
               >
-                <Save size={20} /> Simpan Bill (Kirim ke Dapur)
+                <Save size={20} /> Simpan Bill {selectedTableIds.length > 1 ? `(${selectedTableIds.length} Meja)` : ''} (Kirim ke Dapur)
               </button>
             )}
 
             <button 
               className="btn-checkout py-3 flex items-center justify-center gap-2"
-              disabled={cart.length === 0 || (orderType === 'Dine In' && !selectedTableId)}
+              disabled={cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)}
               onClick={() => setIsCheckoutOpen(true)}
             >
-              <CreditCard size={20} /> Proses Pembayaran
+              <CreditCard size={20} /> Proses Pembayaran {selectedTableIds.length > 1 ? `(${selectedTableIds.length} Meja)` : ''}
             </button>
           </div>
         </div>
@@ -1046,7 +1081,7 @@ export const POSView = () => {
               <div className="flex gap-2">
                 <button 
                   className={`flex-1 py-2 text-xs font-extrabold rounded-xl border transition-all ${orderType === 'Take Away' ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/10' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                  onClick={() => { setOrderType('Take Away'); setSelectedTableId(null); }}
+                  onClick={() => { setOrderType('Take Away'); clearSelectedTables(); }}
                 >
                   Take Away
                 </button>
@@ -1062,30 +1097,43 @@ export const POSView = () => {
                 <div className="space-y-1.5 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                     <span>Pilih Meja ({tables.length})</span>
-                    {selectedTableId && (
+                    {selectedTableIds.length > 0 && (
                       <button 
                         type="button" 
-                        onClick={() => setSelectedTableId(null)}
+                        onClick={clearSelectedTables}
                         className="text-indigo-600 hover:text-indigo-800 text-[10px] font-bold lowercase underline"
                       >
-                        batal
+                        batal ({selectedTableIds.length})
                       </button>
                     )}
                   </div>
+
+                  {selectedTableIds.length > 1 && (
+                    <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 text-xs flex items-center justify-between shadow-sm animate-in fade-in">
+                      <div className="flex items-center gap-1.5 font-bold text-indigo-900 truncate">
+                        <span className="text-sm">🔗</span>
+                        <span className="truncate">
+                          Gabung: {tables.filter(t => selectedTableIds.includes(t.id)).map(t => `#${t.tableNo}`).join(' + ')}
+                        </span>
+                      </div>
+                      <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-sm">
+                        {tables.filter(t => selectedTableIds.includes(t.id)).reduce((sum, t) => sum + (t.capacity || 0), 0)} Pax
+                      </span>
+                    </div>
+                  )}
+
                   {tables.length > 0 ? (
                     <div className="grid grid-cols-4 gap-1 max-h-28 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200 scrollbar-none">
                       {tables.map(t => {
-                        const isSelected = selectedTableId === t.id;
+                        const isSelected = selectedTableIds.includes(t.id);
                         const isOccupied = t.status === 'Terisi';
+                        const selectIndex = selectedTableIds.indexOf(t.id) + 1;
                         return (
                           <button
                             key={t.id}
                             type="button"
-                            onClick={() => {
-                              setSelectedTableId(isSelected ? null : t.id);
-                              posContext?.triggerHaptic(10);
-                            }}
-                            className={`py-1 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center ${
+                            onClick={() => toggleTableSelection(t.id)}
+                            className={`py-1 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center relative ${
                               isSelected
                                 ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400'
                                 : isOccupied
@@ -1093,6 +1141,11 @@ export const POSView = () => {
                                   : 'bg-white text-slate-700 border border-slate-200'
                             }`}
                           >
+                            {isSelected && selectedTableIds.length > 1 && (
+                              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[8px] font-black flex items-center justify-center shadow">
+                                {selectIndex}
+                              </span>
+                            )}
                             <span>#{t.tableNo}</span>
                             <span className={`text-[8px] font-medium ${isSelected ? 'text-indigo-100' : isOccupied ? 'text-amber-700' : 'text-slate-400'}`}>
                               {isOccupied ? 'Terisi' : `${t.capacity}p`}
@@ -1112,19 +1165,19 @@ export const POSView = () => {
               <div className="flex gap-2 pt-1">
                 {orderType === 'Dine In' && (
                   <button 
-                    className={`flex-1 font-bold rounded-xl py-3 text-xs flex items-center justify-center gap-1.5 border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all ${cart.length === 0 || !selectedTableId ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    disabled={cart.length === 0 || !selectedTableId}
+                    className={`flex-1 font-bold rounded-xl py-3 text-xs flex items-center justify-center gap-1.5 border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all ${cart.length === 0 || selectedTableIds.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={cart.length === 0 || selectedTableIds.length === 0}
                     onClick={() => { handleSaveBill(); setIsMobileCartOpen(false); }}
                   >
-                    <Save size={16} /> Simpan Bill
+                    <Save size={16} /> Simpan Bill {selectedTableIds.length > 1 ? `(${selectedTableIds.length})` : ''}
                   </button>
                 )}
                 <button 
                   className="flex-1 py-3 text-xs bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5"
-                  disabled={cart.length === 0 || (orderType === 'Dine In' && !selectedTableId)}
+                  disabled={cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)}
                   onClick={() => { setIsCheckoutOpen(true); setIsMobileCartOpen(false); }}
                 >
-                  <CreditCard size={16} /> Pembayaran
+                  <CreditCard size={16} /> Pembayaran {selectedTableIds.length > 1 ? `(${selectedTableIds.length})` : ''}
                 </button>
               </div>
             </div>
@@ -1138,6 +1191,7 @@ export const POSView = () => {
         onSuccess={() => {
           setCart([]);
           setCustomer(null);
+          clearSelectedTables();
           fetchProducts(); // Refresh stock
         }}
         total={total} 
@@ -1145,7 +1199,11 @@ export const POSView = () => {
         tax={tax}
         serviceCharge={serviceCharge}
         cart={cart}
-        customer={{ ...customer, tableId: selectedTableId }}
+        customer={{ 
+          ...customer, 
+          tableId: selectedTableIds[0] || null,
+          joinedTableIds: selectedTableIds.length > 1 ? selectedTableIds.slice(1) : undefined
+        }}
       />
 
       <CustomerModal 

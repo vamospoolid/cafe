@@ -44,6 +44,18 @@ const sendToNetwork = (host: string, port: number, data: Buffer): Promise<void> 
   });
 };
 
+// Helper: Format Table display with joined tables (e.g. Meja 1 + 2)
+export const formatTableDisplay = (order: any): string => {
+  if (!order.table?.tableNo) return order.orderType || 'Take Away';
+  let display = order.table.tableNo;
+  if (order.joinedTables && Array.isArray(order.joinedTables) && order.joinedTables.length > 0) {
+    display += ' + ' + order.joinedTables.map((t: any) => t.tableNo).join(' + ');
+  } else if (order.joinedTableNumbers && Array.isArray(order.joinedTableNumbers) && order.joinedTableNumbers.length > 0) {
+    display += ' + ' + order.joinedTableNumbers.join(' + ');
+  }
+  return display;
+};
+
 // ─── Format Struk Kasir / Customer Bill ─────────────────────────────────────
 export const buildReceipt = (order: any, settings: any): Buffer => {
   const parts: Buffer[] = [];
@@ -67,7 +79,7 @@ export const buildReceipt = (order: any, settings: any): Buffer => {
   push(str(pad('Kasir:', order.user?.name || order.user?.username || '-')));
   if (order.table?.tableNo) {
     push(CMD.BOLD_ON);
-    push(str(pad('MEJA:', `${order.table.tableNo} (${order.orderType || 'Dine In'})`)));
+    push(str(pad('MEJA:', `${formatTableDisplay(order)} (${order.orderType || 'Dine In'})`)));
     push(CMD.BOLD_OFF);
   } else {
     push(str(pad('Tipe:', order.orderType || 'Take Away')));
@@ -160,7 +172,7 @@ export const buildKitchenTicket = (order: any, specificItems?: any[]): Buffer =>
   
   push(CMD.BOLD_ON, CMD.DOUBLE_ON);
   if (order.table?.tableNo) {
-    push(str(`MEJA: ${order.table.tableNo}`));
+    push(str(`MEJA: ${formatTableDisplay(order)}`));
   } else {
     push(str(`TIPE: ${order.orderType || 'TAKE AWAY'}`));
   }
@@ -215,7 +227,7 @@ export const buildBarTicket = (order: any, specificItems?: any[]): Buffer => {
   
   push(CMD.BOLD_ON, CMD.DOUBLE_ON);
   if (order.table?.tableNo) {
-    push(str(`MEJA: ${order.table.tableNo}`));
+    push(str(`MEJA: ${formatTableDisplay(order)}`));
   } else {
     push(str(`TIPE: ${order.orderType || 'TAKE AWAY'}`));
   }

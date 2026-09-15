@@ -310,6 +310,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             customerPhone: currentCustomer?.phone || '',
             customerId: currentCustomer?.id || null,
             tableId: customer?.tableId || null,
+            joinedTableIds: customer?.joinedTableIds || undefined,
             items: cart.map((item: any) => ({ productId: item.product.id, qty: item.qty, price: item.product.sellPrice, notes: item.notes || '' })),
             subtotal,
             discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
@@ -342,6 +343,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     } catch (err: any) {
       toast(err.message || 'Gagal memproses pesanan.', 'error');
       setLoading(false);
+      if (err.message && err.message.toLowerCase().includes('shift')) {
+        posContext?.fetchActiveShift();
+        onClose();
+      }
     }
   };
 

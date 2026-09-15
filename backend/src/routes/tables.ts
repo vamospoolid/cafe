@@ -137,21 +137,31 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
 router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const tableId = Number(id);
     
     // Optional check if table has active orders
-    const activeOrders = await prisma.order.count({
-      where: { 
-        tableId: Number(id),
-        status: 'Pending'
-      }
+    const allPendingOrders = await prisma.order.findMany({
+      where: { status: 'Pending' },
+      select: { id: true, tableId: true, joinedTableIds: true }
     });
     
-    if (activeOrders > 0) {
-      return res.status(400).json({ error: 'Cannot delete table with active orders.' });
+    const hasActiveOrders = allPendingOrders.some(o => {
+      if (o.tableId === tableId) return true;
+      if (o.joinedTableIds) {
+        try {
+          const ids = typeof o.joinedTableIds === 'string' ? JSON.parse(o.joinedTableIds) : o.joinedTableIds;
+          if (Array.isArray(ids) && ids.includes(tableId)) return true;
+        } catch (e) {}
+      }
+      return false;
+    });
+    
+    if (hasActiveOrders) {
+      return res.status(400).json({ error: 'Tidak dapat menghapus meja yang sedang memiliki pesanan aktif.' });
     }
     
     await prisma.table.delete({
-      where: { id: Number(id) }
+      where: { id: tableId }
     });
     res.json({ message: 'Table deleted successfully' });
   } catch (error) {
@@ -165,9 +175,8 @@ router.post('/:id/clear', authenticateToken, async (req: Request, res: Response)
     const { id } = req.params;
     const tableId = Number(id);
 
-    const activeOrders = await prisma.order.findMany({
+    const candidateOrders = await prisma.order.findMany({
       where: {
-        tableId,
         OR: [
           { status: 'Pending' },
           {
@@ -176,6 +185,17 @@ router.post('/:id/clear', authenticateToken, async (req: Request, res: Response)
           }
         ]
       }
+    });
+
+    const activeOrders = candidateOrders.filter(o => {
+      if (o.tableId === tableId) return true;
+      if (o.joinedTableIds) {
+        try {
+          const ids = typeof o.joinedTableIds === 'string' ? JSON.parse(o.joinedTableIds) : o.joinedTableIds;
+          if (Array.isArray(ids) && ids.includes(tableId)) return true;
+        } catch (e) {}
+      }
+      return false;
     });
 
     if (activeOrders.length === 0) {

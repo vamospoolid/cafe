@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
+import { io } from '../index';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -172,8 +173,14 @@ router.post('/open', authenticateToken, async (req: Request, res: Response) => {
         userId,
         saldoAwal: Number(saldoAwal) || 0,
         status: 'Open'
+      },
+      include: {
+        user: { select: { name: true, username: true } }
       }
     });
+
+    // Broadcast ke seluruh client real-time
+    io.emit('shift:status_change', { status: 'Open', shift });
 
     res.status(201).json(shift);
   } catch (error) {
@@ -431,6 +438,9 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       await prisma.cashFlow.createMany({ data: cashFlowEntries });
     }
     // ── END AUTO-CATAT ───────────────────────────────────────────────────
+
+    // Broadcast ke seluruh client bahwa shift telah ditutup
+    io.emit('shift:status_change', { status: 'Closed', shift: closedShift });
 
     res.json({
       ...closedShift,

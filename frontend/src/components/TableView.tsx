@@ -275,8 +275,47 @@ const TableView = () => {
     }
   };
 
+  const isOrderOnTable = (order: any, tableId: number): boolean => {
+    if (order.tableId === tableId) return true;
+    if (order.joinedTableIds) {
+      try {
+        const ids = typeof order.joinedTableIds === 'string' ? JSON.parse(order.joinedTableIds) : order.joinedTableIds;
+        if (Array.isArray(ids) && ids.includes(tableId)) return true;
+      } catch (e) {}
+    }
+    return false;
+  };
+
+  const getOrderJoinedTableInfo = (order: any) => {
+    if (!order) return null;
+    const allTableIds: number[] = [];
+    if (order.tableId) allTableIds.push(order.tableId);
+    if (order.joinedTableIds) {
+      try {
+        const ids = typeof order.joinedTableIds === 'string' ? JSON.parse(order.joinedTableIds) : order.joinedTableIds;
+        if (Array.isArray(ids)) {
+          ids.forEach((id: number) => {
+            if (!allTableIds.includes(Number(id))) allTableIds.push(Number(id));
+          });
+        }
+      } catch (e) {}
+    }
+    if (allTableIds.length <= 1) return null;
+
+    const linkedTables = tables.filter(t => allTableIds.includes(t.id));
+    const tableNos = linkedTables.map(t => `#${t.tableNo}`).join(' + ');
+    const totalCapacity = linkedTables.reduce((sum, t) => sum + (t.capacity || 0), 0);
+
+    return {
+      tableCount: allTableIds.length,
+      allTableIds,
+      displayString: tableNos,
+      totalCapacity
+    };
+  };
+
   const getTableActiveOrder = (tableId: number) => {
-    const tableOrders = activeOrders.filter(o => o.tableId === tableId);
+    const tableOrders = activeOrders.filter(o => isOrderOnTable(o, tableId));
     if (tableOrders.length === 0) return null;
 
     const pendingOrders = tableOrders.filter(o => o.status === 'Pending');
@@ -289,7 +328,8 @@ const TableView = () => {
         }));
         return {
           ...pendingOrders[0],
-          items: normalizedItems
+          items: normalizedItems,
+          joinedInfo: getOrderJoinedTableInfo(pendingOrders[0])
         };
       }
 
@@ -333,6 +373,8 @@ const TableView = () => {
         customerPhone: pendingOrders[0].customerPhone || '',
         customerId: pendingOrders[0].customerId,
         tableId: pendingOrders[0].tableId,
+        joinedTableIds: pendingOrders[0].joinedTableIds,
+        joinedInfo: getOrderJoinedTableInfo(pendingOrders[0]),
         subtotal,
         tax,
         serviceCharge,
@@ -350,14 +392,15 @@ const TableView = () => {
       return {
         ...tableOrders[0],
         status: 'Paid',
-        items: normalizedItems
+        items: normalizedItems,
+        joinedInfo: getOrderJoinedTableInfo(tableOrders[0])
       };
     }
   };
 
   // 3 states: empty | cooking (Pending/Cooking/Ready) | served (Served)
   const getTableStatus = (tableId: number): 'empty' | 'cooking' | 'served' => {
-    const tableOrders = activeOrders.filter(o => o.tableId === tableId);
+    const tableOrders = activeOrders.filter(o => isOrderOnTable(o, tableId));
     if (tableOrders.length === 0) return 'empty';
     const allServed = tableOrders.every(o => o.kdsStatus === 'Served');
     return allServed ? 'served' : 'cooking';
@@ -597,6 +640,18 @@ const TableView = () => {
                       {/* Card Body: Info Pesanan Aktif / State Kosong */}
                       {isOccupied && activeOrder ? (
                         <div className="space-y-2">
+                          {activeOrder.joinedInfo && (
+                            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 text-indigo-900 text-[10px] font-bold px-2.5 py-1 rounded-xl flex items-center justify-between shadow-xs animate-in fade-in">
+                              <span className="flex items-center gap-1 truncate">
+                                <span>🔗</span>
+                                <span className="truncate">Tergabung: {activeOrder.joinedInfo.displayString}</span>
+                              </span>
+                              <span className="bg-indigo-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full shrink-0">
+                                {activeOrder.joinedInfo.totalCapacity}p
+                              </span>
+                            </div>
+                          )}
+
                           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-1.5">
                             <div className="flex justify-between items-center text-xs">
                               <span className="font-bold text-slate-800 flex items-center gap-1 truncate max-w-[130px]">
@@ -957,8 +1012,8 @@ const TableView = () => {
 
       {selectedOrderToPay && (
         <CheckoutModal 
-          isOpen={isCheckoutOpen}
-          onClose={() => { setIsCheckoutOpen(false); setSelectedOrderToPay(null); }}
+          isOpen={isCheckoutOpen} 
+          onClose={() => { setIsCheckoutOpen(false); setSelectedOrderToPay(null); }} 
           onSuccess={() => {
             setIsCheckoutOpen(false);
             setSelectedOrderToPay(null);
@@ -969,7 +1024,13 @@ const TableView = () => {
           tax={selectedOrderToPay.tax}
           serviceCharge={selectedOrderToPay.serviceCharge}
           cart={selectedOrderToPay.items || []}
-          customer={{ name: selectedOrderToPay.customerName, phone: selectedOrderToPay.customerPhone, id: selectedOrderToPay.customerId, tableId: selectedOrderToPay.tableId }}
+          customer={{ 
+            name: selectedOrderToPay.customerName, 
+            phone: selectedOrderToPay.customerPhone, 
+            id: selectedOrderToPay.customerId, 
+            tableId: selectedOrderToPay.tableId,
+            joinedTableIds: selectedOrderToPay.joinedTableIds 
+          }}
           orderId={selectedOrderToPay.id}
         />
       )}
@@ -1050,6 +1111,24 @@ const TableView = () => {
                   
                   return (
                     <div className="space-y-4">
+                      {/* Banner Grup Meja Gabung */}
+                      {activeOrder.joinedInfo && (
+                        <div className="p-3 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-2xl flex items-center justify-between shadow-xs animate-in fade-in">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">🔗</span>
+                            <div>
+                              <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider block">Grup Meja Gabung ({activeOrder.joinedInfo.tableCount} Meja)</span>
+                              <span className="font-black text-indigo-950 text-sm">
+                                {activeOrder.joinedInfo.displayString}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="bg-indigo-600 text-white text-xs font-black px-2.5 py-1 rounded-full shadow-sm shrink-0">
+                            {activeOrder.joinedInfo.totalCapacity} Pax
+                          </span>
+                        </div>
+                      )}
+
                       {/* Box Info Pesanan */}
                       <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
                         <div className="flex justify-between items-center">

@@ -36,6 +36,7 @@ const AppRoutes = () => {
       <Routes>
         <Route path="/staff" element={<StaffPWAView />} />
         <Route path="/dapur-app" element={<StaffPWAView />} />
+        <Route path="*" element={<StaffPWAView />} />
       </Routes>
     );
   }

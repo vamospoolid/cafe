@@ -3,13 +3,14 @@ import { Calendar, Plus, Edit, Trash2, Clock, Phone, CheckCircle, Users, MapPin,
 import ReservationModal from './ReservationModal';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
+import { formatLocalDate, getTodayStr } from '../utils/dateUtils';
 
 const ReservationView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<any>(null);
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0]);
+  const [dateFilter, setDateFilter] = useState(() => getTodayStr());
   const [searchQuery, setSearchQuery] = useState('');
   const posContext = useContext(POSContext);
 
@@ -22,9 +23,9 @@ const ReservationView = () => {
   };
 
   const shiftDate = (days: number) => {
-    const d = new Date(dateFilter);
+    const d = new Date(dateFilter + 'T00:00:00');
     d.setDate(d.getDate() + days);
-    setDateFilter(d.toISOString().split('T')[0]);
+    setDateFilter(formatLocalDate(d));
   };
 
   const fetchReservations = async () => {
@@ -82,7 +83,7 @@ const ReservationView = () => {
     Booking:    { bg: '#fef9c3', text: '#854d0e', border: '#fef08a', label: 'Booking', icon: <BookOpen size={12} /> },
   };
 
-  const isToday = dateFilter === new Date().toISOString().split('T')[0];
+  const isToday = dateFilter === getTodayStr();
 
   const stats = {
     total: reservations.length,
@@ -331,7 +332,7 @@ const ReservationView = () => {
             <span>Menampilkan {filtered.length} dari {reservations.length} reservasi</span>
           </span>
           <button 
-            onClick={() => setDateFilter(new Date().toISOString().split('T')[0])}
+            onClick={() => setDateFilter(getTodayStr())}
             className="text-xs font-bold text-primary hover:underline"
           >
             Kembali ke Hari Ini

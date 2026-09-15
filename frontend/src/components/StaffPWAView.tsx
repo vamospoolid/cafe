@@ -7,7 +7,8 @@ import {
   Zap, Info, Bell, Search, Filter, Trash2, CheckSquare,
   FileText, ClipboardList, Send, Upload, FileCheck, CheckCheck, RefreshCcw,
   Smartphone, UserCheck, KeyRound, ArrowRight, CornerDownLeft, Sparkles, Activity,
-  Lock, Eye, EyeOff
+  Lock, Eye, EyeOff, QrCode, Share2, Download, Shield, ShieldAlert,
+  Sliders, Thermometer, Flame, Star, BadgeCheck, HelpCircle
 } from 'lucide-react';
 import { toast, confirmAlert } from '../utils/alert';
 
@@ -44,6 +45,43 @@ interface LeaveRequestItem {
   createdAt: string;
 }
 
+interface ShiftHandoverItem {
+  id: number;
+  userId: number;
+  shiftName: string;
+  date: string;
+  cashBalance: number;
+  equipmentStatus?: string;
+  notes: string;
+  createdAt: string;
+  user?: { id: number; name: string; username: string; role: string };
+}
+
+interface SOPCheckItem {
+  id: string;
+  text: string;
+  checked: boolean;
+  category: 'bar' | 'clean' | 'cash' | 'chiller';
+}
+
+const DEFAULT_OPENING_SOP: SOPCheckItem[] = [
+  { id: 'op1', text: 'Kalibrasi Grinder & Cek Rasa Espresso (Dose & Yield)', checked: false, category: 'bar' },
+  { id: 'op2', text: 'Periksa Suhu Chiller / Kulkas Susu (< 4°C)', checked: false, category: 'chiller' },
+  { id: 'op3', text: 'Cek Kesiapan Bahan Baku & Stock Susu Segar', checked: false, category: 'bar' },
+  { id: 'op4', text: 'Sanitasi Meja Bar, Portafilter & Steam Wand', checked: false, category: 'clean' },
+  { id: 'op5', text: 'Hitung Kas Awal / Modal Uang Pas di Laci Kasir', checked: false, category: 'cash' },
+  { id: 'op6', text: 'Nyalakan POS & Pastikan Kertas Thermal Siap', checked: false, category: 'cash' },
+];
+
+const DEFAULT_CLOSING_SOP: SOPCheckItem[] = [
+  { id: 'cl1', text: 'Backflush & Chemical Cleaning Mesin Espresso', checked: false, category: 'bar' },
+  { id: 'cl2', text: 'Bersihkan & Kosongkan Hopper Grinder Kopi', checked: false, category: 'bar' },
+  { id: 'cl3', text: 'Simpan Semua Bahan Sisa ke Dalam Chiller', checked: false, category: 'chiller' },
+  { id: 'cl4', text: 'Sapu, Pel Lantai & Buang Sampah Bar/Dapur', checked: false, category: 'clean' },
+  { id: 'cl5', text: 'Rekonsiliasi Kas Laci & Tutup Shift Kasir', checked: false, category: 'cash' },
+  { id: 'cl6', text: 'Matikan Semua Mesin, AC, Lampu & Kunci Pintu', checked: false, category: 'clean' },
+];
+
 export const StaffPWAView: React.FC = () => {
   // Authentication state
   const [token, setToken] = useState<string>(() => localStorage.getItem('staff_token') || '');
@@ -55,7 +93,7 @@ export const StaffPWAView: React.FC = () => {
     }
   });
 
-  // Individual Login Form State (Username & Password)
+  // Individual Login Form State
   const [loginUsername, setLoginUsername] = useState<string>(() => localStorage.getItem('staff_saved_username') || '');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -63,19 +101,8 @@ export const StaffPWAView: React.FC = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Solid avatar color based on role
-  const getAvatarBg = (role: string = '') => {
-    const r = role.toLowerCase();
-    if (r.includes('barista') || r.includes('kopi')) return 'bg-[#3b82f6] text-white';
-    if (r.includes('chef') || r.includes('dapur') || r.includes('cook')) return 'bg-[#f43f5e] text-white';
-    if (r.includes('kasir') || r.includes('cashier')) return 'bg-[#10b981] text-white';
-    if (r.includes('waiter') || r.includes('server') || r.includes('pramusaji')) return 'bg-[#06b6d4] text-white';
-    if (r.includes('admin') || r.includes('manager') || r.includes('lead')) return 'bg-[#6366f1] text-white';
-    return 'bg-[#1e293b] text-white';
-  };
-
-  // Active Tab: 'attendance' | 'leave' | 'stock' | 'profile'
-  const [activeTab, setActiveTab] = useState<'attendance' | 'leave' | 'stock' | 'profile'>('attendance');
+  // Active Tab: 'attendance' | 'handover' | 'leave' | 'stock' | 'profile'
+  const [activeTab, setActiveTab] = useState<'attendance' | 'handover' | 'leave' | 'stock' | 'profile'>('attendance');
 
   // Live Digital Time
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -84,8 +111,8 @@ export const StaffPWAView: React.FC = () => {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
-      setCurrentDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' }));
+      setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setCurrentDateStr(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }));
     };
     updateTime();
     const timer = setInterval(updateTime, 1000);
@@ -95,7 +122,7 @@ export const StaffPWAView: React.FC = () => {
   // Store Settings & Shifts
   const [settings, setSettings] = useState<any>(null);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
-  const [selectedShiftId, setSelectedShiftId] = useState<string>('1');
+  const [selectedShiftId, setSelectedShiftId] = useState<string>('pagi');
 
   // GPS State
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -107,14 +134,32 @@ export const StaffPWAView: React.FC = () => {
   // Camera State
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const leavePhotoRef = useRef<HTMLInputElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
 
-  // Attendance Clocking State
+  // Attendance Clocking State & My Summary
   const [clockLoading, setClockLoading] = useState(false);
   const [mySummary, setMySummary] = useState<any>(null);
+
+  // SOP Checklist State
+  const [sopType, setSopType] = useState<'OPENING' | 'CLOSING'>('OPENING');
+  const [sopList, setSopList] = useState<SOPCheckItem[]>(DEFAULT_OPENING_SOP);
+  const [savingSOP, setSavingSOP] = useState(false);
+
+  // Handover State
+  const [handovers, setHandovers] = useState<ShiftHandoverItem[]>([]);
+  const [handoverLoading, setHandoverLoading] = useState(false);
+  const [showNewHandoverModal, setShowNewHandoverModal] = useState(false);
+  const [handoverForm, setHandoverForm] = useState({
+    shiftName: 'Shift Pagi ke Shift Sore',
+    cashBalance: '',
+    equipmentStatus: 'Semua mesin normal & area bar bersih',
+    notes: ''
+  });
+  const [submittingHandover, setSubmittingHandover] = useState(false);
 
   // Stock State
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -122,7 +167,7 @@ export const StaffPWAView: React.FC = () => {
   const [stockSearch, setStockSearch] = useState('');
   const [stockCategory, setStockCategory] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING' | 'LOW'>('ALL');
 
-  // Modals
+  // Stock Modals
   const [showLossModal, setShowLossModal] = useState(false);
   const [lossForm, setLossForm] = useState({
     ingredientId: '',
@@ -139,6 +184,7 @@ export const StaffPWAView: React.FC = () => {
   const [adjustForm, setAdjustForm] = useState({ change: '', description: '' });
   const [submittingAdjust, setSubmittingAdjust] = useState(false);
 
+  // Leave Requests State
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>([]);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [showNewLeaveModal, setShowNewLeaveModal] = useState(false);
@@ -151,9 +197,48 @@ export const StaffPWAView: React.FC = () => {
   });
   const [submittingLeave, setSubmittingLeave] = useState(false);
 
-  // Calculate Distance
+  // Modals for ID Card & Security
+  const [showIDCardModal, setShowIDCardModal] = useState(false);
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [securityForm, setSecurityForm] = useState({
+    oldPin: '',
+    newPin: '',
+    confirmPin: '',
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [securityTab, setSecurityTab] = useState<'pin' | 'password'>('pin');
+  const [submittingSecurity, setSubmittingSecurity] = useState(false);
+
+  // Edit Profile Modal
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileNameInput, setProfileNameInput] = useState('');
+  const [submittingProfile, setSubmittingProfile] = useState(false);
+
+  // Helper avatar styling based on role (using brand & warm tones)
+  const getAvatarGradient = (role: string = '') => {
+    const r = role.toLowerCase();
+    if (r.includes('barista') || r.includes('kopi')) return 'bg-gradient-to-tr from-[#7C3AED] to-[#A78BFA] text-white';
+    if (r.includes('chef') || r.includes('dapur') || r.includes('cook')) return 'bg-gradient-to-tr from-[#F43F5E] to-[#FDA4AF] text-white';
+    if (r.includes('kasir') || r.includes('cashier')) return 'bg-gradient-to-tr from-[#10B981] to-[#6EE7B7] text-white';
+    if (r.includes('waiter') || r.includes('server')) return 'bg-gradient-to-tr from-[#06B6D4] to-[#67E8F9] text-white';
+    if (r.includes('admin') || r.includes('manager')) return 'bg-gradient-to-tr from-[#1A1033] to-[#7C3AED] text-white';
+    return 'bg-gradient-to-tr from-[#6366F1] to-[#A5B4FC] text-white';
+  };
+
+  const getRoleBadge = (role: string = '') => {
+    const r = role.toLowerCase();
+    if (r.includes('barista')) return 'bg-[#F5F3FF] text-[#7C3AED] border border-[#DDD6FE]';
+    if (r.includes('chef') || r.includes('dapur')) return 'bg-rose-50 text-[#F43F5E] border border-rose-200';
+    if (r.includes('kasir')) return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    if (r.includes('waiter')) return 'bg-cyan-50 text-cyan-700 border border-cyan-200';
+    return 'bg-slate-100 text-slate-700 border border-slate-200';
+  };
+
+  // Calculate Distance (Haversine)
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3; // meters
+    const R = 6371e3;
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -177,7 +262,7 @@ export const StaffPWAView: React.FC = () => {
       if (shiftRes.ok) {
         const shiftData = await shiftRes.json();
         setShifts(shiftData);
-        if (shiftData.length > 0) setSelectedShiftId(shiftData[0].id);
+        if (shiftData.length > 0 && !selectedShiftId) setSelectedShiftId(shiftData[0].id);
       }
     } catch (e) {
       console.error(e);
@@ -188,7 +273,7 @@ export const StaffPWAView: React.FC = () => {
     fetchSettingsAndShifts();
   }, []);
 
-  // Request GPS
+  // Request GPS Location
   const requestGpsLocation = () => {
     setGpsLoading(true);
     setGpsError('');
@@ -205,8 +290,8 @@ export const StaffPWAView: React.FC = () => {
         setGpsLocation({ lat, lng });
         setGpsLoading(false);
 
-        const storeLat = settings?.storeLatitude ?? -6.229728;
-        const storeLon = settings?.storeLongitude ?? 106.807464;
+        const storeLat = settings?.storeLatitude ?? -6.200000;
+        const storeLon = settings?.storeLongitude ?? 106.816666;
         const maxRadius = settings?.gpsRadiusMeters ?? 150;
 
         const dist = calculateDistance(lat, lng, storeLat, storeLon);
@@ -215,7 +300,7 @@ export const StaffPWAView: React.FC = () => {
       },
       err => {
         setGpsLoading(false);
-        setGpsError('Izin GPS belum aktif');
+        setGpsError('Izin GPS belum aktif / tidak diizinkan');
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -275,7 +360,7 @@ export const StaffPWAView: React.FC = () => {
     if (token && activeTab === 'attendance' && !capturedPhoto) {
       startCamera();
       requestGpsLocation();
-    } else if (activeTab !== 'attendance' || !token) {
+    } else {
       stopCamera();
     }
     return () => {
@@ -315,6 +400,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Fetch My Summary Data (Presensi, KPI, History, Discipline)
   const fetchMySummary = async () => {
     if (!token) return;
     try {
@@ -330,6 +416,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Fetch Ingredients
   const fetchIngredients = async () => {
     if (!token) return;
     setStockLoading(true);
@@ -348,6 +435,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Fetch Leaves
   const fetchMyLeaves = async () => {
     if (!token) return;
     setLeaveLoading(true);
@@ -366,6 +454,25 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Fetch Handovers
+  const fetchHandovers = async () => {
+    if (!token) return;
+    setHandoverLoading(true);
+    try {
+      const res = await fetch('/api/attendance/handover', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHandovers(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setHandoverLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     fetchMySummary();
@@ -373,10 +480,12 @@ export const StaffPWAView: React.FC = () => {
       fetchIngredients();
     } else if (activeTab === 'leave') {
       fetchMyLeaves();
+    } else if (activeTab === 'handover') {
+      fetchHandovers();
     }
   }, [token, activeTab]);
 
-  // INDIVIDUAL USERNAME + PASSWORD/PIN LOGIN HANDLER
+  // Handle Login
   const handleIndividualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginUsername.trim()) {
@@ -429,17 +538,17 @@ export const StaffPWAView: React.FC = () => {
     setUser(null);
     setCapturedPhoto(null);
     stopCamera();
-    toast('Berhasil keluar sesi', 'info');
+    toast('Berhasil keluar sesi portal staf', 'info');
   };
 
   // Perform Clock In / Out
   const handleClockAction = async (type: 'IN' | 'OUT') => {
     if (type === 'IN' && !capturedPhoto && settings?.enableCameraPhoto) {
-      return toast('Harap ambil foto selfie verifikasi terlebih dahulu', 'warning');
+      return toast('Harap ambil foto selfie verifikasi kehadiran terlebih dahulu', 'warning');
     }
 
     if (type === 'IN' && !isWithinRadius && settings?.enableGpsValidation) {
-      return toast(`Anda berada di luar radius absensi (${gpsDistance}m dari toko)`, 'error');
+      return toast(`Anda berada di luar radius absensi (${gpsDistance}m dari outlet)`, 'error');
     }
 
     setClockLoading(true);
@@ -449,7 +558,7 @@ export const StaffPWAView: React.FC = () => {
         pin: user?.pin || '',
         type,
         shiftId: selectedShiftId,
-        shiftName: selectedShift ? `${selectedShift.name} (${selectedShift.start} - ${selectedShift.end})` : 'Shift Pagi',
+        shiftName: selectedShift ? `${selectedShift.name} (${selectedShift.start} - ${selectedShift.end})` : 'Shift Bertugas',
         latitude: gpsLocation?.lat,
         longitude: gpsLocation?.lng,
         photo: capturedPhoto,
@@ -467,7 +576,7 @@ export const StaffPWAView: React.FC = () => {
 
       const data = await res.json();
       if (res.ok) {
-        toast(data.message || 'Presensi berhasil diproses!', 'success');
+        toast(data.message || 'Presensi berhasil dicatat!', 'success');
         setCapturedPhoto(null);
         fetchMySummary();
       } else {
@@ -480,6 +589,84 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Handle SOP Checklist Toggle & Save
+  const toggleSopItem = (id: string) => {
+    setSopList(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item));
+  };
+
+  const handleSaveSOP = async () => {
+    setSavingSOP(true);
+    try {
+      const res = await fetch('/api/attendance/checklist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          type: sopType,
+          shiftName: selectedShiftId,
+          items: sopList,
+          notes: `Checklist ${sopType} oleh ${user.name}`
+        })
+      });
+
+      if (res.ok) {
+        toast(`SOP ${sopType === 'OPENING' ? 'Opening' : 'Closing'} berhasil disimpan!`, 'success');
+      } else {
+        toast('Gagal menyimpan checklist SOP', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSavingSOP(false);
+    }
+  };
+
+  // Submit Shift Handover
+  const handleSubmitHandover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!handoverForm.notes.trim()) {
+      return toast('Harap isi catatan serah terima shift', 'warning');
+    }
+
+    setSubmittingHandover(true);
+    try {
+      const res = await fetch('/api/attendance/handover', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          ...handoverForm
+        })
+      });
+
+      if (res.ok) {
+        toast('Catatan serah terima shift berhasil disimpan!', 'success');
+        setShowNewHandoverModal(false);
+        setHandoverForm({
+          shiftName: 'Shift Pagi ke Shift Sore',
+          cashBalance: '',
+          equipmentStatus: 'Semua mesin normal & area bar bersih',
+          notes: ''
+        });
+        fetchHandovers();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal menyimpan handover', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSubmittingHandover(false);
+    }
+  };
+
+  // Submit Leave Request
   const handleSubmitLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leaveForm.reason.trim()) {
@@ -522,6 +709,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Submit Stock Loss
   const handleSubmitStockLoss = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseFloat(lossForm.qtyLoss);
@@ -558,6 +746,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Submit Quick Restock
   const handleQuickAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjustModal.ingredient) return;
@@ -596,52 +785,153 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Submit Security Update (PIN / Password)
+  const handleUpdateSecurity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (securityTab === 'pin') {
+      if (!securityForm.newPin || securityForm.newPin.length < 4) {
+        return toast('PIN baru minimal 4-6 digit angka', 'warning');
+      }
+      if (securityForm.newPin !== securityForm.confirmPin) {
+        return toast('Konfirmasi PIN tidak cocok', 'warning');
+      }
+    } else {
+      if (!securityForm.newPassword || securityForm.newPassword.length < 4) {
+        return toast('Password baru minimal 4 karakter', 'warning');
+      }
+      if (securityForm.newPassword !== securityForm.confirmPassword) {
+        return toast('Konfirmasi password tidak cocok', 'warning');
+      }
+    }
+
+    setSubmittingSecurity(true);
+    try {
+      const payload: any = {};
+      if (securityTab === 'pin') {
+        payload.newPin = securityForm.newPin;
+        if (securityForm.oldPin) payload.oldPin = securityForm.oldPin;
+      } else {
+        payload.newPassword = securityForm.newPassword;
+        if (securityForm.oldPassword) payload.oldPassword = securityForm.oldPassword;
+      }
+
+      const res = await fetch('/api/users/me/security', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast(data.message || 'Keamanan akun berhasil diperbarui!', 'success');
+        setShowSecurityModal(false);
+        setSecurityForm({
+          oldPin: '',
+          newPin: '',
+          confirmPin: '',
+          oldPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+        if (data.user) {
+          setUser((prev: any) => ({ ...prev, ...data.user }));
+          localStorage.setItem('staff_user', JSON.stringify({ ...user, ...data.user }));
+        }
+      } else {
+        toast(data.error || 'Gagal memperbarui keamanan', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSubmittingSecurity(false);
+    }
+  };
+
+  // Submit Profile Name Update
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profileNameInput.trim()) return toast('Nama tidak boleh kosong', 'warning');
+
+    setSubmittingProfile(true);
+    try {
+      const res = await fetch('/api/users/me/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: profileNameInput.trim() })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast('Nama profil berhasil diperbarui!', 'success');
+        setShowProfileModal(false);
+        setUser((prev: any) => ({ ...prev, name: profileNameInput.trim() }));
+        localStorage.setItem('staff_user', JSON.stringify({ ...user, name: profileNameInput.trim() }));
+      } else {
+        toast(data.error || 'Gagal memperbarui profil', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSubmittingProfile(false);
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────
-  // RENDER INDIVIDUAL LOGIN SCREEN (GAMBAR 2 THEME: NAVY & WHITE SHEET)
+  // 1. RENDER UN-AUTHENTICATED LOGIN SCREEN (MATCHING BRAND PALETTE)
   // ─────────────────────────────────────────────────────────────
   if (!token || !user) {
     return (
-      <div className="min-h-screen bg-[#1c2e4a] flex flex-col justify-between sm:py-6 sm:px-4 max-w-md mx-auto relative select-none font-sans text-slate-800 antialiased">
+      <div className="min-h-screen bg-[#1A1033] flex flex-col justify-between sm:py-8 sm:px-4 max-w-md mx-auto select-none font-sans text-slate-800 antialiased">
         
-        {/* Top Dark Navy Brand Header */}
-        <div className="px-6 pt-7 pb-8 text-center text-white space-y-1.5">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold mb-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono text-blue-100">{currentTime}</span>
-            <span>•</span>
-            <span className="uppercase tracking-wider">{settings?.storeName || 'SOL CAFE'}</span>
+        {/* Brand Header */}
+        <div className="px-6 pt-8 pb-8 text-center text-white space-y-2">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold border border-white/10">
+            <span className="w-2 h-2 rounded-full bg-[#FFD600] animate-pulse" />
+            <span className="font-mono text-purple-200">{currentTime || '08:00'}</span>
+            <span className="text-white/40">•</span>
+            <span className="uppercase tracking-wider font-bold text-white">
+              {settings?.storeName || 'POS PORTAL STAF'}
+            </span>
           </div>
-          
-          <h1 className="text-xl font-bold tracking-tight text-white pt-1">
-            Portal Staf
+
+          <h1 className="text-2xl font-bold tracking-tight text-white pt-2">
+            Portal Staf Operasional
           </h1>
-          <p className="text-xs text-blue-200/70">Silakan masuk dengan akun kerja pribadi Anda</p>
+          <p className="text-xs text-purple-200/70">
+            Presensi, Checklist SOP, Serah Terima Shift & Inventaris
+          </p>
         </div>
 
-        {/* White Rounded Sheet (Gambar 2 Inspired) */}
-        <div className="bg-white rounded-t-[36px] sm:rounded-3xl p-6 sm:p-7 shadow-2xl space-y-6 flex-1 flex flex-col justify-between">
+        {/* Soft White Rounded Sheet Container */}
+        <div className="bg-[#F4F6F9] rounded-t-[36px] sm:rounded-3xl p-6 sm:p-7 shadow-2xl flex-1 flex flex-col justify-between">
           
-          <form onSubmit={handleIndividualLogin} className="space-y-4 pt-1">
+          <form onSubmit={handleIndividualLogin} className="space-y-4 pt-2">
             
-            <div className="text-center pb-1">
-              <div className="w-16 h-16 rounded-full bg-[#1c2e4a] text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md ring-4 ring-slate-100 mb-2">
-                <User size={26} className="text-blue-200" />
+            <div className="text-center pb-2">
+              <div className="w-16 h-16 rounded-full bg-[#7C3AED] text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md ring-4 ring-[#F5F3FF] mb-2">
+                <User size={28} className="text-[#FFD600]" />
               </div>
-              <h2 className="text-base font-bold text-[#1c2e4a]">Masuk Akun Staf</h2>
-              <p className="text-xs text-slate-400">Gunakan Username dan Password / PIN Anda</p>
+              <h2 className="text-base font-bold text-[#1A1033]">Masuk Akun Staf</h2>
+              <p className="text-xs text-slate-500">Gunakan Username dan Password atau PIN kerja Anda</p>
             </div>
 
             {loginError && (
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-center text-xs font-semibold text-[#f43f5e] flex items-center justify-center gap-1.5">
-                <AlertCircle size={14} />
+              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-center text-xs font-semibold text-[#F43F5E] flex items-center justify-center gap-2">
+                <AlertCircle size={15} />
                 <span>{loginError}</span>
               </div>
             )}
 
-            {/* Username Input Field */}
+            {/* Username Field */}
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#1c2e4a] block px-0.5">
-                Username / ID Staf:
+              <label className="text-xs font-bold text-[#1A1033] block px-0.5">
+                Username Staf:
               </label>
               <div className="relative">
                 <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -654,15 +944,15 @@ export const StaffPWAView: React.FC = () => {
                     setLoginUsername(e.target.value);
                     setLoginError('');
                   }}
-                  placeholder="Contoh: rian atau barista1"
-                  className="w-full pl-10 pr-3.5 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#1c2e4a] focus:bg-white transition-all shadow-sm"
+                  placeholder="Contoh: rian, barista1, atau chef"
+                  className="w-full pl-10 pr-3.5 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 transition-all shadow-sm"
                 />
               </div>
             </div>
 
-            {/* Password / PIN Input Field */}
+            {/* Password / PIN Field */}
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-[#1c2e4a] block px-0.5">
+              <label className="text-xs font-bold text-[#1A1033] block px-0.5">
                 Password atau 6-Digit PIN:
               </label>
               <div className="relative">
@@ -676,7 +966,7 @@ export const StaffPWAView: React.FC = () => {
                     setLoginError('');
                   }}
                   placeholder="Masukkan password atau PIN..."
-                  className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#1c2e4a] focus:bg-white transition-all shadow-sm"
+                  className="w-full pl-10 pr-10 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 transition-all shadow-sm"
                 />
                 <button
                   type="button"
@@ -688,34 +978,34 @@ export const StaffPWAView: React.FC = () => {
               </div>
             </div>
 
-            {/* Remember Me Checkbox */}
+            {/* Remember Me */}
             <div className="flex items-center justify-between text-xs pt-1">
               <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 font-medium">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={e => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded text-[#1c2e4a] focus:ring-[#1c2e4a] border-slate-300"
+                  className="w-4 h-4 rounded text-[#7C3AED] focus:ring-[#7C3AED] border-slate-300"
                 />
                 <span>Ingat username di perangkat ini</span>
               </label>
             </div>
 
-            {/* Submit Login Button (Rounded Full Deep Navy like Gambar 2) */}
+            {/* Submit Login Button */}
             <div className="pt-2">
               <button
                 type="submit"
                 disabled={loginLoading}
-                className="w-full py-3.5 bg-[#1c2e4a] hover:bg-[#152338] active:bg-[#0f172a] disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#1c2e4a]/20 active:scale-98"
+                className="w-full py-3.5 bg-[#7C3AED] hover:bg-[#6D28D9] active:bg-[#5B21B6] disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#7C3AED]/25 active:scale-98"
               >
                 {loginLoading ? (
                   <>
-                    <RefreshCw size={14} className="animate-spin" />
+                    <RefreshCw size={15} className="animate-spin" />
                     <span>Memeriksa Akun...</span>
                   </>
                 ) : (
                   <>
-                    <KeyRound size={15} />
+                    <KeyRound size={16} className="text-[#FFD600]" />
                     <span>Masuk ke Portal Staf</span>
                   </>
                 )}
@@ -724,12 +1014,12 @@ export const StaffPWAView: React.FC = () => {
           </form>
 
           {/* Footer Return Link */}
-          <div className="text-center pt-3 border-t border-slate-100">
+          <div className="text-center pt-4 border-t border-slate-200">
             <a
               href="/"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-[#1c2e4a] transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[#7C3AED] transition-colors"
             >
-              <ArrowLeft size={13} /> Kembali ke Kasir Utama POS
+              <ArrowLeft size={14} /> Kembali ke Kasir Utama POS
             </a>
           </div>
         </div>
@@ -738,60 +1028,91 @@ export const StaffPWAView: React.FC = () => {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // RENDER AUTHENTICATED STAFF APP (GAMBAR 2 LUXURY BLUE & WHITE)
+  // 2. RENDER AUTHENTICATED STAFF APP (PROFESSIONAL & SOFT LUXURY)
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#1c2e4a] flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
-      <div className="w-full sm:max-w-[420px] min-h-screen sm:min-h-[850px] bg-slate-50 sm:rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-[#1A1033] flex flex-col items-center justify-start sm:py-6 sm:px-4 font-sans select-none antialiased">
+      <div className="w-full sm:max-w-[430px] min-h-screen sm:min-h-[880px] bg-[#F4F6F9] sm:rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
         
-        {/* TOP NAVY HEADER BANNER (GAMBAR 2 COLOR TONE) */}
-        <header className="bg-[#1c2e4a] text-white px-5 pt-4 pb-12 shrink-0 relative">
-          <div className="flex items-center justify-between text-xs text-blue-200/80 font-medium mb-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        {/* ── TOP DEEP PLUM HEADER BANNER ── */}
+        <header className="bg-[#1A1033] text-white px-5 pt-4 pb-12 shrink-0 relative">
+          
+          {/* Top Info Bar */}
+          <div className="flex items-center justify-between text-xs text-purple-200/80 font-medium mb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#FFD600] animate-pulse" />
               <span className="font-bold text-white uppercase tracking-wider text-[11px]">
-                {settings?.storeName || 'SOL CAFE'}
+                {settings?.storeName || 'DEMO CAFE'}
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95"
-              title="Keluar Akun"
-            >
-              <LogOut size={13} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {/* Quick ID Card Modal Button (Gold Accent) */}
+              <button
+                type="button"
+                onClick={() => setShowIDCardModal(true)}
+                className="px-2.5 py-1 rounded-full bg-[#FFD600] text-[#1A1033] font-bold text-[10px] flex items-center gap-1 shadow-sm hover:bg-[#FACC15] active:scale-95 transition-all"
+                title="Buka Kartu ID Digital"
+              >
+                <QrCode size={12} />
+                <span>ID Card</span>
+              </button>
+
+              {/* Logout Button */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all active:scale-95"
+                title="Keluar Akun"
+              >
+                <LogOut size={13} />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          {/* User Welcome & Time */}
+          <div className="flex items-center justify-between pt-1">
             <div>
-              <span className="text-xs text-blue-200/70 font-medium">Selamat Bertugas,</span>
-              <h1 className="text-lg font-bold text-white tracking-tight">{user.name}</h1>
+              <span className="text-xs text-purple-200/70 font-medium">Selamat bertugas,</span>
+              <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-1.5">
+                <span>{user.name}</span>
+                <span className="text-[10px] font-semibold text-[#FFD600] bg-white/10 px-2 py-0.5 rounded-full border border-white/10">
+                  {user.role}
+                </span>
+              </h1>
             </div>
             <div className="text-right">
               <div className="text-base font-bold text-white font-mono">{currentTime}</div>
-              <div className="text-[10px] text-blue-200/60">{currentDateStr}</div>
+              <div className="text-[10px] text-purple-200/70">{currentDateStr}</div>
             </div>
           </div>
         </header>
 
-        {/* FLOATING WHITE SHEET CONTAINER (GAMBAR 2 STYLE) */}
-        <div className="-mt-7 bg-slate-50 rounded-t-[32px] sm:rounded-3xl flex-1 flex flex-col relative z-10 overflow-hidden">
+        {/* ── FLOATING SHEET CONTAINER ── */}
+        <div className="-mt-7 bg-[#F4F6F9] rounded-t-[32px] sm:rounded-3xl flex-1 flex flex-col relative z-10 overflow-hidden">
           
-          {/* PROFILE SUMMARY BAR WITH FLOATING AVATAR */}
-          <div className="bg-white px-5 pt-3 pb-4 rounded-b-[28px] shadow-[0_4px_20px_rgba(28,46,74,0.05)] border-b border-slate-100">
+          {/* ── PROFILE & STATS SUMMARY BAR ── */}
+          <div className="bg-white px-5 pt-3.5 pb-4 rounded-b-[28px] shadow-[0_4px_25px_rgba(124,58,237,0.06)] border-b border-slate-100">
             <div className="flex items-center justify-between">
-              {/* Floating Round Avatar with Ring */}
+              
+              {/* Avatar + Name */}
               <div className="flex items-center gap-3">
-                <div className={`w-13 h-13 rounded-full ${getAvatarBg(user.role)} flex items-center justify-center font-bold text-base shadow-md ring-4 ring-white`}>
-                  {user.name.substring(0, 2).toUpperCase()}
+                <div className={`w-13 h-13 rounded-full ${getAvatarGradient(user.role)} flex items-center justify-center font-bold text-base shadow-md ring-4 ring-white`}>
+                  {user.name?.substring(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-[#1c2e4a]">{user.name}</h3>
-                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                    {user.role}
-                  </span>
+                  <h3 className="text-xs font-bold text-[#1A1033] flex items-center gap-1">
+                    <span>{user.name}</span>
+                    <BadgeCheck size={14} className="text-[#7C3AED]" />
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`text-[10px] font-semibold px-2 py-0.2 rounded-full ${getRoleBadge(user.role)}`}>
+                      {user.role}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      ID #{user.id}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -799,64 +1120,66 @@ export const StaffPWAView: React.FC = () => {
               <div>
                 {mySummary?.todayStatus?.clockedIn ? (
                   mySummary?.todayStatus?.clockedOut ? (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px]">
-                      <CheckCircle2 size={11} className="text-blue-600" /> Selesai Shift
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px] border border-slate-200">
+                      <CheckCircle2 size={12} className="text-[#7C3AED]" /> Shift Selesai
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200 shadow-sm">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Sedang Shift
                     </span>
                   )
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-[#f43f5e] font-bold text-[10px] border border-rose-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#f43f5e]" /> Belum Presensi
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 text-[#F43F5E] font-bold text-[10px] border border-rose-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#F43F5E]" /> Belum Masuk
                   </span>
                 )}
               </div>
             </div>
 
-            {/* 3-COLUMN STATS BAR (EXACT GAMBAR 2 INSPIRATION) */}
-            <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-100 text-center">
-              <div>
-                <div className="text-sm font-bold text-[#1c2e4a]">
+            {/* 3-Column Performance Bar in Lavender Soft Tint */}
+            <div className="grid grid-cols-3 gap-2 mt-3.5 text-center">
+              <div className="bg-[#F5F3FF] p-2 rounded-2xl border border-[#DDD6FE]/60">
+                <div className="text-sm font-bold text-[#1A1033]">
                   {mySummary?.stats?.totalHadir || 0}
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium">Hari Hadir</div>
+                <div className="text-[10px] text-slate-500 font-medium">Hari Hadir</div>
               </div>
-              <div className="border-x border-slate-100">
-                <div className="text-sm font-bold text-[#f43f5e]">
+
+              <div className="bg-[#F5F3FF] p-2 rounded-2xl border border-[#DDD6FE]/60">
+                <div className="text-sm font-bold text-[#F43F5E]">
                   {mySummary?.stats?.totalTerlambat || 0}x
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium">Terlambat</div>
+                <div className="text-[10px] text-slate-500 font-medium">Terlambat</div>
               </div>
-              <div>
-                <div className="text-sm font-bold text-[#38bdf8]">
+
+              <div className="bg-[#F5F3FF] p-2 rounded-2xl border border-[#DDD6FE]/60">
+                <div className="text-sm font-bold text-[#7C3AED]">
                   {mySummary?.stats?.totalWorkHours || 0}j
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium">Jam Kerja</div>
+                <div className="text-[10px] text-slate-500 font-medium">Jam Kerja</div>
               </div>
             </div>
           </div>
 
-          {/* SCROLLABLE TAB CONTENTS */}
-          <main className="flex-1 overflow-y-auto px-4 py-4 pb-24 space-y-4">
+          {/* ── SCROLLABLE TAB CONTENTS ── */}
+          <main className="flex-1 overflow-y-auto px-4 py-4 pb-28 space-y-4">
             
-            {/* ─────────────────────────────────────────────────────────────
-                TAB 1: PRESENSI HERO (BIOMETRIC SCANNER + GAMBAR 2 CARD)
-               ───────────────────────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════
+                TAB 1: PRESENSI, BIOMETRIC SELFIE & SOP CHECKLIST
+               ══════════════════════════════════════════════════════════════ */}
             {activeTab === 'attendance' && (
               <div className="space-y-4">
                 
-                {/* Shift Tabs (Gambar 2 Segmented Style) */}
+                {/* Shift Selector */}
                 {!mySummary?.todayStatus?.clockedIn && shifts.length > 0 && (
-                  <div className="bg-white rounded-2xl p-3 border border-slate-100 shadow-sm space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-[#1c2e4a]">
+                  <div className="bg-white rounded-3xl p-3.5 border border-slate-100 shadow-sm space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-[#1A1033]">
                       <span className="flex items-center gap-1.5">
-                        <Clock size={13} className="text-[#f43f5e]" /> Pilih Shift Bertugas:
+                        <Clock size={14} className="text-[#7C3AED]" /> Pilih Shift Bertugas Hari Ini:
                       </span>
                     </div>
 
-                    <div className="flex border-b border-slate-100 text-xs font-bold">
+                    <div className="flex gap-2">
                       {shifts.map(s => {
                         const isSelected = selectedShiftId === s.id;
                         return (
@@ -864,17 +1187,16 @@ export const StaffPWAView: React.FC = () => {
                             key={s.id}
                             type="button"
                             onClick={() => setSelectedShiftId(s.id)}
-                            className={`flex-1 py-2 text-center relative transition-all ${
+                            className={`flex-1 py-2 px-2 rounded-2xl text-center border transition-all ${
                               isSelected
-                                ? 'text-[#1c2e4a] font-bold'
-                                : 'text-slate-400 font-medium'
+                                ? 'bg-[#7C3AED] text-white border-[#7C3AED] shadow-sm font-bold'
+                                : 'bg-[#F4F6F9] text-slate-600 border-slate-200 hover:bg-slate-100 font-medium'
                             }`}
                           >
-                            <div className="truncate">{s.name}</div>
-                            <div className="text-[10px] text-slate-400 font-normal font-mono">{s.start}-{s.end}</div>
-                            {isSelected && (
-                              <span className="absolute bottom-0 inset-x-2 h-0.5 bg-[#f43f5e] rounded-full" />
-                            )}
+                            <div className="text-xs truncate">{s.name.split('(')[0].trim()}</div>
+                            <div className={`text-[10px] font-mono mt-0.5 ${isSelected ? 'text-purple-100' : 'text-slate-400'}`}>
+                              {s.start}-{s.end}
+                            </div>
                           </button>
                         );
                       })}
@@ -882,19 +1204,19 @@ export const StaffPWAView: React.FC = () => {
                   </div>
                 )}
 
-                {/* Hero Biometric Camera Card (Clean White Surface) */}
-                <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm space-y-3">
+                {/* Hero Biometric Camera Card */}
+                <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-[0_4px_20px_rgba(124,58,237,0.04)] space-y-3">
                   
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-[#1c2e4a] flex items-center gap-1.5">
-                      <Camera size={14} className="text-[#38bdf8]" /> Kamera Selfie Presensi
+                    <span className="font-bold text-[#1A1033] flex items-center gap-1.5">
+                      <Camera size={15} className="text-[#7C3AED]" /> Kamera Selfie Presensi
                     </span>
                     {capturedPhoto ? (
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                        ✓ Foto Terkunci
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle2 size={11} /> Foto Siap
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-400">Posisikan wajah</span>
+                      <span className="text-[10px] text-slate-400">Posisikan wajah Anda</span>
                     )}
                   </div>
 
@@ -909,8 +1231,8 @@ export const StaffPWAView: React.FC = () => {
 
                   {!capturedPhoto ? (
                     <div className="space-y-3">
-                      {/* Biometric Viewfinder Frame */}
-                      <div className="relative rounded-3xl overflow-hidden bg-[#1c2e4a] aspect-square max-w-[270px] mx-auto shadow-inner">
+                      {/* Viewfinder Frame */}
+                      <div className="relative rounded-3xl overflow-hidden bg-[#1A1033] aspect-square max-w-[270px] mx-auto shadow-inner">
                         <video
                           ref={videoRef}
                           autoPlay
@@ -919,21 +1241,21 @@ export const StaffPWAView: React.FC = () => {
                           className={`w-full h-full object-cover ${cameraFacing === 'user' ? 'transform -scale-x-100' : ''}`}
                         />
                         
-                        {/* Subtle Minimalist Guides */}
+                        {/* Soft Guide Corners */}
                         <div className="absolute inset-0 pointer-events-none p-5 flex flex-col justify-between">
                           <div className="flex justify-between">
-                            <div className="w-5 h-5 border-t-2 border-l-2 border-[#38bdf8] rounded-tl-lg" />
-                            <div className="w-5 h-5 border-t-2 border-r-2 border-[#38bdf8] rounded-tr-lg" />
+                            <div className="w-5 h-5 border-t-2 border-l-2 border-[#FFD600] rounded-tl-lg" />
+                            <div className="w-5 h-5 border-t-2 border-r-2 border-[#FFD600] rounded-tr-lg" />
                           </div>
                           <div className="flex justify-between">
-                            <div className="w-5 h-5 border-b-2 border-l-2 border-[#38bdf8] rounded-bl-lg" />
-                            <div className="w-5 h-5 border-b-2 border-r-2 border-[#38bdf8] rounded-br-lg" />
+                            <div className="w-5 h-5 border-b-2 border-l-2 border-[#FFD600] rounded-bl-lg" />
+                            <div className="w-5 h-5 border-b-2 border-r-2 border-[#FFD600] rounded-br-lg" />
                           </div>
                         </div>
 
-                        {/* Top Overlay Badge */}
+                        {/* Top Badges */}
                         <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between pointer-events-auto">
-                          <span className="px-2 py-0.5 rounded-full bg-black/60 text-[9px] font-bold text-emerald-400 border border-white/10 flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-[9px] font-bold text-emerald-400 border border-white/10 flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
                           </span>
 
@@ -947,15 +1269,15 @@ export const StaffPWAView: React.FC = () => {
                           </button>
                         </div>
 
-                        {/* Bottom Shutter Capture Action */}
+                        {/* Shutter Capture Button */}
                         <div className="absolute bottom-3 inset-x-0 flex items-center justify-center pointer-events-auto">
                           <button
                             type="button"
                             onClick={capturePhoto}
-                            className="w-13 h-13 p-1 rounded-full bg-white text-[#1c2e4a] flex items-center justify-center shadow-xl active:scale-90 transition-transform"
+                            className="w-13 h-13 p-1 rounded-full bg-white text-[#7C3AED] flex items-center justify-center shadow-xl active:scale-90 transition-transform"
                             title="Ambil Foto"
                           >
-                            <div className="w-10 h-10 rounded-full bg-[#1c2e4a] text-white flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-full bg-[#7C3AED] text-white flex items-center justify-center">
                               <Camera size={16} />
                             </div>
                           </button>
@@ -966,16 +1288,16 @@ export const StaffPWAView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                        className="w-full py-2.5 bg-[#F5F3FF] hover:bg-[#EDE9FE] text-[#7C3AED] rounded-2xl text-xs font-semibold border border-[#DDD6FE]/60 transition-all flex items-center justify-center gap-1.5 active:scale-95"
                       >
-                        <Smartphone size={13} />
-                        <span>Gunakan Kamera HP</span>
+                        <Smartphone size={14} />
+                        <span>Buka Kamera Bawaan HP</span>
                       </button>
                     </div>
                   ) : (
                     /* Captured Photo Preview */
                     <div className="space-y-3">
-                      <div className="relative rounded-3xl overflow-hidden bg-[#1c2e4a] aspect-square max-w-[220px] mx-auto border-2 border-emerald-500 shadow-md">
+                      <div className="relative rounded-3xl overflow-hidden bg-[#1A1033] aspect-square max-w-[220px] mx-auto border-2 border-emerald-500 shadow-md">
                         <img src={capturedPhoto} alt="Selfie" className="w-full h-full object-cover" />
                         <button
                           type="button"
@@ -995,7 +1317,7 @@ export const StaffPWAView: React.FC = () => {
                           setCapturedPhoto(null);
                           startCamera();
                         }}
-                        className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 flex items-center justify-center gap-1.5 transition-all"
+                        className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-2xl border border-slate-200 flex items-center justify-center gap-1.5 transition-all"
                       >
                         <RefreshCw size={12} />
                         <span>Foto Ulang</span>
@@ -1006,24 +1328,24 @@ export const StaffPWAView: React.FC = () => {
                   {/* GPS Status Strip */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className={`p-1.5 rounded-full shrink-0 ${isWithinRadius ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-[#f43f5e]'}`}>
+                      <div className={`p-1.5 rounded-full shrink-0 ${isWithinRadius ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-[#F43F5E]'}`}>
                         <MapPin size={14} />
                       </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-[#1c2e4a] text-[11px] truncate">
-                          {settings?.storeName || 'SOL CAFE'}
+                        <div className="font-bold text-[#1A1033] text-[11px] truncate">
+                          {settings?.storeName || 'DEMO CAFE'}
                         </div>
                         <div className="text-[10px]">
                           {gpsLoading ? (
                             <span className="text-slate-400 flex items-center gap-1">
-                              <RefreshCw size={10} className="animate-spin" /> Mengunci GPS...
+                              <RefreshCw size={10} className="animate-spin text-[#7C3AED]" /> Mengunci GPS...
                             </span>
                           ) : isWithinRadius ? (
                             <span className="text-emerald-600 font-medium">
-                              ✓ GPS Valid ({gpsDistance !== null ? `${gpsDistance}m` : '0m'} / {settings?.gpsRadiusMeters || 150}m)
+                              ✓ Tepat di Lokasi ({gpsDistance !== null ? `${gpsDistance}m` : '0m'} / {settings?.gpsRadiusMeters || 150}m)
                             </span>
                           ) : (
-                            <span className="text-[#f43f5e] font-medium">
+                            <span className="text-[#F43F5E] font-medium">
                               Di Luar Radius ({gpsDistance !== null ? `${gpsDistance}m` : '-'})
                             </span>
                           )}
@@ -1038,77 +1360,234 @@ export const StaffPWAView: React.FC = () => {
                       className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all active:scale-95 shrink-0"
                       title="Perbarui GPS"
                     >
-                      <RefreshCw size={12} className={gpsLoading ? 'animate-spin text-blue-600' : ''} />
+                      <RefreshCw size={12} className={gpsLoading ? 'animate-spin text-[#7C3AED]' : ''} />
                     </button>
                   </div>
                 </div>
 
-                {/* PRIMARY ACTION BUTTON */}
+                {/* Primary Action Button */}
                 <div>
                   {!mySummary?.todayStatus?.clockedIn ? (
                     <button
                       type="button"
                       disabled={clockLoading || !isWithinRadius}
                       onClick={() => handleClockAction('IN')}
-                      className="w-full py-4 bg-[#1c2e4a] hover:bg-[#152338] active:bg-[#0f172a] disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#1c2e4a]/20 active:scale-98"
+                      className="w-full py-4 bg-[#7C3AED] hover:bg-[#6D28D9] active:bg-[#5B21B6] disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#7C3AED]/25 active:scale-98"
                     >
-                      <CheckCircle2 size={16} className="text-emerald-400" />
-                      <span>{clockLoading ? 'Memproses...' : 'Presensi Masuk (Clock In)'}</span>
+                      <CheckCircle2 size={16} className="text-[#FFD600]" />
+                      <span>{clockLoading ? 'Memproses Presensi...' : 'Presensi Masuk (Clock In)'}</span>
                     </button>
                   ) : !mySummary?.todayStatus?.clockedOut ? (
                     <button
                       type="button"
                       disabled={clockLoading}
                       onClick={() => handleClockAction('OUT')}
-                      className="w-full py-4 bg-[#f43f5e] hover:bg-rose-600 active:bg-rose-700 disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-500/20 active:scale-98"
+                      className="w-full py-4 bg-[#F43F5E] hover:bg-rose-600 active:bg-rose-700 disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-500/20 active:scale-98"
                     >
                       <LogOut size={16} />
-                      <span>{clockLoading ? 'Memproses...' : 'Presensi Pulang (Clock Out)'}</span>
+                      <span>{clockLoading ? 'Memproses Pulang...' : 'Presensi Pulang (Clock Out)'}</span>
                     </button>
                   ) : (
-                    <div className="p-3.5 rounded-2xl bg-emerald-50 text-center text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center justify-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-emerald-600" />
-                      <span>Shift hari ini telah selesai. Selamat beristirahat!</span>
+                    <div className="p-3.5 rounded-3xl bg-emerald-50 text-center text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center justify-center gap-1.5">
+                      <CheckCircle2 size={16} className="text-emerald-600" />
+                      <span>Shift hari ini telah selesai. Terima kasih atas kerja keras Anda!</span>
                     </div>
                   )}
                 </div>
+
+                {/* Daily SOP Checklist Section */}
+                <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList size={16} className="text-[#7C3AED]" />
+                      <h4 className="text-xs font-bold text-[#1A1033]">Daily SOP Checklist</h4>
+                    </div>
+
+                    <div className="flex bg-[#F5F3FF] p-0.5 rounded-full border border-[#DDD6FE]/60">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSopType('OPENING');
+                          setSopList(DEFAULT_OPENING_SOP);
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                          sopType === 'OPENING' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-500'
+                        }`}
+                      >
+                        Opening
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSopType('CLOSING');
+                          setSopList(DEFAULT_CLOSING_SOP);
+                        }}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                          sopType === 'CLOSING' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-500'
+                        }`}
+                      >
+                        Closing
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Checklist Items */}
+                  <div className="space-y-2 pt-1">
+                    {sopList.map(item => (
+                      <label
+                        key={item.id}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-2xl border transition-all cursor-pointer select-none ${
+                          item.checked
+                            ? 'bg-[#F5F3FF] border-[#DDD6FE] text-[#1A1033]'
+                            : 'bg-slate-50/50 border-slate-100 text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={item.checked}
+                          onChange={() => toggleSopItem(item.id)}
+                          className="mt-0.5 w-4 h-4 rounded text-[#7C3AED] focus:ring-[#7C3AED] border-slate-300"
+                        />
+                        <span className={`text-xs ${item.checked ? 'line-through text-slate-400' : 'font-medium'}`}>
+                          {item.text}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveSOP}
+                    disabled={savingSOP}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-[#1A1033] font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                  >
+                    {savingSOP ? (
+                      <RefreshCw size={13} className="animate-spin text-[#7C3AED]" />
+                    ) : (
+                      <CheckCheck size={14} className="text-[#7C3AED]" />
+                    )}
+                    <span>Simpan Status Checklist SOP</span>
+                  </button>
+                </div>
+
               </div>
             )}
 
-            {/* ─────────────────────────────────────────────────────────────
-                TAB 2: IZIN & CUTI
-               ───────────────────────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════
+                TAB 2: SERAH TERIMA SHIFT (HANDOVER LOGBOOK)
+               ══════════════════════════════════════════════════════════════ */}
+            {activeTab === 'handover' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold text-[#1A1033] uppercase tracking-wider">Serah Terima Shift</h3>
+                    <p className="text-[10px] text-slate-400">Catatan operasional & kondisi mesin antar-shift</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewHandoverModal(true)}
+                    className="py-1.5 px-3 rounded-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95"
+                  >
+                    <Plus size={13} />
+                    <span>+ Handover</span>
+                  </button>
+                </div>
+
+                {handovers.length === 0 ? (
+                  <div className="py-12 bg-white rounded-3xl border border-slate-100 text-center space-y-2 p-5 shadow-sm">
+                    <ClipboardList size={34} className="mx-auto text-purple-200" />
+                    <h4 className="text-xs font-bold text-[#1A1033]">Belum Ada Catatan Handover</h4>
+                    <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                      Buat catatan serah terima saat pergantian shift agar shift berikutnya mengetahui kondisi kas & peralatan.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {handovers.map(item => (
+                      <div
+                        key={item.id}
+                        className="bg-white rounded-3xl border border-slate-100 p-4 shadow-sm space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-[#F5F3FF] text-[#7C3AED] flex items-center justify-center font-bold text-xs">
+                              {item.user?.name?.substring(0, 1) || 'S'}
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-[#1A1033]">{item.shiftName}</h5>
+                              <p className="text-[10px] text-slate-400 font-medium">Oleh: {item.user?.name || 'Staf'}</p>
+                            </div>
+                          </div>
+
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {new Date(item.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • {item.date}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="bg-[#F5F3FF] p-2 rounded-2xl border border-[#DDD6FE]/40">
+                            <span className="text-[10px] text-slate-400 block font-medium">Sisa Kas Laci:</span>
+                            <span className="font-bold text-[#1A1033] font-mono">
+                              Rp {Number(item.cashBalance).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                          <div className="bg-[#F5F3FF] p-2 rounded-2xl border border-[#DDD6FE]/40">
+                            <span className="text-[10px] text-slate-400 block font-medium">Kondisi Mesin:</span>
+                            <span className="font-bold text-emerald-700 truncate block">
+                              {item.equipmentStatus || 'Normal'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 rounded-2xl bg-slate-50 text-xs text-slate-700">
+                          <strong className="text-[#1A1033]">Catatan Tugas:</strong> "{item.notes}"
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                TAB 3: IZIN & CUTI (LEAVE MANAGEMENT)
+               ══════════════════════════════════════════════════════════════ */}
             {activeTab === 'leave' && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-[#1c2e4a] uppercase tracking-wider">Pengajuan Izin & Sakit</h3>
+                  <div>
+                    <h3 className="text-xs font-bold text-[#1A1033] uppercase tracking-wider">Pengajuan Izin & Sakit</h3>
+                    <p className="text-[10px] text-slate-400">Pengajuan izin, sakit, cuti & tukar shift kerja</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowNewLeaveModal(true)}
-                    className="py-1.5 px-3 rounded-full bg-[#1c2e4a] hover:bg-[#152338] text-white text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95"
+                    className="py-1.5 px-3 rounded-full bg-[#7C3AED] hover:bg-[#6D28D9] text-white text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95"
                   >
                     <Plus size={13} />
-                    <span>Buat Izin</span>
+                    <span>+ Buat Izin</span>
                   </button>
                 </div>
 
                 {leaveRequests.length === 0 ? (
-                  <div className="py-12 bg-white rounded-3xl border border-slate-100 text-center space-y-2 p-4 shadow-sm">
-                    <FileCheck size={32} className="mx-auto text-slate-300" />
-                    <h4 className="text-xs font-bold text-[#1c2e4a]">Belum Ada Pengajuan</h4>
-                    <p className="text-[11px] text-slate-400">Tekan "+ Buat Izin" untuk mengajukan izin/cuti.</p>
+                  <div className="py-12 bg-white rounded-3xl border border-slate-100 text-center space-y-2 p-5 shadow-sm">
+                    <FileCheck size={34} className="mx-auto text-purple-200" />
+                    <h4 className="text-xs font-bold text-[#1A1033]">Belum Ada Pengajuan Izin</h4>
+                    <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                      Tekan tombol "+ Buat Izin" untuk mengajukan izin tidak hadir atau sakit dengan lampiran surat dokter.
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
                     {leaveRequests.map(item => (
                       <div
                         key={item.id}
-                        className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm space-y-2"
+                        className="bg-white rounded-3xl border border-slate-100 p-4 shadow-sm space-y-2.5"
                       >
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-[#1c2e4a]">{item.type}</span>
-                            <span className="text-[10px] text-slate-400">
+                            <span className="text-xs font-bold text-[#1A1033]">{item.type}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">
                               ({item.startDate === item.endDate ? item.startDate : `${item.startDate} s/d ${item.endDate}`})
                             </span>
                           </div>
@@ -1118,7 +1597,7 @@ export const StaffPWAView: React.FC = () => {
                               item.status === 'Approved'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : item.status === 'Rejected'
-                                ? 'bg-rose-50 text-[#f43f5e] border border-rose-200'
+                                ? 'bg-rose-50 text-[#F43F5E] border border-rose-200'
                                 : 'bg-amber-50 text-amber-700 border border-amber-200'
                             }`}
                           >
@@ -1128,9 +1607,16 @@ export const StaffPWAView: React.FC = () => {
 
                         <p className="text-xs text-slate-600">"{item.reason}"</p>
 
+                        {item.photoUrl && (
+                          <div className="pt-1">
+                            <span className="text-[10px] text-slate-400 block mb-1">Bukti Foto / Surat Dokter:</span>
+                            <img src={item.photoUrl} alt="Bukti" className="w-16 h-16 rounded-xl object-cover border border-slate-200" />
+                          </div>
+                        )}
+
                         {item.adminNotes && (
-                          <div className="p-2 rounded-xl bg-slate-50 text-[10px] text-slate-600">
-                            <strong>Catatan Admin:</strong> {item.adminNotes}
+                          <div className="p-2.5 rounded-2xl bg-slate-50 text-[10px] text-slate-600">
+                            <strong className="text-[#1A1033]">Catatan Admin:</strong> {item.adminNotes}
                           </div>
                         )}
                       </div>
@@ -1140,72 +1626,75 @@ export const StaffPWAView: React.FC = () => {
               </div>
             )}
 
-            {/* ─────────────────────────────────────────────────────────────
-                TAB 3: STOK BAHAN BAKU
-               ───────────────────────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════
+                TAB 4: STOK BAHAN BAKU & QUICK LOSS / RESTOCK
+               ══════════════════════════════════════════════════════════════ */}
             {activeTab === 'stock' && (
               <div className="space-y-3">
+                
+                {/* Action Bar */}
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setShowLossModal(true)}
-                    className="flex-1 py-2 px-3 rounded-full bg-rose-50 text-[#f43f5e] border border-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm"
+                    className="flex-1 py-2 px-3 rounded-full bg-rose-50 text-[#F43F5E] border border-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm transition-all"
                   >
-                    <TrendingDown size={13} />
-                    <span>Lapor Bahan Basi / Rusak</span>
+                    <TrendingDown size={14} />
+                    <span>Lapor Basi / Rusak</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={fetchIngredients}
-                    className="p-2 rounded-full bg-white border border-slate-100 text-slate-600 hover:bg-slate-50 shadow-sm"
+                    className="p-2.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm"
                     title="Refresh Stok"
                   >
-                    <RefreshCw size={13} />
+                    <RefreshCw size={13} className={stockLoading ? 'animate-spin text-[#7C3AED]' : ''} />
                   </button>
                 </div>
 
-                {/* Search & Filter Tabs */}
-                <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm space-y-2">
+                {/* Search & Category Tabs */}
+                <div className="bg-white p-3.5 rounded-3xl border border-slate-100 shadow-sm space-y-2.5">
                   <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       value={stockSearch}
                       onChange={e => setStockSearch(e.target.value)}
-                      placeholder="Cari bahan baku..."
-                      className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-[#1c2e4a]"
+                      placeholder="Cari bahan baku (kopi, susu, sirup)..."
+                      className="w-full pl-9 pr-3.5 py-2 bg-[#F4F6F9] border border-slate-200 rounded-2xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#7C3AED]"
                     />
                   </div>
 
                   <div className="grid grid-cols-4 gap-1 text-center text-[10px]">
                     <button
                       onClick={() => setStockCategory('ALL')}
-                      className={`py-1 rounded-lg font-bold ${
-                        stockCategory === 'ALL' ? 'bg-[#1c2e4a] text-white' : 'bg-slate-100 text-slate-600'
+                      className={`py-1.5 rounded-xl font-bold transition-all ${
+                        stockCategory === 'ALL' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
                       }`}
                     >
                       Semua ({ingredients.length})
                     </button>
                     <button
                       onClick={() => setStockCategory('FOOD')}
-                      className={`py-1 rounded-lg font-bold ${
-                        stockCategory === 'FOOD' ? 'bg-[#1c2e4a] text-white' : 'bg-slate-100 text-slate-600'
+                      className={`py-1.5 rounded-xl font-bold transition-all ${
+                        stockCategory === 'FOOD' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
                       }`}
                     >
                       Makanan
                     </button>
                     <button
                       onClick={() => setStockCategory('DRINK')}
-                      className={`py-1 rounded-lg font-bold ${
-                        stockCategory === 'DRINK' ? 'bg-[#1c2e4a] text-white' : 'bg-slate-100 text-slate-600'
+                      className={`py-1.5 rounded-xl font-bold transition-all ${
+                        stockCategory === 'DRINK' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
                       }`}
                     >
                       Minuman
                     </button>
                     <button
                       onClick={() => setStockCategory('LOW')}
-                      className={`py-1 rounded-lg font-bold ${
-                        stockCategory === 'LOW' ? 'bg-[#f43f5e] text-white' : 'bg-slate-100 text-slate-600'
+                      className={`py-1.5 rounded-xl font-bold transition-all ${
+                        stockCategory === 'LOW' ? 'bg-[#F43F5E] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
                       }`}
                     >
                       Menipis ({ingredients.filter(i => i.stock <= i.minStock).length})
@@ -1229,15 +1718,15 @@ export const StaffPWAView: React.FC = () => {
                       return (
                         <div
                           key={ing.id}
-                          className={`bg-white p-3 rounded-2xl border shadow-sm flex items-center justify-between gap-3 ${
+                          className={`bg-white p-3.5 rounded-3xl border shadow-sm flex items-center justify-between gap-3 ${
                             isLow ? 'border-rose-200 bg-rose-50/20' : 'border-slate-100'
                           }`}
                         >
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <h5 className="text-xs font-bold text-[#1c2e4a]">{ing.name}</h5>
+                              <h5 className="text-xs font-bold text-[#1A1033]">{ing.name}</h5>
                               {isLow && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[#f43f5e] text-white">
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[#F43F5E] text-white">
                                   Menipis
                                 </span>
                               )}
@@ -1248,7 +1737,7 @@ export const StaffPWAView: React.FC = () => {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-[#1c2e4a] font-mono">
+                            <span className="text-xs font-bold text-[#1A1033] font-mono">
                               {ing.stock} <span className="text-[10px] font-normal text-slate-400">{ing.unit}</span>
                             </span>
                             <button
@@ -1257,7 +1746,7 @@ export const StaffPWAView: React.FC = () => {
                                 setAdjustModal({ open: true, ingredient: ing });
                                 setAdjustForm({ change: '', description: '' });
                               }}
-                              className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-[#1c2e4a] font-bold text-[10px]"
+                              className="px-2.5 py-1 rounded-full bg-[#F5F3FF] hover:bg-[#EDE9FE] text-[#7C3AED] font-bold text-[10px] border border-[#DDD6FE]/60"
                             >
                               +Restock
                             </button>
@@ -1269,155 +1758,650 @@ export const StaffPWAView: React.FC = () => {
               </div>
             )}
 
-            {/* ─────────────────────────────────────────────────────────────
-                TAB 4: PROFIL SAYA & RIWAYAT
-               ───────────────────────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════
+                TAB 5: PROFIL LENGKAP, KPI, ID CARD & KEAMANAN AKUN
+               ══════════════════════════════════════════════════════════════ */}
             {activeTab === 'profile' && (
-              <div className="space-y-3">
-                {/* Profile Card */}
-                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm text-center space-y-2">
-                  <div className={`w-16 h-16 rounded-full ${getAvatarBg(user?.role)} flex items-center justify-center font-bold text-2xl mx-auto shadow-md ring-4 ring-slate-100`}>
-                    {user?.name?.substring(0, 2).toUpperCase()}
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-[#1c2e4a]">{user?.name}</h3>
-                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-3 py-0.5 rounded-full inline-block mt-0.5">
-                      {user?.role}
+              <div className="space-y-4">
+                
+                {/* ── DIGITAL EMPLOYEE ID CARD BANNER ── */}
+                <div className="bg-gradient-to-br from-[#1A1033] to-[#2E1A47] text-white p-5 rounded-3xl shadow-lg border border-purple-900/40 relative overflow-hidden">
+                  
+                  {/* Subtle Background Glow */}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#7C3AED]/20 rounded-full blur-2xl pointer-events-none" />
+                  
+                  <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3 relative z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#FFD600] animate-pulse" />
+                      <span className="text-[11px] font-bold tracking-wider uppercase text-purple-200">
+                        {settings?.storeName || 'DEMO CAFE'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#FFD600] bg-white/10 px-2.5 py-0.5 rounded-full font-semibold">
+                      EMP-0{user.id}
                     </span>
                   </div>
+
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className={`w-16 h-16 rounded-2xl ${getAvatarGradient(user.role)} flex items-center justify-center font-bold text-2xl shadow-md ring-2 ring-[#FFD600]/80 shrink-0`}>
+                      {user.name?.substring(0, 2).toUpperCase()}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold text-white truncate">{user.name}</h3>
+                      <div className="text-[11px] text-purple-200 font-medium">{user.role}</div>
+                      <div className="text-[10px] text-purple-300/70 mt-1 font-mono">
+                        Username: @{user.username}
+                      </div>
+                    </div>
+
+                    {/* QR Code Mini Stamp */}
+                    <button
+                      type="button"
+                      onClick={() => setShowIDCardModal(true)}
+                      className="p-2 bg-white rounded-xl shadow-md shrink-0 hover:scale-105 active:scale-95 transition-transform"
+                      title="Perbesar Kartu ID"
+                    >
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`STAFF-${user.id}`)}`}
+                        alt="QR ID"
+                        className="w-10 h-10 object-contain"
+                      />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[10px] text-purple-200/80">
+                    <span>Status: <strong className="text-emerald-400">Aktif</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileNameInput(user.name);
+                        setShowProfileModal(true);
+                      }}
+                      className="text-[#FFD600] hover:underline font-semibold"
+                    >
+                      Edit Nama
+                    </button>
+                  </div>
                 </div>
 
-                {/* Shift Bertugas Card */}
-                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-2 text-xs">
-                  <h4 className="font-bold text-[#1c2e4a] border-b pb-2 flex items-center justify-between">
-                    <span>Status Presensi Hari Ini</span>
-                    <span className="text-[10px] text-slate-400 font-normal">{currentDateStr}</span>
-                  </h4>
+                {/* ── KPI PERFORMANCE & SCORECARD ── */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Award size={16} className="text-[#FFD600]" />
+                      <h4 className="text-xs font-bold text-[#1A1033]">Scorecard & Disiplin Staf</h4>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Shift Terpilih:</span>
-                      <span className="font-bold text-[#1c2e4a]">
-                        {mySummary?.todayStatus?.todayLog?.shiftName || 'Belum Presensi'}
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#FFD600] text-[#1A1033] font-bold text-[10px] shadow-sm">
+                      Grade A • Teladan
+                    </span>
+                  </div>
+
+                  {/* Zero Late Bonus Tracker */}
+                  <div className="p-3 rounded-2xl bg-[#F5F3FF] border border-[#DDD6FE]/60 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-[#1A1033]">Bonus Zero-Late Bulan Ini:</span>
+                      <span className="font-bold text-[#7C3AED] font-mono">
+                        {mySummary?.discipline?.isOnTrackZeroLate ? 'On-Track (Rp 200.000)' : 'Tidak Memenuhi Syarat'}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Jam Masuk (Clock In):</span>
-                      <span className="font-bold text-emerald-600">
-                        {mySummary?.todayStatus?.todayLog?.clockIn 
-                          ? new Date(mySummary.todayStatus.todayLog.clockIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-                          : '-'}
-                      </span>
+
+                    {/* Progress Bar */}
+                    <div className="w-full bg-white h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-[#7C3AED] h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.min(100, ((mySummary?.stats?.totalHadir || 0) / (mySummary?.discipline?.zeroLateMinAttendance || 20)) * 100)}%`
+                        }}
+                      />
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Jam Pulang (Clock Out):</span>
-                      <span className="font-bold text-[#1c2e4a]">
-                        {mySummary?.todayStatus?.todayLog?.clockOut 
-                          ? new Date(mySummary.todayStatus.todayLog.clockOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-                          : '-'}
-                      </span>
+                    
+                    <div className="flex justify-between text-[10px] text-slate-500">
+                      <span>{mySummary?.stats?.totalHadir || 0} / {mySummary?.discipline?.zeroLateMinAttendance || 20} Hari Hadir</span>
+                      <span>{mySummary?.stats?.totalTerlambat || 0}x Terlambat</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Logout Action */}
+                {/* ── 30-DAY ATTENDANCE HISTORY TIMELINE ── */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-[#1A1033] flex items-center gap-1.5">
+                      <Calendar size={15} className="text-[#7C3AED]" /> Riwayat Presensi Bulan Ini
+                    </h4>
+                    <span className="text-[10px] text-slate-400">
+                      {mySummary?.history?.length || 0} Catatan
+                    </span>
+                  </div>
+
+                  {mySummary?.history && mySummary.history.length > 0 ? (
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {mySummary.history.slice(0, 10).map((log: any) => (
+                        <div
+                          key={log.id}
+                          className="flex items-center justify-between p-2.5 rounded-2xl bg-[#F4F6F9] border border-slate-100 text-xs"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            {log.photoIn ? (
+                              <img src={log.photoIn} alt="Selfie" className="w-9 h-9 rounded-xl object-cover border border-slate-200" />
+                            ) : (
+                              <div className="w-9 h-9 rounded-xl bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-xs">
+                                📸
+                              </div>
+                            )}
+
+                            <div>
+                              <div className="font-bold text-[#1A1033] text-[11px]">{log.date}</div>
+                              <div className="text-[10px] text-slate-500">
+                                In: {new Date(log.clockIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} • 
+                                Out: {log.clockOut ? new Date(log.clockOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                            log.status === 'Hadir' 
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                              : 'bg-rose-50 text-[#F43F5E] border border-rose-200'
+                          }`}>
+                            {log.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-slate-400 text-xs">
+                      Belum ada riwayat kehadiran bulan ini.
+                    </div>
+                  )}
+                </div>
+
+                {/* ── SECURITY & CREDENTIALS ── */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-2.5">
+                  <h4 className="text-xs font-bold text-[#1A1033] flex items-center gap-1.5">
+                    <Shield size={15} className="text-[#7C3AED]" /> Keamanan & Akun
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSecurityTab('pin');
+                        setShowSecurityModal(true);
+                      }}
+                      className="py-2.5 px-3 rounded-2xl bg-[#F5F3FF] hover:bg-[#EDE9FE] text-[#7C3AED] font-bold text-xs border border-[#DDD6FE]/60 flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                    >
+                      <KeyRound size={14} />
+                      <span>Ubah PIN 6-Digit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSecurityTab('password');
+                        setShowSecurityModal(true);
+                      }}
+                      className="py-2.5 px-3 rounded-2xl bg-[#F5F3FF] hover:bg-[#EDE9FE] text-[#7C3AED] font-bold text-xs border border-[#DDD6FE]/60 flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                    >
+                      <Lock size={14} />
+                      <span>Ubah Password</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Logout Button */}
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full py-3 bg-white hover:bg-rose-50 text-[#f43f5e] font-bold text-xs rounded-full border border-rose-200 flex items-center justify-center gap-2 transition-all shadow-sm"
+                  className="w-full py-3 bg-white hover:bg-rose-50 text-[#F43F5E] font-bold text-xs rounded-full border border-rose-200 flex items-center justify-center gap-2 transition-all shadow-sm active:scale-98"
                 >
                   <LogOut size={14} />
-                  <span>Keluar dari Akun Staf</span>
+                  <span>Keluar dari Akun Portal Staf</span>
                 </button>
+
               </div>
             )}
+
           </main>
         </div>
 
-        {/* ─────────────────────────────────────────────────────────────
-            STICKY BOTTOM 4 TABS DOCK
-           ───────────────────────────────────────────────────────────── */}
-        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[420px] mx-auto z-40 bg-white border-t border-slate-100 py-2.5 px-3 sm:rounded-b-3xl shadow-[0_-4px_20px_rgba(28,46,74,0.06)]">
+        {/* ── STICKY BOTTOM 5 TABS NAVIGATION DOCK ── */}
+        <nav className="fixed bottom-0 left-0 right-0 sm:max-w-[430px] mx-auto z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 py-2 px-3 sm:rounded-b-3xl shadow-[0_-4px_25px_rgba(124,58,237,0.08)]">
           <div className="flex items-center justify-around">
+            
             {/* Tab 1: Presensi */}
             <button
               type="button"
               onClick={() => setActiveTab('attendance')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
                 activeTab === 'attendance'
-                  ? 'text-[#1c2e4a] font-bold scale-105'
+                  ? 'text-[#7C3AED] font-bold scale-105'
                   : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <Fingerprint size={20} className={activeTab === 'attendance' ? 'text-[#1c2e4a]' : 'text-slate-400'} />
+              <Fingerprint size={20} className={activeTab === 'attendance' ? 'text-[#7C3AED]' : 'text-slate-400'} />
               <span className="text-[10px] mt-0.5">Presensi</span>
               {activeTab === 'attendance' && (
-                <span className="w-1 h-1 rounded-full bg-[#f43f5e] mt-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] mt-0.5" />
               )}
             </button>
 
-            {/* Tab 2: Izin / Cuti */}
+            {/* Tab 2: Handover */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('handover')}
+              className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+                activeTab === 'handover'
+                  ? 'text-[#7C3AED] font-bold scale-105'
+                  : 'text-slate-400 hover:text-slate-600 font-medium'
+              }`}
+            >
+              <ClipboardList size={20} className={activeTab === 'handover' ? 'text-[#7C3AED]' : 'text-slate-400'} />
+              <span className="text-[10px] mt-0.5">Handover</span>
+              {activeTab === 'handover' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] mt-0.5" />
+              )}
+            </button>
+
+            {/* Tab 3: Izin / Cuti */}
             <button
               type="button"
               onClick={() => setActiveTab('leave')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
                 activeTab === 'leave'
-                  ? 'text-[#1c2e4a] font-bold scale-105'
+                  ? 'text-[#7C3AED] font-bold scale-105'
                   : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <FileText size={20} className={activeTab === 'leave' ? 'text-[#1c2e4a]' : 'text-slate-400'} />
-              <span className="text-[10px] mt-0.5">Izin / Cuti</span>
+              <FileText size={20} className={activeTab === 'leave' ? 'text-[#7C3AED]' : 'text-slate-400'} />
+              <span className="text-[10px] mt-0.5">Izin/Cuti</span>
               {activeTab === 'leave' && (
-                <span className="w-1 h-1 rounded-full bg-[#f43f5e] mt-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] mt-0.5" />
               )}
             </button>
 
-            {/* Tab 3: Stok Bahan */}
+            {/* Tab 4: Stok Bahan */}
             <button
               type="button"
               onClick={() => setActiveTab('stock')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all relative ${
                 activeTab === 'stock'
-                  ? 'text-[#1c2e4a] font-bold scale-105'
+                  ? 'text-[#7C3AED] font-bold scale-105'
                   : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <Package size={20} className={activeTab === 'stock' ? 'text-[#1c2e4a]' : 'text-slate-400'} />
-              <span className="text-[10px] mt-0.5">Stok Bahan</span>
+              <Package size={20} className={activeTab === 'stock' ? 'text-[#7C3AED]' : 'text-slate-400'} />
+              <span className="text-[10px] mt-0.5">Stok</span>
               {activeTab === 'stock' ? (
-                <span className="w-1 h-1 rounded-full bg-[#f43f5e] mt-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] mt-0.5" />
               ) : ingredients.filter(i => i.stock <= i.minStock).length > 0 ? (
-                <span className="absolute top-1 right-6 w-1.5 h-1.5 rounded-full bg-[#f43f5e]" />
+                <span className="absolute top-1 right-6 w-2 h-2 rounded-full bg-[#F43F5E] animate-pulse" />
               ) : null}
             </button>
 
-            {/* Tab 4: Profil Saya */}
+            {/* Tab 5: Profil */}
             <button
               type="button"
               onClick={() => setActiveTab('profile')}
               className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
                 activeTab === 'profile'
-                  ? 'text-[#1c2e4a] font-bold scale-105'
+                  ? 'text-[#7C3AED] font-bold scale-105'
                   : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              <UserCheck size={20} className={activeTab === 'profile' ? 'text-[#1c2e4a]' : 'text-slate-400'} />
-              <span className="text-[10px] mt-0.5">Profil Saya</span>
+              <UserCheck size={20} className={activeTab === 'profile' ? 'text-[#7C3AED]' : 'text-slate-400'} />
+              <span className="text-[10px] mt-0.5">Profil</span>
               {activeTab === 'profile' && (
-                <span className="w-1 h-1 rounded-full bg-[#f43f5e] mt-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] mt-0.5" />
               )}
             </button>
+
           </div>
         </nav>
 
-        {/* MODAL BUAT PENGAJUAN IZIN */}
-        {showNewLeaveModal && (
-          <div className="fixed inset-0 z-50 bg-[#1c2e4a]/60 backdrop-blur-sm flex items-center justify-center p-4">
+        {/* ══════════════════════════════════════════════════════════════
+            MODAL 1: DIGITAL EMPLOYEE ID CARD & QR CODE
+           ══════════════════════════════════════════════════════════════ */}
+        {showIDCardModal && (
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center relative border border-slate-100">
+              <button
+                onClick={() => setShowIDCardModal(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="pt-2">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-[#7C3AED] bg-[#F5F3FF] px-3 py-1 rounded-full border border-[#DDD6FE]">
+                  Kartu Identitas Karyawan Digital
+                </span>
+              </div>
+
+              {/* ID Badge Preview */}
+              <div className="bg-gradient-to-b from-[#1A1033] to-[#2E1A47] text-white p-6 rounded-3xl shadow-xl space-y-4 border-2 border-[#FFD600]/80">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                  <span className="text-xs font-bold text-[#FFD600] uppercase tracking-wider">
+                    {settings?.storeName || 'DEMO CAFE'}
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-200">
+                    ID #{user.id}
+                  </span>
+                </div>
+
+                <div className={`w-20 h-20 rounded-2xl ${getAvatarGradient(user.role)} flex items-center justify-center font-bold text-3xl mx-auto shadow-lg ring-4 ring-white/20`}>
+                  {user.name?.substring(0, 2).toUpperCase()}
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-white">{user.name}</h3>
+                  <p className="text-xs text-[#FFD600] font-semibold">{user.role}</p>
+                </div>
+
+                {/* QR Code Container */}
+                <div className="bg-white p-3.5 rounded-2xl max-w-[170px] mx-auto shadow-md">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`STAFF-${user.id}`)}`}
+                    alt="Staff QR"
+                    className="w-full h-full object-contain"
+                  />
+                  <span className="text-[9px] font-mono text-slate-600 font-bold block mt-1">
+                    STAFF-{user.id}
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-purple-200/70">
+                  Scan QR code ini di POS Kasir atau KDS Dapur untuk otentikasi instan.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowIDCardModal(false)}
+                className="w-full py-3 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-full shadow-md active:scale-98 transition-all"
+              >
+                Tutup Kartu ID
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            MODAL 2: GANTI PIN / PASSWORD
+           ══════════════════════════════════════════════════════════════ */}
+        {showSecurityModal && (
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b pb-2.5">
-                <h3 className="text-xs font-bold text-[#1c2e4a] uppercase tracking-wider">Pengajuan Izin / Cuti</h3>
+                <h3 className="text-xs font-bold text-[#1A1033] uppercase tracking-wider flex items-center gap-1.5">
+                  <KeyRound size={15} className="text-[#7C3AED]" />
+                  <span>Keamanan Akun Pribadi</span>
+                </h3>
+                <button onClick={() => setShowSecurityModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Tabs PIN vs Password */}
+              <div className="flex bg-[#F4F6F9] p-1 rounded-2xl">
+                <button
+                  type="button"
+                  onClick={() => setSecurityTab('pin')}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    securityTab === 'pin' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-600'
+                  }`}
+                >
+                  Ubah 6-Digit PIN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSecurityTab('password')}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    securityTab === 'password' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-600'
+                  }`}
+                >
+                  Ubah Password
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateSecurity} className="space-y-3">
+                {securityTab === 'pin' ? (
+                  <>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">PIN Lama (Opsional):</label>
+                      <input
+                        type="password"
+                        maxLength={8}
+                        value={securityForm.oldPin}
+                        onChange={e => setSecurityForm({ ...securityForm, oldPin: e.target.value })}
+                        placeholder="Masukkan PIN lama jika ada"
+                        className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">PIN Baru (4-8 Digit):</label>
+                      <input
+                        type="password"
+                        required
+                        maxLength={8}
+                        value={securityForm.newPin}
+                        onChange={e => setSecurityForm({ ...securityForm, newPin: e.target.value })}
+                        placeholder="Contoh: 123456"
+                        className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Konfirmasi PIN Baru:</label>
+                      <input
+                        type="password"
+                        required
+                        maxLength={8}
+                        value={securityForm.confirmPin}
+                        onChange={e => setSecurityForm({ ...securityForm, confirmPin: e.target.value })}
+                        placeholder="Ketik ulang PIN baru"
+                        className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Password Lama:</label>
+                      <input
+                        type="password"
+                        value={securityForm.oldPassword}
+                        onChange={e => setSecurityForm({ ...securityForm, oldPassword: e.target.value })}
+                        placeholder="Masukkan password saat ini"
+                        className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Password Baru:</label>
+                      <input
+                        type="password"
+                        required
+                        value={securityForm.newPassword}
+                        onChange={e => setSecurityForm({ ...securityForm, newPassword: e.target.value })}
+                        placeholder="Minimal 4 karakter"
+                        className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">Konfirmasi Password Baru:</label>
+                      <input
+                        type="password"
+                        required
+                        value={securityForm.confirmPassword}
+                        onChange={e => setSecurityForm({ ...securityForm, confirmPassword: e.target.value })}
+                        placeholder="Ketik ulang password baru"
+                        className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSecurityModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingSecurity}
+                    className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-full shadow-md"
+                  >
+                    {submittingSecurity ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            MODAL 3: EDIT PROFILE NAME
+           ══════════════════════════════════════════════════════════════ */}
+        {showProfileModal && (
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b pb-2.5">
+                <h3 className="text-xs font-bold text-[#1A1033] uppercase tracking-wider">Perbarui Nama Profil</h3>
+                <button onClick={() => setShowProfileModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateProfile} className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Nama Lengkap:</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileNameInput}
+                    onChange={e => setProfileNameInput(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-[#7C3AED]"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowProfileModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingProfile}
+                    className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-full shadow-md"
+                  >
+                    {submittingProfile ? 'Menyimpan...' : 'Simpan Nama'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            MODAL 4: BUAT CATATAN SERAH TERIMA SHIFT (HANDOVER)
+           ══════════════════════════════════════════════════════════════ */}
+        {showNewHandoverModal && (
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b pb-2.5">
+                <h3 className="text-xs font-bold text-[#1A1033] uppercase tracking-wider flex items-center gap-1.5">
+                  <ClipboardList size={15} className="text-[#7C3AED]" />
+                  <span>Buat Serah Terima Shift</span>
+                </h3>
+                <button onClick={() => setShowNewHandoverModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitHandover} className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Operan Shift:</label>
+                  <select
+                    value={handoverForm.shiftName}
+                    onChange={e => setHandoverForm({ ...handoverForm, shiftName: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                  >
+                    <option value="Shift Pagi ke Shift Sore">Shift Pagi ➔ Shift Sore</option>
+                    <option value="Shift Sore ke Shift Malam">Shift Sore ➔ Shift Malam</option>
+                    <option value="Shift Malam ke Shift Pagi">Shift Malam ➔ Shift Pagi</option>
+                    <option value="Handover General / Penutupan">Handover General / Penutupan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Sisa Kas Fisik di Laci (Rp):</label>
+                  <input
+                    type="number"
+                    value={handoverForm.cashBalance}
+                    onChange={e => setHandoverForm({ ...handoverForm, cashBalance: e.target.value })}
+                    placeholder="Contoh: 500000"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Status Mesin & Area:</label>
+                  <input
+                    type="text"
+                    value={handoverForm.equipmentStatus}
+                    onChange={e => setHandoverForm({ ...handoverForm, equipmentStatus: e.target.value })}
+                    placeholder="Contoh: Mesin espresso & grinder normal, chiller aman"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Catatan Tugas / Titipan:</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={handoverForm.notes}
+                    onChange={e => setHandoverForm({ ...handoverForm, notes: e.target.value })}
+                    placeholder="Contoh: Stok susu tinggal 2 botol di kulkas, tolong restock saat supplier datang..."
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#7C3AED]"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewHandoverModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingHandover}
+                    className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-full shadow-md"
+                  >
+                    {submittingHandover ? 'Menyimpan...' : 'Simpan Handover'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════
+            MODAL 5: BUAT PENGAJUAN IZIN / SAKIT
+           ══════════════════════════════════════════════════════════════ */}
+        {showNewLeaveModal && (
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b pb-2.5">
+                <h3 className="text-xs font-bold text-[#1A1033] uppercase tracking-wider">Pengajuan Izin / Cuti</h3>
                 <button onClick={() => setShowNewLeaveModal(false)} className="text-slate-400 hover:text-slate-600">
                   <X size={16} />
                 </button>
@@ -1429,7 +2413,7 @@ export const StaffPWAView: React.FC = () => {
                   <select
                     value={leaveForm.type}
                     onChange={e => setLeaveForm({ ...leaveForm, type: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                   >
                     <option value="Izin">Izin (Keperluan Mendesak)</option>
                     <option value="Sakit">Sakit (Dengan / Tanpa Surat Dokter)</option>
@@ -1446,7 +2430,7 @@ export const StaffPWAView: React.FC = () => {
                       type="date"
                       value={leaveForm.startDate}
                       onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono"
+                      className="w-full px-2.5 py-1.5 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 font-mono"
                     />
                   </div>
                   <div>
@@ -1455,7 +2439,7 @@ export const StaffPWAView: React.FC = () => {
                       type="date"
                       value={leaveForm.endDate}
                       onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono"
+                      className="w-full px-2.5 py-1.5 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 font-mono"
                     />
                   </div>
                 </div>
@@ -1464,11 +2448,40 @@ export const StaffPWAView: React.FC = () => {
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">Alasan Pengajuan:</label>
                   <textarea
                     rows={3}
+                    required
                     value={leaveForm.reason}
                     onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                    placeholder="Tulis alasan izin / sakit secara jelas..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#1c2e4a]"
+                    placeholder="Tuliskan alasan izin atau kondisi sakit..."
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#7C3AED]"
                   />
+                </div>
+
+                {/* Upload Foto Surat Dokter */}
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={leavePhotoRef}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setLeaveForm({ ...leaveForm, photoUrl: ev.target?.result as string });
+                        };
+                        reader.readAsDataURL(f);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => leavePhotoRef.current?.click()}
+                    className="w-full py-2 bg-[#F5F3FF] hover:bg-[#EDE9FE] text-[#7C3AED] rounded-xl text-xs font-semibold border border-[#DDD6FE]/60 flex items-center justify-center gap-1.5"
+                  >
+                    <Upload size={13} />
+                    <span>{leaveForm.photoUrl ? '✓ Foto Lampiran Terpilih' : 'Unggah Foto Bukti / Surat Dokter'}</span>
+                  </button>
                 </div>
 
                 <div className="pt-2 flex gap-2">
@@ -1482,7 +2495,7 @@ export const StaffPWAView: React.FC = () => {
                   <button
                     type="submit"
                     disabled={submittingLeave}
-                    className="flex-1 py-2.5 bg-[#1c2e4a] hover:bg-[#152338] text-white font-bold text-xs rounded-full shadow-sm"
+                    className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-full shadow-md"
                   >
                     {submittingLeave ? 'Mengirim...' : 'Kirim Pengajuan'}
                   </button>
@@ -1492,12 +2505,14 @@ export const StaffPWAView: React.FC = () => {
           </div>
         )}
 
-        {/* MODAL LAPOR STOCK LOSS */}
+        {/* ══════════════════════════════════════════════════════════════
+            MODAL 6: LAPOR STOCK LOSS
+           ══════════════════════════════════════════════════════════════ */}
         {showLossModal && (
-          <div className="fixed inset-0 z-50 bg-[#1c2e4a]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b pb-2.5">
-                <h3 className="text-xs font-bold text-[#f43f5e] uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-xs font-bold text-[#F43F5E] uppercase tracking-wider flex items-center gap-1.5">
                   <TrendingDown size={14} />
                   <span>Pencatatan Bahan Rusak / Basi</span>
                 </h3>
@@ -1510,9 +2525,10 @@ export const StaffPWAView: React.FC = () => {
                 <div>
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">Pilih Bahan Baku:</label>
                   <select
+                    required
                     value={lossForm.ingredientId}
                     onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                   >
                     <option value="">-- Pilih Bahan --</option>
                     {ingredients.map(ing => (
@@ -1528,10 +2544,11 @@ export const StaffPWAView: React.FC = () => {
                   <input
                     type="number"
                     step="0.01"
+                    required
                     value={lossForm.qtyLoss}
                     onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
                     placeholder="Contoh: 0.5 atau 2"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
                   />
                 </div>
 
@@ -1540,7 +2557,7 @@ export const StaffPWAView: React.FC = () => {
                   <select
                     value={lossForm.reason}
                     onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                   >
                     <option value="Busuk / Kadaluarsa">Busuk / Kadaluarsa</option>
                     <option value="Tumpah / Pecah">Tumpah / Pecah</option>
@@ -1556,8 +2573,8 @@ export const StaffPWAView: React.FC = () => {
                     type="text"
                     value={lossForm.notes}
                     onChange={e => setLossForm({ ...lossForm, notes: e.target.value })}
-                    placeholder="Contoh: Susu basi saat buka kulkas pagi"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
+                    placeholder="Contoh: Susu basi saat chiller mati semalam"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
                   />
                 </div>
 
@@ -1572,7 +2589,7 @@ export const StaffPWAView: React.FC = () => {
                   <button
                     type="submit"
                     disabled={submittingLoss}
-                    className="flex-1 py-2.5 bg-[#f43f5e] hover:bg-rose-600 text-white font-bold text-xs rounded-full shadow-sm"
+                    className="flex-1 py-2.5 bg-[#F43F5E] hover:bg-rose-600 text-white font-bold text-xs rounded-full shadow-md"
                   >
                     {submittingLoss ? 'Menyimpan...' : 'Simpan Loss'}
                   </button>
@@ -1582,14 +2599,16 @@ export const StaffPWAView: React.FC = () => {
           </div>
         )}
 
-        {/* MODAL QUICK RESTOCK */}
+        {/* ══════════════════════════════════════════════════════════════
+            MODAL 7: QUICK RESTOCK
+           ══════════════════════════════════════════════════════════════ */}
         {adjustModal.open && adjustModal.ingredient && (
-          <div className="fixed inset-0 z-50 bg-[#1c2e4a]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
               <div className="flex items-center justify-between border-b pb-2.5">
                 <div>
-                  <h3 className="text-xs font-bold text-[#1c2e4a] uppercase tracking-wider">+ Restock Masuk</h3>
-                  <p className="text-[11px] text-slate-500 font-semibold">{adjustModal.ingredient.name}</p>
+                  <h3 className="text-xs font-bold text-[#1A1033] uppercase tracking-wider">+ Restock Masuk</h3>
+                  <p className="text-[11px] text-[#7C3AED] font-bold">{adjustModal.ingredient.name}</p>
                 </div>
                 <button
                   onClick={() => setAdjustModal({ open: false, ingredient: null })}
@@ -1608,10 +2627,11 @@ export const StaffPWAView: React.FC = () => {
                     type="number"
                     step="0.01"
                     autoFocus
+                    required
                     value={adjustForm.change}
                     onChange={e => setAdjustForm({ ...adjustForm, change: e.target.value })}
-                    placeholder={`Misal: 5 atau 10 ${adjustModal.ingredient.unit}`}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
+                    placeholder={`Contoh: 5 atau 10 ${adjustModal.ingredient.unit}`}
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
                   />
                 </div>
 
@@ -1621,8 +2641,8 @@ export const StaffPWAView: React.FC = () => {
                     type="text"
                     value={adjustForm.description}
                     onChange={e => setAdjustForm({ ...adjustForm, description: e.target.value })}
-                    placeholder="Contoh: Beli di pasar / supplier datang"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
+                    placeholder="Contoh: Belanja di pasar / supplier datang"
+                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
                   />
                 </div>
 
@@ -1637,7 +2657,7 @@ export const StaffPWAView: React.FC = () => {
                   <button
                     type="submit"
                     disabled={submittingAdjust}
-                    className="flex-1 py-2.5 bg-[#1c2e4a] hover:bg-[#152338] text-white font-bold text-xs rounded-full shadow-sm"
+                    className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-full shadow-md"
                   >
                     {submittingAdjust ? 'Menyimpan...' : 'Simpan Restock'}
                   </button>

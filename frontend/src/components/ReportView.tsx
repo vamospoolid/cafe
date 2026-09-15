@@ -10,6 +10,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { exportFinancialPDF } from '../utils/pdfGenerator';
+import { getTodayStr, getYesterdayStr, getLast7DaysRange, getLast30DaysRange, formatLocalDate } from '../utils/dateUtils';
 
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory' | 'accounting';
@@ -18,14 +19,10 @@ export const ReportView: React.FC = () => {
   const posContext = useContext(POSContext);
   const token = posContext?.token;
 
-  // Date Filters
-  const [quickFilter, setQuickFilter] = useState<QuickFilterType>('month');
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split('T')[0];
-  });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // Date Filters: Default to today
+  const [quickFilter, setQuickFilter] = useState<QuickFilterType>('today');
+  const [startDate, setStartDate] = useState(getTodayStr());
+  const [endDate, setEndDate] = useState(getTodayStr());
 
   // Main Tabs Navigation
   const [activeTab, setActiveTab] = useState<MainTabType>('dashboard');
@@ -110,28 +107,22 @@ export const ReportView: React.FC = () => {
   // Quick Filter preset handler
   const handleQuickFilter = (type: QuickFilterType) => {
     setQuickFilter(type);
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-
     if (type === 'today') {
-      setStartDate(todayStr);
-      setEndDate(todayStr);
+      const t = getTodayStr();
+      setStartDate(t);
+      setEndDate(t);
     } else if (type === 'yesterday') {
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-      setStartDate(yesterdayStr);
-      setEndDate(yesterdayStr);
+      const y = getYesterdayStr();
+      setStartDate(y);
+      setEndDate(y);
     } else if (type === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(today.getDate() - 7);
-      setStartDate(weekAgo.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      const r = getLast7DaysRange();
+      setStartDate(r.startDate);
+      setEndDate(r.endDate);
     } else if (type === 'month') {
-      const monthAgo = new Date();
-      monthAgo.setDate(today.getDate() - 30);
-      setStartDate(monthAgo.toISOString().split('T')[0]);
-      setEndDate(todayStr);
+      const r = getLast30DaysRange();
+      setStartDate(r.startDate);
+      setEndDate(r.endDate);
     }
   };
 

@@ -1,6 +1,7 @@
 import { createContext, useState, useEffect, type ReactNode } from 'react';
 import { offlineDB } from '../utils/offlineDb';
 import { toast } from '../utils/alert';
+import useSocket from '../hooks/useSocket';
 
 // Interfaces
 export interface User {
@@ -170,6 +171,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const socket = useSocket();
+
   useEffect(() => {
     if (token) {
       fetchSettings();
@@ -178,6 +181,39 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         syncOfflineOrders(token);
       }
     }
+  }, [token]);
+
+  // Real-time synchronization saat shift dibuka atau ditutup
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleShiftChange = (data: any) => {
+      console.log('[Socket.IO] Shift status updated:', data);
+      if (token) {
+        fetchActiveShift();
+      }
+    };
+
+    socket.on('shift:status_change', handleShiftChange);
+    socket.on('shift:opened', handleShiftChange);
+    socket.on('shift:closed', handleShiftChange);
+
+    return () => {
+      socket.off('shift:status_change', handleShiftChange);
+      socket.off('shift:opened', handleShiftChange);
+      socket.off('shift:closed', handleShiftChange);
+    };
+  }, [socket, token]);
+
+  // Re-fetch shift saat tab kasir mendapatkan fokus browser kembali
+  useEffect(() => {
+    const handleFocus = () => {
+      if (token) {
+        fetchActiveShift();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, [token]);
 
   const login = (userData: User, newToken: string) => {
