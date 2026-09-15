@@ -19,6 +19,8 @@ import {
   QrCode,
   Bell,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChefHat,
   Menu,
   Fingerprint,
@@ -27,13 +29,25 @@ import {
   ClipboardList,
   PackageSearch,
   Boxes,
-  Delete
+  Delete,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem('pos_sidebar_collapsed') === 'true';
+  });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+
+  const toggleSidebar = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('pos_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
   const location = useLocation();
   const posContext = useContext(POSContext);
   const [kdsCount, setKdsCount] = useState(0);
@@ -180,172 +194,195 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       {/* Sidebar */}
       {!isMobile && (
         <aside className="sidebar">
-        <div className="sidebar-header">
-          <div className="brand-logo" style={{ overflow: 'hidden', background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {posContext?.settings?.logoUrl ? (
-              <img src={posContext.settings.logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <ShoppingCart size={32} />
-            )}
+          <div className="sidebar-header flex items-center justify-between">
+            <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={toggleSidebar} title={isCollapsed ? "Klik untuk memperluas sidebar" : ""}>
+              <div className="brand-logo shrink-0" style={{ overflow: 'hidden', background: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {posContext?.settings?.logoUrl ? (
+                  <img src={posContext.settings.logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <ShoppingCart size={24} />
+                )}
+              </div>
+              {!isCollapsed && (
+                <div className="brand-text truncate">
+                  <div className="brand-title truncate">{posContext?.settings?.storeName || 'SOL Cafe'}</div>
+                  <div className="brand-subtitle truncate">Point of Sale System</div>
+                </div>
+              )}
+            </div>
+            
+            <button 
+              type="button"
+              onClick={toggleSidebar}
+              className="sidebar-collapse-btn text-purple-300 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition-all"
+              title={isCollapsed ? "Perluas Sidebar" : "Kecilkan Sidebar (Minimize)"}
+            >
+              {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
           </div>
-          <div className="brand-text">
-            <div className="brand-title">{posContext?.settings?.storeName || 'SOL Cafe'}</div>
-            <div className="brand-subtitle">Point of Sale System v1.0.0</div>
-          </div>
-        </div>
         
-        <nav className="nav-menu">
-          {checkAccess(['Admin']) && (
-            <NavLink to="/dashboard" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <LayoutDashboard size={20} />
-              <span>Dashboard</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin', 'Kasir']) && (
-            <NavLink to="/pos" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <ShoppingCart size={20} />
-              <span>POS / Penjualan</span>
-            </NavLink>
-          )}
-          {isKDSEnabled && checkAccess(['Admin', 'Dapur']) && (
-            <NavLink to="/kds" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <ChefHat size={20} />
-              <span>Dapur (KDS)</span>
-              {kdsCount > 0 && (
-                <span style={{ 
-                  backgroundColor: '#ef4444', 
-                  color: 'white', 
-                  fontSize: '0.7rem', 
-                  fontWeight: 800, 
-                  padding: '2px 6px', 
-                  borderRadius: '9999px',
-                  marginLeft: 'auto',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minWidth: '18px',
-                  height: '18px',
-                  lineHeight: 1
-                }}>
-                  {kdsCount}
-                </span>
-              )}
-            </NavLink>
-          )}
-          {checkAccess(['Admin']) && (
-            <NavLink to="/produk" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Package size={20} />
-              <span>Produk</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin', 'Kasir']) && (
-            <NavLink to="/reservasi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Calendar size={20} />
-              <span>Reservasi</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin', 'Kasir', 'Dapur']) && (
-            <NavLink to="/meja" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Grid size={20} />
-              <span>Nomor Meja</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin', 'Kasir']) && (
-            <NavLink to="/qrcode" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <QrCode size={20} />
-              <span>Generate QR Code</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin', 'Kasir']) && (
-            <NavLink to="/kas" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Wallet size={20} />
-              <span>Arus Kas / Petty Cash</span>
-            </NavLink>
-          )}
+          <nav className="nav-menu">
+            {checkAccess(['Admin']) && (
+              <NavLink to="/dashboard" title="Dashboard" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <LayoutDashboard size={20} className="shrink-0" />
+                <span>Dashboard</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/pos" title="POS / Penjualan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <ShoppingCart size={20} className="shrink-0" />
+                <span>POS / Penjualan</span>
+              </NavLink>
+            )}
+            {isKDSEnabled && checkAccess(['Admin', 'Dapur']) && (
+              <NavLink to="/kds" title="Dapur (KDS)" className={({isActive}) => `nav-item relative ${isActive ? 'active' : ''}`}>
+                <ChefHat size={20} className="shrink-0" />
+                <span>Dapur (KDS)</span>
+                {kdsCount > 0 && (
+                  <span className="badge-count" style={{ 
+                    backgroundColor: '#ef4444', 
+                    color: 'white', 
+                    fontSize: '0.7rem', 
+                    fontWeight: 800, 
+                    padding: '2px 6px', 
+                    borderRadius: '9999px',
+                    marginLeft: 'auto',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '18px',
+                    height: '18px',
+                    lineHeight: 1
+                  }}>
+                    {kdsCount}
+                  </span>
+                )}
+              </NavLink>
+            )}
+            {checkAccess(['Admin']) && (
+              <NavLink to="/produk" title="Produk" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Package size={20} className="shrink-0" />
+                <span>Produk</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/reservasi" title="Reservasi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Calendar size={20} className="shrink-0" />
+                <span>Reservasi</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+              <NavLink to="/meja" title="Nomor Meja" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Grid size={20} className="shrink-0" />
+                <span>Nomor Meja</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/qrcode" title="Generate QR Code" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <QrCode size={20} className="shrink-0" />
+                <span>Generate QR Code</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/kas" title="Arus Kas / Petty Cash" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Wallet size={20} className="shrink-0" />
+                <span>Arus Kas / Petty Cash</span>
+              </NavLink>
+            )}
 
-          {/* Group Pembelian */}
-          {checkAccess(['Admin', 'Dapur']) && (
-            <>
-              <div style={{ padding: '0.5rem 1rem 0.25rem', fontSize: '.65rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '.08em', textTransform: 'uppercase' }}>Pembelian</div>
-              <NavLink to="/supplier" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Truck size={20} />
-                <span>Supplier</span>
-              </NavLink>
-              <NavLink to="/purchase-order" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                <ClipboardList size={20} />
-                <span>Purchase Order</span>
-              </NavLink>
-              <NavLink to="/gudang" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Boxes size={20} />
-                <span>Gudang Pusat</span>
-              </NavLink>
-              {posContext?.settings && (posContext.settings as any).ingredientTrackingEnabled && (
-                <NavLink to="/bahan-baku" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <PackageSearch size={20} />
-                  <span>Bahan Baku</span>
+            {/* Group Pembelian */}
+            {checkAccess(['Admin', 'Dapur']) && (
+              <>
+                <div className="sidebar-section-title">
+                  <span>Pembelian</span>
+                </div>
+                <NavLink to="/supplier" title="Supplier" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Truck size={20} className="shrink-0" />
+                  <span>Supplier</span>
                 </NavLink>
-              )}
-            </>
-          )}
-          <div style={{ padding: '0.25rem 1rem 0', fontSize: '.65rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '.08em', textTransform: 'uppercase' }}>SDM</div>
+                <NavLink to="/purchase-order" title="Purchase Order" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ClipboardList size={20} className="shrink-0" />
+                  <span>Purchase Order</span>
+                </NavLink>
+                <NavLink to="/gudang" title="Gudang Pusat" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Boxes size={20} className="shrink-0" />
+                  <span>Gudang Pusat</span>
+                </NavLink>
+                {posContext?.settings && (posContext.settings as any).ingredientTrackingEnabled && (
+                  <NavLink to="/bahan-baku" title="Bahan Baku" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <PackageSearch size={20} className="shrink-0" />
+                    <span>Bahan Baku</span>
+                  </NavLink>
+                )}
+              </>
+            )}
 
-          {checkAccess(['Admin']) && (
-            <NavLink to="/karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Users size={20} />
-              <span>Pengguna & Karyawan</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin']) && (
-            <NavLink to="/crm" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Award size={20} />
-              <span>CRM & Member</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin']) && (
-            <NavLink to="/absensi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Fingerprint size={20} />
-              <span>Absensi Karyawan</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin', 'Kasir']) && (
-            <NavLink to="/riwayat" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <History size={20} />
-              <span>Riwayat Transaksi</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin', 'Kasir']) && (
-            <NavLink to="/shift" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Clock size={20} />
-              <span>History Shift</span>
-            </NavLink>
-          )}
-          {checkAccess(['Admin']) && (
-            <NavLink to="/laporan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <FileText size={20} />
-              <span>Laporan</span>
-            </NavLink>
-          )}
-          
-          {checkAccess(['Admin']) && (
-            <>
-              <div className="border-t border-gray-200 my-2 mx-4"></div>
-              <NavLink to="/pengaturan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                <Settings size={20} />
-                <span>Pengaturan Sistem</span>
+            <div className="sidebar-section-title">
+              <span>SDM</span>
+            </div>
+
+            {checkAccess(['Admin']) && (
+              <NavLink to="/karyawan" title="Pengguna & Karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Users size={20} className="shrink-0" />
+                <span>Pengguna & Karyawan</span>
               </NavLink>
-            </>
-          )}
-        </nav>
-      </aside>
+            )}
+            {checkAccess(['Admin']) && (
+              <NavLink to="/crm" title="CRM & Member" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Award size={20} className="shrink-0" />
+                <span>CRM & Member</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin']) && (
+              <NavLink to="/absensi" title="Absensi Karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Fingerprint size={20} className="shrink-0" />
+                <span>Absensi Karyawan</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/riwayat" title="Riwayat Transaksi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <History size={20} className="shrink-0" />
+                <span>Riwayat Transaksi</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/shift" title="History Shift" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Clock size={20} className="shrink-0" />
+                <span>History Shift</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin']) && (
+              <NavLink to="/laporan" title="Laporan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <FileText size={20} className="shrink-0" />
+                <span>Laporan</span>
+              </NavLink>
+            )}
+            
+            {checkAccess(['Admin']) && (
+              <>
+                <div className="sidebar-section-divider"></div>
+                <NavLink to="/pengaturan" title="Pengaturan Sistem" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Settings size={20} className="shrink-0" />
+                  <span>Pengaturan Sistem</span>
+                </NavLink>
+              </>
+            )}
+          </nav>
+        </aside>
       )}
 
       {/* Main Content */}
       <main className="main-content">
-        <header className="topbar" style={{ padding: isMobile ? '0 1rem' : '0 2rem' }}>
+        <header className="topbar" style={{ padding: isMobile ? '0 1rem' : '0 1.5rem' }}>
           <div className="flex items-center gap-3">
             {!isMobile && (
-              <button className="icon-btn hover:bg-gray-100 p-2 rounded-md" onClick={() => setIsCollapsed(!isCollapsed)}>
-                <Menu size={20} />
+              <button 
+                type="button"
+                className="icon-btn hover:bg-slate-100 p-2 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors"
+                onClick={toggleSidebar}
+                title={isCollapsed ? "Perluas Sidebar" : "Kecilkan Sidebar (Minimize)"}
+              >
+                {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
               </button>
             )}
             <h1 className="page-title" style={{ fontSize: isMobile ? '1.15rem' : '1.25rem', fontWeight: 800 }}>{pageTitle}</h1>

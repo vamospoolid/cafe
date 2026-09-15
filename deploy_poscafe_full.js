@@ -49,51 +49,9 @@ const deployCommands = [
     `cd ${appDir}/frontend && npm install`,
     `cd ${appDir}/frontend && npm run build`,
 
-    // 5. Setup Nginx
-    `echo "⚙️ [5/5] Setup Nginx Server Block..."`,
-    `cat << 'EOF' > /etc/nginx/sites-available/${domain}
-server {
-    listen 80;
-    server_name ${domain} www.${domain};
-
-    client_max_body_size 10M;
-
-    # Frontend
-    root ${appDir}/frontend/dist;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Uploaded Images
-    location /uploads/ {
-        alias ${appDir}/backend/dist/uploads/;
-        access_log off;
-    }
-
-    # Backend API Proxy
-    location /api/ {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-
-    # Socket.IO Proxy
-    location /socket.io/ {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host $host;
-    }
-}
-EOF`,
-    `ln -sf /etc/nginx/sites-available/${domain} /etc/nginx/sites-enabled/`,
-    `systemctl restart nginx`,
+    // 5. Reload Nginx
+    `echo "⚙️ [5/5] Reloading Nginx Web Server..."`,
+    `nginx -t && systemctl reload nginx`,
     `echo "✅ Deploy Complete!"`
 ];
 
