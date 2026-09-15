@@ -1119,152 +1119,243 @@ export default function WarehouseView() {
                 </div>
               </div>
 
-              {/* Card 2: Rincian Bahan Baku yang Dibelanja (Full Width Table) */}
-              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+              {/* Card 2: Rincian Bahan Baku yang Dibelanja (Ergonomic Smart-Card Layout) */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-5">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
                   <div className="flex items-center gap-2.5">
                     <span className="p-2 rounded-xl bg-amber-50 text-amber-600">
                       <Package size={18} />
                     </span>
                     <div>
                       <h2 className="font-extrabold text-sm sm:text-base text-slate-800">Daftar Bahan Baku Grosir yang Masuk</h2>
-                      <p className="text-xs text-slate-400">Input kuantitas kemasan grosir, rasio konversi isi, dan harga modal beli</p>
+                      <p className="text-xs text-slate-400">Input kuantitas kemasan grosir, rasio konversi isi, dan harga modal beli dengan kalkulasi HPP otomatis</p>
                     </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleAddInboundItem}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition-all border border-indigo-200 cursor-pointer"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
                   >
-                    <Plus size={15} /> + Tambah Baris Bahan
+                    <Plus size={15} /> + Tambah Bahan Baku
                   </button>
                 </div>
 
-                {/* Table Container */}
-                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold uppercase tracking-wider">
-                        <th className="p-3.5 w-12 text-center">No</th>
-                        <th className="p-3.5 min-w-[240px]">Nama Bahan Baku Terdaftar</th>
-                        <th className="p-3.5 min-w-[140px]">Satuan Grosir (Beli)</th>
-                        <th className="p-3.5 w-28 text-center">Qty Beli</th>
-                        <th className="p-3.5 w-32 text-center">Isi per Satuan</th>
-                        <th className="p-3.5 min-w-[150px]">Hasil Masuk Gudang</th>
-                        <th className="p-3.5 min-w-[160px] text-right">Harga Beli Satuan (Rp)</th>
-                        <th className="p-3.5 min-w-[160px] text-right">Subtotal Modal (Rp)</th>
-                        <th className="p-3.5 w-14 text-center">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {inboundForm.items.map((it, idx) => {
-                        const selectedIng = stockList.find(s => s.id === Number(it.ingredientId));
-                        const baseUnit = selectedIng?.unit || 'unit';
-                        const baseTotal = (Number(it.purchaseQty) || 0) * (Number(it.conversionRatio) || 1);
-                        const subtotal = (Number(it.purchaseQty) || 0) * (Number(it.purchasePrice) || 0);
+                {/* Card-based List of Inbound Items */}
+                <div className="space-y-4">
+                  {inboundForm.items.map((it, idx) => {
+                    const selectedIng = stockList.find(s => s.id === Number(it.ingredientId));
+                    const baseUnit = selectedIng?.unit || 'unit';
+                    const qty = Number(it.purchaseQty) || 0;
+                    const ratio = Number(it.conversionRatio) || 1;
+                    const price = Number(it.purchasePrice) || 0;
+                    const baseTotal = qty * ratio;
+                    const subtotal = qty * price;
+                    const costPerBaseUnit = ratio > 0 ? (price / ratio) : 0;
+                    const pUnit = it.purchaseUnit || 'Grosir';
 
-                        return (
-                          <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                            <td className="p-3.5 text-center font-bold text-slate-400">
+                    const presetUnits = ['Karton', 'Dus', 'Pak', 'Karung', 'Jerigen', 'Bal'];
+
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`rounded-2xl border transition-all p-4 sm:p-5 relative ${
+                          it.ingredientId 
+                            ? 'bg-slate-50/50 border-slate-200/90 shadow-xs hover:border-indigo-300' 
+                            : 'bg-amber-50/20 border-amber-200'
+                        }`}
+                      >
+                        {/* Item Card Header */}
+                        <div className="flex items-center justify-between pb-3 mb-3.5 border-b border-slate-200/60">
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 text-xs font-black flex items-center justify-center">
                               {idx + 1}
-                            </td>
-                            <td className="p-3.5">
-                              <select
-                                className="w-full py-2 px-3 text-xs font-bold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
-                                value={it.ingredientId}
-                                onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
-                                required
+                            </span>
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                              Baris Bahan #{idx + 1}
+                            </span>
+                            {selectedIng && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                {selectedIng.category || 'Bahan'}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {/* Live Subtotal Badge */}
+                            <div className="text-right">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block leading-tight">Subtotal Baris</span>
+                              <span className="text-sm font-black text-slate-900">
+                                {formatCurrency(subtotal)}
+                              </span>
+                            </div>
+
+                            {inboundForm.items.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveInboundItem(idx)}
+                                className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-100/60 transition-colors ml-1"
+                                title="Hapus Baris Ini"
                               >
-                                <option value="">-- Pilih Bahan Baku --</option>
-                                {stockList.map(s => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name} ({s.category}) — Satuan Dapur: {s.unit}
-                                  </option>
-                                ))}
-                              </select>
-                              {selectedIng && (
-                                <div className="text-[10px] text-slate-400 mt-1 pl-1">
-                                  Stok gudang saat ini: <strong>{selectedIng.warehouseStock} {selectedIng.unit}</strong>
-                                </div>
-                              )}
-                            </td>
-                            <td className="p-3.5">
-                              <input
-                                type="text"
-                                className="w-full py-2 px-2.5 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
-                                placeholder="cth: Karton / Dus"
-                                value={it.purchaseUnit}
-                                onChange={e => handleInboundItemChange(idx, 'purchaseUnit', e.target.value)}
-                                required
-                              />
-                            </td>
-                            <td className="p-3.5">
-                              <input
-                                type="number"
-                                step="any"
-                                min="0.01"
-                                className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
-                                value={it.purchaseQty}
-                                onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
-                                required
-                              />
-                            </td>
-                            <td className="p-3.5">
-                              <div className="relative">
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Grid Form Fields */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 sm:gap-4 items-start">
+                          {/* Sisi 1: Pemilihan Bahan Baku (4 Kolom) */}
+                          <div className="md:col-span-4 space-y-1.5">
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                              Bahan Baku Terdaftar <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              className="w-full py-2.5 px-3 text-xs font-bold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                              value={it.ingredientId}
+                              onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
+                              required
+                            >
+                              <option value="">-- Pilih Bahan Baku --</option>
+                              {stockList.map(s => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name} ({s.category}) — Satuan Dapur: {s.unit}
+                                </option>
+                              ))}
+                            </select>
+
+                            {selectedIng ? (
+                              <div className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 text-slate-500">
+                                <span>Stok Gudang Fisik:</span>
+                                <strong className="text-slate-800">{selectedIng.warehouseStock} {selectedIng.unit}</strong>
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-amber-600 italic">Pilih bahan baku untuk mulai menghitung</div>
+                            )}
+                          </div>
+
+                          {/* Sisi 2: Satuan Grosir & Kuantitas Beli (4 Kolom) */}
+                          <div className="md:col-span-4 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              {/* Satuan Grosir */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                  Kemasan Grosir
+                                </label>
+                                <input
+                                  type="text"
+                                  className="w-full py-2 px-2.5 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                  placeholder="cth: Karton"
+                                  value={it.purchaseUnit}
+                                  onChange={e => handleInboundItemChange(idx, 'purchaseUnit', e.target.value)}
+                                  required
+                                />
+                              </div>
+
+                              {/* Qty Beli */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                  Kuantitas (Qty)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                  value={it.purchaseQty}
+                                  onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            {/* Quick Preset Unit Chips */}
+                            <div className="flex items-center gap-1 overflow-x-auto py-0.5 no-scrollbar">
+                              <span className="text-[9px] text-slate-400 font-bold uppercase shrink-0">Cepat:</span>
+                              {presetUnits.map(unit => (
+                                <button
+                                  type="button"
+                                  key={unit}
+                                  onClick={() => handleInboundItemChange(idx, 'purchaseUnit', unit)}
+                                  className={`text-[10px] px-1.5 py-0.5 rounded font-bold border transition-colors shrink-0 ${
+                                    it.purchaseUnit === unit 
+                                      ? 'bg-indigo-600 text-white border-indigo-600' 
+                                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {unit}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Rasio Konversi Isi */}
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                                  Isi per 1 {pUnit}
+                                </label>
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  (ke Satuan Dapur)
+                                </span>
+                              </div>
+                              <div className="relative flex items-center">
                                 <input
                                   type="number"
                                   step="any"
                                   min="0.001"
-                                  className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
+                                  className="w-full py-2 pl-3 pr-16 text-xs font-black bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
                                   value={it.conversionRatio}
                                   onChange={e => handleInboundItemChange(idx, 'conversionRatio', Number(e.target.value))}
                                   required
                                 />
+                                <span className="absolute right-3 text-[11px] font-bold text-indigo-600 pointer-events-none">
+                                  {baseUnit}
+                                </span>
                               </div>
-                              <div className="text-[10px] text-slate-400 text-center mt-0.5 font-medium">
-                                {baseUnit} / {it.purchaseUnit || 'Grosir'}
-                              </div>
-                            </td>
-                            <td className="p-3.5">
-                              <div className="px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200/80 text-indigo-900 font-extrabold text-xs text-center">
-                                + {baseTotal.toLocaleString('id-ID')} {baseUnit}
-                              </div>
-                            </td>
-                            <td className="p-3.5">
-                              <div className="relative">
-                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">Rp</span>
+                            </div>
+                          </div>
+
+                          {/* Sisi 3: Harga Beli & Hasil Konversi (4 Kolom) */}
+                          <div className="md:col-span-4 space-y-2">
+                            {/* Harga Beli Satuan Grosir */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                Harga Beli per 1 {pUnit}
+                              </label>
+                              <div className="relative flex items-center">
+                                <span className="absolute left-3 text-xs font-bold text-slate-400">Rp</span>
                                 <input
                                   type="number"
                                   step="any"
                                   min="0"
-                                  className="w-full py-2 pl-7 pr-2 text-xs font-bold text-right bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none"
+                                  className="w-full py-2 pl-8 pr-3 text-xs font-black text-right bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
                                   value={it.purchasePrice}
                                   onChange={e => handleInboundItemChange(idx, 'purchasePrice', Number(e.target.value))}
                                   required
                                 />
                               </div>
-                            </td>
-                            <td className="p-3.5 text-right font-black text-xs text-slate-900">
-                              {formatCurrency(subtotal)}
-                            </td>
-                            <td className="p-3.5 text-center">
-                              {inboundForm.items.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveInboundItem(idx)}
-                                  className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors"
-                                  title="Hapus Baris"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </div>
+
+                            {/* Visual Feedback Result Box */}
+                            <div className="bg-white rounded-xl border border-indigo-100 p-2.5 space-y-1.5 shadow-2xs">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-500 font-medium">Hasil Masuk Stok:</span>
+                                <span className="font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60">
+                                  +{baseTotal.toLocaleString('id-ID')} {baseUnit}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs pt-1 border-t border-dashed border-slate-100">
+                                <span className="text-slate-400 text-[10px] font-medium">HPP Modal per {baseUnit}:</span>
+                                <span className="font-extrabold text-emerald-700 text-[11px]">
+                                  {formatCurrency(costPerBaseUnit)} / {baseUnit}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Add Row Button */}
@@ -1272,13 +1363,14 @@ export default function WarehouseView() {
                   <button
                     type="button"
                     onClick={handleAddInboundItem}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition-all border border-indigo-200 cursor-pointer active:scale-95"
                   >
-                    <Plus size={16} className="text-indigo-600" />
-                    <span>+ Tambah Baris Bahan Baku</span>
+                    <Plus size={16} />
+                    <span>+ Tambah Baris Bahan Baku Lain</span>
                   </button>
                 </div>
               </div>
+
 
               {/* Card 3: Catatan & Ringkasan Total */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
