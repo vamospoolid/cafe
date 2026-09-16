@@ -8,7 +8,8 @@ import {
   FileText, ClipboardList, Send, Upload, FileCheck, CheckCheck, RefreshCcw,
   Smartphone, UserCheck, KeyRound, ArrowRight, CornerDownLeft, Sparkles, Activity,
   Lock, Eye, EyeOff, QrCode, Share2, Download, Shield, ShieldAlert,
-  Sliders, Thermometer, Flame, Star, BadgeCheck, HelpCircle, Timer, Compass
+  Sliders, Thermometer, Flame, Star, BadgeCheck, HelpCircle, Timer, Compass,
+  CreditCard, Wallet
 } from 'lucide-react';
 import { toast, confirmAlert } from '../utils/alert';
 
@@ -487,6 +488,30 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  // Fetch My Employee Loans
+  const [myLoans, setMyLoans] = useState<any[]>([]);
+  const [myLoansOutstanding, setMyLoansOutstanding] = useState(0);
+  const [loansLoading, setLoansLoading] = useState(false);
+
+  const fetchMyLoans = async () => {
+    if (!token) return;
+    setLoansLoading(true);
+    try {
+      const res = await fetch('/api/employee-loans/my', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMyLoans(data.loans || []);
+        setMyLoansOutstanding(data.totalOutstanding || 0);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoansLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     fetchMySummary();
@@ -496,6 +521,8 @@ export const StaffPWAView: React.FC = () => {
       fetchMyLeaves();
     } else if (activeTab === 'handover') {
       fetchHandovers();
+    } else if (activeTab === 'profile') {
+      fetchMyLoans();
     }
   }, [token, activeTab]);
 
@@ -1940,6 +1967,62 @@ export const StaffPWAView: React.FC = () => {
                       <span>{mySummary?.stats?.totalTerlambat || 0}x Terlambat</span>
                     </div>
                   </div>
+                </div>
+
+                {/* ── KASBON & PINJAMAN SAYA ── */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <CreditCard size={16} className="text-[#7C3AED]" />
+                      <h4 className="text-xs font-bold text-[#1A1033]">Kasbon & Pinjaman Saya</h4>
+                    </div>
+
+                    {myLoansOutstanding > 0 ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 font-bold text-[10px] border border-rose-200">
+                        Sisa: Rp {myLoansOutstanding.toLocaleString('id-ID')}
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200">
+                        Tidak Ada Kasbon Aktif
+                      </span>
+                    )}
+                  </div>
+
+                  {loansLoading ? (
+                    <div className="text-center py-4 text-xs text-slate-400">Memuat data kasbon...</div>
+                  ) : myLoans.length === 0 ? (
+                    <div className="p-3.5 bg-slate-50 rounded-2xl text-center text-xs text-slate-400 font-medium border border-slate-100">
+                      Tidak ada catatan kasbon atau pinjaman.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                      {myLoans.map((loan: any) => (
+                        <div key={loan.id} className="p-3 bg-slate-50/80 border border-slate-200/80 rounded-2xl text-xs space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-slate-800">
+                              {loan.reason || 'Kasbon Operasional'}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                              loan.status === 'Lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {loan.status}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px] text-slate-500">
+                            <span>Pinjaman: Rp {loan.amount.toLocaleString('id-ID')}</span>
+                            <span className="font-bold text-rose-600">
+                              {loan.remaining > 0 ? `Sisa: Rp ${loan.remaining.toLocaleString('id-ID')}` : 'Lunas'}
+                            </span>
+                          </div>
+                          {loan.settledNote && (
+                            <div className="text-[10px] text-slate-400 italic pt-0.5">
+                              Catatan: {loan.settledNote}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* ── 30-DAY ATTENDANCE HISTORY TIMELINE ── */}

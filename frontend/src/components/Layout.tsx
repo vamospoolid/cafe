@@ -31,7 +31,8 @@ import {
   Boxes,
   Delete,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  CreditCard
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -337,6 +338,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <NavLink to="/absensi" title="Absensi Karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Fingerprint size={20} className="shrink-0" />
                 <span>Absensi Karyawan</span>
+              </NavLink>
+            )}
+            {checkAccess(['Admin']) && (
+              <NavLink to="/kasbon" title="Kasbon Karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <CreditCard size={20} className="shrink-0" />
+                <span>Kasbon Karyawan</span>
               </NavLink>
             )}
             {checkAccess(['Admin', 'Kasir']) && (
@@ -724,6 +731,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 >
                   <Fingerprint size={18} className="text-slate-500" />
                   <span className="text-[10px] font-bold text-slate-700">Absensi</span>
+                </NavLink>
+              )}
+
+              {checkAccess(['Admin']) && (
+                <NavLink 
+                  to="/kasbon" 
+                  onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
+                >
+                  <CreditCard size={18} className="text-indigo-600" />
+                  <span className="text-[10px] font-bold text-slate-700">Kasbon Staf</span>
                 </NavLink>
               )}
 

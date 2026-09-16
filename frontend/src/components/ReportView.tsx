@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { POSContext } from '../context/POSContext';
-import { toast } from '../utils/alert';
+import { toast, confirmAlert } from '../utils/alert';
 import { exportFinancialPDF, exportProfitSharingPDF, exportDailyBonusPDF } from '../utils/pdfGenerator';
 import { exportProfitSharingExcel, exportDailyBonusExcel, exportPettyCashExcel, exportSalesReportExcel, exportInventoryValuationExcel } from '../utils/excelGenerator';
 import { getTodayStr, getYesterdayStr, getLast7DaysRange, getLast30DaysRange, getThisMonthRange, getLastMonthRange, getMonthRange, formatLocalDate } from '../utils/dateUtils';
@@ -150,6 +150,41 @@ export const ReportView: React.FC = () => {
     const r = getMonthRange(yearMonthStr);
     setStartDate(r.startDate);
     setEndDate(r.endDate);
+  };
+
+  const handleSettleKasbon = async (userId: number, userName: string, amount: number) => {
+    const resConfirm = await confirmAlert(
+      'Lunasi Kasbon via Gaji?',
+      `Yakin ingin memproses pelunasan kasbon ${userName} senilai ${formatCurrency(amount)} untuk periode ${startDate} s/d ${endDate}? Status kasbon staf akan otomatis berubah menjadi LUNAS.`
+    );
+
+    if (!resConfirm.isConfirmed) return;
+
+    try {
+      const res = await fetch('/api/employee-loans/bulk-settle-payroll', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId,
+          period: `${startDate} s/d ${endDate}`,
+          notes: `Dipotong Otomatis via Slip Gaji Periode ${startDate} s/d ${endDate}`
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast(data.message || 'Kasbon staf berhasil dilunasi!', 'success');
+        fetchAllReportData();
+      } else {
+        toast(data.error || 'Gagal melunasi kasbon', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan koneksi', 'error');
+    }
   };
 
   // PDF Export Handler
@@ -2246,15 +2281,30 @@ export const ReportView: React.FC = () => {
 
             {/* Employee Ranking & Summary Cards */}
             <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
-              <h4 className="font-black text-slate-900 text-base">Rekapitulasi Total Bonus Karyawan</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="font-black text-slate-900 text-base">Rekapitulasi Gaji, Bonus & Potongan Kasbon</h4>
+                  <p className="text-xs text-slate-500">Perhitungan take-home bonus setelah otomatisasi potongan kasbon karyawan</p>
+                </div>
+                {dailyBonusData?.totalKasbonOutstandingAll > 0 && (
+                  <span className="text-xs px-3 py-1 bg-rose-50 border border-rose-200 text-rose-700 font-bold rounded-xl">
+                    Total Kasbon Menggantung: {formatCurrency(dailyBonusData.totalKasbonOutstandingAll)}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {employeeSummaries.map((e: any, idx: number) => {
                   const isFT = e.employmentType === 'FULL_TIME';
+                  const totalBonus = e.totalBonus ?? e.totalBonusAmount ?? 0;
+                  const kasbonAmt = e.kasbonOutstanding || 0;
+                  const takeHome = Math.max(0, totalBonus - kasbonAmt);
+
                   return (
-                    <div key={idx} className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                    <div key={idx} className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs border border-indigo-200">
                             {(e.name || e.username || 'U').slice(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -2264,14 +2314,43 @@ export const ReportView: React.FC = () => {
                             </span>
                           </div>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isFT ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
-                          {e.presentCount ?? e.totalPresentDays ?? 0} Hari Hadir
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${isFT ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
+                          {e.presentCount ?? e.totalPresentDays ?? 0} Hadir
                         </span>
                       </div>
-                      <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
-                        <span className="text-xs text-slate-500">Dapat Bonus: <strong>{e.lateCount !== undefined ? `${(e.presentCount || 0)} Hadir` : ''}</strong></span>
-                        <span className="text-sm font-black text-amber-700">{formatCurrency(e.totalBonus ?? e.totalBonusAmount ?? 0)}</span>
+
+                      {/* Financial Breakdown */}
+                      <div className="bg-white p-3 rounded-xl border border-slate-200/80 text-xs space-y-1.5">
+                        <div className="flex justify-between items-center text-slate-600">
+                          <span>Bonus Omzet:</span>
+                          <span className="font-black text-amber-700">{formatCurrency(totalBonus)}</span>
+                        </div>
+
+                        {kasbonAmt > 0 && (
+                          <div className="flex justify-between items-center text-rose-600 font-bold">
+                            <span className="flex items-center gap-1">
+                              <span>Potongan Kasbon:</span>
+                            </span>
+                            <span>-{formatCurrency(kasbonAmt)}</span>
+                          </div>
+                        )}
+
+                        <div className="pt-1.5 border-t border-slate-100 flex justify-between items-center font-black">
+                          <span className="text-slate-800">Take Home Bonus:</span>
+                          <span className="text-sm text-indigo-700">{formatCurrency(takeHome)}</span>
+                        </div>
                       </div>
+
+                      {/* Action Button */}
+                      {kasbonAmt > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSettleKasbon(e.userId || e.id, e.name || e.username, kasbonAmt)}
+                          className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                        >
+                          <CheckCircle2 size={14} /> Potong & Lunasi Kasbon
+                        </button>
+                      )}
                     </div>
                   );
                 })}

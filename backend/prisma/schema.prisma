@@ -36,6 +36,7 @@ model User {
   reqsRequested     WarehouseRequisition[] @relation("ReqRequestedBy")
   reqsApproved      WarehouseRequisition[] @relation("ReqApprovedBy")
   ownerFundTxns     OwnerFundTransaction[]
+  employeeLoans     EmployeeLoan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -684,3 +685,44 @@ model WarehouseSaleItem {
   @@index([saleId])
   @@index([ingredientId])
 }
+
+// ─── Manajemen Kasbon / Pinjaman Karyawan (Employee Loans) ─────────────
+
+model EmployeeLoan {
+  id          Int       @id @default(autoincrement())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int
+  amount      Float     // Jumlah kasbon awal
+  remaining   Float     // Sisa kasbon yang belum lunas
+  date        DateTime  @default(now()) // Tanggal pinjam
+  source      String    @default("KAS_OWNER") // "KAS_OWNER", "KASIR"
+  reason      String?   // Keperluan / catatan pinjaman
+  status      String    @default("Belum Lunas") // "Belum Lunas", "Lunas"
+  approvedBy  String?   // Nama yang menyetujui (Owner / Manager)
+  settledAt   DateTime? // Tanggal saat dilunasi
+  settledNote String?   // Catatan pelunasan (misal: "Dipotong Gaji Periode...")
+
+  payments    EmployeeLoanPayment[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([date])
+}
+
+model EmployeeLoanPayment {
+  id            Int          @id @default(autoincrement())
+  loan          EmployeeLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  loanId        Int
+  amountPaid    Float
+  paymentDate   DateTime     @default(now())
+  paymentMethod String       @default("POTONG_GAJI") // "POTONG_GAJI", "TUNAI", "TRANSFER"
+  notes         String?
+  paidBy        String?      // Nama yang memproses
+  createdAt     DateTime     @default(now())
+
+  @@index([loanId])
+}
+

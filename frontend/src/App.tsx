@@ -23,6 +23,7 @@ import SupplierView from './components/SupplierView';
 import PurchaseOrderView from './components/PurchaseOrderView';
 import StaffPWAView from './components/StaffPWAView';
 import WarehouseView from './components/WarehouseView';
+import EmployeeLoanView from './components/EmployeeLoanView';
 import { POSProvider, POSContext } from './context/POSContext';
 
 
@@ -75,6 +76,7 @@ const AppRoutes = () => {
         <Route path="/kas" element={<CashFlowView />} />
         <Route path="/karyawan" element={<UserView />} />
         <Route path="/absensi" element={<AttendanceView />} />
+        <Route path="/kasbon" element={<EmployeeLoanView />} />
         <Route path="/riwayat" element={<TransactionHistoryView />} />
         <Route path="/shift" element={<ShiftHistoryView />} />
         <Route path="/laporan" element={<ReportView />} />

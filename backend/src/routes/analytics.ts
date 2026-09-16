@@ -1879,20 +1879,40 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
       iterDate.setUTCDate(iterDate.getUTCDate() + 1);
     }
 
-    const employeeSummaries = Object.values(employeeSummaryMap).map(s => ({
-      userId: s.user.id,
-      name: s.user.name,
-      username: s.user.username,
-      role: s.user.role,
-      employmentType: s.user.employmentType,
-      totalBonus: s.totalBonus,
-      presentCount: s.presentCount,
-      lateCount: s.lateCount,
-      offCount: s.offCount,
-      leaveCount: s.leaveCount,
-      alphaCount: s.alphaCount,
-      dwCount: s.dwCount
-    }));
+    // 5. Fetch active employee loans
+    const activeLoans = await prisma.employeeLoan.findMany({
+      where: {
+        status: 'Belum Lunas'
+      },
+      include: {
+        payments: true
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    const employeeSummaries = Object.values(employeeSummaryMap).map(s => {
+      const userLoans = activeLoans.filter(l => l.userId === s.user.id);
+      const kasbonOutstanding = userLoans.reduce((sum, l) => sum + (l.remaining || 0), 0);
+
+      return {
+        userId: s.user.id,
+        name: s.user.name,
+        username: s.user.username,
+        role: s.user.role,
+        employmentType: s.user.employmentType,
+        totalBonus: s.totalBonus,
+        presentCount: s.presentCount,
+        lateCount: s.lateCount,
+        offCount: s.offCount,
+        leaveCount: s.leaveCount,
+        alphaCount: s.alphaCount,
+        dwCount: s.dwCount,
+        kasbonOutstanding,
+        activeLoans: userLoans
+      };
+    });
+
+    const totalKasbonOutstandingAll = activeLoans.reduce((sum, l) => sum + (l.remaining || 0), 0);
 
     res.json({
       period: { startDate: sStr, endDate: eStr, totalDays: days.length },
@@ -1901,7 +1921,8 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
       employees: users,
       days,
       employeeSummaries,
-      totalBonusAll: totalBonusAllEmployees
+      totalBonusAll: totalBonusAllEmployees,
+      totalKasbonOutstandingAll
     });
 
   } catch (error) {
