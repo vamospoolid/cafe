@@ -11,10 +11,8 @@ import CustomerModal from './CustomerModal';
 import ReceiptPrinter from './ReceiptPrinter';
 import SplitPrintModal from './SplitPrintModal';
 import { 
-  isNativeMobile, 
-  connectBluetoothPrinter, 
-  printBluetoothReceipt, 
-  disconnectBluetoothPrinter 
+  getSavedBluetoothPrinter,
+  printBluetoothReceipt 
 } from '../utils/printerBluetooth';
 
 interface CheckoutModalProps {
@@ -101,9 +99,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const quickAmounts = getSmartPresets(finalTotal);
 
   const handleDirectPrint = async (id: number) => {
-    const isHighPrecision = localStorage.getItem('high_precision_mode') === 'true';
-    if (isHighPrecision && isNativeMobile() && localStorage.getItem('bluetooth_printer_mac')) {
-      const macAddress = localStorage.getItem('bluetooth_printer_mac')!;
+    const savedBt = getSavedBluetoothPrinter();
+    if (savedBt) {
       setPrintLoading(true);
       try {
         const orderRes = await fetch(`/api/orders/${id}`, {
@@ -112,13 +109,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         if (!orderRes.ok) throw new Error('Gagal mengambil detail order untuk cetak Bluetooth');
         const orderData = await orderRes.json();
         
-        await connectBluetoothPrinter(macAddress);
         await printBluetoothReceipt(orderData, {
           name: posContext?.settings?.storeName || 'MUKI RAMEN',
-          address: posContext?.settings?.address || 'Jl. Kopi No.1',
-          footer: posContext?.settings?.receiptFooter || 'Terima kasih!'
+          address: posContext?.settings?.address || '',
+          phone: posContext?.settings?.phone || '',
+          footer: posContext?.settings?.receiptFooter || 'Terima kasih atas kunjungan Anda!'
         });
-        await disconnectBluetoothPrinter();
         toast('Struk berhasil dicetak via Bluetooth!', 'success');
       } catch (err: any) {
         toast(err.message || 'Gagal cetak via Bluetooth', 'error');
