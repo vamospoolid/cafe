@@ -38,6 +38,60 @@ function getPastDays(days: number, tzOffsetMinutes: number | string = -420) {
   return result;
 }
 
+// Helper to classify food vs drink vs lainnya
+export function getCategoryGroup(prod: any): 'makanan' | 'minuman' | 'lainnya' {
+  const target = (prod?.category?.printerTarget || '').toUpperCase();
+  const cat = (prod?.category?.name || '').toLowerCase();
+  const name = (prod?.name || '').toLowerCase();
+  if (target === 'BAR') return 'minuman';
+  if (target === 'KITCHEN') return 'makanan';
+  if (
+    cat.includes('minum') || cat.includes('drink') || cat.includes('beverage') ||
+    cat.includes('bevvies') || cat.includes('kopi') || cat.includes('coffee') ||
+    cat.includes('tea') || cat.includes('teh') || cat.includes('jus') ||
+    cat.includes('juice') || cat.includes('boba') || cat.includes('latte') ||
+    cat.includes('mocktail') || cat.includes('float') || cat.includes('es ')
+  ) return 'minuman';
+  if (
+    cat.includes('makan') || cat.includes('food') || cat.includes('ramen') ||
+    cat.includes('mie') || cat.includes('nasi') || cat.includes('salties') ||
+    cat.includes('rice') || cat.includes('soup') || cat.includes('snack') ||
+    cat.includes('dimsum') || cat.includes('bento') || cat.includes('dessert') ||
+    cat.includes('pastry') || cat.includes('sweeties') || cat.includes('roti')
+  ) return 'makanan';
+  if (
+    name.includes('kopi') || name.includes('coffee') || name.includes('tea') ||
+    name.includes('teh') || name.includes('jus') || name.includes('juice') ||
+    name.includes('latte') || name.includes('espresso') || name.includes('susu') ||
+    name.includes('ice') || name.includes('es ') || name.includes('drink')
+  ) return 'minuman';
+  return 'makanan';
+}
+
+// Helper to classify petty cash / expenses for profit sharing division
+export function getExpenseDivision(cf: { category?: string; description?: string }): 'food' | 'drink' | 'shared_opex' {
+  const text = `${cf.category || ''} ${cf.description || ''}`.toLowerCase();
+  if (
+    text.includes('ramen') || text.includes('mie') || text.includes('dapur') ||
+    text.includes('food') || text.includes('chashu') || text.includes('kuah') ||
+    text.includes('nori') || text.includes('bumbu') || text.includes('ayam') ||
+    text.includes('daging') || text.includes('bawang') || text.includes('shoyu') ||
+    text.includes('naruto') || text.includes('makanan')
+  ) {
+    return 'food';
+  }
+  if (
+    text.includes('minum') || text.includes('drink') || text.includes('bar') ||
+    text.includes('kopi') || text.includes('coffee') || text.includes('susu') ||
+    text.includes('syrup') || text.includes('sirup') || text.includes('teh') ||
+    text.includes('tea') || text.includes('es batu') || text.includes('boba') ||
+    text.includes('yakult') || text.includes('matcha')
+  ) {
+    return 'drink';
+  }
+  return 'shared_opex';
+}
+
 router.get('/sales-chart', authenticateToken, async (req: Request, res: Response) => {
   try {
     const days = Number(req.query.days) || 7;
@@ -344,36 +398,6 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     let periodTakeaway = 0;
     let periodQrisTotal = 0;
     let periodQrisCount = 0;
-
-    // Helper classifier for Food vs Drink
-    const getCategoryGroup = (prod: any): 'makanan' | 'minuman' | 'lainnya' => {
-      const target = (prod?.category?.printerTarget || '').toUpperCase();
-      const cat = (prod?.category?.name || '').toLowerCase();
-      const name = (prod?.name || '').toLowerCase();
-      if (target === 'BAR') return 'minuman';
-      if (target === 'KITCHEN') return 'makanan';
-      if (
-        cat.includes('minum') || cat.includes('drink') || cat.includes('beverage') ||
-        cat.includes('bevvies') || cat.includes('kopi') || cat.includes('coffee') ||
-        cat.includes('tea') || cat.includes('teh') || cat.includes('jus') ||
-        cat.includes('juice') || cat.includes('boba') || cat.includes('latte') ||
-        cat.includes('mocktail') || cat.includes('float') || cat.includes('es ')
-      ) return 'minuman';
-      if (
-        cat.includes('makan') || cat.includes('food') || cat.includes('ramen') ||
-        cat.includes('mie') || cat.includes('nasi') || cat.includes('salties') ||
-        cat.includes('rice') || cat.includes('soup') || cat.includes('snack') ||
-        cat.includes('dimsum') || cat.includes('bento') || cat.includes('dessert') ||
-        cat.includes('pastry') || cat.includes('sweeties') || cat.includes('roti')
-      ) return 'makanan';
-      if (
-        name.includes('kopi') || name.includes('coffee') || name.includes('tea') ||
-        name.includes('teh') || name.includes('jus') || name.includes('juice') ||
-        name.includes('latte') || name.includes('espresso') || name.includes('susu') ||
-        name.includes('ice') || name.includes('es ') || name.includes('drink')
-      ) return 'minuman';
-      return 'makanan';
-    };
 
     // Food vs Drink tracking objects
     const foodStats = { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 };
@@ -1177,6 +1201,579 @@ router.get('/product-details', authenticateToken, async (req: Request, res: Resp
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Gagal memuat laporan detail barang jadi' });
+  }
+});
+
+// GET Laporan Bagi Hasil (Profit Sharing 80:20 / Custom)
+router.get('/profit-sharing', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, tzOffset } = req.query;
+
+    const todayStr = getTodayDateStr(tzOffset as string || -420);
+    const sStr = (startDate as string) || todayStr;
+    const eStr = (endDate as string) || sStr;
+    const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
+
+    // 1. Fetch settings
+    const settings = await prisma.settings.findFirst();
+    const ownerPct = settings?.profitSharingOwnerPercent ?? 80;
+    const ramenPct = settings?.profitSharingRamenPercent ?? 20;
+    const drinkPct = settings?.profitSharingDrinkPercent ?? 20;
+    const opexMode = settings?.profitSharingOpexMode ?? 'BEFORE_SPLIT'; // 'BEFORE_SPLIT', 'OWNER_COVERED', 'SPLIT_50_50'
+
+    // 2. Fetch Orders in range
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { not: 'Void' },
+        createdAt: { gte: start, lte: end }
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: { category: true }
+            }
+          }
+        }
+      }
+    });
+
+    // 3. Fetch CashFlows (Expenses) in range
+    const cashFlows = await prisma.cashFlow.findMany({
+      where: {
+        date: { gte: start, lte: end }
+      }
+    });
+
+    // Division sales aggregation
+    let foodRevenue = 0;
+    let foodHpp = 0;
+    let foodQty = 0;
+
+    let drinkRevenue = 0;
+    let drinkHpp = 0;
+    let drinkQty = 0;
+
+    let otherRevenue = 0;
+    let otherHpp = 0;
+    let otherQty = 0;
+
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        const buyPrice = item.buyPrice || item.product?.buyPrice || 0;
+        const itemCost = buyPrice * item.qty;
+        const grp = getCategoryGroup(item.product);
+
+        if (grp === 'makanan') {
+          foodRevenue += item.subtotal;
+          foodHpp += itemCost;
+          foodQty += item.qty;
+        } else if (grp === 'minuman') {
+          drinkRevenue += item.subtotal;
+          drinkHpp += itemCost;
+          drinkQty += item.qty;
+        } else {
+          otherRevenue += item.subtotal;
+          otherHpp += itemCost;
+          otherQty += item.qty;
+        }
+      });
+    });
+
+    const totalGrossRevenue = foodRevenue + drinkRevenue + otherRevenue;
+
+    // Categorize Expenses from CashFlow
+    let foodDirectExpense = 0;
+    let drinkDirectExpense = 0;
+    let sharedOpex = 0;
+    const expenseList: any[] = [];
+
+    cashFlows.forEach(cf => {
+      if (cf.type === 'Pengeluaran') {
+        const division = getExpenseDivision(cf);
+        if (division === 'food') {
+          foodDirectExpense += cf.amount;
+        } else if (division === 'drink') {
+          drinkDirectExpense += cf.amount;
+        } else {
+          sharedOpex += cf.amount;
+        }
+        expenseList.push({
+          id: cf.id,
+          date: cf.date,
+          category: cf.category,
+          description: cf.description,
+          amount: cf.amount,
+          division
+        });
+      }
+    });
+
+    // Calculate Division Net Profits based on opexMode
+    const foodTotalExpense = foodDirectExpense > 0 ? foodDirectExpense : foodHpp;
+    const drinkTotalExpense = drinkDirectExpense > 0 ? drinkDirectExpense : drinkHpp;
+
+    const foodGrossProfit = foodRevenue - foodTotalExpense;
+    const drinkGrossProfit = drinkRevenue - drinkTotalExpense;
+
+    let foodSharedOpexPortion = 0;
+    let drinkSharedOpexPortion = 0;
+    let ownerSharedOpexPortion = 0;
+
+    let foodNetProfit = foodGrossProfit;
+    let drinkNetProfit = drinkGrossProfit;
+
+    let ownerFoodShare = 0;
+    let pjFoodShare = 0;
+    let ownerDrinkShare = 0;
+    let pjDrinkShare = 0;
+
+    if (opexMode === 'BEFORE_SPLIT') {
+      const totalDivRevenue = (foodRevenue + drinkRevenue) || 1;
+      foodSharedOpexPortion = sharedOpex * (foodRevenue / totalDivRevenue);
+      drinkSharedOpexPortion = sharedOpex * (drinkRevenue / totalDivRevenue);
+
+      const foodNetAfterOpex = foodGrossProfit - foodSharedOpexPortion;
+      const drinkNetAfterOpex = drinkGrossProfit - drinkSharedOpexPortion;
+
+      foodNetProfit = foodNetAfterOpex;
+      drinkNetProfit = drinkNetAfterOpex;
+
+      ownerFoodShare = foodNetAfterOpex * (ownerPct / 100);
+      pjFoodShare = foodNetAfterOpex * (ramenPct / 100);
+
+      ownerDrinkShare = drinkNetAfterOpex * (ownerPct / 100);
+      pjDrinkShare = drinkNetAfterOpex * (drinkPct / 100);
+    } else if (opexMode === 'OWNER_COVERED') {
+      ownerSharedOpexPortion = sharedOpex;
+
+      pjFoodShare = foodGrossProfit * (ramenPct / 100);
+      const rawOwnerFood = foodGrossProfit * (ownerPct / 100);
+
+      pjDrinkShare = drinkGrossProfit * (drinkPct / 100);
+      const rawOwnerDrink = drinkGrossProfit * (ownerPct / 100);
+
+      ownerFoodShare = rawOwnerFood - (sharedOpex * (foodRevenue / ((foodRevenue + drinkRevenue) || 1)));
+      ownerDrinkShare = rawOwnerDrink - (sharedOpex * (drinkRevenue / ((foodRevenue + drinkRevenue) || 1)));
+    } else {
+      // SPLIT_50_50
+      ownerSharedOpexPortion = sharedOpex * 0.5;
+      foodSharedOpexPortion = sharedOpex * 0.25;
+      drinkSharedOpexPortion = sharedOpex * 0.25;
+
+      pjFoodShare = (foodGrossProfit * (ramenPct / 100)) - foodSharedOpexPortion;
+      pjDrinkShare = (drinkGrossProfit * (drinkPct / 100)) - drinkSharedOpexPortion;
+
+      ownerFoodShare = (foodGrossProfit * (ownerPct / 100)) - (sharedOpex * 0.25);
+      ownerDrinkShare = (drinkGrossProfit * (ownerPct / 100)) - (sharedOpex * 0.25);
+    }
+
+    const totalOwnerProfit = ownerFoodShare + ownerDrinkShare;
+    const totalPjRamenProfit = pjFoodShare;
+    const totalPjDrinkProfit = pjDrinkShare;
+    const totalNetProfit = totalOwnerProfit + totalPjRamenProfit + totalPjDrinkProfit;
+
+    // Daily breakdown for profit sharing table/chart
+    const dailyBreakdown: any[] = [];
+    const [sy, sm, sd] = sStr.split('-').map(Number);
+    const [ey, em, ed] = eStr.split('-').map(Number);
+    const iterDate = new Date(Date.UTC(sy, sm - 1, sd));
+    const endDateObj = new Date(Date.UTC(ey, em - 1, ed));
+
+    while (iterDate <= endDateObj) {
+      const iy = iterDate.getUTCFullYear();
+      const im = String(iterDate.getUTCMonth() + 1).padStart(2, '0');
+      const id = String(iterDate.getUTCDate()).padStart(2, '0');
+      const dayDateStr = `${iy}-${im}-${id}`;
+      const { startUtc: dayStart, endUtc: dayEnd } = getLocalDateRange(dayDateStr, tzOffset as string || -420);
+
+      const dayOrders = orders.filter(o => o.createdAt >= dayStart && o.createdAt <= dayEnd);
+      const dayCashFlows = cashFlows.filter(cf => cf.date >= dayStart && cf.date <= dayEnd && cf.type === 'Pengeluaran');
+
+      let dFoodRev = 0;
+      let dFoodHpp = 0;
+      let dDrinkRev = 0;
+      let dDrinkHpp = 0;
+
+      dayOrders.forEach(o => {
+        o.items.forEach(item => {
+          const buyPrice = item.buyPrice || item.product?.buyPrice || 0;
+          const cost = buyPrice * item.qty;
+          const grp = getCategoryGroup(item.product);
+          if (grp === 'makanan') {
+            dFoodRev += item.subtotal;
+            dFoodHpp += cost;
+          } else if (grp === 'minuman') {
+            dDrinkRev += item.subtotal;
+            dDrinkHpp += cost;
+          }
+        });
+      });
+
+      let dFoodExp = 0;
+      let dDrinkExp = 0;
+      let dSharedOpex = 0;
+
+      dayCashFlows.forEach(cf => {
+        const div = getExpenseDivision(cf);
+        if (div === 'food') dFoodExp += cf.amount;
+        else if (div === 'drink') dDrinkExp += cf.amount;
+        else dSharedOpex += cf.amount;
+      });
+
+      const dFoodCost = dFoodExp > 0 ? dFoodExp : dFoodHpp;
+      const dDrinkCost = dDrinkExp > 0 ? dDrinkExp : dDrinkHpp;
+      const dFoodNet = dFoodRev - dFoodCost;
+      const dDrinkNet = dDrinkRev - dDrinkCost;
+
+      dailyBreakdown.push({
+        date: dayDateStr,
+        dateLabel: iterDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', timeZone: 'UTC' }),
+        dayName: iterDate.toLocaleDateString('id-ID', { weekday: 'long', timeZone: 'UTC' }),
+        foodRevenue: dFoodRev,
+        foodExpense: dFoodCost,
+        foodNet: dFoodNet,
+        foodPjShare: dFoodNet * (ramenPct / 100),
+        drinkRevenue: dDrinkRev,
+        drinkExpense: dDrinkCost,
+        drinkNet: dDrinkNet,
+        drinkPjShare: dDrinkNet * (drinkPct / 100),
+        sharedOpex: dSharedOpex,
+        totalOmzet: dFoodRev + dDrinkRev,
+        ownerShareTotal: (dFoodNet * (ownerPct / 100)) + (dDrinkNet * (ownerPct / 100)) - (opexMode === 'OWNER_COVERED' ? dSharedOpex : 0)
+      });
+
+      iterDate.setUTCDate(iterDate.getUTCDate() + 1);
+    }
+
+    res.json({
+      period: { startDate: sStr, endDate: eStr },
+      config: {
+        ownerPct,
+        ramenPct,
+        drinkPct,
+        opexMode
+      },
+      foodDivision: {
+        name: 'MUKI RAMEN (Food & Kitchen)',
+        revenue: foodRevenue,
+        hpp: foodHpp,
+        directExpense: foodDirectExpense,
+        totalExpense: foodTotalExpense,
+        grossProfit: foodGrossProfit,
+        sharedOpexPortion: foodSharedOpexPortion,
+        netProfit: foodNetProfit,
+        ownerShare: ownerFoodShare,
+        pjShare: pjFoodShare,
+        qtySold: foodQty,
+        percentage: totalGrossRevenue > 0 ? Math.round((foodRevenue / totalGrossRevenue) * 100) : 0
+      },
+      drinkDivision: {
+        name: 'MUKI DRINK (Beverage & Bar)',
+        revenue: drinkRevenue,
+        hpp: drinkHpp,
+        directExpense: drinkDirectExpense,
+        totalExpense: drinkTotalExpense,
+        grossProfit: drinkGrossProfit,
+        sharedOpexPortion: drinkSharedOpexPortion,
+        netProfit: drinkNetProfit,
+        ownerShare: ownerDrinkShare,
+        pjShare: pjDrinkShare,
+        qtySold: drinkQty,
+        percentage: totalGrossRevenue > 0 ? Math.round((drinkRevenue / totalGrossRevenue) * 100) : 0
+      },
+      sharedOpex: {
+        total: sharedOpex,
+        ownerPortion: ownerSharedOpexPortion,
+        foodPortion: foodSharedOpexPortion,
+        drinkPortion: drinkSharedOpexPortion,
+        items: expenseList
+      },
+      summary: {
+        totalRevenue: totalGrossRevenue,
+        totalDirectExpense: foodTotalExpense + drinkTotalExpense,
+        totalSharedOpex: sharedOpex,
+        totalExpense: foodTotalExpense + drinkTotalExpense + sharedOpex,
+        totalNetProfit,
+        ownerShare: totalOwnerProfit,
+        pjRamenShare: totalPjRamenProfit,
+        pjDrinkShare: totalPjDrinkProfit
+      },
+      dailyBreakdown
+    });
+
+  } catch (error) {
+    console.error('Profit sharing report error:', error);
+    res.status(500).json({ error: 'Gagal memuat laporan bagi hasil' });
+  }
+});
+
+// GET Matrix Bonus Harian Omzet Karyawan & Rekap Absensi
+router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, tzOffset } = req.query;
+
+    const todayStr = getTodayDateStr(tzOffset as string || -420);
+    const sStr = (startDate as string) || todayStr;
+    const eStr = (endDate as string) || sStr;
+    const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
+
+    // 1. Fetch settings & bonus tiers
+    const settings = await prisma.settings.findFirst();
+    const enableDailyOmzetBonus = settings?.enableDailyOmzetBonus ?? true;
+    
+    let tiers: Array<{ minOmzet: number; bonus: number; label?: string }> = [
+      { minOmzet: 6000000, bonus: 25000, label: 'Tier >= 6.0 Juta' },
+      { minOmzet: 5000000, bonus: 20000, label: 'Tier >= 5.0 Juta' },
+      { minOmzet: 4000000, bonus: 15000, label: 'Tier >= 4.0 Juta' },
+      { minOmzet: 3000000, bonus: 10000, label: 'Tier >= 3.0 Juta' },
+      { minOmzet: 2500000, bonus: 5000,  label: 'Tier >= 2.5 Juta' }
+    ];
+
+    if (settings?.dailyOmzetTiers) {
+      try {
+        const parsed = JSON.parse(settings.dailyOmzetTiers);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          tiers = parsed;
+        }
+      } catch (e) {
+        console.error('Error parsing dailyOmzetTiers:', e);
+      }
+    }
+
+    // Sort tiers descending by minOmzet
+    tiers.sort((a, b) => Number(b.minOmzet) - Number(a.minOmzet));
+
+    // 2. Fetch all active employees
+    const users = await prisma.user.findMany({
+      where: { status: { not: 'Nonaktif' } },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        employmentType: true,
+        status: true
+      },
+      orderBy: [
+        { employmentType: 'asc' },
+        { role: 'asc' },
+        { name: 'asc' }
+      ]
+    });
+
+    // 3. Fetch orders and attendances in date range
+    const orders = await prisma.order.findMany({
+      where: {
+        status: { not: 'Void' },
+        createdAt: { gte: start, lte: end }
+      },
+      select: {
+        id: true,
+        total: true,
+        createdAt: true
+      }
+    });
+
+    const attendances = await prisma.attendance.findMany({
+      where: {
+        date: { gte: sStr, lte: eStr }
+      }
+    });
+
+    // 4. Generate Daily Matrix
+    const days: any[] = [];
+    const employeeSummaryMap: Record<number, {
+      user: any;
+      totalBonus: number;
+      presentCount: number;
+      lateCount: number;
+      offCount: number;
+      leaveCount: number;
+      alphaCount: number;
+      dwCount: number;
+    }> = {};
+
+    users.forEach(u => {
+      employeeSummaryMap[u.id] = {
+        user: u,
+        totalBonus: 0,
+        presentCount: 0,
+        lateCount: 0,
+        offCount: 0,
+        leaveCount: 0,
+        alphaCount: 0,
+        dwCount: 0
+      };
+    });
+
+    const [sy, sm, sd] = sStr.split('-').map(Number);
+    const [ey, em, ed] = eStr.split('-').map(Number);
+    const iterDate = new Date(Date.UTC(sy, sm - 1, sd));
+    const endDateObj = new Date(Date.UTC(ey, em - 1, ed));
+
+    let totalBonusAllEmployees = 0;
+
+    while (iterDate <= endDateObj) {
+      const iy = iterDate.getUTCFullYear();
+      const im = String(iterDate.getUTCMonth() + 1).padStart(2, '0');
+      const id = String(iterDate.getUTCDate()).padStart(2, '0');
+      const dayDateStr = `${iy}-${im}-${id}`;
+      const { startUtc: dayStart, endUtc: dayEnd } = getLocalDateRange(dayDateStr, tzOffset as string || -420);
+
+      // Orders for this day
+      const dayOrders = orders.filter(o => o.createdAt >= dayStart && o.createdAt <= dayEnd);
+      const grossOmzet = dayOrders.reduce((sum, o) => sum + o.total, 0);
+
+      // Match tier
+      let matchedTier = null;
+      let tierBonus = 0;
+      if (enableDailyOmzetBonus) {
+        for (const t of tiers) {
+          if (grossOmzet >= Number(t.minOmzet)) {
+            matchedTier = t;
+            tierBonus = Number(t.bonus);
+            break;
+          }
+        }
+      }
+
+      // Attendances for this day
+      const dayAttendances = attendances.filter(a => a.date === dayDateStr);
+      const employeeAttendanceRecord: Record<number, {
+        status: string;
+        bonus: number;
+        clockIn?: string;
+        clockOut?: string;
+        lateMinutes?: number;
+        displayBadge: string;
+      }> = {};
+
+      users.forEach(u => {
+        const att = dayAttendances.find(a => a.userId === u.id);
+        const empType = u.employmentType || 'FULL_TIME';
+        const summary = employeeSummaryMap[u.id];
+
+        let status = 'LIBUR';
+        let bonus = 0;
+        let displayBadge = 'LIBUR';
+
+        if (att) {
+          const rawStatus = (att.status || '').toUpperCase();
+          if (rawStatus === 'HADIR' || rawStatus === 'PRESENT') {
+            if (empType === 'FULL_TIME') {
+              status = 'HADIR';
+              bonus = tierBonus;
+              displayBadge = bonus > 0 ? `+${bonus.toLocaleString('id-ID')}` : 'HADIR';
+              summary.presentCount++;
+              summary.totalBonus += bonus;
+              totalBonusAllEmployees += bonus;
+            } else if (empType === 'DAILY_WORKER') {
+              status = 'DW';
+              bonus = 0;
+              displayBadge = 'DW';
+              summary.dwCount++;
+            } else {
+              status = 'HADIR';
+              bonus = 0;
+              displayBadge = 'HADIR';
+              summary.presentCount++;
+            }
+          } else if (rawStatus === 'TERLAMBAT' || rawStatus === 'LATE') {
+            if (empType === 'FULL_TIME') {
+              status = 'TERLAMBAT';
+              bonus = tierBonus;
+              displayBadge = bonus > 0 ? `+${bonus.toLocaleString('id-ID')}` : 'TELAT';
+              summary.lateCount++;
+              summary.presentCount++;
+              summary.totalBonus += bonus;
+              totalBonusAllEmployees += bonus;
+            } else if (empType === 'DAILY_WORKER') {
+              status = 'DW';
+              bonus = 0;
+              displayBadge = 'DW';
+              summary.dwCount++;
+            } else {
+              status = 'TERLAMBAT';
+              bonus = 0;
+              displayBadge = 'TELAT';
+              summary.lateCount++;
+              summary.presentCount++;
+            }
+          } else if (rawStatus === 'IZIN' || rawStatus === 'LEAVE') {
+            status = 'IZIN';
+            displayBadge = 'IZIN';
+            summary.leaveCount++;
+          } else if (rawStatus === 'SAKIT' || rawStatus === 'SICK') {
+            status = 'SAKIT';
+            displayBadge = 'SAKIT';
+            summary.leaveCount++;
+          } else if (rawStatus === 'CUTI') {
+            status = 'CUTI';
+            displayBadge = 'CUTI';
+            summary.leaveCount++;
+          } else {
+            status = 'LIBUR';
+            displayBadge = 'LIBUR';
+            summary.offCount++;
+          }
+        } else {
+          status = 'LIBUR';
+          displayBadge = 'LIBUR';
+          summary.offCount++;
+        }
+
+        employeeAttendanceRecord[u.id] = {
+          status,
+          bonus,
+          clockIn: att?.clockIn ? att.clockIn.toISOString() : undefined,
+          clockOut: att?.clockOut ? att.clockOut.toISOString() : undefined,
+          lateMinutes: att?.lateMinutes || 0,
+          displayBadge
+        };
+      });
+
+      days.push({
+        date: dayDateStr,
+        dayName: iterDate.toLocaleDateString('id-ID', { weekday: 'long', timeZone: 'UTC' }),
+        dateLabel: iterDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', timeZone: 'UTC' }),
+        grossOmzet,
+        matchedTier,
+        tierBonus,
+        employeeAttendance: employeeAttendanceRecord
+      });
+
+      iterDate.setUTCDate(iterDate.getUTCDate() + 1);
+    }
+
+    const employeeSummaries = Object.values(employeeSummaryMap).map(s => ({
+      userId: s.user.id,
+      name: s.user.name,
+      username: s.user.username,
+      role: s.user.role,
+      employmentType: s.user.employmentType,
+      totalBonus: s.totalBonus,
+      presentCount: s.presentCount,
+      lateCount: s.lateCount,
+      offCount: s.offCount,
+      leaveCount: s.leaveCount,
+      alphaCount: s.alphaCount,
+      dwCount: s.dwCount
+    }));
+
+    res.json({
+      period: { startDate: sStr, endDate: eStr, totalDays: days.length },
+      enableDailyOmzetBonus,
+      tiers,
+      employees: users,
+      days,
+      employeeSummaries,
+      totalBonusAll: totalBonusAllEmployees
+    });
+
+  } catch (error) {
+    console.error('Daily omzet bonus report error:', error);
+    res.status(500).json({ error: 'Gagal memuat laporan bonus harian omzet' });
   }
 });
 

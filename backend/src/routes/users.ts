@@ -27,6 +27,7 @@ router.get('/me', authenticateToken, async (req: Request, res: Response) => {
         name: true,
         username: true,
         role: true,
+        employmentType: true,
         pin: true,
         status: true,
         permissions: true,
@@ -89,7 +90,7 @@ router.put('/me/security', authenticateToken, async (req: Request, res: Response
     const updated = await prisma.user.update({
       where: { id: userId },
       data: updateData,
-      select: { id: true, name: true, username: true, role: true, pin: true }
+      select: { id: true, name: true, username: true, role: true, employmentType: true, pin: true }
     });
 
     res.json({ message: 'Keamanan akun berhasil diperbarui', user: updated });
@@ -113,7 +114,7 @@ router.put('/me/profile', authenticateToken, async (req: Request, res: Response)
     const updated = await prisma.user.update({
       where: { id: userId },
       data: { name: name.trim() },
-      select: { id: true, name: true, username: true, role: true, pin: true }
+      select: { id: true, name: true, username: true, role: true, employmentType: true, pin: true }
     });
 
     res.json({ message: 'Profil berhasil diperbarui', user: updated });
@@ -132,6 +133,7 @@ router.get('/', authenticateToken, isAdmin, async (req: Request, res: Response) 
         name: true,
         username: true,
         role: true,
+        employmentType: true,
         permissions: true,
         status: true,
         createdAt: true,
@@ -152,7 +154,7 @@ router.get('/', authenticateToken, isAdmin, async (req: Request, res: Response) 
 // POST Create new user
 router.post('/', authenticateToken, isAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, username, password, pin, role, permissions, status } = req.body;
+    const { name, username, password, pin, role, employmentType, permissions, status } = req.body;
 
     const existingUser = await prisma.user.findUnique({ where: { username } });
     if (existingUser) return res.status(400).json({ error: 'Username sudah digunakan' });
@@ -166,10 +168,11 @@ router.post('/', authenticateToken, isAdmin, async (req: Request, res: Response)
         passwordHash,
         pin: pin || '123456',
         role,
+        employmentType: employmentType || 'FULL_TIME',
         permissions: JSON.stringify(permissions),
         status: status || 'Aktif',
       },
-      select: { id: true, name: true, username: true, role: true }
+      select: { id: true, name: true, username: true, role: true, employmentType: true }
     });
 
     res.status(201).json(newUser);
@@ -183,7 +186,7 @@ router.post('/', authenticateToken, isAdmin, async (req: Request, res: Response)
 router.put('/:id', authenticateToken, isAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, username, password, pin, role, permissions, status } = req.body;
+    const { name, username, password, pin, role, employmentType, permissions, status } = req.body;
 
     // Check if trying to edit superadmin
     const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
@@ -201,6 +204,10 @@ router.put('/:id', authenticateToken, isAdmin, async (req: Request, res: Respons
       status
     };
 
+    if (employmentType !== undefined) {
+      updateData.employmentType = employmentType;
+    }
+
     if (password) {
       updateData.passwordHash = await bcrypt.hash(password, 10);
     }
@@ -211,7 +218,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req: Request, res: Respons
     const updatedUser = await prisma.user.update({
       where: { id: Number(id) },
       data: updateData,
-      select: { id: true, name: true, username: true, role: true }
+      select: { id: true, name: true, username: true, role: true, employmentType: true }
     });
 
     res.json(updatedUser);

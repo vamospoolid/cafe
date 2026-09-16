@@ -20,6 +20,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
     password: '',
     pin: '',
     role: 'Kasir',
+    employmentType: 'FULL_TIME',
     status: 'Aktif',
     permissions: {
       canVoid: false,
@@ -37,6 +38,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
         password: '', 
         pin: '', 
         role: initialData.role,
+        employmentType: initialData.employmentType || 'FULL_TIME',
         status: initialData.status,
         permissions: initialData.permissions || {
           canVoid: false,
@@ -52,6 +54,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
         password: '',
         pin: '',
         role: 'Kasir',
+        employmentType: 'FULL_TIME',
         status: 'Aktif',
         permissions: { canVoid: false, canDiscount: false, canEditMenu: false, canViewReports: false }
       });
@@ -128,7 +131,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 {initialData ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium">
-                Atur akun staf, PIN absensi, dan batasan hak akses fitur
+                Atur akun staf, tipe kerja, PIN absensi, dan batasan hak akses
               </p>
             </div>
           </div>
@@ -174,9 +177,9 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role / Peran Utama</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role / Jabatan</label>
                 <select name="role" className="form-control" value={formData.role} onChange={handleChange}>
                   <option value="Kasir">Kasir</option>
                   <option value="Dapur">Dapur (KDS)</option>
@@ -185,7 +188,15 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Status Karyawan</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Tipe Kepegawaian</label>
+                <select name="employmentType" className="form-control font-bold text-slate-800" value={formData.employmentType} onChange={handleChange}>
+                  <option value="FULL_TIME">Full Time (Ikut Bonus Omzet)</option>
+                  <option value="DAILY_WORKER">Daily Worker (DW)</option>
+                  <option value="PART_TIME">Part Time</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Status Akun</label>
                 <select name="status" className="form-control" value={formData.status} onChange={handleChange}>
                   <option value="Aktif">Aktif Bekerja</option>
                   <option value="Nonaktif">Nonaktif / Resign</option>

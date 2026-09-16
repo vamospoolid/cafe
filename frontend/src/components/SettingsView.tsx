@@ -196,7 +196,24 @@ const SettingsView = () => {
     latePenaltyAmount: 10000,
     enableAlphaPenalty: false,
     alphaPenaltyAmount: 50000,
+    // Sistem Bagi Hasil (Profit Sharing)
+    profitSharingOwnerPercent: 80,
+    profitSharingRamenPercent: 20,
+    profitSharingDrinkPercent: 20,
+    profitSharingOpexMode: 'BEFORE_SPLIT',
+    // Bonus Harian Omzet Karyawan
+    enableDailyOmzetBonus: true,
+    dailyOmzetTiers: '',
   });
+
+  const [dailyTiersList, setDailyTiersList] = useState<Array<{ minOmzet: number; bonus: number; label?: string }>>([
+    { minOmzet: 6000000, bonus: 25000, label: 'Tier >= 6.0 Juta' },
+    { minOmzet: 5000000, bonus: 20000, label: 'Tier >= 5.0 Juta' },
+    { minOmzet: 4000000, bonus: 15000, label: 'Tier >= 4.0 Juta' },
+    { minOmzet: 3000000, bonus: 10000, label: 'Tier >= 3.0 Juta' },
+    { minOmzet: 2500000, bonus: 5000,  label: 'Tier >= 2.5 Juta' }
+  ]);
+  const [newTier, setNewTier] = useState({ minOmzet: 3500000, bonus: 12500, label: '' });
 
   const [shiftsList, setShiftsList] = useState<Array<{ id: string; name: string; start: string; end: string; lateTolerance: number }>>([
     { id: 'pagi', name: 'Shift Pagi', start: '08:00', end: '16:00', lateTolerance: 15 },
@@ -218,8 +235,34 @@ const SettingsView = () => {
           if (Array.isArray(parsed) && parsed.length > 0) setShiftsList(parsed);
         } catch {}
       }
+      if (posContext.settings.dailyOmzetTiers) {
+        try {
+          const parsedTiers = JSON.parse(posContext.settings.dailyOmzetTiers);
+          if (Array.isArray(parsedTiers) && parsedTiers.length > 0) setDailyTiersList(parsedTiers);
+        } catch {}
+      }
     }
   }, [posContext?.settings]);
+
+  const handleAddTier = () => {
+    if (!newTier.minOmzet || Number(newTier.minOmzet) <= 0) return toast('Min omzet harus lebih dari 0', 'warning');
+    if (!newTier.bonus || Number(newTier.bonus) <= 0) return toast('Nominal bonus harus lebih dari 0', 'warning');
+    const label = newTier.label.trim() || `Tier >= Rp ${(Number(newTier.minOmzet) / 1000000).toFixed(1)} Juta`;
+    const updated = [...dailyTiersList, { minOmzet: Number(newTier.minOmzet), bonus: Number(newTier.bonus), label }];
+    updated.sort((a, b) => Number(b.minOmzet) - Number(a.minOmzet));
+    setDailyTiersList(updated);
+    setFormData(prev => ({ ...prev, dailyOmzetTiers: JSON.stringify(updated) }));
+    setNewTier({ minOmzet: 0, bonus: 0, label: '' });
+    toast('Tier bonus baru berhasil ditambahkan!', 'success');
+  };
+
+  const handleDeleteTier = (idx: number) => {
+    if (dailyTiersList.length <= 1) return toast('Minimal harus menyisakan 1 tier omzet', 'warning');
+    const updated = dailyTiersList.filter((_, i) => i !== idx);
+    setDailyTiersList(updated);
+    setFormData(prev => ({ ...prev, dailyOmzetTiers: JSON.stringify(updated) }));
+    toast('Tier berhasil dihapus', 'info');
+  };
 
   const handleGetDeviceCoordinates = () => {
     if (!navigator.geolocation) {
@@ -330,6 +373,7 @@ const SettingsView = () => {
             { id: 'pajak', label: 'Pajak & Service', icon: Percent },
             { id: 'bayar', label: 'Metode Pembayaran', icon: CreditCard },
             { id: 'fitur', label: 'Mode Operasional POS', icon: Settings },
+            { id: 'bagi_hasil', label: 'Bagi Hasil & Bonus', icon: Sliders },
             { id: 'crm', label: 'CRM & Member', icon: Award },
             { id: 'inventaris', label: 'Mode Inventaris', icon: PackageSearch },
             { id: 'printer_bt', label: 'Printer Bluetooth', icon: Printer },
@@ -1869,6 +1913,217 @@ const SettingsView = () => {
             </div>
           )}
 
+          {activeTab === 'bagi_hasil' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
+                  <Sliders size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Sistem Bagi Hasil & Bonus Omzet Karyawan</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Konfigurasi persentase profit sharing divisi Muki Ramen & Muki Drink, serta skema tier reward omzet harian.</p>
+                </div>
+              </div>
+
+              {/* ── BAGIAN 1: SISTEM BAGI HASIL USAHA (PROFIT SHARING) ── */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-orange-200/80 bg-orange-50/30 space-y-6">
+                <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
+                  <ChefHat size={18} className="text-orange-600" />
+                  <span>I. Pembagian Hasil Usaha (Profit Sharing)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Bagian Owner (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        name="profitSharingOwnerPercent"
+                        className="form-control font-bold text-slate-800"
+                        value={formData.profitSharingOwnerPercent ?? 80}
+                        onChange={handleChange}
+                        min={0}
+                        max={100}
+                        placeholder="80"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 80% (Pemilik Modal & Brand)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Bagian PJ Muki Ramen (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        name="profitSharingRamenPercent"
+                        className="form-control font-bold text-slate-800"
+                        value={formData.profitSharingRamenPercent ?? 20}
+                        onChange={handleChange}
+                        min={0}
+                        max={100}
+                        placeholder="20"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 20% dari Laba Bersih Divisi Makanan</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Bagian PJ Muki Drink (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        name="profitSharingDrinkPercent"
+                        className="form-control font-bold text-slate-800"
+                        value={formData.profitSharingDrinkPercent ?? 20}
+                        onChange={handleChange}
+                        min={0}
+                        max={100}
+                        placeholder="20"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 20% dari Laba Bersih Divisi Minuman</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Mode Pembebanan Biaya Bersama (Shared OPEX: Listrik, Air, Gas, Kemasan, Wifi)
+                  </label>
+                  <select
+                    name="profitSharingOpexMode"
+                    className="form-control font-medium text-slate-800 bg-white"
+                    value={formData.profitSharingOpexMode || 'BEFORE_SPLIT'}
+                    onChange={handleChange}
+                  >
+                    <option value="BEFORE_SPLIT">Mode A (Rekomendasi): Dipotong Proporsional dari Omzet Sebelum Bagi Hasil 80:20</option>
+                    <option value="OWNER_COVERED">Mode B: Ditanggung Penuh oleh Owner (PJ Terima Bersih dari Omzet - Belanja Langsung)</option>
+                    <option value="SPLIT_50_50">Mode C: Split Beban (50% Owner : 25% PJ Ramen : 25% PJ Drink)</option>
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                    Biaya operasional kas kecil seperti token listrik, air galon, tabung gas, kresek kemasan & tissue akan dikurangkan secara otomatis berdasarkan opsi di atas.
+                  </p>
+                </div>
+              </div>
+
+              {/* ── BAGIAN 2: SKEMA TIER REWARD BONUS OMZET HARIAN ── */}
+              <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+                  <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                    <Award size={18} className="text-indigo-600" />
+                    <span>II. Skema Reward Bonus Omzet Harian (Karyawan Full-Time)</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                    <input
+                      type="checkbox"
+                      name="enableDailyOmzetBonus"
+                      checked={formData.enableDailyOmzetBonus ?? true}
+                      onChange={handleChange}
+                      className="w-4 h-4 text-indigo-600 rounded"
+                    />
+                    <span>Aktifkan Bonus Omzet Harian</span>
+                  </label>
+                </div>
+
+                {formData.enableDailyOmzetBonus && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Karyawan berstatus <strong>Full Time</strong> yang hadir/terlambat pada hari kerja akan otomatis mendapatkan reward sesuai tier omzet kotor harian yang tercapai. Karyawan <strong>Daily Worker (DW)</strong> dan status <strong>Libur/Izin/Sakit</strong> bernilai Rp 0 bonus.
+                    </p>
+
+                    {/* Form Tambah Tier Baru */}
+                    <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/40 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Target Min. Omzet (Rp)</label>
+                        <input
+                          type="number"
+                          className="form-control text-xs font-bold"
+                          value={newTier.minOmzet || ''}
+                          onChange={(e) => setNewTier({ ...newTier, minOmzet: Number(e.target.value) })}
+                          placeholder="Contoh: 3500000"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Reward Bonus / Orang (Rp)</label>
+                        <input
+                          type="number"
+                          className="form-control text-xs font-bold text-emerald-600"
+                          value={newTier.bonus || ''}
+                          onChange={(e) => setNewTier({ ...newTier, bonus: Number(e.target.value) })}
+                          placeholder="Contoh: 12500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">Label / Keterangan</label>
+                        <input
+                          type="text"
+                          className="form-control text-xs"
+                          value={newTier.label}
+                          onChange={(e) => setNewTier({ ...newTier, label: e.target.value })}
+                          placeholder="Tier >= 3.5 Juta"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddTier}
+                        className="btn btn-primary bg-indigo-600 hover:bg-indigo-700 text-xs font-bold py-2.5 h-[38px] flex items-center justify-center gap-1.5"
+                      >
+                        + Tambah Tier
+                      </button>
+                    </div>
+
+                    {/* Tabel Daftar Tier */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-black tracking-wider">
+                          <tr>
+                            <th className="p-3">Peringkat Tier</th>
+                            <th className="p-3">Minimal Omzet Harian</th>
+                            <th className="p-3">Reward / Karyawan</th>
+                            <th className="p-3">Keterangan</th>
+                            <th className="p-3 text-center">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {dailyTiersList.map((tier, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                              <td className="p-3 font-bold text-slate-700">Tier #{idx + 1}</td>
+                              <td className="p-3 font-mono font-bold text-slate-900">
+                                Rp {(tier.minOmzet || 0).toLocaleString('id-ID')}
+                              </td>
+                              <td className="p-3 font-mono font-bold text-emerald-600">
+                                +Rp {(tier.bonus || 0).toLocaleString('id-ID')}
+                              </td>
+                              <td className="p-3 text-slate-500">{tier.label || `Omzet >= Rp ${(tier.minOmzet/1000000).toFixed(1)} Jt`}</td>
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTier(idx)}
+                                  className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-bold text-[11px] transition-colors"
+                                  title="Hapus Tier"
+                                >
+                                  Hapus
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'koneksi_server' && (
             <div className="space-y-8 animate-fade-in">
               <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
@@ -1885,7 +2140,7 @@ const SettingsView = () => {
           )}
 
           {/* Bottom Save Action for settings tabs */}
-          {['profil', 'struk', 'pajak', 'bayar', 'fitur', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
+          {['profil', 'struk', 'pajak', 'bayar', 'fitur', 'bagi_hasil', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
             <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-end">
               <button 
                 type="button"

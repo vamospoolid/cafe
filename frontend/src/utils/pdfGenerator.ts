@@ -3186,4 +3186,599 @@ export const exportPettyCashPDF = async (
   doc.save(`Laporan_Buku_Kas_${settings?.storeName ? settings.storeName.replace(/\s+/g, '_') : 'MUKI_RAMEN'}_${timestamp}.pdf`);
 };
 
+// ─── 8. EXPORT PROFIT SHARING PDF (LAPORAN BAGI HASIL 80:20) ───────────────────
+
+export const exportProfitSharingPDF = async (
+  data: any,
+  settings: VenueSettings,
+  period: { startDate: string; endDate: string },
+  userName?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {
+      console.warn('Failed to load logo', e);
+    }
+  }
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+
+  const food = data?.foodDivision || {};
+  const drink = data?.drinkDivision || {};
+  const shared = data?.sharedOpex || {};
+  const summary = data?.summary || {};
+  const config = data?.config || {};
+  const daily = data?.dailyBreakdown || [];
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 15, 15);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(234, 88, 12); // Ramen Orange
+      pdfDoc.rect(margin, 10, 4, 16, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(13);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo, Polman, Sulbar', textXOffset, 19.5);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '081298765432'} | Sistem Pembagian Hasil Usaha`, textXOffset, 23.5);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(10.5);
+    pdfDoc.setTextColor(234, 88, 12);
+    pdfDoc.text('LAPORAN BAGI HASIL (PROFIT SHARING)', pageWidth - margin, 15, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Periode: ${formatDateID(period.startDate)} s/d ${formatDateID(period.endDate)}`, pageWidth - margin, 19.5, { align: 'right' });
+    pdfDoc.text(`Dicetak Oleh: ${userName || 'Administrator'} | ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 23.5, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 28, pageWidth - margin, 28);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(`MUKI RAMEN & MUKI DRINK — Dokumen Perhitungan Resmi Bagi Hasil Usaha`, margin, pageHeight - 6);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 6, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  let currentY = 32;
+
+  // 1. Executive KPI Summary Cards
+  const cardW = (pageWidth - margin * 2 - 8) / 3;
+  const cardH = 18;
+
+  // Card 1: Total Omzet
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, currentY, cardW, cardH, 2, 2, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL OMZET GABUNGAN', margin + 4, currentY + 5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text(formatCurrency(summary.totalRevenue || 0), margin + 4, currentY + 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Ramen: ${formatCurrency(food.revenue || 0)} | Drink: ${formatCurrency(drink.revenue || 0)}`, margin + 4, currentY + 16);
+
+  // Card 2: Total Laba Bersih
+  const c2X = margin + cardW + 4;
+  doc.setFillColor(240, 253, 244); // light emerald
+  doc.setDrawColor(187, 247, 208);
+  doc.roundedRect(c2X, currentY, cardW, cardH, 2, 2, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(22, 101, 52);
+  doc.text('TOTAL LABA BERSIH DIBAGIKAN', c2X + 4, currentY + 5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(21, 128, 61);
+  doc.text(formatCurrency(summary.totalNetProfit || 0), c2X + 4, currentY + 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(22, 101, 52);
+  doc.text(`Total Beban: ${formatCurrency(summary.totalExpense || 0)}`, c2X + 4, currentY + 16);
+
+  // Card 3: Bagian Owner
+  const c3X = c2X + cardW + 4;
+  doc.setFillColor(238, 242, 255); // light indigo
+  doc.setDrawColor(199, 210, 254);
+  doc.roundedRect(c3X, currentY, cardW, cardH, 2, 2, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(55, 48, 163);
+  doc.text(`BAGIAN OWNER (${config.ownerPct || 80}%)`, c3X + 4, currentY + 5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(67, 56, 202);
+  doc.text(formatCurrency(summary.ownerShare || 0), c3X + 4, currentY + 12);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(79, 70, 229);
+  doc.text(`Setoran modal & profit owner`, c3X + 4, currentY + 16);
+
+  currentY += cardH + 5;
+
+  // 2. Executive Split Table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text('I. REKAPITULASI PEMBAGIAN HASIL (PROFIT SPLIT)', margin, currentY);
+  currentY += 2;
+
+  const splitRows = [
+    ['Owner (Pemilik Usaha)', 'Muki Ramen + Muki Drink', `${config.ownerPct || 80}%`, formatCurrency(summary.ownerShare || 0), 'Laba Bersih gabungan setelah potongan beban'],
+    ['Penanggung Jawab Muki Ramen', 'Divisi Makanan (Kitchen)', `${config.ramenPct || 20}%`, formatCurrency(summary.pjRamenShare || 0), `Hak 20% dari laba bersih Ramen (${formatCurrency(food.netProfit || 0)})`],
+    ['Penanggung Jawab Muki Drink', 'Divisi Minuman (Bar)', `${config.drinkPct || 20}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak 20% dari laba bersih Drink (${formatCurrency(drink.netProfit || 0)})`]
+  ];
+
+  autoTable(doc, {
+    startY: currentY + 1,
+    margin: { left: margin, right: margin },
+    head: [['Entitas Penerima', 'Divisi Usaha', 'Porsi', 'Nominal Diterima (Rp)', 'Dasar Perhitungan']],
+    body: splitRows,
+    foot: [['TOTAL HASIL DIBAGIKAN', 'Seluruh Divisi', '100%', formatCurrency(summary.totalNetProfit || 0), 'Total laba bersih periode terpilih']],
+    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 7.5 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50 },
+      1: { cellWidth: 38 },
+      2: { halign: 'center', cellWidth: 16 },
+      3: { halign: 'right', fontStyle: 'bold', cellWidth: 32 },
+      4: { fontStyle: 'normal', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // 3. Division Comparison Breakdown Table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text('II. RINCIAN KINERJA KEUANGAN PER DIVISI', margin, currentY);
+  currentY += 2;
+
+  const divRows = [
+    ['Total Omzet Penjualan', formatCurrency(food.revenue || 0), formatCurrency(drink.revenue || 0), formatCurrency(summary.totalRevenue || 0)],
+    ['Beban Belanja Langsung / HPP', `(${formatCurrency(food.totalExpense || 0)})`, `(${formatCurrency(drink.totalExpense || 0)})`, `(${formatCurrency(summary.totalDirectExpense || 0)})`],
+    ['Laba Kotor Divisi', formatCurrency(food.grossProfit || 0), formatCurrency(drink.grossProfit || 0), formatCurrency((food.grossProfit || 0) + (drink.grossProfit || 0))],
+    ['Alokasi Beban Bersama (Shared OPEX)', `(${formatCurrency(food.sharedOpexPortion || 0)})`, `(${formatCurrency(drink.sharedOpexPortion || 0)})`, `(${formatCurrency(shared.total || 0)})`],
+    ['Laba Bersih Divisi', formatCurrency(food.netProfit || 0), formatCurrency(drink.netProfit || 0), formatCurrency(summary.totalNetProfit || 0)],
+    [`Bagian Owner (${config.ownerPct || 80}%)`, formatCurrency(food.ownerShare || 0), formatCurrency(drink.ownerShare || 0), formatCurrency(summary.ownerShare || 0)],
+    [`Bagian Penanggung Jawab (${config.ramenPct || 20}%)`, formatCurrency(food.pjShare || 0), formatCurrency(drink.pjShare || 0), formatCurrency((summary.pjRamenShare || 0) + (summary.pjDrinkShare || 0))]
+  ];
+
+  autoTable(doc, {
+    startY: currentY + 1,
+    margin: { left: margin, right: margin },
+    head: [['Pos Laporan Keuangan', 'Muki Ramen (Food)', 'Muki Drink (Bar)', 'Total Resto']],
+    body: divRows,
+    headStyles: { fillColor: [234, 88, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 65 },
+      1: { halign: 'right', cellWidth: 38 },
+      2: { halign: 'right', cellWidth: 38 },
+      3: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // 4. Daily Breakdown Table (if exists)
+  if (daily.length > 0) {
+    if (currentY + 50 > pageHeight - 35) {
+      doc.addPage();
+      currentY = 32;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('III. LOG RINCIAN HARIAN BAGI HASIL', margin, currentY);
+    currentY += 2;
+
+    const dailyTableRows = daily.map((d: any, idx: number) => [
+      idx + 1,
+      d.dateLabel || d.date,
+      d.dayName || '',
+      formatCurrency(d.foodRevenue || 0),
+      formatCurrency(d.foodPjShare || 0),
+      formatCurrency(d.drinkRevenue || 0),
+      formatCurrency(d.drinkPjShare || 0),
+      formatCurrency(d.sharedOpex || 0),
+      formatCurrency(d.totalOmzet || 0),
+      formatCurrency(d.ownerShareTotal || 0)
+    ]);
+
+    autoTable(doc, {
+      startY: currentY + 1,
+      margin: { left: margin, right: margin },
+      head: [['No', 'Tgl', 'Hari', 'Omzet Ramen', 'PJ Ramen (20%)', 'Omzet Drink', 'PJ Drink (20%)', 'Shared OPEX', 'Total Omzet', 'Hak Owner']],
+      body: dailyTableRows,
+      foot: [[
+        'TOT',
+        '—',
+        '—',
+        formatCurrency(food.revenue || 0),
+        formatCurrency(summary.pjRamenShare || 0),
+        formatCurrency(drink.revenue || 0),
+        formatCurrency(summary.pjDrinkShare || 0),
+        formatCurrency(shared.total || 0),
+        formatCurrency(summary.totalRevenue || 0),
+        formatCurrency(summary.ownerShare || 0)
+      ]],
+      headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+      footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 6.5 },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 7 },
+        1: { halign: 'center', cellWidth: 14 },
+        2: { halign: 'center', cellWidth: 14 },
+        3: { halign: 'right', cellWidth: 20 },
+        4: { halign: 'right', fontStyle: 'bold', cellWidth: 18 },
+        5: { halign: 'right', cellWidth: 20 },
+        6: { halign: 'right', fontStyle: 'bold', cellWidth: 18 },
+        7: { halign: 'right', cellWidth: 18 },
+        8: { halign: 'right', fontStyle: 'bold', cellWidth: 22 },
+        9: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+      },
+      styles: { fontSize: 6.5, cellPadding: 1.5, lineColor: [226, 232, 240], lineWidth: 0.2 }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // 5. Signatures Block
+  let sigY = currentY + 4;
+  if (sigY + 30 > pageHeight - 15) {
+    doc.addPage();
+    sigY = 35;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 3;
+  const roles = [
+    { title: 'Penanggung Jawab Muki Ramen', name: 'PIC Muki Ramen' },
+    { title: 'Penanggung Jawab Muki Drink', name: 'PIC Muki Drink' },
+    { title: 'Owner / Pemilik Usaha', name: 'Owner Muki Group' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, sigY, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, sigY + 5, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 10, sigY + 20, x + sigColWidth - 10, sigY + 20);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, sigY + 24, { align: 'center' });
+  });
+
+  // Footer on all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  const timestamp = Date.now();
+  doc.save(`Laporan_Bagi_Hasil_Muki_Ramen_${timestamp}.pdf`);
+};
+
+// ─── 9. EXPORT DAILY OMZET BONUS MATRIX PDF ───────────────────────────────────
+
+export const exportDailyBonusPDF = async (
+  data: any,
+  settings: VenueSettings,
+  period: { startDate: string; endDate: string },
+  userName?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {
+      console.warn('Failed to load logo', e);
+    }
+  }
+
+  // Landscape A4 for wide employee matrix table
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.width || 297;
+  const pageHeight = doc.internal.pageSize.height || 210;
+  const margin = 12;
+
+  const employees = data?.employees || [];
+  const days = data?.days || [];
+  const employeeSummaries = data?.employeeSummaries || [];
+  const tiers = data?.tiers || [];
+  const totalBonusAll = data?.totalBonusAll || 0;
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 8, 14, 14);
+      textXOffset = margin + 17;
+    } else {
+      pdfDoc.setFillColor(234, 88, 12);
+      pdfDoc.rect(margin, 8, 4, 14, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(12);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 12);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo, Polman, Sulbar', textXOffset, 16);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '081298765432'} | Sistem Reward Absensi & Bonus Omzet`, textXOffset, 19.5);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(10.5);
+    pdfDoc.setTextColor(234, 88, 12);
+    pdfDoc.text('MATRIKS REWARD ABSENSI & BONUS OMZET HARIAN KARYAWAN', pageWidth - margin, 12, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Periode: ${formatDateID(period.startDate)} s/d ${formatDateID(period.endDate)}`, pageWidth - margin, 16, { align: 'right' });
+    pdfDoc.text(`Dicetak Oleh: ${userName || 'Administrator'} | ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 19.5, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 23, pageWidth - margin, 23);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(6.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 8, pageWidth - margin, pageHeight - 8);
+    pdfDoc.text(`MUKI RAMEN — Dokumen Sah Rekapitulasi Kehadiran & Bonus Omzet Harian Full-Time Crew`, margin, pageHeight - 4.5);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 4.5, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  let currentY = 26;
+
+  // 1. Tier Rules Box (Horizontal concise bar)
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 8, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('SKEMA TIER BONUS OMZET:', margin + 3, currentY + 5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  let tierX = margin + 40;
+  tiers.forEach((t: any) => {
+    const tierText = `>= ${formatCurrency(t.minOmzet)} (+${formatCurrency(t.bonus)}/org)`;
+    doc.text(tierText, tierX, currentY + 5);
+    tierX += 45;
+  });
+
+  currentY += 10;
+
+  // 2. Build Matrix Table Headers
+  const tableHeaders = ['No', 'Tanggal', 'Hari', 'Omzet (Rp)', 'Tier Target', 'Bonus Tier'];
+  employees.forEach((emp: any) => {
+    const tag = emp.employmentType === 'DAILY_WORKER' ? '\n(DW)' : '';
+    tableHeaders.push(`${emp.name.toUpperCase()}${tag}`);
+  });
+
+  let totalOmzetAllDays = 0;
+
+  const tableBody = days.map((day: any, idx: number) => {
+    totalOmzetAllDays += day.grossOmzet || 0;
+    const row = [
+      idx + 1,
+      day.dateLabel || day.date,
+      day.dayName || '',
+      formatCurrency(day.grossOmzet || 0),
+      day.matchedTier ? (day.matchedTier.label || `Tier ${formatCurrency(day.matchedTier.minOmzet)}`) : '—',
+      day.tierBonus > 0 ? formatCurrency(day.tierBonus) : 'Rp 0'
+    ];
+
+    employees.forEach((emp: any) => {
+      const att = day.employeeAttendance ? day.employeeAttendance[emp.id] : null;
+      if (att) {
+        if (att.bonus > 0) {
+          row.push(`+${(att.bonus / 1000)}k`);
+        } else {
+          row.push(att.displayBadge || att.status || 'LIBUR');
+        }
+      } else {
+        row.push('LIBUR');
+      }
+    });
+
+    return row;
+  });
+
+  // Footer row
+  const tableFoot = [
+    'TOT',
+    '—',
+    '—',
+    formatCurrency(totalOmzetAllDays),
+    '—',
+    '—'
+  ];
+
+  employees.forEach((emp: any) => {
+    const summary = employeeSummaries.find((s: any) => s.userId === emp.id);
+    tableFoot.push(formatCurrency(summary?.totalBonus || 0));
+  });
+
+  autoTable(doc, {
+    startY: currentY,
+    margin: { left: margin, right: margin },
+    head: [tableHeaders],
+    body: tableBody,
+    foot: [tableFoot],
+    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 6 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 7 },
+      1: { halign: 'center', cellWidth: 15 },
+      2: { halign: 'center', cellWidth: 14 },
+      3: { halign: 'right', fontStyle: 'bold', cellWidth: 22 },
+      4: { halign: 'center', cellWidth: 20 },
+      5: { halign: 'right', cellWidth: 18 }
+    },
+    styles: { fontSize: 5.5, cellPadding: 1.2, lineColor: [226, 232, 240], lineWidth: 0.2, halign: 'center' }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // 3. Employee Summary Table
+  if (currentY + 30 > pageHeight - 30) {
+    doc.addPage();
+    currentY = 26;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+  doc.text('REKAPITULASI TOTAL BONUS OMZET PER KARYAWAN', margin, currentY);
+  currentY += 2;
+
+  const empSummaryRows = employeeSummaries.map((s: any, idx: number) => [
+    idx + 1,
+    s.name,
+    s.role,
+    s.employmentType === 'DAILY_WORKER' ? 'Daily Worker (DW)' : 'Full Time',
+    s.presentCount || 0,
+    s.lateCount || 0,
+    s.offCount || 0,
+    s.leaveCount || 0,
+    formatCurrency(s.totalBonus || 0)
+  ]);
+
+  autoTable(doc, {
+    startY: currentY + 1,
+    margin: { left: margin, right: margin },
+    head: [['No', 'Nama Karyawan', 'Jabatan', 'Status', 'Hadir', 'Telat', 'Libur', 'Izin/Sakit', 'Total Bonus Diterima']],
+    body: empSummaryRows,
+    foot: [['TOTAL', '—', '—', '—', '—', '—', '—', '—', formatCurrency(totalBonusAll)]],
+    headStyles: { fillColor: [234, 88, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 6.5 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold', cellWidth: 45 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 28 },
+      4: { halign: 'center', cellWidth: 15 },
+      5: { halign: 'center', cellWidth: 15 },
+      6: { halign: 'center', cellWidth: 15 },
+      7: { halign: 'center', cellWidth: 18 },
+      8: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 6, cellPadding: 1.5, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // 4. Signatures Block
+  let sigY = currentY + 4;
+  if (sigY + 25 > pageHeight - 10) {
+    doc.addPage();
+    sigY = 28;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 3;
+  const roles = [
+    { title: 'Dibuat Oleh (Admin / Kasir)', name: userName || 'Petugas Kasir' },
+    { title: 'Diterima Perwakilan Karyawan', name: 'Perwakilan Tim Staff' },
+    { title: 'Disetujui Oleh (Owner)', name: 'Owner Muki Ramen' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, sigY, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6);
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, sigY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 15, sigY + 16, x + sigColWidth - 15, sigY + 16);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, sigY + 19.5, { align: 'center' });
+  });
+
+  // Footer on all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  const timestamp = Date.now();
+  doc.save(`Matriks_Bonus_Omzet_Muki_Ramen_${timestamp}.pdf`);
+};
+
 

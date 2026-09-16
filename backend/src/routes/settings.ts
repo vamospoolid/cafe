@@ -25,6 +25,18 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
           storeLatitude: -3.4026521,
           storeLongitude: 119.2137757,
           gpsRadiusMeters: 200,
+          profitSharingOwnerPercent: 80,
+          profitSharingRamenPercent: 20,
+          profitSharingDrinkPercent: 20,
+          profitSharingOpexMode: 'BEFORE_SPLIT',
+          enableDailyOmzetBonus: true,
+          dailyOmzetTiers: JSON.stringify([
+            { minOmzet: 2500000, bonus: 5000 },
+            { minOmzet: 3000000, bonus: 10000 },
+            { minOmzet: 4000000, bonus: 15000 },
+            { minOmzet: 5000000, bonus: 20000 },
+            { minOmzet: 6000000, bonus: 25000 }
+          ]),
         }
       });
     }
@@ -83,6 +95,18 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     // Warehouse & Transfer Pricing
     if (updateData.warehouseTransferPricing !== undefined) updateData.warehouseTransferPricing = String(updateData.warehouseTransferPricing);
     if (updateData.warehouseMarkupPercent !== undefined) updateData.warehouseMarkupPercent = Number(updateData.warehouseMarkupPercent);
+
+    // Konfigurasi Bagi Hasil (Profit Sharing)
+    if (updateData.profitSharingOwnerPercent !== undefined) updateData.profitSharingOwnerPercent = Number(updateData.profitSharingOwnerPercent);
+    if (updateData.profitSharingRamenPercent !== undefined) updateData.profitSharingRamenPercent = Number(updateData.profitSharingRamenPercent);
+    if (updateData.profitSharingDrinkPercent !== undefined) updateData.profitSharingDrinkPercent = Number(updateData.profitSharingDrinkPercent);
+    if (updateData.profitSharingOpexMode !== undefined) updateData.profitSharingOpexMode = String(updateData.profitSharingOpexMode);
+
+    // Konfigurasi Bonus Omzet Harian
+    if (updateData.enableDailyOmzetBonus !== undefined) updateData.enableDailyOmzetBonus = Boolean(updateData.enableDailyOmzetBonus);
+    if (updateData.dailyOmzetTiers !== undefined && typeof updateData.dailyOmzetTiers !== 'string') {
+      updateData.dailyOmzetTiers = JSON.stringify(updateData.dailyOmzetTiers);
+    }
 
     let settings = await prisma.settings.findFirst();
     

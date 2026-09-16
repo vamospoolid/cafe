@@ -4,16 +4,17 @@ import {
   Printer, User, Award, ListFilter, AlertTriangle, ArrowUpRight, ArrowDownRight, 
   BookOpen, CreditCard, ChevronRight, RefreshCw, Download, Check, Search, 
   FileText, Utensils, Coffee, CheckCircle2, X, Sparkles, SlidersHorizontal, BarChart3, Clock,
-  Boxes, Users, Receipt, Package, Flame, Percent
+  Boxes, Users, Receipt, Package, Flame, Percent, FileSpreadsheet, ChefHat, Sliders
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
-import { exportFinancialPDF } from '../utils/pdfGenerator';
+import { exportFinancialPDF, exportProfitSharingPDF, exportDailyBonusPDF } from '../utils/pdfGenerator';
+import { exportProfitSharingExcel, exportDailyBonusExcel, exportPettyCashExcel, exportSalesReportExcel, exportInventoryValuationExcel } from '../utils/excelGenerator';
 import { getTodayStr, getYesterdayStr, getLast7DaysRange, getLast30DaysRange, formatLocalDate } from '../utils/dateUtils';
 
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory' | 'accounting';
+type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory' | 'accounting' | 'profit_sharing' | 'daily_bonus';
 
 export const ReportView: React.FC = () => {
   const posContext = useContext(POSContext);
@@ -73,6 +74,8 @@ export const ReportView: React.FC = () => {
   });
 
   const [transactionsData, setTransactionsData] = useState<any[]>([]);
+  const [profitSharingData, setProfitSharingData] = useState<any>(null);
+  const [dailyBonusData, setDailyBonusData] = useState<any>(null);
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
@@ -81,17 +84,21 @@ export const ReportView: React.FC = () => {
     try {
       const headers = { Authorization: `Bearer ${token}` };
       const tzOffset = new Date().getTimezoneOffset();
-      const [resReports, resAccounting, resInventory, resTransactions] = await Promise.all([
+      const [resReports, resAccounting, resInventory, resTransactions, resProfitSharing, resDailyBonus] = await Promise.all([
         fetch(`/api/analytics/reports?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
         fetch(`/api/analytics/accounting?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
         fetch(`/api/analytics/inventory?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
-        fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers })
+        fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
+        fetch(`/api/analytics/profit-sharing?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers }),
+        fetch(`/api/analytics/daily-omzet-bonus?startDate=${startDate}&endDate=${endDate}&tzOffset=${tzOffset}`, { headers })
       ]);
 
       if (resReports.ok) setReportData(await resReports.json());
       if (resAccounting.ok) setAccountingData(await resAccounting.json());
       if (resInventory.ok) setInventoryData(await resInventory.json());
       if (resTransactions.ok) setTransactionsData(await resTransactions.json());
+      if (resProfitSharing.ok) setProfitSharingData(await resProfitSharing.json());
+      if (resDailyBonus.ok) setDailyBonusData(await resDailyBonus.json());
     } catch (err) {
       console.error(err);
       toast('Terjadi kesalahan saat memuat data laporan', 'error');
@@ -132,11 +139,40 @@ export const ReportView: React.FC = () => {
     try {
       let dataToPass: any = null;
 
-      // Validasi data sebelum generate PDF agar tidak menghasilkan dokumen kosong
-      if (type === 'products') {
+      if (type === 'profit_sharing') {
+        if (!profitSharingData || !profitSharingData.summary) {
+          toast('Data bagi hasil tidak tersedia untuk periode ini.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        await exportProfitSharingPDF(
+          profitSharingData,
+          posContext?.settings || { storeName: 'MUKI RAMEN' },
+          { startDate, endDate },
+          posContext?.user?.username || 'Admin'
+        );
+        toast('✅ Dokumen PDF Bagi Hasil berhasil diunduh!', 'success');
+        setShowPdfModal(false);
+        return;
+      } else if (type === 'daily_bonus') {
+        if (!dailyBonusData || !dailyBonusData.days || dailyBonusData.days.length === 0) {
+          toast('Data bonus harian tidak tersedia untuk periode ini.', 'error');
+          setExportingPdf(false);
+          return;
+        }
+        await exportDailyBonusPDF(
+          dailyBonusData,
+          posContext?.settings || { storeName: 'MUKI RAMEN' },
+          { startDate, endDate },
+          posContext?.user?.username || 'Admin'
+        );
+        toast('✅ Dokumen PDF Matriks Bonus berhasil diunduh!', 'success');
+        setShowPdfModal(false);
+        return;
+      } else if (type === 'products') {
         const products = reportData.products || [];
         if (products.length === 0) {
-          toast('Tidak ada data penjualan menu untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          toast('Tidak ada data penjualan menu untuk periode ini.', 'error');
           setExportingPdf(false);
           return;
         }
@@ -144,7 +180,7 @@ export const ReportView: React.FC = () => {
       } else if (type === 'pl') {
         const pl = accountingData.profitLoss;
         if (!pl || (pl.salesRevenue === 0 && pl.operatingRevenue === 0)) {
-          toast('Tidak ada data transaksi untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          toast('Tidak ada data transaksi untuk periode ini.', 'error');
           setExportingPdf(false);
           return;
         }
@@ -152,7 +188,7 @@ export const ReportView: React.FC = () => {
       } else if (type === 'cashflow') {
         const cf = accountingData.cashFlow;
         if (!cf || cf.inflow?.total === 0) {
-          toast('Tidak ada data arus kas untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          toast('Tidak ada data arus kas untuk periode ini.', 'error');
           setExportingPdf(false);
           return;
         }
@@ -160,7 +196,7 @@ export const ReportView: React.FC = () => {
       } else if (type === 'ledger') {
         const journals = accountingData.journals || [];
         if (journals.length === 0) {
-          toast('Tidak ada entri jurnal untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          toast('Tidak ada entri jurnal untuk periode ini.', 'error');
           setExportingPdf(false);
           return;
         }
@@ -168,7 +204,7 @@ export const ReportView: React.FC = () => {
       } else if (type === 'shifts') {
         const s = reportData.shifts || [];
         if (s.length === 0) {
-          toast('Tidak ada riwayat shift untuk periode ini. Ubah filter tanggal dan coba lagi.', 'error');
+          toast('Tidak ada riwayat shift untuk periode ini.', 'error');
           setExportingPdf(false);
           return;
         }
@@ -203,6 +239,31 @@ export const ReportView: React.FC = () => {
     }
   };
 
+  // Excel Export Handler (.xlsx)
+  const handleExportExcel = () => {
+    try {
+      if (activeTab === 'profit_sharing') {
+        if (!profitSharingData || !profitSharingData.summary) return toast('Tidak ada data bagi hasil untuk diekspor', 'warning');
+        exportProfitSharingExcel(profitSharingData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        toast('✓ Spreadsheet Excel Bagi Hasil berhasil diunduh!', 'success');
+      } else if (activeTab === 'daily_bonus') {
+        if (!dailyBonusData || !dailyBonusData.days || dailyBonusData.days.length === 0) return toast('Tidak ada data bonus untuk diekspor', 'warning');
+        exportDailyBonusExcel(dailyBonusData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        toast('✓ Spreadsheet Excel Matriks Bonus berhasil diunduh!', 'success');
+      } else if (activeTab === 'inventory') {
+        if (!inventoryData || !inventoryData.inventory) return toast('Tidak ada data inventaris untuk diekspor', 'warning');
+        exportInventoryValuationExcel(inventoryData, posContext?.settings || { storeName: 'MUKI RAMEN' });
+        toast('✓ Spreadsheet Excel Valuasi Stok berhasil diunduh!', 'success');
+      } else {
+        if (!reportData || !reportData.summary) return toast('Tidak ada data penjualan untuk diekspor', 'warning');
+        exportSalesReportExcel(reportData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        toast('✓ Spreadsheet Excel Laporan Penjualan berhasil diunduh!', 'success');
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast('Gagal mengunduh spreadsheet Excel: ' + err.message, 'error');
+    }
+  };
 
   // CSV Export Helper
   const downloadCSVFile = (filename: string, content: string) => {
@@ -291,6 +352,14 @@ export const ReportView: React.FC = () => {
             </button>
 
             <button
+              onClick={handleExportExcel}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-emerald-200 active:scale-95 transition-all"
+              title="Download Excel (.xlsx) dengan tata letak profesional"
+            >
+              <FileSpreadsheet size={15} /> <span>Export Excel (.xlsx)</span>
+            </button>
+
+            <button
               onClick={handleExportCSV}
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-all"
             >
@@ -364,9 +433,9 @@ export const ReportView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 5 TAB UTAMA LAPORAN
+          2. NAVIGASI 7 TAB UTAMA LAPORAN
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 shrink-0">
+      <div className="bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-1.5 shrink-0">
         {[
           { 
             id: 'dashboard', 
@@ -374,6 +443,20 @@ export const ReportView: React.FC = () => {
             subtitle: 'Grafik & KPI Utama', 
             icon: BarChart3,
             badge: null
+          },
+          { 
+            id: 'profit_sharing', 
+            title: 'Bagi Hasil (80:20)', 
+            subtitle: 'Ramen vs Minuman & Owner', 
+            icon: Percent,
+            badge: profitSharingData?.summary ? `Rp ${Math.round((profitSharingData.summary.grandTotalNetProfit || 0) / 1000)}k` : null
+          },
+          { 
+            id: 'daily_bonus', 
+            title: 'Bonus & Absensi', 
+            subtitle: 'Reward Omzet Full Time', 
+            icon: Award,
+            badge: dailyBonusData?.days ? `${dailyBonusData.days.length} Hari` : null
           },
           { 
             id: 'products', 
@@ -1574,6 +1657,577 @@ export const ReportView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
+          TAB: BAGI HASIL (80:20) - RAMEN VS MINUMAN & OWNER
+      ────────────────────────────────────────────────────────────── */}
+      {activeTab === 'profit_sharing' && (() => {
+        const ps = profitSharingData?.summary;
+        const daily = profitSharingData?.dailyBreakdown || [];
+        const exp = profitSharingData?.expensesBreakdown || { foodExpenses: [], drinkExpenses: [], sharedExpenses: [] };
+
+        if (!ps) {
+          return (
+            <div className="bg-white rounded-2xl p-8 text-center text-slate-500 border border-slate-200">
+              <Percent className="w-12 h-12 mx-auto text-indigo-400 mb-2 animate-bounce" />
+              <p className="font-bold text-slate-700">Memuat atau belum ada data bagi hasil...</p>
+              <p className="text-xs text-slate-400 mt-1">Pastikan ada transaksi penjualan atau pengeluaran pada periode {startDate} s/d {endDate}</p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex flex-col gap-5">
+            {/* Header Strategy Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white p-5 rounded-3xl shadow-lg border border-indigo-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
+                  <Percent size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Sistem Bagi Hasil 80 : 20
+                    </span>
+                    <span className="text-xs text-slate-300">
+                      Mode OPEX: <strong className="text-amber-300 uppercase">{ps.opexMode === 'SHARED_BEFORE_SPLIT' ? 'Dipotong Laba Bersama' : ps.opexMode === 'SPLIT_50_50' ? 'Dibagi 50:50' : 'Ditanggung Owner'}</strong>
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black text-white mt-1">
+                    Rekapitulasi Pembagian Keuntungan MUKI RAMEN & DRINK
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Formula: Laba Bersih Per Divisi = Omzet - Belanja Bahan
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleGeneratePdf('profit_sharing')}
+                  disabled={exportingPdf}
+                  className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-white transition-all flex items-center gap-1.5"
+                >
+                  <Printer size={14} /> PDF Bagi Hasil
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-xs font-bold text-white shadow-md shadow-emerald-900/30 transition-all flex items-center gap-1.5"
+                >
+                  <FileSpreadsheet size={14} /> Export Excel (.xlsx)
+                </button>
+              </div>
+            </div>
+
+            {/* 5 Top KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              {/* Omzet Gabungan */}
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Omzet Gabungan</span>
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <TrendingUp size={15} />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <div className="text-xl font-black text-slate-900">{formatCurrency(ps.grandTotalRevenue)}</div>
+                  <div className="text-[11px] text-slate-500 mt-1 flex justify-between">
+                    <span>Ramen: {formatCurrency(ps.food.revenue)}</span>
+                    <span>Drink: {formatCurrency(ps.drink.revenue)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Belanja & OPEX */}
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Pengeluaran</span>
+                  <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                    <ArrowDownRight size={15} />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <div className="text-xl font-black text-rose-600">{formatCurrency(ps.grandTotalExpense)}</div>
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    Bahan: {formatCurrency(ps.food.expense + ps.drink.expense)} | OPEX: {formatCurrency(ps.sharedOpexTotal)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Laba Bersih Total */}
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Laba Bersih Bersama</span>
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <DollarSign size={15} />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <div className={`text-xl font-black ${ps.grandTotalNetProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {formatCurrency(ps.grandTotalNetProfit)}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    Margin: {ps.grandTotalRevenue > 0 ? Math.round((ps.grandTotalNetProfit / ps.grandTotalRevenue) * 100) : 0}% dari Omzet
+                  </div>
+                </div>
+              </div>
+
+              {/* Hak Bagian Owner (80%) */}
+              <div className="bg-gradient-to-br from-indigo-500 to-purple-700 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-black uppercase text-indigo-100 tracking-wider">Hak Bagian Owner</span>
+                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">{ps.food.ownerPct}% Total</span>
+                </div>
+                <div className="mt-2">
+                  <div className="text-xl font-black text-white">{formatCurrency(ps.totalOwnerShare)}</div>
+                  <div className="text-[11px] text-indigo-100/90 mt-1">
+                    Dari Ramen: {formatCurrency(ps.food.ownerShare)} + Drink: {formatCurrency(ps.drink.ownerShare)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Hak Bagian Tim PJ (20%) */}
+              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-black uppercase text-emerald-100 tracking-wider">Hak Bagian PJ (Tim)</span>
+                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">20% Masing-2</span>
+                </div>
+                <div className="mt-2">
+                  <div className="text-xl font-black text-white">{formatCurrency(ps.totalPjShare)}</div>
+                  <div className="text-[11px] text-emerald-100/90 mt-1">
+                    PJ Ramen: {formatCurrency(ps.food.pjShare)} | PJ Drink: {formatCurrency(ps.drink.pjShare)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Division Comparison Breakdown Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Divisi 1: Muki Ramen */}
+              <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black">
+                        🍜
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900 text-base">Divisi MUKI RAMEN (Makanan)</h4>
+                        <span className="text-xs text-slate-400">Penanggung Jawab: Bagi Hasil {ps.food.profitSharingPct}%</span>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-black bg-orange-50 text-orange-700 border border-orange-200">
+                      Food Division
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 my-4">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-[11px] text-slate-500 font-bold block">Omzet Ramen</span>
+                      <span className="text-base font-black text-slate-800">{formatCurrency(ps.food.revenue)}</span>
+                    </div>
+                    <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
+                      <span className="text-[11px] text-rose-600 font-bold block">Belanja Bahan Ramen</span>
+                      <span className="text-base font-black text-rose-700">-{formatCurrency(ps.food.expense)}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-100/70 rounded-2xl flex justify-between items-center mb-4">
+                    <span className="text-xs font-bold text-slate-700">Laba Bersih Divisi Ramen</span>
+                    <span className="text-base font-black text-indigo-900">{formatCurrency(ps.food.finalNet)}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                  <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-indigo-700">Owner ({ps.food.ownerPct}%)</span>
+                      <span className="text-[10px] bg-indigo-200/60 text-indigo-800 px-1.5 py-0.5 rounded font-bold">Owner</span>
+                    </div>
+                    <div className="text-base font-black text-indigo-900 mt-1">{formatCurrency(ps.food.ownerShare)}</div>
+                  </div>
+                  <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-emerald-700">PJ Ramen ({ps.food.profitSharingPct}%)</span>
+                      <span className="text-[10px] bg-emerald-200/60 text-emerald-800 px-1.5 py-0.5 rounded font-bold">PJ Tim</span>
+                    </div>
+                    <div className="text-base font-black text-emerald-900 mt-1">{formatCurrency(ps.food.pjShare)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divisi 2: Muki Drink */}
+              <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center font-black">
+                        🍹
+                      </div>
+                      <div>
+                        <h4 className="font-black text-slate-900 text-base">Divisi MUKI DRINK (Minuman)</h4>
+                        <span className="text-xs text-slate-400">Penanggung Jawab: Bagi Hasil {ps.drink.profitSharingPct}%</span>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-black bg-cyan-50 text-cyan-700 border border-cyan-200">
+                      Drink Division
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 my-4">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="text-[11px] text-slate-500 font-bold block">Omzet Minuman</span>
+                      <span className="text-base font-black text-slate-800">{formatCurrency(ps.drink.revenue)}</span>
+                    </div>
+                    <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
+                      <span className="text-[11px] text-rose-600 font-bold block">Belanja Bahan Minuman</span>
+                      <span className="text-base font-black text-rose-700">-{formatCurrency(ps.drink.expense)}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-100/70 rounded-2xl flex justify-between items-center mb-4">
+                    <span className="text-xs font-bold text-slate-700">Laba Bersih Divisi Minuman</span>
+                    <span className="text-base font-black text-cyan-900">{formatCurrency(ps.drink.finalNet)}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                  <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-indigo-700">Owner ({ps.drink.ownerPct}%)</span>
+                      <span className="text-[10px] bg-indigo-200/60 text-indigo-800 px-1.5 py-0.5 rounded font-bold">Owner</span>
+                    </div>
+                    <div className="text-base font-black text-indigo-900 mt-1">{formatCurrency(ps.drink.ownerShare)}</div>
+                  </div>
+                  <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-emerald-700">PJ Drink ({ps.drink.profitSharingPct}%)</span>
+                      <span className="text-[10px] bg-emerald-200/60 text-emerald-800 px-1.5 py-0.5 rounded font-bold">PJ Tim</span>
+                    </div>
+                    <div className="text-base font-black text-emerald-900 mt-1">{formatCurrency(ps.drink.pjShare)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Daily Breakdown Table */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="font-black text-slate-900 text-base">Tabel Rincian Harian Bagi Hasil</h4>
+                  <p className="text-xs text-slate-500">Omzet, Belanja Bahan & Alokasi Bagi Hasil Per Hari</p>
+                </div>
+                <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-lg font-bold">
+                  {daily.length} Hari Transaksi
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100/90 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="p-3 rounded-l-xl">Tanggal</th>
+                      <th className="p-3 text-right">Omzet Ramen</th>
+                      <th className="p-3 text-right">Belanja Ramen</th>
+                      <th className="p-3 text-right">Laba Ramen</th>
+                      <th className="p-3 text-right">Omzet Drink</th>
+                      <th className="p-3 text-right">Belanja Drink</th>
+                      <th className="p-3 text-right">Laba Drink</th>
+                      <th className="p-3 text-right text-rose-600">OPEX Bersama</th>
+                      <th className="p-3 text-right text-indigo-700">Laba Bersih</th>
+                      <th className="p-3 text-right text-indigo-800">Owner (80%)</th>
+                      <th className="p-3 text-right text-emerald-700">PJ Ramen (20%)</th>
+                      <th className="p-3 text-right text-emerald-700 rounded-r-xl">PJ Drink (20%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {daily.map((d: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-50/80 font-medium">
+                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{d.date}</td>
+                        <td className="p-3 text-right">{formatCurrency(d.foodRevenue)}</td>
+                        <td className="p-3 text-right text-rose-600">-{formatCurrency(d.foodExpense)}</td>
+                        <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(d.foodNet)}</td>
+                        <td className="p-3 text-right">{formatCurrency(d.drinkRevenue)}</td>
+                        <td className="p-3 text-right text-rose-600">-{formatCurrency(d.drinkExpense)}</td>
+                        <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(d.drinkNet)}</td>
+                        <td className="p-3 text-right text-rose-600">-{formatCurrency(d.sharedOpex)}</td>
+                        <td className="p-3 text-right font-black text-indigo-900 bg-indigo-50/30">{formatCurrency(d.totalNetProfit)}</td>
+                        <td className="p-3 text-right font-bold text-indigo-700 bg-indigo-50/50">{formatCurrency(d.ownerShare)}</td>
+                        <td className="p-3 text-right font-bold text-emerald-700 bg-emerald-50/40">{formatCurrency(d.pjFoodShare)}</td>
+                        <td className="p-3 text-right font-bold text-emerald-700 bg-emerald-50/40">{formatCurrency(d.pjDrinkShare)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-900 text-white font-black text-xs">
+                    <tr>
+                      <td className="p-3 rounded-l-xl">TOTAL</td>
+                      <td className="p-3 text-right">{formatCurrency(ps.food.revenue)}</td>
+                      <td className="p-3 text-right text-rose-300">-{formatCurrency(ps.food.expense)}</td>
+                      <td className="p-3 text-right text-amber-300">{formatCurrency(ps.food.grossNet)}</td>
+                      <td className="p-3 text-right">{formatCurrency(ps.drink.revenue)}</td>
+                      <td className="p-3 text-right text-rose-300">-{formatCurrency(ps.drink.expense)}</td>
+                      <td className="p-3 text-right text-amber-300">{formatCurrency(ps.drink.grossNet)}</td>
+                      <td className="p-3 text-right text-rose-300">-{formatCurrency(ps.sharedOpexTotal)}</td>
+                      <td className="p-3 text-right text-emerald-300">{formatCurrency(ps.grandTotalNetProfit)}</td>
+                      <td className="p-3 text-right text-indigo-200">{formatCurrency(ps.totalOwnerShare)}</td>
+                      <td className="p-3 text-right text-teal-200">{formatCurrency(ps.food.pjShare)}</td>
+                      <td className="p-3 text-right text-teal-200 rounded-r-xl">{formatCurrency(ps.drink.pjShare)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB: BONUS & ABSENSI STAF
+      ────────────────────────────────────────────────────────────── */}
+      {activeTab === 'daily_bonus' && (() => {
+        const days = dailyBonusData?.days || [];
+        const employees = dailyBonusData?.employeesSummary || [];
+        const tiers = dailyBonusData?.tiersConfig || [];
+
+        const totalBonusAll = days.reduce((sum: number, d: any) => sum + (d.totalBonusDistributed || 0), 0);
+        const daysHitTier = days.filter((d: any) => d.tierReached !== null).length;
+
+        // Distinct employee usernames
+        const allStaffNames: string[] = employees.map((e: any) => e.username);
+
+        return (
+          <div className="flex flex-col gap-5">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white p-5 rounded-3xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white shrink-0">
+                  <Award size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white border border-white/30">
+                      Reward Target Omzet Harian
+                    </span>
+                    <span className="text-xs text-amber-100">
+                      Khusus Crew <strong>Full-Time</strong> (Hadir / Terlambat)
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black text-white mt-1">
+                    Matriks Kehadiran & Akumulasi Bonus Omzet Harian
+                  </h3>
+                  <p className="text-xs text-amber-100 mt-0.5">
+                    Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Staf DW: Tag DW (Rp 0 Bonus)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleGeneratePdf('daily_bonus')}
+                  disabled={exportingPdf}
+                  className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-xs font-bold text-white transition-all flex items-center gap-1.5"
+                >
+                  <Printer size={14} /> PDF Matriks Bonus
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white shadow-md shadow-emerald-950/30 transition-all flex items-center gap-1.5"
+                >
+                  <FileSpreadsheet size={14} /> Export Excel (.xlsx)
+                </button>
+              </div>
+            </div>
+
+            {/* Tier Levels Legend */}
+            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Flame size={14} className="text-amber-500" /> Skema Range Tier Target Omzet Harian
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">Diatur pada Menu Settings &gt; Bagi Hasil & Bonus</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                {tiers.map((t: any, idx: number) => (
+                  <div key={idx} className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-200/70 flex flex-col">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase text-amber-800">Tier {t.tier}</span>
+                      <span className="text-[10px] font-extrabold text-amber-600">≥ {formatCurrency(t.minOmzet)}</span>
+                    </div>
+                    <span className="text-sm font-black text-amber-900 mt-1">+{formatCurrency(t.bonusPerStaff)} <span className="text-[10px] font-normal text-amber-700">/ crew</span></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 4 Summary Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
+                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Hari Dihitung</span>
+                <div className="text-2xl font-black text-slate-900 mt-1">{days.length} Hari</div>
+                <div className="text-xs text-slate-500 mt-0.5">Rentang {startDate} s/d {endDate}</div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
+                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Hari Capai Target</span>
+                <div className="text-2xl font-black text-emerald-600 mt-1">{daysHitTier} Hari</div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {days.length > 0 ? Math.round((daysHitTier / days.length) * 100) : 0}% Target Tercapai
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
+                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Bonus Terdistribusi</span>
+                <div className="text-2xl font-black text-amber-600 mt-1">{formatCurrency(totalBonusAll)}</div>
+                <div className="text-xs text-slate-500 mt-0.5">Untuk semua staf Full-Time</div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
+                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Rata-rata Bonus / Hari</span>
+                <div className="text-2xl font-black text-indigo-600 mt-1">
+                  {formatCurrency(daysHitTier > 0 ? Math.round(totalBonusAll / daysHitTier) : 0)}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">Pada hari tercapai target</div>
+              </div>
+            </div>
+
+            {/* Matriks Harian Bonus Staf */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="font-black text-slate-900 text-base">Matriks Harian Kehadiran & Bonus Per Karyawan</h4>
+                  <p className="text-xs text-slate-500">Persis format lembar matriks owner: Status Hadir/Libur & Nominal Bonus</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100/90 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="p-3 rounded-l-xl">Tanggal</th>
+                      <th className="p-3 text-right">Omzet Harian</th>
+                      <th className="p-3 text-center">Tier Target</th>
+                      {allStaffNames.map((name, i) => (
+                        <th key={i} className="p-3 text-center whitespace-nowrap">
+                          {name}
+                        </th>
+                      ))}
+                      <th className="p-3 text-right rounded-r-xl">Total Bonus</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {days.map((d: any, idx: number) => {
+                      const hit = d.tierReached !== null;
+                      return (
+                        <tr key={idx} className={`hover:bg-slate-50/80 font-medium ${hit ? 'bg-amber-50/20' : ''}`}>
+                          <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{d.date}</td>
+                          <td className="p-3 text-right font-black text-slate-900">{formatCurrency(d.totalOmzet)}</td>
+                          <td className="p-3 text-center">
+                            {hit ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
+                                Tier {d.tierReached.tier} (+{formatCurrency(d.tierReached.bonusPerStaff)})
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">-</span>
+                            )}
+                          </td>
+                          {allStaffNames.map((name, i) => {
+                            const staff = [...(d.fullTimeStaffPresent || []), ...(d.otherStaffPresent || [])].find((s: any) => s.username === name);
+                            if (!staff) {
+                              return <td key={i} className="p-3 text-center text-slate-300">-</td>;
+                            }
+                            const isDW = staff.employmentType === 'DAILY_WORKER';
+                            const status = staff.attendanceStatus;
+                            const isPresent = status === 'Hadir' || status === 'Terlambat';
+                            const bonus = staff.bonusEarned || 0;
+
+                            return (
+                              <td key={i} className="p-3 text-center">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  {isDW ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-slate-200 text-slate-700">DW</span>
+                                  ) : isPresent ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800">
+                                      {status === 'Terlambat' ? 'Telat' : 'Hadir'}
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">
+                                      {status || 'Libur'}
+                                    </span>
+                                  )}
+                                  {bonus > 0 && (
+                                    <span className="text-[10px] font-black text-amber-700">
+                                      +{formatCurrency(bonus)}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                          <td className="p-3 text-right font-black text-amber-800 bg-amber-50/40">
+                            {formatCurrency(d.totalBonusDistributed)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-slate-900 text-white font-black text-xs">
+                    <tr>
+                      <td className="p-3 rounded-l-xl">TOTAL AKUMULASI</td>
+                      <td className="p-3 text-right">{formatCurrency(days.reduce((s: number, d: any) => s + (d.totalOmzet || 0), 0))}</td>
+                      <td className="p-3 text-center">{daysHitTier} Hari</td>
+                      {allStaffNames.map((name, i) => {
+                        const emp = employees.find((e: any) => e.username === name);
+                        return (
+                          <td key={i} className="p-3 text-center text-amber-300 font-black">
+                            {formatCurrency(emp?.totalBonusAmount || 0)}
+                          </td>
+                        );
+                      })}
+                      <td className="p-3 text-right text-amber-300 rounded-r-xl font-black">
+                        {formatCurrency(totalBonusAll)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Employee Ranking & Summary Cards */}
+            <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
+              <h4 className="font-black text-slate-900 text-base">Rekapitulasi Total Bonus Karyawan</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {employees.map((e: any, idx: number) => {
+                  const isFT = e.employmentType === 'FULL_TIME';
+                  return (
+                    <div key={idx} className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                            {e.username.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-black text-slate-900 text-sm">{e.username}</div>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase">
+                              {isFT ? 'Full Time' : e.employmentType === 'DAILY_WORKER' ? 'Daily Worker' : 'Part Time'}
+                            </span>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isFT ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
+                          {e.totalPresentDays} Hari Hadir
+                        </span>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
+                        <span className="text-xs text-slate-500">Dapat Bonus: <strong>{e.totalBonusDays} Hari</strong></span>
+                        <span className="text-sm font-black text-amber-700">{formatCurrency(e.totalBonusAmount)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─────────────────────────────────────────────────────────────
           MODAL PILIHAN CETAK PDF RESMI
       ────────────────────────────────────────────────────────────── */}
       {showPdfModal && (
@@ -1595,6 +2249,8 @@ export const ReportView: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '.6rem' }}>
               {[
+                { type: 'profit_sharing', title: '💰 Laporan Rekapitulasi Bagi Hasil (80:20)', desc: 'Pembagian laba bersih Owner vs PJ Ramen & PJ Drink setelah beban operasional' },
+                { type: 'daily_bonus', title: '🏆 Matriks Bonus Omzet Harian & Rekap Staf', desc: 'Matriks kehadiran karyawan Full-Time vs Daily Worker & pencapaian bonus tier omzet harian' },
                 { type: 'products', title: '🍜 Laporan Penjualan Menu & Margin (Best Seller)', desc: 'Ranking menu terlaris, kuantitas terjual, total omzet, HPP, laba dan margin' },
                 { type: 'pl', title: '📊 Laporan Laba Rugi (Profit & Loss)', desc: 'Format standar akuntansi: Pendapatan, HPP, OPEX, dan Laba Bersih' },
                 { type: 'cashflow', title: '💵 Laporan Arus Kas (Cash Flow)', desc: 'Rincian kas masuk penjualan dan kas keluar operasional' },

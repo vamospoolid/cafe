@@ -69,6 +69,18 @@ const UserView = () => {
     }
   };
 
+  const getEmploymentBadge = (type?: string) => {
+    switch (type) {
+      case 'DAILY_WORKER':
+        return { label: 'Daily Worker (DW)', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+      case 'PART_TIME':
+        return { label: 'Part Time', color: 'bg-sky-50 text-sky-700 border-sky-200' };
+      case 'FULL_TIME':
+      default:
+        return { label: 'Full Time (Bonus Omzet)', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    }
+  };
+
   const filteredUsers = users.filter(u => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -84,7 +96,7 @@ const UserView = () => {
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
             <Users className="text-primary" size={24} /> Pengguna &amp; Karyawan
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">Kelola data staf dan atur izin hak akses masing-masing akun</p>
+          <p className="text-xs text-slate-500 mt-0.5">Kelola data staf, tipe kepegawaian, dan atur izin hak akses masing-masing akun</p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -129,70 +141,73 @@ const UserView = () => {
           <>
             {/* Mobile Cards List (< 640px) */}
             <div className="sm:hidden divide-y divide-slate-100">
-              {filteredUsers.map((user) => (
-                <div 
-                  key={user.id} 
-                  className={`p-4 space-y-3 ${user.status === 'Nonaktif' ? 'opacity-60 bg-slate-50/50' : 'bg-white'}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-700 font-black text-sm flex items-center justify-center border border-indigo-100/80 shrink-0">
-                        {user.name.slice(0, 2).toUpperCase()}
+              {filteredUsers.map((user) => {
+                const empBadge = getEmploymentBadge(user.employmentType);
+                return (
+                  <div 
+                    key={user.id} 
+                    className={`p-4 space-y-3 ${user.status === 'Nonaktif' ? 'opacity-60 bg-slate-50/50' : 'bg-white'}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-700 font-black text-sm flex items-center justify-center border border-indigo-100/80 shrink-0">
+                          {user.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-extrabold text-sm text-slate-900 leading-tight">{user.name}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">@{user.username}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-extrabold text-sm text-slate-900 leading-tight">{user.name}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">@{user.username}</div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-extrabold ${getRoleBadge(user.role)}`}>
+                          {user.role}
+                        </span>
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full border font-bold ${empBadge.color}`}>
+                          {empBadge.label}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className={`text-[10px] px-2.5 py-0.5 rounded-full border font-extrabold ${getRoleBadge(user.role)}`}>
-                        {user.role}
-                      </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${user.status === 'Aktif' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                        {user.status}
-                      </span>
+
+                    {/* Permissions Badges */}
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hak Akses:</div>
+                      {user.role === 'Admin' ? (
+                        <span className="text-xs text-primary font-bold flex items-center gap-1">
+                          <Shield size={13} /> Akses Penuh Sistem
+                        </span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {user.permissions?.canVoid && <span className="text-[10px] bg-rose-50 text-rose-700 font-bold px-1.5 py-0.5 rounded border border-rose-200">Void</span>}
+                          {user.permissions?.canDiscount && <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-200">Diskon</span>}
+                          {user.permissions?.canEditMenu && <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200">Menu</span>}
+                          {user.permissions?.canViewReports && <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">Laporan</span>}
+                          {!user.permissions?.canVoid && !user.permissions?.canDiscount && !user.permissions?.canEditMenu && !user.permissions?.canViewReports && (
+                            <span className="text-[10px] text-slate-400 italic">Standar Kasir</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
 
-                  {/* Permissions Badges */}
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hak Akses:</div>
-                    {user.role === 'Admin' ? (
-                      <span className="text-xs text-primary font-bold flex items-center gap-1">
-                        <Shield size={13} /> Akses Penuh Sistem
-                      </span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {user.permissions?.canVoid && <span className="text-[10px] bg-rose-50 text-rose-700 font-bold px-1.5 py-0.5 rounded border border-rose-200">Void</span>}
-                        {user.permissions?.canDiscount && <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-200">Diskon</span>}
-                        {user.permissions?.canEditMenu && <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200">Menu</span>}
-                        {user.permissions?.canViewReports && <span className="text-[10px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">Laporan</span>}
-                        {!user.permissions?.canVoid && !user.permissions?.canDiscount && !user.permissions?.canEditMenu && !user.permissions?.canViewReports && (
-                          <span className="text-[10px] text-slate-400 italic">Standar Kasir</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <button 
-                      className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
-                      onClick={() => { setSelectedUser(user); setIsModalOpen(true); }}
-                    >
-                      <Edit size={13} /> Edit Profil &amp; PIN
-                    </button>
-                    {user.role !== 'Admin' && (
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-end gap-2 pt-1">
                       <button 
-                        className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
-                        onClick={() => handleDelete(user.id, user.name)}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                        onClick={() => { setSelectedUser(user); setIsModalOpen(true); }}
                       >
-                        <Trash2 size={13} /> Hapus
+                        <Edit size={13} /> Edit Profil &amp; PIN
                       </button>
-                    )}
+                      {user.role !== 'Admin' && (
+                        <button 
+                          className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                          onClick={() => handleDelete(user.id, user.name)}
+                        >
+                          <Trash2 size={13} /> Hapus
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Desktop Table View (>= 640px) */}
@@ -202,72 +217,81 @@ const UserView = () => {
                   <tr>
                     <th>NAMA LENGKAP</th>
                     <th>USERNAME</th>
-                    <th>PERAN (ROLE)</th>
+                    <th>JABATAN (ROLE)</th>
+                    <th>TIPE KERJA</th>
                     <th>HAK AKSES KHUSUS</th>
                     <th>STATUS</th>
                     <th className="text-right">AKSI</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className={user.status === 'Nonaktif' ? 'opacity-60 bg-gray-50' : 'hover:bg-gray-50'}>
-                      <td>
-                        <div className="font-bold text-gray-800 flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-xs flex items-center justify-center border border-indigo-100">
-                            {user.name.slice(0, 2).toUpperCase()}
+                  {filteredUsers.map((user) => {
+                    const empBadge = getEmploymentBadge(user.employmentType);
+                    return (
+                      <tr key={user.id} className={user.status === 'Nonaktif' ? 'opacity-60 bg-gray-50' : 'hover:bg-gray-50'}>
+                        <td>
+                          <div className="font-bold text-gray-800 flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-xs flex items-center justify-center border border-indigo-100">
+                              {user.name.slice(0, 2).toUpperCase()}
+                            </div>
+                            {user.name}
                           </div>
-                          {user.name}
-                        </div>
-                      </td>
-                      <td className="text-muted text-sm font-mono">@{user.username}</td>
-                      <td>
-                        <span className={`text-xs px-2 py-1 rounded-md border font-bold ${getRoleBadge(user.role)}`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td>
-                        {user.role === 'Admin' ? (
-                          <span className="text-xs text-primary font-bold flex items-center gap-1">
-                            <Shield size={12} /> Akses Penuh
+                        </td>
+                        <td className="text-muted text-sm font-mono">@{user.username}</td>
+                        <td>
+                          <span className={`text-xs px-2.5 py-1 rounded-full border font-bold ${getRoleBadge(user.role)}`}>
+                            {user.role}
                           </span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {user.permissions?.canVoid && <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded border border-red-100 font-bold">Void</span>}
-                            {user.permissions?.canDiscount && <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded border border-green-100 font-bold">Diskon</span>}
-                            {user.permissions?.canEditMenu && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-bold">Menu</span>}
-                            {user.permissions?.canViewReports && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold">Laporan</span>}
-                            {!user.permissions?.canVoid && !user.permissions?.canDiscount && !user.permissions?.canEditMenu && !user.permissions?.canViewReports && (
-                              <span className="text-[10px] text-gray-400">Standar</span>
-                            )}
+                        </td>
+                        <td>
+                          <span className={`text-xs px-2.5 py-1 rounded-full border font-bold ${empBadge.color}`}>
+                            {empBadge.label}
+                          </span>
+                        </td>
+                        <td>
+                          {user.role === 'Admin' ? (
+                            <span className="text-xs text-primary font-bold flex items-center gap-1">
+                              <Shield size={12} /> Akses Penuh
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {user.permissions?.canVoid && <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded border border-red-100 font-bold">Void</span>}
+                              {user.permissions?.canDiscount && <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded border border-green-100 font-bold">Diskon</span>}
+                              {user.permissions?.canEditMenu && <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded border border-indigo-100 font-bold">Menu</span>}
+                              {user.permissions?.canViewReports && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 font-bold">Laporan</span>}
+                              {!user.permissions?.canVoid && !user.permissions?.canDiscount && !user.permissions?.canEditMenu && !user.permissions?.canViewReports && (
+                                <span className="text-[10px] text-gray-400">Standar</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className={`badge ${user.status === 'Aktif' ? 'badge-success' : 'badge-danger'}`}>
+                            {user.status}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <button 
+                              className="icon-btn text-blue-600 bg-blue-50" 
+                              title="Edit Data"
+                              onClick={() => { setSelectedUser(user); setIsModalOpen(true); }}
+                            >
+                              <Edit size={16}/>
+                            </button>
+                            <button 
+                              className="icon-btn text-red-600 bg-red-50" 
+                              title="Hapus / Nonaktifkan"
+                              onClick={() => handleDelete(user.id, user.name)}
+                              disabled={user.role === 'Admin'}
+                            >
+                              <Trash2 size={16}/>
+                            </button>
                           </div>
-                        )}
-                      </td>
-                      <td>
-                        <span className={`badge ${user.status === 'Aktif' ? 'badge-success' : 'badge-danger'}`}>
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <button 
-                            className="icon-btn text-blue-600 bg-blue-50" 
-                            title="Edit Data"
-                            onClick={() => { setSelectedUser(user); setIsModalOpen(true); }}
-                          >
-                            <Edit size={16}/>
-                          </button>
-                          <button 
-                            className="icon-btn text-red-600 bg-red-50" 
-                            title="Hapus Akun" 
-                            disabled={user.role === 'Admin'}
-                            onClick={() => handleDelete(user.id, user.name)}
-                          >
-                            <Trash2 size={16}/>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
