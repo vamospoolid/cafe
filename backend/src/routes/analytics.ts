@@ -318,12 +318,86 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       }
     });
 
+    // 6. Fetch Active Cashier Shift
+    const activeShift = await prisma.shift.findFirst({
+      where: { status: 'OPEN' },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+
+    // 7. Fetch Today's Crew on Duty (Live Attendances)
+    const todayAttendances = await prisma.attendance.findMany({
+      where: { date: todayStr },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      },
+      orderBy: { clockIn: 'asc' }
+    });
+
+    // 8. Active Kitchen Orders in KDS
+    const activeKitchenOrdersCount = await prisma.order.count({
+      where: {
+        status: { not: 'Void' },
+        kdsStatus: { in: ['Pending', 'Cooking'] },
+        createdAt: { gte: todayStart, lte: todayEnd }
+      }
+    });
+
+    // 9. Daily Omzet Bonus Tier Calculation
+    const defaultTiers = [
+      { min: 0, max: 2499999, bonus: 0, label: '< Rp 2.5 Juta' },
+      { min: 2500000, max: 2999999, bonus: 5000, label: 'Rp 2.5 - 3 Juta' },
+      { min: 3000000, max: 3999999, bonus: 10000, label: 'Rp 3 - 4 Juta' },
+      { min: 4000000, max: 4999999, bonus: 15000, label: 'Rp 4 - 5 Juta' },
+      { min: 5000000, max: 5999999, bonus: 20000, label: 'Rp 5 - 6 Juta' },
+      { min: 6000000, max: 999999999, bonus: 25000, label: '≥ Rp 6 Juta' }
+    ];
+
+    let activeTiers = defaultTiers;
+    const settings = await prisma.settings.findFirst();
+    if (settings?.dailyOmzetTiers) {
+      try {
+        const parsed = JSON.parse(settings.dailyOmzetTiers);
+        if (Array.isArray(parsed) && parsed.length > 0) activeTiers = parsed;
+      } catch (e) {}
+    }
+
+    let currentTier = activeTiers[0];
+    let nextTier: any = null;
+
+    for (let i = 0; i < activeTiers.length; i++) {
+      const t = activeTiers[i];
+      if (totalRevenue >= t.min) {
+        currentTier = t;
+        nextTier = activeTiers[i + 1] || null;
+      }
+    }
+
+    const omzetBonusTier = {
+      enabled: settings?.enableDailyOmzetBonus ?? true,
+      currentBonus: currentTier?.bonus || 0,
+      currentTierLabel: currentTier?.label || '< Rp 2.5 Juta',
+      nextGoalAmount: nextTier ? nextTier.min : null,
+      remainingToNext: nextTier ? Math.max(0, nextTier.min - totalRevenue) : 0,
+      nextTierBonus: nextTier ? nextTier.bonus : null,
+      progressPercent: nextTier ? Math.min(100, Math.round((totalRevenue / nextTier.min) * 100)) : 100
+    };
+
+    // 10. Cash vs Digital breakdown
+    const totalCashRevenue = paymentMethods['Tunai'] || 0;
+    const totalDigitalRevenue = (paymentMethods['QRIS'] || 0) + (paymentMethods['Kartu'] || 0) + (paymentMethods['Split'] || 0);
+
     res.json({
       revenue: totalRevenue,
       profit: totalProfit,
       transactions: totalTransactions,
       averageServiceTime: avgServiceTime,
       paymentMethods,
+      cashBreakdown: {
+        cash: totalCashRevenue,
+        digital: totalDigitalRevenue
+      },
       hourlySales,
       tableOccupancy: {
         occupied: occupiedTablesCount,
@@ -332,7 +406,11 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       },
       lowStockProducts,
       recentTransactions,
-      recentStockLogs
+      recentStockLogs,
+      activeShift,
+      crewOnDuty: todayAttendances,
+      kitchenQueue: activeKitchenOrdersCount,
+      omzetBonusTier
     });
   } catch (error) {
     console.error(error);
