@@ -36,6 +36,11 @@ import {
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
+import {
+  exportWarehouseStockPDF,
+  exportWarehouseInboundPDF,
+  exportWarehouseSettlementPDF
+} from '../utils/pdfGenerator';
 import WarehouseSaleModal from './WarehouseSaleModal';
 import WarehouseSaleInvoiceModal from './WarehouseSaleInvoiceModal';
 
@@ -146,6 +151,49 @@ export default function WarehouseView() {
       fetchData();
     }
   }, [posContext?.token]);
+
+  // ─── PDF EXPORTS ───────────────────────────────────────────────────────
+  const handleExportStockPDF = async () => {
+    if (filteredStock.length === 0) {
+      toast('Tidak ada data stok bahan untuk diekspor.', 'warning');
+      return;
+    }
+    try {
+      await exportWarehouseStockPDF(filteredStock, posContext?.settings || { storeName: 'MUKI RAMEN' }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      toast('Laporan Stok & Valuasi Aset Gudang berhasil diunduh!', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengekspor PDF stok gudang', 'error');
+    }
+  };
+
+  const handleExportInboundPDF = async () => {
+    if (inbounds.length === 0) {
+      toast('Tidak ada riwayat pasokan untuk diekspor.', 'warning');
+      return;
+    }
+    try {
+      await exportWarehouseInboundPDF(inbounds, posContext?.settings || { storeName: 'MUKI RAMEN' }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      toast('Laporan Rekap Penerimaan Pasokan berhasil diunduh!', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengekspor PDF pasokan', 'error');
+    }
+  };
+
+  const handleExportSettlementPDF = async () => {
+    if (!financeData?.transactions || financeData.transactions.length === 0) {
+      toast('Tidak ada data transaksi settlement untuk diekspor.', 'warning');
+      return;
+    }
+    try {
+      await exportWarehouseSettlementPDF(financeData, posContext?.settings || { storeName: 'MUKI RAMEN' }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      toast('Laporan Rekonsiliasi & Settlement Modal Owner berhasil diunduh!', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengekspor PDF settlement', 'error');
+    }
+  };
 
   // ─── INBOUND ACTIONS ───────────────────────────────────────────────────
   const handleAddInboundItem = () => {
@@ -675,115 +723,226 @@ export default function WarehouseView() {
       {activeTab === 'stock' && (
         <div className="flex flex-col gap-3">
           {/* Search & Filter Toolbar */}
-          <div className="card p-3 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex flex-col sm:flex-row gap-2.5 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-              <input
-                type="text"
-                className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                placeholder="Cari nama bahan baku gudang..."
-                value={searchStock}
-                onChange={e => setSearchStock(e.target.value)}
-              />
+          <div className="card p-3 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex flex-col sm:flex-row gap-2.5 items-center justify-between">
+            <div className="flex flex-col sm:flex-row gap-2.5 items-center flex-1 w-full">
+              <div className="relative flex-1 w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+                <input
+                  type="text"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="Cari nama bahan baku gudang..."
+                  value={searchStock}
+                  onChange={e => setSearchStock(e.target.value)}
+                />
+              </div>
+              <div className="w-full sm:w-48 shrink-0">
+                <select
+                  className="w-full px-3 py-2 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  value={filterCategory}
+                  onChange={e => setFilterCategory(e.target.value)}
+                >
+                  <option value="">Semua Kategori</option>
+                  <option value="FOOD">Makanan (Food)</option>
+                  <option value="DRINK">Minuman (Drink)</option>
+                  <option value="PACKAGING">Packaging / Kemasan</option>
+                </select>
+              </div>
             </div>
-            <div className="w-full sm:w-48 shrink-0">
-              <select
-                className="w-full px-3 py-2 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                value={filterCategory}
-                onChange={e => setFilterCategory(e.target.value)}
-              >
-                <option value="">Semua Kategori</option>
-                <option value="FOOD">Makanan (Food)</option>
-                <option value="DRINK">Minuman (Drink)</option>
-                <option value="PACKAGING">Packaging / Kemasan</option>
-              </select>
-            </div>
+
+            <button
+              onClick={handleExportStockPDF}
+              className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95"
+              title="Download Laporan Rekap Stok & Valuasi Aset Gudang (PDF)"
+            >
+              <FileText size={14} className="text-rose-500" /> Export PDF
+            </button>
           </div>
 
-          {/* Table Container */}
+          {/* Table Container (Desktop) & Card List (Mobile) */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             {loading ? (
               <div className="p-10 text-center text-slate-400 text-xs font-medium">Memuat stok bahan gudang...</div>
             ) : filteredStock.length === 0 ? (
               <div className="p-10 text-center text-slate-400 text-xs font-medium">Tidak ada bahan baku ditemukan.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 font-bold uppercase">
-                      <th className="p-3.5">Bahan Baku</th>
-                      <th className="p-3.5">Kategori</th>
-                      <th className="p-3.5">Satuan Konversi</th>
-                      <th className="p-3.5 text-right">Stok Fisik Gudang</th>
-                      <th className="p-3.5 text-right">Stok di Dapur Cabang</th>
-                      <th className="p-3.5 text-right">Nilai Modal / Aset</th>
-                      <th className="p-3.5 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredStock.map(item => {
-                      const ratio = item.conversionRatio || 1;
-                      const pUnit = item.purchaseUnit || 'Grosir';
-                      const wholesaleEquivalent = ratio > 1 ? (item.warehouseStock / ratio).toFixed(1) : null;
+              <>
+                {/* ── DESKTOP TABLE ─────────────────────────────────── */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 font-bold uppercase">
+                        <th className="p-3.5">Bahan Baku</th>
+                        <th className="p-3.5">Kategori</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5">Satuan Konversi</th>
+                        <th className="p-3.5 text-right">Stok Fisik Gudang</th>
+                        <th className="p-3.5 text-right">Stok di Dapur Cabang</th>
+                        <th className="p-3.5 text-right">Nilai Modal / Aset</th>
+                        <th className="p-3.5 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {filteredStock.map(item => {
+                        const ratio = item.conversionRatio || 1;
+                        const pUnit = item.purchaseUnit || 'Grosir';
+                        const wholesaleEquivalent = ratio > 1 ? (item.warehouseStock / ratio).toFixed(1) : null;
+                        const isOutOfStock = Number(item.warehouseStock || 0) <= 0;
+                        const isLowStock = Number(item.warehouseStock || 0) > 0 && Number(item.warehouseStock || 0) <= 5;
 
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3.5 font-bold text-slate-800">
-                            {item.name}
-                            {item.supplier && (
-                              <div className="text-[10px] text-slate-400 font-normal">
-                                Supplier: {item.supplier.name}
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3.5 font-bold text-slate-800">
+                              {item.name}
+                              {item.supplier && (
+                                <div className="text-[10px] text-slate-400 font-normal">
+                                  Supplier: {item.supplier.name}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3.5">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600">
+                                {item.category}
+                              </span>
+                            </td>
+                            <td className="p-3.5">
+                              {isOutOfStock ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-600 border border-rose-200 inline-flex items-center gap-1">
+                                  <AlertTriangle size={10} /> Habis
+                                </span>
+                              ) : isLowStock ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1">
+                                  <AlertCircle size={10} /> Menipis
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-600 border border-emerald-200 inline-flex items-center gap-1">
+                                  <CheckCircle2 size={10} /> Aman
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-slate-600">
+                              {ratio > 1 ? (
+                                <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                                  1 {pUnit} = {ratio} {item.unit}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">1:1 ({item.unit})</span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-right">
+                              <div className="font-black text-slate-900 text-sm">
+                                {Number(item.warehouseStock || 0).toLocaleString('id-ID')} <span className="text-xs font-normal text-slate-400">{item.unit}</span>
                               </div>
+                              {wholesaleEquivalent && (
+                                <div className="text-[10px] font-semibold text-indigo-600">
+                                  &asymp; {wholesaleEquivalent} {pUnit}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-right font-bold text-slate-600">
+                              {Number(item.stock || 0).toLocaleString('id-ID')} <span className="text-xs font-normal text-slate-400">{item.unit}</span>
+                            </td>
+                            <td className="p-3.5 text-right font-black text-slate-800">
+                              {formatCurrency((item.warehouseStock || 0) * (item.buyPrice || 0))}
+                            </td>
+                            <td className="p-3.5 text-right">
+                              <button
+                                onClick={() => {
+                                  setSelectedIngredientForOpname(item);
+                                  setActualOpnameStock(item.warehouseStock);
+                                  setShowOpnameModal(true);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition-colors"
+                              >
+                                Opname
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (< 768px) ────────────────────── */}
+                <div className="block md:hidden divide-y divide-slate-100">
+                  {filteredStock.map(item => {
+                    const ratio = item.conversionRatio || 1;
+                    const pUnit = item.purchaseUnit || 'Grosir';
+                    const wholesaleEquivalent = ratio > 1 ? (item.warehouseStock / ratio).toFixed(1) : null;
+                    const isOutOfStock = Number(item.warehouseStock || 0) <= 0;
+                    const isLowStock = Number(item.warehouseStock || 0) > 0 && Number(item.warehouseStock || 0) <= 5;
+
+                    return (
+                      <div key={item.id} className="p-3.5 flex flex-col gap-2.5 bg-white hover:bg-slate-50/80 transition-colors">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-black text-slate-900 text-xs sm:text-sm">{item.name}</div>
+                            {item.supplier && (
+                              <div className="text-[10px] text-slate-400">Supplier: {item.supplier.name}</div>
                             )}
-                          </td>
-                          <td className="p-3.5">
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600">
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600">
                               {item.category}
                             </span>
-                          </td>
-                          <td className="p-3.5 text-slate-600">
-                            {ratio > 1 ? (
-                              <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                                1 {pUnit} = {ratio} {item.unit}
+                            {isOutOfStock ? (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-rose-50 text-rose-600 border border-rose-200">
+                                Habis
+                              </span>
+                            ) : isLowStock ? (
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-50 text-amber-600 border border-amber-200">
+                                Menipis
                               </span>
                             ) : (
-                              <span className="text-slate-400">1:1 ({item.unit})</span>
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                Aman
+                              </span>
                             )}
-                          </td>
-                          <td className="p-3.5 text-right">
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl text-xs border border-slate-100">
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase">Stok Gudang Pusat</div>
                             <div className="font-black text-slate-900 text-sm">
-                              {item.warehouseStock} <span className="text-xs font-normal text-slate-400">{item.unit}</span>
+                              {Number(item.warehouseStock || 0).toLocaleString('id-ID')} <span className="text-[10px] font-normal text-slate-500">{item.unit}</span>
                             </div>
                             {wholesaleEquivalent && (
-                              <div className="text-[10px] font-semibold text-indigo-600">
-                                &asymp; {wholesaleEquivalent} {pUnit}
-                              </div>
+                              <div className="text-[10px] text-indigo-600 font-semibold">&asymp; {wholesaleEquivalent} {pUnit}</div>
                             )}
-                          </td>
-                          <td className="p-3.5 text-right font-bold text-slate-600">
-                            {item.stock} <span className="text-xs font-normal text-slate-400">{item.unit}</span>
-                          </td>
-                          <td className="p-3.5 text-right font-black text-slate-800">
-                            {formatCurrency(item.warehouseStock * item.buyPrice)}
-                          </td>
-                          <td className="p-3.5 text-right">
-                            <button
-                              onClick={() => {
-                                setSelectedIngredientForOpname(item);
-                                setActualOpnameStock(item.warehouseStock);
-                                setShowOpnameModal(true);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition-colors"
-                            >
-                              Opname
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase">Stok Dapur Cabang</div>
+                            <div className="font-bold text-slate-700 text-sm">
+                              {Number(item.stock || 0).toLocaleString('id-ID')} <span className="text-[10px] font-normal text-slate-500">{item.unit}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400">Modal: {formatCurrency(item.buyPrice || 0)}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div className="text-xs">
+                            <span className="text-[10px] text-slate-400">Nilai Aset: </span>
+                            <span className="font-black text-slate-900">
+                              {formatCurrency((item.warehouseStock || 0) * (item.buyPrice || 0))}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedIngredientForOpname(item);
+                              setActualOpnameStock(item.warehouseStock);
+                              setShowOpnameModal(true);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-colors flex items-center gap-1 active:scale-95"
+                          >
+                            <ClipboardCheck size={13} /> Stok Opname
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -792,87 +951,168 @@ export default function WarehouseView() {
       {/* ─── TAB 2: INBOUND (BARANG MASUK DARI SUPPLIER) ──────────────────── */}
       {activeTab === 'inbound' && (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-black text-slate-800">Riwayat Penerimaan Pasokan Masuk Gudang</h3>
-            <button
-              onClick={() => setShowInboundModal(true)}
-              className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1"
-            >
-              <Plus size={14} /> + Penerimaan Pasokan Masuk
-            </button>
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+            <div>
+              <h3 className="text-sm font-black text-slate-800">Riwayat Penerimaan Pasokan Masuk Gudang</h3>
+              <p className="text-[11px] text-slate-500">Pencatatan pasokan partai besar / grosir (Kasir MUKI tidak berkurang)</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleExportInboundPDF}
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-1.5 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all"
+                title="Download Laporan Rekap Pasokan Masuk (PDF)"
+              >
+                <FileText size={14} className="text-rose-500" /> Export PDF
+              </button>
+              <button
+                onClick={() => setShowInboundModal(true)}
+                className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+              >
+                <Plus size={14} /> + Penerimaan Pasokan Masuk
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             {inbounds.length === 0 ? (
               <div className="p-10 text-center text-slate-400 text-xs font-medium">Belum ada riwayat belanja barang masuk.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 font-bold uppercase">
-                      <th className="p-3.5">No. Invoice</th>
-                      <th className="p-3.5">Tanggal</th>
-                      <th className="p-3.5">Supplier</th>
-                      <th className="p-3.5">Sumber Dana</th>
-                      <th className="p-3.5">Item Barang</th>
-                      <th className="p-3.5 text-right">Total Belanja</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {inbounds.map(inb => (
-                      <tr key={inb.id} className={`hover:bg-slate-50 transition-colors ${inb.isVoided ? 'opacity-50' : ''}`}>
-                        <td className="p-3.5">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-mono font-bold text-indigo-700">{inb.invoiceNumber}</span>
-                            {inb.isVoided && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
-                                <Ban size={9} /> DIBATALKAN
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-3.5 text-slate-500">{new Date(inb.date).toLocaleDateString('id-ID')}</td>
-                        <td className="p-3.5 font-bold text-slate-800">{inb.supplier?.name || inb.supplierName || 'Toko Bebas'}</td>
-                        <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {inb.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Modal Pusat' : 'Kas Operasional'}
-                          </span>
-                        </td>
-                        <td className="p-3.5">
-                          <div className="flex flex-col gap-0.5">
-                            {inb.items?.map((it: any) => (
-                              <span key={it.id} className="text-[11px] text-slate-600">
-                                &bull; {it.itemName}: <strong>{it.purchaseQty} {it.purchaseUnit}</strong> ({it.baseQty} {it.ingredient?.unit})
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3.5 text-right font-black text-slate-900 text-sm">
-                          <div className="flex items-center justify-end gap-2">
-                            <span className={inb.isVoided ? 'line-through text-slate-400' : ''}>
-                              {formatCurrency(inb.totalAmount)}
-                            </span>
-                            {!inb.isVoided && (
-                              <button
-                                onClick={() => { setVoidTarget(inb); setVoidReason(''); setShowVoidModal(true); }}
-                                title="Batalkan / Koreksi Salah Input"
-                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors flex-shrink-0"
-                              >
-                                <Ban size={13} />
-                              </button>
-                            )}
-                          </div>
-                          {inb.isVoided && inb.voidReason && (
-                            <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[180px] ml-auto">
-                              Alasan: {inb.voidReason}
-                            </div>
-                          )}
-                        </td>
+              <>
+                {/* ── DESKTOP TABLE ─────────────────────────────────── */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 font-bold uppercase">
+                        <th className="p-3.5">No. Invoice</th>
+                        <th className="p-3.5">Tanggal</th>
+                        <th className="p-3.5">Supplier</th>
+                        <th className="p-3.5">Sumber Dana</th>
+                        <th className="p-3.5">Item Barang</th>
+                        <th className="p-3.5 text-right">Total Belanja</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {inbounds.map(inb => (
+                        <tr key={inb.id} className={`hover:bg-slate-50 transition-colors ${inb.isVoided ? 'opacity-50' : ''}`}>
+                          <td className="p-3.5">
+                            <div className="flex flex-col gap-1">
+                              <span className="font-mono font-bold text-indigo-700">{inb.invoiceNumber}</span>
+                              {inb.isVoided && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
+                                  <Ban size={9} /> DIBATALKAN
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-slate-500">{new Date(inb.date).toLocaleDateString('id-ID')}</td>
+                          <td className="p-3.5 font-bold text-slate-800">{inb.supplier?.name || inb.supplierName || 'Toko Bebas'}</td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                              inb.paymentSource === 'DANA_PRIBADI_OWNER'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}>
+                              {inb.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Talangan Owner' : 'Kas Resto'}
+                            </span>
+                          </td>
+                          <td className="p-3.5">
+                            <div className="flex flex-col gap-0.5">
+                              {inb.items?.map((it: any) => (
+                                <span key={it.id} className="text-[11px] text-slate-600">
+                                  &bull; {it.itemName}: <strong>{it.purchaseQty} {it.purchaseUnit}</strong> ({it.baseQty} {it.ingredient?.unit})
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-right font-black text-slate-900 text-sm">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className={inb.isVoided ? 'line-through text-slate-400' : ''}>
+                                {formatCurrency(inb.totalAmount)}
+                              </span>
+                              {!inb.isVoided && (
+                                <button
+                                  onClick={() => { setVoidTarget(inb); setVoidReason(''); setShowVoidModal(true); }}
+                                  title="Batalkan / Koreksi Salah Input"
+                                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors flex-shrink-0"
+                                >
+                                  <Ban size={13} />
+                                </button>
+                              )}
+                            </div>
+                            {inb.isVoided && inb.voidReason && (
+                              <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[180px] ml-auto">
+                                Alasan: {inb.voidReason}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (< 768px) ────────────────────── */}
+                <div className="block md:hidden divide-y divide-slate-100">
+                  {inbounds.map(inb => (
+                    <div key={inb.id} className={`p-3.5 flex flex-col gap-2.5 bg-white hover:bg-slate-50/80 transition-colors ${inb.isVoided ? 'opacity-50' : ''}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-mono font-black text-indigo-700 text-xs">{inb.invoiceNumber}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {new Date(inb.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} &bull; {inb.supplier?.name || inb.supplierName || 'Toko Bebas'}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${
+                            inb.paymentSource === 'DANA_PRIBADI_OWNER'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}>
+                            {inb.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Talangan Owner' : 'Kas Resto'}
+                          </span>
+                          {inb.isVoided && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-red-50 text-red-600 border border-red-200">
+                              Batal
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex flex-col gap-1">
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">Item Pasokan Masuk:</div>
+                        {inb.items?.map((it: any) => (
+                          <div key={it.id} className="text-xs text-slate-700 flex justify-between">
+                            <span>{it.itemName}</span>
+                            <span className="font-bold">{it.purchaseQty} {it.purchaseUnit} <span className="font-normal text-slate-400">({it.baseQty} {it.ingredient?.unit})</span></span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          <span className="text-[10px] text-slate-400">Total: </span>
+                          <span className={`font-black text-sm text-slate-900 ${inb.isVoided ? 'line-through text-slate-400' : ''}`}>
+                            {formatCurrency(inb.totalAmount)}
+                          </span>
+                        </div>
+                        {!inb.isVoided && (
+                          <button
+                            onClick={() => { setVoidTarget(inb); setVoidReason(''); setShowVoidModal(true); }}
+                            className="px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center gap-1"
+                          >
+                            <Ban size={12} /> Batalkan
+                          </button>
+                        )}
+                      </div>
+                      {inb.isVoided && inb.voidReason && (
+                        <div className="text-[10px] text-red-500 italic bg-red-50 p-1.5 rounded-lg border border-red-100">
+                          Alasan batal: {inb.voidReason}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1067,10 +1307,13 @@ export default function WarehouseView() {
       {activeTab === 'transfers' && (
         <div className="flex flex-col gap-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-black text-slate-800">Riwayat Pengajuan &amp; Distribusi Bahan ke Dapur Cabang</h3>
+            <div>
+              <h3 className="text-sm font-black text-slate-800">Riwayat Pengajuan &amp; Distribusi Bahan ke Dapur Cabang</h3>
+              <p className="text-[11px] text-slate-500">Stok berpindah saat dapur mengonfirmasi penerimaan bahan</p>
+            </div>
             <button
               onClick={() => setShowTransferModal(true)}
-              className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1"
+              className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
             >
               <Plus size={14} /> + Permintaan Bahan Baru
             </button>
@@ -1080,21 +1323,22 @@ export default function WarehouseView() {
             {transfers.length === 0 ? (
               <div className="p-10 text-center text-slate-400 text-xs font-medium">Belum ada pengajuan transfer bahan.</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 font-bold uppercase">
-                      <th className="p-3.5">No. Requisition</th>
-                      <th className="p-3.5">Diminta Oleh</th>
-                      <th className="p-3.5">Item Permintaan</th>
-                      <th className="p-3.5 text-right">Nilai Transfer (HPP)</th>
-                      <th className="p-3.5 text-center">Status</th>
-                      <th className="p-3.5 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {transfers.map(tr => {
-                      return (
+              <>
+                {/* ── DESKTOP TABLE ─────────────────────────────────── */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 font-bold uppercase">
+                        <th className="p-3.5">No. Requisition</th>
+                        <th className="p-3.5">Diminta Oleh</th>
+                        <th className="p-3.5">Item Permintaan</th>
+                        <th className="p-3.5 text-right">Nilai Transfer (HPP)</th>
+                        <th className="p-3.5 text-center">Status</th>
+                        <th className="p-3.5 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {transfers.map(tr => (
                         <tr key={tr.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-3.5">
                             <div className="font-mono font-bold text-indigo-700">{tr.reqNumber}</div>
@@ -1176,11 +1420,94 @@ export default function WarehouseView() {
                             </div>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (< 768px) ────────────────────── */}
+                <div className="block md:hidden divide-y divide-slate-100">
+                  {transfers.map(tr => (
+                    <div key={tr.id} className="p-3.5 flex flex-col gap-2.5 bg-white hover:bg-slate-50/80 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-mono font-black text-indigo-700 text-xs">{tr.reqNumber}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {new Date(tr.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} &bull; Diminta: {tr.requestedBy?.name || 'Staff'}
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${
+                          tr.status === 'RECEIVED'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : tr.status === 'APPROVED'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : tr.status === 'VOIDED'
+                            ? 'bg-rose-50 text-rose-600 border-rose-200 line-through'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {tr.status === 'RECEIVED'
+                            ? 'Diterima Dapur'
+                            : tr.status === 'APPROVED'
+                            ? 'Siap Dikirim'
+                            : tr.status === 'VOIDED'
+                            ? 'Batal'
+                            : 'Pending'}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex flex-col gap-1">
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">Item Bahan:</div>
+                        {tr.items?.map((it: any) => (
+                          <div key={it.id} className="text-xs text-slate-700 flex justify-between">
+                            <span>{it.itemName}</span>
+                            <span className="font-bold">{it.requestedQty} {it.requestedUnit} <span className="font-normal text-slate-400">({it.baseQty} {it.ingredient?.unit})</span></span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          <span className="text-[10px] text-slate-400">Nilai HPP: </span>
+                          <span className="font-black text-slate-900 text-xs sm:text-sm">
+                            {formatCurrency(tr.totalTransferCost)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {tr.status === 'PENDING' && (
+                            <>
+                              <button
+                                onClick={() => handleApproveTransfer(tr.id)}
+                                className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs border border-blue-200"
+                              >
+                                Setujui
+                              </button>
+                              <button
+                                onClick={() => handleCancelTransfer(tr.id, tr.reqNumber)}
+                                className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs"
+                              >
+                                Batal
+                              </button>
+                            </>
+                          )}
+                          {tr.status === 'APPROVED' && (
+                            <button
+                              onClick={() => handleReceiveTransfer(tr.id, tr.reqNumber)}
+                              className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs"
+                            >
+                              Terima di Dapur ✓
+                            </button>
+                          )}
+                          {tr.status === 'RECEIVED' && (
+                            <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                              <CheckCircle2 size={13} /> Selesai
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1189,6 +1516,21 @@ export default function WarehouseView() {
       {/* ─── TAB 4: REKONSILIASI & SETTLEMENT FINANSIAL ───────────────────── */}
       {activeTab === 'finance' && (
         <div className="flex flex-col gap-4">
+          {/* Protection Notice Banner */}
+          <div className="bg-emerald-50 border border-emerald-200/80 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3 shadow-xs">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <ShieldCheck size={20} />
+            </div>
+            <div className="text-xs">
+              <div className="font-black text-emerald-950 flex items-center gap-1.5">
+                Proteksi Keuangan: Arus Kas Toko MUKI RAMEN 100% Terpisah &amp; Aman
+              </div>
+              <p className="text-emerald-800 mt-0.5 leading-relaxed">
+                Belanja pasokan dari supplier menggunakan <strong>Dana Talangan Pribadi Owner / Modal Pusat</strong> sehingga kasir harian &amp; laci POS tidak terganggu. Outlet hanya berkewajiban me-reimburse sejumlah bahan yang telah resmi diterima dan dipakai di dapur.
+              </p>
+            </div>
+          </div>
+
           {/* Summary Box */}
           <div className="card p-5 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-3xl shadow-lg border border-slate-800 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
             <div>
@@ -1200,69 +1542,132 @@ export default function WarehouseView() {
                 Akumulasi nilai bahan baku yang telah didistribusikan ke unit operasional dapur cabang yang belum diselesaikan (settled) kembali ke entitas modal pusat.
               </p>
             </div>
-            <button
-              onClick={() => {
-                setReimburseForm(prev => ({
-                  ...prev,
-                  amount: financeData?.summary?.currentOwnerPayable || 0
-                }));
-                setShowReimburseModal(true);
-              }}
-              className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2"
-            >
-              <Coins size={16} /> Proses Settlement / Pencairan Balik
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleExportSettlementPDF}
+                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                title="Download Laporan Rekonsiliasi & Settlement Owner (PDF)"
+              >
+                <FileText size={16} className="text-rose-400" /> Export PDF
+              </button>
+              <button
+                onClick={() => {
+                  setReimburseForm(prev => ({
+                    ...prev,
+                    amount: financeData?.summary?.currentOwnerPayable || 0
+                  }));
+                  setShowReimburseModal(true);
+                }}
+                className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2"
+              >
+                <Coins size={16} /> Proses Settlement / Pelunasan
+              </button>
+            </div>
           </div>
 
-          {/* Ledger Table */}
+          {/* Ledger Table (Desktop) & Card List (Mobile) */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
-            <div className="p-3.5 bg-slate-50 border-b border-slate-100 font-black text-xs text-slate-700 uppercase">
-              Buku Rekonsiliasi Settlement Pengadaan
+            <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <div className="font-black text-xs text-slate-700 uppercase">
+                Buku Rekonsiliasi Settlement Pengadaan
+              </div>
+              <button
+                onClick={handleExportSettlementPDF}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              >
+                <FileText size={13} className="text-rose-500" /> Unduh Laporan PDF
+              </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-400 font-bold uppercase">
-                    <th className="p-3.5">Tanggal</th>
-                    <th className="p-3.5">Jenis Transaksi</th>
-                    <th className="p-3.5">Deskripsi / Referensi</th>
-                    <th className="p-3.5">Oleh</th>
-                    <th className="p-3.5 text-right">Nominal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
+
+            {(!financeData?.transactions || financeData.transactions.length === 0) ? (
+              <div className="p-10 text-center text-slate-400 text-xs font-medium">Belum ada riwayat transaksi mutasi modal pusat.</div>
+            ) : (
+              <>
+                {/* ── DESKTOP TABLE ─────────────────────────────────── */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-400 font-bold uppercase">
+                        <th className="p-3.5">Tanggal</th>
+                        <th className="p-3.5">Jenis Transaksi</th>
+                        <th className="p-3.5">Deskripsi / Referensi</th>
+                        <th className="p-3.5">Oleh</th>
+                        <th className="p-3.5 text-right">Nominal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(financeData?.transactions || []).map((t: any) => {
+                        const isPlus = t.type === 'CAPITAL_IN';
+                        const isDiserap = t.type === 'TRANSFER_TO_RESTO';
+                        const isPaid = t.type === 'REIMBURSEMENT_PAID';
+
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3.5 text-slate-500">{new Date(t.date || t.createdAt).toLocaleDateString('id-ID')}</td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                                isPlus
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : isDiserap
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}>
+                                {isPlus ? 'Pasokan Modal Pusat' : isDiserap ? 'Distribusi ke Cabang' : 'Settlement Selesai'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 font-medium text-slate-800">{t.description}</td>
+                            <td className="p-3.5 text-slate-500">{t.user?.name || 'Admin'}</td>
+                            <td className={`p-3.5 text-right font-black text-sm ${
+                              isPaid ? 'text-emerald-600' : isDiserap ? 'text-amber-600' : 'text-blue-600'
+                            }`}>
+                              {formatCurrency(t.amount)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (< 768px) ────────────────────── */}
+                <div className="block md:hidden divide-y divide-slate-100">
                   {(financeData?.transactions || []).map((t: any) => {
                     const isPlus = t.type === 'CAPITAL_IN';
                     const isDiserap = t.type === 'TRANSFER_TO_RESTO';
                     const isPaid = t.type === 'REIMBURSEMENT_PAID';
 
                     return (
-                      <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3.5 text-slate-500">{new Date(t.date || t.createdAt).toLocaleDateString('id-ID')}</td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                            isPlus
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : isDiserap
-                              ? 'bg-amber-50 text-amber-700 border-amber-200'
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      <div key={t.id} className="p-3.5 flex flex-col gap-2 bg-white hover:bg-slate-50/80 transition-colors">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${
+                              isPlus
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : isDiserap
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}>
+                              {isPlus ? 'Talangan Owner (+)' : isDiserap ? 'Distribusi Cabang' : 'Settlement Selesai (-)'}
+                            </span>
+                            <div className="text-[10px] text-slate-400 mt-1">
+                              {new Date(t.date || t.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} &bull; {t.user?.name || 'Admin'}
+                            </div>
+                          </div>
+                          <div className={`font-black text-sm ${
+                            isPaid ? 'text-emerald-600' : isDiserap ? 'text-amber-600' : 'text-blue-600'
                           }`}>
-                            {isPlus ? 'Pasokan Modal Pusat' : isDiserap ? 'Distribusi ke Cabang' : 'Settlement Selesai'}
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-medium text-slate-800">{t.description}</td>
-                        <td className="p-3.5 text-slate-500">{t.user?.name || 'Admin'}</td>
-                        <td className={`p-3.5 text-right font-black text-sm ${
-                          isPaid ? 'text-emerald-600' : isDiserap ? 'text-amber-600' : 'text-blue-600'
-                        }`}>
-                          {formatCurrency(t.amount)}
-                        </td>
-                      </tr>
+                            {formatCurrency(t.amount)}
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100 font-medium">
+                          {t.description}
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

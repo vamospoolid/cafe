@@ -3792,4 +3792,567 @@ export const exportDailyBonusPDF = async (
   doc.save(`Matriks_Bonus_Omzet_Muki_Ramen_${timestamp}.pdf`);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 19. LAPORAN REKAPITULASI STOK & VALUASI ASET GUDANG (WAREHOUSE STOCK PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportWarehouseStockPDF = async (
+  stockList: any[],
+  settings: VenueSettings,
+  userName?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
 
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 12;
+
+  const totalItems = stockList.length;
+  const totalAssetValue = stockList.reduce((acc, item) => {
+    return acc + (Number(item.warehouseStock || 0) * Number(item.buyPrice || 0));
+  }, 0);
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    if (logoBase64) {
+      try {
+        pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 18, 18);
+      } catch (e) {}
+    }
+    const textStartX = logoBase64 ? margin + 22 : margin;
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(15, 23, 42);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textStartX, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo, Polman', textStartX, 19.5);
+    pdfDoc.text(`Telepon / WA: ${settings?.phone || '0812-9876-5432'} • Central Warehouse Unit`, textStartX, 23.5);
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 30, pageWidth - margin, 30);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPg: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(6.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')} • Operator: ${userName || 'Admin Gudang'}`, margin, pageHeight - 6.5);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPg}`, pageWidth - margin, pageHeight - 6.5, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  // Title Box
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, 33, pageWidth - margin * 2, 18, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(30, 41, 59);
+  doc.text('LAPORAN REKAPITULASI STOK & VALUASI ASET GUDANG PUSAT', margin + 4, 39);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Total Bahan Baku: ${totalItems} Item  •  Total Valuasi Aset Gudang: ${formatCurrency(totalAssetValue)}`, margin + 4, 46);
+
+  // KPI Summary Cards
+  const cardY = 54;
+  const cardW = (pageWidth - margin * 2 - 6) / 2;
+
+  // Card 1
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(margin, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(30, 64, 175);
+  doc.text('TOTAL ITEM BAHAN BAKU AKTIF', margin + 4, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(`${totalItems} Macam Bahan`, margin + 4, cardY + 10.5);
+
+  // Card 2
+  doc.setFillColor(236, 253, 245);
+  doc.setDrawColor(167, 243, 208);
+  doc.roundedRect(margin + cardW + 6, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(6, 95, 70);
+  doc.text('TOTAL NILAI MODAL / ASET FISIK GUDANG', margin + cardW + 10, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(formatCurrency(totalAssetValue), margin + cardW + 10, cardY + 10.5);
+
+  // Table Data
+  const tableData = stockList.map((item, idx) => {
+    const ratio = item.conversionRatio || 1;
+    const pUnit = item.purchaseUnit || 'Grosir';
+    const conversionStr = ratio > 1 ? `1 ${pUnit} = ${ratio} ${item.unit}` : `1:1 (${item.unit})`;
+    const subtotalAsset = Number(item.warehouseStock || 0) * Number(item.buyPrice || 0);
+
+    return [
+      (idx + 1).toString(),
+      item.name + (item.supplier?.name ? `\n(Supplier: ${item.supplier.name})` : ''),
+      item.category || 'FOOD',
+      conversionStr,
+      `${Number(item.warehouseStock || 0).toLocaleString('id-ID')} ${item.unit}`,
+      `${Number(item.stock || 0).toLocaleString('id-ID')} ${item.unit}`,
+      formatCurrency(item.buyPrice || 0),
+      formatCurrency(subtotalAsset)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 72,
+    margin: { left: margin, right: margin, bottom: 35 },
+    head: [['NO', 'NAMA BAHAN BAKU', 'KATEGORI', 'KONVERSI', 'STOK GUDANG', 'STOK DAPUR', 'HPP/UNIT', 'VALUASI ASET']],
+    body: tableData,
+    foot: [['TOTAL', '', '', '', '', '', '', formatCurrency(totalAssetValue)]],
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 6.5 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold', cellWidth: 46 },
+      2: { halign: 'center', cellWidth: 18 },
+      3: { cellWidth: 26 },
+      4: { halign: 'right', cellWidth: 22, fontStyle: 'bold' },
+      5: { halign: 'right', cellWidth: 20 },
+      6: { halign: 'right', cellWidth: 20 },
+      7: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 6, cellPadding: 1.8, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 8;
+  if (currentY + 30 > pageHeight - 12) {
+    doc.addPage();
+    currentY = 32;
+  }
+
+  // Signatures
+  const sigColWidth = (pageWidth - margin * 2) / 3;
+  const roles = [
+    { title: 'Kepala Bagian Gudang', name: userName || 'Petugas Gudang' },
+    { title: 'Supervisor Operasional', name: 'Supervisor Toko' },
+    { title: 'Disetujui Oleh (Owner)', name: 'Owner Muki Ramen' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, currentY, { align: 'center' });
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, currentY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 12, currentY + 16, x + sigColWidth - 12, currentY + 16);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, currentY + 19.5, { align: 'center' });
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Stok_Gudang_Muki_Ramen_${Date.now()}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 20. LAPORAN REKAP PENERIMAAN PASOKAN / INBOUND (INBOUND GOODS PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportWarehouseInboundPDF = async (
+  inbounds: any[],
+  settings: VenueSettings,
+  userName?: string,
+  periodText?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 12;
+
+  const totalAmount = inbounds.reduce((acc, inb) => acc + (inb.totalAmount || 0), 0);
+  const totalOwnerFund = inbounds.filter(inb => inb.paymentSource === 'DANA_PRIBADI_OWNER').reduce((acc, inb) => acc + (inb.totalAmount || 0), 0);
+  const totalBranchFund = inbounds.filter(inb => inb.paymentSource !== 'DANA_PRIBADI_OWNER').reduce((acc, inb) => acc + (inb.totalAmount || 0), 0);
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    if (logoBase64) {
+      try {
+        pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 18, 18);
+      } catch (e) {}
+    }
+    const textStartX = logoBase64 ? margin + 22 : margin;
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(15, 23, 42);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textStartX, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo, Polman', textStartX, 19.5);
+    pdfDoc.text(`Telepon / WA: ${settings?.phone || '0812-9876-5432'} • Inbound Logistics Report`, textStartX, 23.5);
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 30, pageWidth - margin, 30);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPg: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(6.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')} • Operator: ${userName || 'Admin'}`, margin, pageHeight - 6.5);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPg}`, pageWidth - margin, pageHeight - 6.5, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  // Title Box
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, 33, pageWidth - margin * 2, 18, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(30, 41, 59);
+  doc.text('LAPORAN REKAPITULASI PENERIMAAN PASOKAN GUDANG', margin + 4, 39);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Periode: ${periodText || 'Semua Waktu'}  •  Total Pengadaan: ${inbounds.length} Faktur`, margin + 4, 46);
+
+  // KPI Summary
+  const cardY = 54;
+  const cardW = (pageWidth - margin * 2 - 6) / 2;
+
+  // Card 1
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(margin, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(30, 64, 175);
+  doc.text('TOTAL TALANGAN OWNER / MODAL PUSAT', margin + 4, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(formatCurrency(totalOwnerFund), margin + 4, cardY + 10.5);
+
+  // Card 2
+  doc.setFillColor(236, 253, 245);
+  doc.setDrawColor(167, 243, 208);
+  doc.roundedRect(margin + cardW + 6, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(6, 95, 70);
+  doc.text('TOTAL PENGADAAN KAS RESTORAN / LAINNYA', margin + cardW + 10, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(formatCurrency(totalBranchFund), margin + cardW + 10, cardY + 10.5);
+
+  const tableData = inbounds.map((inb, idx) => {
+    const dStr = inb.date ? new Date(inb.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+    const sourceStr = inb.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Talangan Owner' : 'Kas Resto';
+    const itemsSummary = inb.items?.map((it: any) => `${it.ingredient?.name || it.itemName} (${it.purchaseQty} ${it.purchaseUnit})`).join(', ') || '-';
+
+    return [
+      (idx + 1).toString(),
+      inb.invoiceNumber || '-',
+      dStr,
+      inb.supplier?.name || inb.supplierName || 'Supplier Umum',
+      sourceStr,
+      itemsSummary,
+      formatCurrency(inb.totalAmount || 0)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 72,
+    margin: { left: margin, right: margin, bottom: 35 },
+    head: [['NO', 'NO. INVOICE', 'TANGGAL', 'SUPPLIER', 'SUMBER DANA', 'RINCIAN ITEM PASOKAN', 'TOTAL BELANJA']],
+    body: tableData,
+    foot: [['TOTAL', '', '', '', '', '', formatCurrency(totalAmount)]],
+    headStyles: { fillColor: [13, 148, 136], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 6.5 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold', cellWidth: 26 },
+      2: { halign: 'center', cellWidth: 20 },
+      3: { cellWidth: 26 },
+      4: { halign: 'center', cellWidth: 22 },
+      5: { cellWidth: 56 },
+      6: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 6, cellPadding: 1.8, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 8;
+  if (currentY + 30 > pageHeight - 12) {
+    doc.addPage();
+    currentY = 32;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 2;
+  const roles = [
+    { title: 'Petugas Penerima Pasokan', name: userName || 'Petugas Gudang' },
+    { title: 'Owner / Verifikator Keuangan', name: 'Owner Muki Ramen' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, currentY, { align: 'center' });
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, currentY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 20, currentY + 16, x + sigColWidth - 20, currentY + 16);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, currentY + 19.5, { align: 'center' });
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Rekap_Penerimaan_Pasokan_${Date.now()}.pdf`);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21. LAPORAN REKONSILIASI MODAL TALANGAN OWNER & SETTLEMENT CABANG
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportWarehouseSettlementPDF = async (
+  financeData: any,
+  settings: VenueSettings,
+  userName?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 12;
+
+  const totalCapitalIn = financeData?.summary?.totalCapitalIn || 0;
+  const totalTransferredToResto = financeData?.summary?.totalTransferredToResto || 0;
+  const totalReimbursedToOwner = financeData?.summary?.totalReimbursedToOwner || 0;
+  const currentOwnerPayable = Math.max(0, totalTransferredToResto - totalReimbursedToOwner);
+  const transactions = financeData?.transactions || [];
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    if (logoBase64) {
+      try {
+        pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 18, 18);
+      } catch (e) {}
+    }
+    const textStartX = logoBase64 ? margin + 22 : margin;
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(15, 23, 42);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textStartX, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo, Polman', textStartX, 19.5);
+    pdfDoc.text(`Telepon / WA: ${settings?.phone || '0812-9876-5432'} • Owner Financial Settlement Report`, textStartX, 23.5);
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 30, pageWidth - margin, 30);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPg: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(6.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(`Dokumen Resmi Rekonsiliasi Modal • Dicetak: ${new Date().toLocaleString('id-ID')} • Operator: ${userName || 'Admin'}`, margin, pageHeight - 6.5);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPg}`, pageWidth - margin, pageHeight - 6.5, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  // Title Box
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, 33, pageWidth - margin * 2, 18, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(30, 41, 59);
+  doc.text('LAPORAN REKONSILIASI MODAL TALANGAN OWNER & SETTLEMENT', margin + 4, 39);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Rekapitulasi Pengadaan Bahan Baku & Pemisahan Arus Kas Outlet MUKI RAMEN', margin + 4, 46);
+
+  // 4 Financial Metric Cards
+  const cardY = 54;
+  const cardW = (pageWidth - margin * 2 - 9) / 4;
+
+  // Card 1: Total Talangan Masuk
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(margin, cardY, cardW, 17, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(30, 64, 175);
+  doc.text('TOTAL TALANGAN OWNER', margin + 2.5, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text(formatCurrency(totalCapitalIn), margin + 2.5, cardY + 12);
+
+  // Card 2: Didistribusikan ke Dapur
+  doc.setFillColor(245, 243, 255);
+  doc.setDrawColor(221, 214, 254);
+  doc.roundedRect(margin + cardW + 3, cardY, cardW, 17, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(109, 40, 217);
+  doc.text('DIPAKAI DAPUR CABANG', margin + cardW + 5.5, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text(formatCurrency(totalTransferredToResto), margin + cardW + 5.5, cardY + 12);
+
+  // Card 3: Telah Di-Reimburse
+  doc.setFillColor(236, 253, 245);
+  doc.setDrawColor(167, 243, 208);
+  doc.roundedRect(margin + (cardW + 3) * 2, cardY, cardW, 17, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(6, 95, 70);
+  doc.text('TELAH DI-REIMBURSE', margin + (cardW + 3) * 2 + 2.5, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text(formatCurrency(totalReimbursedToOwner), margin + (cardW + 3) * 2 + 2.5, cardY + 12);
+
+  // Card 4: Sisa Kewajiban Settlement
+  doc.setFillColor(254, 243, 199);
+  doc.setDrawColor(253, 230, 138);
+  doc.roundedRect(margin + (cardW + 3) * 3, cardY, cardW, 17, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(146, 64, 14);
+  doc.text('SISA KEWAJIBAN CABANG', margin + (cardW + 3) * 3 + 2.5, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(180, 83, 9);
+  doc.text(formatCurrency(currentOwnerPayable), margin + (cardW + 3) * 3 + 2.5, cardY + 12);
+
+  // Ledger Table
+  const tableData = transactions.map((t: any, idx: number) => {
+    const dStr = t.date ? new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+    let typeBadge = 'Mutasi';
+    if (t.type === 'CAPITAL_IN') typeBadge = 'Talangan Owner (+)';
+    else if (t.type === 'TRANSFER_TO_RESTO') typeBadge = 'Distribusi Dapur';
+    else if (t.type === 'REIMBURSEMENT_PAID') typeBadge = 'Settlement Lunas (-)';
+
+    return [
+      (idx + 1).toString(),
+      dStr,
+      typeBadge,
+      t.referenceId || '-',
+      t.description || '-',
+      t.user?.name || 'Admin',
+      formatCurrency(t.amount || 0)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 76,
+    margin: { left: margin, right: margin, bottom: 35 },
+    head: [['NO', 'TANGGAL & WAKTU', 'TIPE MUTASI', 'NO. REFERENSI', 'KETERANGAN TRANSAKSI', 'PETUGAS', 'NOMINAL (RP)']],
+    body: tableData,
+    headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { halign: 'center', cellWidth: 26 },
+      2: { halign: 'center', cellWidth: 28, fontStyle: 'bold' },
+      3: { halign: 'center', cellWidth: 22 },
+      4: { cellWidth: 54 },
+      5: { cellWidth: 20 },
+      6: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 6, cellPadding: 1.8, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 8;
+  if (currentY + 30 > pageHeight - 12) {
+    doc.addPage();
+    currentY = 32;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 3;
+  const roles = [
+    { title: 'Penanggung Jawab Outlet', name: userName || 'Store Lead Muki' },
+    { title: 'Bagian Keuangan / Kasir', name: 'Finance / Kasir' },
+    { title: 'Penerima Settlement (Owner)', name: 'Owner Muki Ramen' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, currentY, { align: 'center' });
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, currentY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 12, currentY + 16, x + sigColWidth - 12, currentY + 16);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, currentY + 19.5, { align: 'center' });
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Settlement_Modal_Owner_${Date.now()}.pdf`);
+};
