@@ -1573,9 +1573,15 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
     // Sort tiers descending by minOmzet
     tiers.sort((a, b) => Number(b.minOmzet) - Number(a.minOmzet));
 
-    // 2. Fetch all active employees
+    // 2. Fetch all active employees (excluding Admin, Super Admin, and Owner for staff rewards document)
     const users = await prisma.user.findMany({
-      where: { status: { not: 'Nonaktif' } },
+      where: {
+        status: { not: 'Nonaktif' },
+        NOT: [
+          { role: { in: ['Admin', 'admin', 'Super Admin', 'superadmin', 'Owner', 'owner'] } },
+          { username: { in: ['admin', 'superadmin', 'owner'] } }
+        ]
+      },
       select: {
         id: true,
         name: true,

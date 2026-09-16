@@ -3537,9 +3537,20 @@ export const exportDailyBonusPDF = async (
   const pageHeight = doc.internal.pageSize.height || 210;
   const margin = 12;
 
-  const employees = data?.employees || [];
+  const isStaff = (u: any) => {
+    const role = (u?.role || '').toLowerCase();
+    const uname = (u?.username || '').toLowerCase();
+    const name = (u?.name || '').toLowerCase();
+    return !['admin', 'super admin', 'superadmin', 'owner'].includes(role) &&
+           !['admin', 'superadmin', 'owner'].includes(uname) &&
+           name !== 'super admin';
+  };
+
+  const rawEmployees = data?.employees || [];
+  const employees = rawEmployees.filter(isStaff);
   const days = data?.days || [];
-  const employeeSummaries = data?.employeeSummaries || [];
+  const rawSummaries = data?.employeeSummaries || [];
+  const employeeSummaries = rawSummaries.filter((s: any) => isStaff(s));
   const tiers = data?.tiers || [];
   const totalBonusAll = data?.totalBonusAll || 0;
 

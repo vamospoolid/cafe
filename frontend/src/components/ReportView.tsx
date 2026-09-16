@@ -1990,9 +1990,20 @@ export const ReportView: React.FC = () => {
           TAB: BONUS & ABSENSI STAF
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'daily_bonus' && (() => {
+        const isStaff = (u: any) => {
+          const role = (u?.role || '').toLowerCase();
+          const uname = (u?.username || '').toLowerCase();
+          const name = (u?.name || '').toLowerCase();
+          return !['admin', 'super admin', 'superadmin', 'owner'].includes(role) &&
+                 !['admin', 'superadmin', 'owner'].includes(uname) &&
+                 name !== 'super admin';
+        };
+
         const days = dailyBonusData?.days || [];
-        const employees = dailyBonusData?.employees || dailyBonusData?.employeeSummaries || [];
-        const employeeSummaries = dailyBonusData?.employeeSummaries || [];
+        const rawEmployees = dailyBonusData?.employees || dailyBonusData?.employeeSummaries || [];
+        const employees = rawEmployees.filter(isStaff);
+        const rawSummaries = dailyBonusData?.employeeSummaries || [];
+        const employeeSummaries = rawSummaries.filter(isStaff);
         const tiers = dailyBonusData?.tiers || dailyBonusData?.tiersConfig || [];
 
         const totalBonusAll = dailyBonusData?.totalBonusAll ?? days.reduce((sum: number, d: any) => sum + (d.tierBonus || 0), 0);

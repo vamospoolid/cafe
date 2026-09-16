@@ -223,9 +223,20 @@ export function exportDailyBonusExcel(data: any, settings: any, period: { startD
   const periodText = `${formatDateIndo(period.startDate)} s/d ${formatDateIndo(period.endDate)}`;
   const printedAt = new Date().toLocaleString('id-ID');
 
-  const employees = data?.employees || [];
+  const isStaff = (u: any) => {
+    const role = (u?.role || '').toLowerCase();
+    const uname = (u?.username || '').toLowerCase();
+    const name = (u?.name || '').toLowerCase();
+    return !['admin', 'super admin', 'superadmin', 'owner'].includes(role) &&
+           !['admin', 'superadmin', 'owner'].includes(uname) &&
+           name !== 'super admin';
+  };
+
+  const rawEmployees = data?.employees || [];
+  const employees = rawEmployees.filter(isStaff);
   const days = data?.days || [];
-  const employeeSummaries = data?.employeeSummaries || [];
+  const rawSummaries = data?.employeeSummaries || [];
+  const employeeSummaries = rawSummaries.filter((s: any) => isStaff(s));
   const tiers = data?.tiers || [];
   const totalBonusAll = data?.totalBonusAll || 0;
 
