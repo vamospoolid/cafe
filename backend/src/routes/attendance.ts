@@ -307,8 +307,8 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
           orderBy: { clockIn: 'desc' }
         });
 
-        const totalHadir = logs.filter(l => l.status === 'Hadir').length;
-        const totalTerlambat = logs.filter(l => l.status === 'Terlambat').length;
+        const totalTerlambat = logs.filter(l => l.status === 'Terlambat' || (l.lateMinutes || 0) > 0).length;
+        const totalHadir = logs.filter(l => (l.status === 'Hadir' || l.status === 'Tepat Waktu') && (l.lateMinutes || 0) === 0).length;
         const totalLuarRadius = logs.filter(l => l.status === 'Di Luar Radius').length;
         const totalEntries = logs.length;
         const totalLateMinutes = logs.reduce((sum, l) => sum + (l.lateMinutes || 0), 0);

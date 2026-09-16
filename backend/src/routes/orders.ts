@@ -1087,11 +1087,35 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
         }
       }
 
+      // Auto-release table status if no other active pending orders exist
+      for (const ord of updatedOrders) {
+        if (ord.tableId) {
+          const remainingActive = await tx.order.count({
+            where: {
+              tableId: ord.tableId,
+              status: 'Pending',
+              id: { notIn: updatedOrders.map((u: any) => u.id) }
+            }
+          });
+          if (remainingActive === 0) {
+            await tx.table.update({
+              where: { id: ord.tableId },
+              data: { status: 'Kosong' }
+            });
+          }
+        }
+      }
+
       return updatedOrders;
     });
 
-    // Emit real-time event pembayaran
+    // Emit real-time event pembayaran & update meja
     io.emit('order:paid', { orderIds: result.map((o: any) => o.id) });
+    for (const ord of result) {
+      if (ord.tableId) {
+        io.emit('table:update', { tableId: ord.tableId });
+      }
+    }
 
     // Auto-print struk (fire-and-forget)
     const paySettings = await prisma.settings.findFirst();

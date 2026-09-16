@@ -320,7 +320,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 6. Fetch Active Cashier Shift
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'OPEN' },
+      where: { status: { in: ['Open', 'OPEN'] } },
       include: {
         user: { select: { id: true, name: true, username: true, role: true } }
       }
@@ -354,34 +354,54 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       { min: 6000000, max: 999999999, bonus: 25000, label: '≥ Rp 6 Juta' }
     ];
 
-    let activeTiers = defaultTiers;
+    let activeTiers: any[] = defaultTiers;
     const settings = await prisma.settings.findFirst();
     if (settings?.dailyOmzetTiers) {
       try {
         const parsed = JSON.parse(settings.dailyOmzetTiers);
-        if (Array.isArray(parsed) && parsed.length > 0) activeTiers = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Normalize tiers list to ensure min, max, bonus, label
+          const sorted = [...parsed].sort((a: any, b: any) => {
+            const aMin = Number(a.min ?? a.minOmzet ?? 0);
+            const bMin = Number(b.min ?? b.minOmzet ?? 0);
+            return aMin - bMin;
+          });
+          activeTiers = sorted;
+        }
       } catch (e) {}
     }
 
-    let currentTier = activeTiers[0];
+    let currentTier: any = activeTiers[0];
     let nextTier: any = null;
 
     for (let i = 0; i < activeTiers.length; i++) {
       const t = activeTiers[i];
-      if (totalRevenue >= t.min) {
+      const tMin = Number(t.min ?? t.minOmzet ?? 0);
+      if (totalRevenue >= tMin) {
         currentTier = t;
         nextTier = activeTiers[i + 1] || null;
       }
     }
 
+    const nextGoalAmount = nextTier ? Number(nextTier.min ?? nextTier.minOmzet ?? 0) : null;
+    const currentTierMin = Number(currentTier?.min ?? currentTier?.minOmzet ?? 0);
+    const remainingToNext = nextGoalAmount ? Math.max(0, nextGoalAmount - totalRevenue) : 0;
+    
+    let progressPercent = 100;
+    if (nextGoalAmount && nextGoalAmount > currentTierMin) {
+      const range = nextGoalAmount - currentTierMin;
+      const progress = totalRevenue - currentTierMin;
+      progressPercent = Math.min(100, Math.max(0, Math.round((progress / range) * 100)));
+    }
+
     const omzetBonusTier = {
       enabled: settings?.enableDailyOmzetBonus ?? true,
-      currentBonus: currentTier?.bonus || 0,
-      currentTierLabel: currentTier?.label || '< Rp 2.5 Juta',
-      nextGoalAmount: nextTier ? nextTier.min : null,
-      remainingToNext: nextTier ? Math.max(0, nextTier.min - totalRevenue) : 0,
-      nextTierBonus: nextTier ? nextTier.bonus : null,
-      progressPercent: nextTier ? Math.min(100, Math.round((totalRevenue / nextTier.min) * 100)) : 100
+      currentBonus: Number(currentTier?.bonus || 0),
+      currentTierLabel: currentTier?.label || `Tier >= Rp ${(currentTierMin / 1000000).toFixed(1)} Juta`,
+      nextGoalAmount,
+      remainingToNext,
+      nextTierBonus: nextTier ? Number(nextTier.bonus || 0) : 0,
+      progressPercent
     };
 
     // 10. Cash vs Digital breakdown
