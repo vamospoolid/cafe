@@ -11,9 +11,9 @@ import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { exportFinancialPDF, exportProfitSharingPDF, exportDailyBonusPDF } from '../utils/pdfGenerator';
 import { exportProfitSharingExcel, exportDailyBonusExcel, exportPettyCashExcel, exportSalesReportExcel, exportInventoryValuationExcel } from '../utils/excelGenerator';
-import { getTodayStr, getYesterdayStr, getLast7DaysRange, getLast30DaysRange, formatLocalDate } from '../utils/dateUtils';
+import { getTodayStr, getYesterdayStr, getLast7DaysRange, getLast30DaysRange, getThisMonthRange, getLastMonthRange, getMonthRange, formatLocalDate } from '../utils/dateUtils';
 
-type QuickFilterType = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
+type QuickFilterType = 'today' | 'yesterday' | 'week' | 'this_month' | 'last_month' | 'month_30' | 'custom';
 type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory' | 'accounting' | 'profit_sharing' | 'daily_bonus';
 
 export const ReportView: React.FC = () => {
@@ -24,6 +24,7 @@ export const ReportView: React.FC = () => {
   const [quickFilter, setQuickFilter] = useState<QuickFilterType>('today');
   const [startDate, setStartDate] = useState(getTodayStr());
   const [endDate, setEndDate] = useState(getTodayStr());
+  const [selectedMonth, setSelectedMonth] = useState(getTodayStr().slice(0, 7)); // YYYY-MM
 
   // Main Tabs Navigation
   const [activeTab, setActiveTab] = useState<MainTabType>('dashboard');
@@ -126,11 +127,29 @@ export const ReportView: React.FC = () => {
       const r = getLast7DaysRange();
       setStartDate(r.startDate);
       setEndDate(r.endDate);
-    } else if (type === 'month') {
+    } else if (type === 'this_month') {
+      const r = getThisMonthRange();
+      setStartDate(r.startDate);
+      setEndDate(r.endDate);
+      setSelectedMonth(r.startDate.slice(0, 7));
+    } else if (type === 'last_month') {
+      const r = getLastMonthRange();
+      setStartDate(r.startDate);
+      setEndDate(r.endDate);
+      setSelectedMonth(r.startDate.slice(0, 7));
+    } else if (type === 'month_30') {
       const r = getLast30DaysRange();
       setStartDate(r.startDate);
       setEndDate(r.endDate);
     }
+  };
+
+  const handleMonthPickerChange = (yearMonthStr: string) => {
+    setSelectedMonth(yearMonthStr);
+    setQuickFilter('custom');
+    const r = getMonthRange(yearMonthStr);
+    setStartDate(r.startDate);
+    setEndDate(r.endDate);
   };
 
   // PDF Export Handler
@@ -377,20 +396,22 @@ export const ReportView: React.FC = () => {
         </div>
 
         {/* Date Filter Bar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-3 border-t border-slate-100">
           {/* Quick Filter Pills (Horizontally scrollable on mobile) */}
           <div className="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-xl overflow-x-auto max-w-full scrollbar-none">
             {[
               { id: 'today', label: 'Hari Ini' },
               { id: 'yesterday', label: 'Kemarin' },
-              { id: 'week', label: '7 Hari Terakhir' },
-              { id: 'month', label: '30 Hari Terakhir' },
-              { id: 'custom', label: 'Kustom Tanggal' },
+              { id: 'week', label: '7 Hari' },
+              { id: 'this_month', label: 'Bulan Ini' },
+              { id: 'last_month', label: 'Bulan Lalu' },
+              { id: 'month_30', label: '30 Hari' },
+              { id: 'custom', label: 'Kustom' },
             ].map((f) => (
               <button
                 key={f.id}
                 onClick={() => handleQuickFilter(f.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap cursor-pointer ${
                   quickFilter === f.id
                     ? 'bg-white text-indigo-700 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
@@ -401,9 +422,21 @@ export const ReportView: React.FC = () => {
             ))}
           </div>
 
-          {/* Date Picker Range */}
-          <div className="flex items-center gap-2 w-full lg:w-auto">
-            <div className="flex-1 lg:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+          {/* Date Picker Range & Month Selector */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto">
+            {/* Quick Month Picker */}
+            <div className="flex items-center gap-1.5 bg-indigo-50/70 border border-indigo-200/80 px-2.5 py-1.5 rounded-xl shrink-0" title="Pilih Bulan Spesifik">
+              <span className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-wider">Bulan:</span>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => handleMonthPickerChange(e.target.value)}
+                className="bg-transparent text-xs font-black text-indigo-950 outline-none cursor-pointer"
+              />
+            </div>
+
+            {/* Custom Date Range */}
+            <div className="flex-1 sm:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <Calendar size={14} className="text-slate-400 shrink-0" />
               <input
                 type="date"
@@ -416,7 +449,7 @@ export const ReportView: React.FC = () => {
               />
             </div>
             <span className="text-xs text-slate-400 font-bold shrink-0">s/d</span>
-            <div className="flex-1 lg:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+            <div className="flex-1 sm:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <Calendar size={14} className="text-slate-400 shrink-0" />
               <input
                 type="date"

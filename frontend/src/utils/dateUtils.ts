@@ -55,6 +55,31 @@ export const getThisMonthRange = () => {
   };
 };
 
+// Dapatkan rentang bulan lalu (tgl 1 s/d akhir bulan lalu)
+export const getLastMonthRange = () => {
+  const now = new Date();
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+  return {
+    startDate: formatLocalDate(startOfLastMonth),
+    endDate: formatLocalDate(endOfLastMonth)
+  };
+};
+
+// Dapatkan rentang bulan tertentu (YYYY-MM)
+export const getMonthRange = (yearMonthStr: string) => {
+  if (!yearMonthStr || !yearMonthStr.includes('-')) return getThisMonthRange();
+  const [yearStr, monthStr] = yearMonthStr.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10) - 1;
+  const startOfMonth = new Date(year, month, 1);
+  const endOfMonth = new Date(year, month + 1, 0);
+  return {
+    startDate: formatLocalDate(startOfMonth),
+    endDate: formatLocalDate(endOfMonth)
+  };
+};
+
 // Format tanggal ramah bahasa Indonesia
 export const formatDisplayDate = (isoOrDateStr: string, includeTime: boolean = false): string => {
   if (!isoOrDateStr) return '-';
