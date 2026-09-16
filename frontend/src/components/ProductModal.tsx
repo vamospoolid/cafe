@@ -549,111 +549,211 @@ const ProductModal: React.FC<ProductModalProps> = ({
               </div>
             ) : (
               /* RECIPE TAB CONTENT */
-              <div className="space-y-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3 items-start">
-                  <Info size={18} className="text-amber-700 mt-0.5 shrink-0" />
-                  <div className="text-amber-900 text-xs leading-relaxed">
-                    <p className="font-black mb-0.5">Kalkulasi Otomatis HPP Berdasarkan Resep Bahan Baku</p>
-                    <p className="font-medium text-amber-800">
-                      Harga modal (HPP) menu ini akan dihitung otomatis dari total bahan baku di bawah. Setiap kali menu ini terjual di kasir, stok bahan baku akan langsung terpotong secara otomatis.
+              <div className="space-y-5">
+                {/* Banner Info */}
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-200/80 rounded-2xl p-4 flex gap-3.5 items-start shadow-sm">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                    <Info size={18} />
+                  </div>
+                  <div className="text-amber-950 text-xs leading-relaxed">
+                    <p className="font-black text-amber-900 mb-0.5 text-xs sm:text-sm">Kalkulasi Otomatis HPP Berdasarkan Resep Bahan Baku</p>
+                    <p className="font-medium text-amber-800/90 text-[11px] sm:text-xs">
+                      Harga modal (HPP) menu ini akan dihitung otomatis dari total akumulasi bahan baku di bawah. Setiap kali menu ini terjual di kasir, stok bahan baku akan langsung dipotong otomatis sesuai takaran porsi.
                     </p>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3">
-                  <div className="font-bold text-xs text-slate-700 uppercase tracking-wider">Tambah Bahan ke Resep</div>
-                  <div className="flex flex-col sm:flex-row gap-2.5">
-                    <div className="flex-1">
-                      <select 
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500" 
-                        value={newRecipe.ingredientId} 
-                        onChange={e => setNewRecipe(p => ({ ...p, ingredientId: e.target.value }))}
+                {/* Form Input Tambah Bahan */}
+                <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Plus size={14} className="text-indigo-600" /> Tambah Bahan ke Resep
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      Pilih bahan dan tentukan takaran per 1 porsi saji
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end pt-1">
+                    {/* Select Bahan Baku */}
+                    <div className="sm:col-span-6">
+                      <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Pilih Bahan Baku <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <select 
+                          className="w-full pl-3 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer shadow-sm truncate" 
+                          value={newRecipe.ingredientId} 
+                          onChange={e => setNewRecipe(p => ({ ...p, ingredientId: e.target.value }))}
+                        >
+                          <option value="">-- Pilih Bahan Baku --</option>
+                          {ingredients.map(ing => (
+                            <option key={ing.id} value={ing.id}>
+                              {ing.name} (Stok: {ing.stock} {ing.unit} | Rp {Number(ing.buyPrice || 0).toLocaleString('id-ID')}/{ing.unit})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Input Qty */}
+                    {(() => {
+                      const selectedIng = ingredients.find(i => String(i.id) === String(newRecipe.ingredientId));
+                      return (
+                        <div className="sm:col-span-3">
+                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5 truncate">
+                            Takaran {selectedIng?.unit ? `(${selectedIng.unit})` : '/ Porsi'} <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <input 
+                              type="number" 
+                              step="any"
+                              placeholder="0.00" 
+                              className="w-full pl-3 pr-12 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm"
+                              value={newRecipe.qty}
+                              onChange={e => setNewRecipe(p => ({ ...p, qty: e.target.value }))}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddRecipeItem();
+                                }
+                              }}
+                            />
+                            {selectedIng?.unit && (
+                              <span className="absolute right-2.5 top-2 text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 pointer-events-none">
+                                {selectedIng.unit}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Submit Button */}
+                    <div className="sm:col-span-3">
+                      <button 
+                        type="button"
+                        onClick={handleAddRecipeItem}
+                        disabled={!newRecipe.ingredientId || !newRecipe.qty}
+                        className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 transition-all"
                       >
-                        <option value="">-- Pilih Bahan Baku --</option>
-                        {ingredients.map(ing => (
-                          <option key={ing.id} value={ing.id}>
-                            {ing.name} (Stok: {ing.stock} {ing.unit} | Rp {ing.buyPrice.toLocaleString('id-ID')}/{ing.unit})
-                          </option>
-                        ))}
-                      </select>
+                        <Plus size={16} /> Tambah Bahan
+                      </button>
                     </div>
-                    <div className="w-full sm:w-36">
-                      <input 
-                        type="number" 
-                        step="any"
-                        placeholder="Qty / porsi" 
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
-                        value={newRecipe.qty}
-                        onChange={e => setNewRecipe(p => ({ ...p, qty: e.target.value }))}
-                      />
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={handleAddRecipeItem}
-                      disabled={!newRecipe.ingredientId || !newRecipe.qty}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all"
-                    >
-                      <Plus size={15} /> Tambah
-                    </button>
                   </div>
                 </div>
 
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                {/* Table Resep Bahan */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                    <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                          <th className="p-3">Nama Bahan</th>
-                          <th className="p-3">Takaran / Porsi</th>
-                          <th className="p-3">Harga Beli</th>
-                          <th className="p-3">Subtotal HPP</th>
-                          <th className="p-3 text-center">Aksi</th>
+                          <th className="p-3.5 pl-4">Bahan Baku</th>
+                          <th className="p-3.5 text-center">Takaran / Porsi</th>
+                          <th className="p-3.5 text-right">Harga Modal Satuan</th>
+                          <th className="p-3.5 text-right">Subtotal HPP</th>
+                          <th className="p-3.5 text-center pr-4 w-16">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {recipeItems.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
-                              Belum ada bahan baku ditambahkan pada resep ini.
+                            <td colSpan={5} className="p-10 text-center text-slate-400 font-medium">
+                              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
+                                <Beaker size={24} />
+                              </div>
+                              <p className="font-bold text-slate-600 text-xs">Belum ada bahan baku di resep ini</p>
+                              <p className="text-[11px] text-slate-400 mt-0.5">Gunakan formulir di atas untuk menambahkan bahan baku dan takarannya.</p>
                             </td>
                           </tr>
                         ) : (
-                          recipeItems.map(item => (
-                            <tr key={item.ingredientId} className="hover:bg-slate-50/50">
-                              <td className="p-3 font-bold text-slate-800">{item.ingredientName}</td>
-                              <td className="p-3 font-bold text-indigo-600">
-                                {item.qtyPerServing} <span className="text-slate-400 font-medium text-[11px]">{item.unit}</span>
+                          recipeItems.map((item, idx) => (
+                            <tr key={item.ingredientId} className="hover:bg-indigo-50/30 transition-colors">
+                              <td className="p-3.5 pl-4">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="w-5 h-5 rounded-md bg-slate-100 text-slate-500 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <span className="font-bold text-slate-800 text-xs sm:text-sm">{item.ingredientName}</span>
+                                </div>
                               </td>
-                              <td className="p-3 text-slate-600">Rp {item.buyPrice.toLocaleString('id-ID')}</td>
-                              <td className="p-3 font-black text-slate-900">
+                              <td className="p-3.5 text-center">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-black text-xs border border-indigo-100">
+                                  {item.qtyPerServing} <span className="text-[10px] font-semibold text-indigo-400">{item.unit}</span>
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right font-medium text-slate-600">
+                                Rp {Number(item.buyPrice || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">/{item.unit}</span>
+                              </td>
+                              <td className="p-3.5 text-right font-black text-slate-900 text-xs sm:text-sm">
                                 Rp {(item.qtyPerServing * item.buyPrice).toLocaleString('id-ID')}
                               </td>
-                              <td className="p-3 text-center">
+                              <td className="p-3.5 text-center pr-4">
                                 <button 
                                   type="button" 
                                   onClick={() => handleRemoveRecipeItem(item.ingredientId)}
-                                  className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center hover:bg-rose-100 transition-colors mx-auto"
+                                  className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200/80 flex items-center justify-center transition-all mx-auto active:scale-95"
+                                  title="Hapus dari resep"
                                 >
-                                  <Trash2 size={13} />
+                                  <Trash2 size={14} />
                                 </button>
                               </td>
                             </tr>
                           ))
                         )}
                       </tbody>
-                      {recipeItems.length > 0 && (
-                        <tfoot>
-                          <tr className="bg-slate-50 font-black border-t border-slate-200">
-                            <td colSpan={3} className="p-3 text-right text-slate-600 uppercase text-[11px]">Total HPP Menu:</td>
-                            <td colSpan={2} className="p-3 text-indigo-700 text-sm">
-                              Rp {recipeItems.reduce((s, i) => s + (i.qtyPerServing * i.buyPrice), 0).toLocaleString('id-ID')}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      )}
                     </table>
                   </div>
                 </div>
+
+                {/* Financial Summary Calculation Cards */}
+                {recipeItems.length > 0 && (() => {
+                  const totalHpp = recipeItems.reduce((s, i) => s + (i.qtyPerServing * i.buyPrice), 0);
+                  const sellPrice = Number(formData.sellPrice) || 0;
+                  const profit = sellPrice - totalHpp;
+                  const marginPercent = sellPrice > 0 ? ((profit / sellPrice) * 100).toFixed(1) : '0';
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-gradient-to-br from-slate-50 to-indigo-50/40 rounded-2xl border border-slate-200">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+                          Total Modal HPP / Porsi
+                        </span>
+                        <span className="text-base font-black text-indigo-700">
+                          Rp {totalHpp.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+                          Harga Jual Kasir
+                        </span>
+                        <span className="text-base font-black text-slate-900">
+                          {sellPrice > 0 ? `Rp ${sellPrice.toLocaleString('id-ID')}` : <span className="text-xs text-amber-500 font-bold">Belum diset</span>}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+                          Estimasi Profit (Margin)
+                        </span>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className={`text-base font-black ${profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            Rp {profit.toLocaleString('id-ID')}
+                          </span>
+                          {sellPrice > 0 && (
+                            <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-md ${
+                              profit >= 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}>
+                              {marginPercent}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
