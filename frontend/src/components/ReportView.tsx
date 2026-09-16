@@ -1991,14 +1991,12 @@ export const ReportView: React.FC = () => {
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'daily_bonus' && (() => {
         const days = dailyBonusData?.days || [];
-        const employees = dailyBonusData?.employeesSummary || [];
-        const tiers = dailyBonusData?.tiersConfig || [];
+        const employees = dailyBonusData?.employees || dailyBonusData?.employeeSummaries || [];
+        const employeeSummaries = dailyBonusData?.employeeSummaries || [];
+        const tiers = dailyBonusData?.tiers || dailyBonusData?.tiersConfig || [];
 
-        const totalBonusAll = days.reduce((sum: number, d: any) => sum + (d.totalBonusDistributed || 0), 0);
-        const daysHitTier = days.filter((d: any) => d.tierReached !== null).length;
-
-        // Distinct employee usernames
-        const allStaffNames: string[] = employees.map((e: any) => e.username);
+        const totalBonusAll = dailyBonusData?.totalBonusAll ?? days.reduce((sum: number, d: any) => sum + (d.tierBonus || 0), 0);
+        const daysHitTier = days.filter((d: any) => Boolean(d.matchedTier || d.tierReached)).length;
 
         return (
           <div className="flex flex-col gap-5">
@@ -2055,10 +2053,10 @@ export const ReportView: React.FC = () => {
                 {tiers.map((t: any, idx: number) => (
                   <div key={idx} className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-200/70 flex flex-col">
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black uppercase text-amber-800">Tier {t.tier}</span>
-                      <span className="text-[10px] font-extrabold text-amber-600">≥ {formatCurrency(t.minOmzet)}</span>
+                      <span className="text-[10px] font-black uppercase text-amber-800">Tier {t?.tier ?? (idx + 1)}</span>
+                      <span className="text-[10px] font-extrabold text-amber-600">≥ {formatCurrency(t?.minOmzet || 0)}</span>
                     </div>
-                    <span className="text-sm font-black text-amber-900 mt-1">+{formatCurrency(t.bonusPerStaff)} <span className="text-[10px] font-normal text-amber-700">/ crew</span></span>
+                    <span className="text-sm font-black text-amber-900 mt-1">+{formatCurrency(t?.bonus || t?.bonusPerStaff || 0)} <span className="text-[10px] font-normal text-amber-700">/ crew</span></span>
                   </div>
                 ))}
               </div>
@@ -2111,9 +2109,10 @@ export const ReportView: React.FC = () => {
                       <th className="p-3 rounded-l-xl">Tanggal</th>
                       <th className="p-3 text-right">Omzet Harian</th>
                       <th className="p-3 text-center">Tier Target</th>
-                      {allStaffNames.map((name, i) => (
+                      {employees.map((emp: any, i: number) => (
                         <th key={i} className="p-3 text-center whitespace-nowrap">
-                          {name}
+                          {emp?.name || emp?.username}
+                          {emp?.employmentType === 'DAILY_WORKER' && <span className="ml-1 text-[9px] text-amber-600 font-bold">(DW)</span>}
                         </th>
                       ))}
                       <th className="p-3 text-right rounded-r-xl">Total Bonus</th>
@@ -2121,29 +2120,32 @@ export const ReportView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {days.map((d: any, idx: number) => {
-                      const hit = d.tierReached !== null;
+                      const tierObj = d.matchedTier || d.tierReached;
+                      const hit = Boolean(tierObj);
+                      const dayGross = d.grossOmzet ?? d.totalOmzet ?? 0;
+                      let dayTotalBonus = 0;
+
                       return (
                         <tr key={idx} className={`hover:bg-slate-50/80 font-medium ${hit ? 'bg-amber-50/20' : ''}`}>
                           <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{d.date}</td>
-                          <td className="p-3 text-right font-black text-slate-900">{formatCurrency(d.totalOmzet)}</td>
+                          <td className="p-3 text-right font-black text-slate-900">{formatCurrency(dayGross)}</td>
                           <td className="p-3 text-center">
-                            {hit ? (
+                            {hit && tierObj ? (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
-                                Tier {d.tierReached.tier} (+{formatCurrency(d.tierReached.bonusPerStaff)})
+                                {tierObj.label || `Tier ${tierObj.tier ?? (idx + 1)}`} (+{formatCurrency(tierObj.bonus ?? tierObj.bonusPerStaff ?? d.tierBonus ?? 0)})
                               </span>
                             ) : (
                               <span className="text-[10px] text-slate-400">-</span>
                             )}
                           </td>
-                          {allStaffNames.map((name, i) => {
-                            const staff = [...(d.fullTimeStaffPresent || []), ...(d.otherStaffPresent || [])].find((s: any) => s.username === name);
-                            if (!staff) {
-                              return <td key={i} className="p-3 text-center text-slate-300">-</td>;
-                            }
-                            const isDW = staff.employmentType === 'DAILY_WORKER';
-                            const status = staff.attendanceStatus;
-                            const isPresent = status === 'Hadir' || status === 'Terlambat';
-                            const bonus = staff.bonusEarned || 0;
+                          {employees.map((emp: any, i: number) => {
+                            const empId = emp.userId || emp.id;
+                            const att = d.employeeAttendance?.[empId];
+                            const isDW = emp.employmentType === 'DAILY_WORKER';
+                            const status = att?.status || 'LIBUR';
+                            const isPresent = status === 'HADIR' || status === 'TERLAMBAT' || status === 'Hadir' || status === 'Terlambat';
+                            const bonus = att?.bonus || 0;
+                            dayTotalBonus += bonus;
 
                             return (
                               <td key={i} className="p-3 text-center">
@@ -2152,7 +2154,7 @@ export const ReportView: React.FC = () => {
                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-slate-200 text-slate-700">DW</span>
                                   ) : isPresent ? (
                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800">
-                                      {status === 'Terlambat' ? 'Telat' : 'Hadir'}
+                                      {status === 'TERLAMBAT' || status === 'Terlambat' ? 'Telat' : 'Hadir'}
                                     </span>
                                   ) : (
                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">
@@ -2169,7 +2171,7 @@ export const ReportView: React.FC = () => {
                             );
                           })}
                           <td className="p-3 text-right font-black text-amber-800 bg-amber-50/40">
-                            {formatCurrency(d.totalBonusDistributed)}
+                            {formatCurrency(dayTotalBonus)}
                           </td>
                         </tr>
                       );
@@ -2178,13 +2180,14 @@ export const ReportView: React.FC = () => {
                   <tfoot className="bg-slate-900 text-white font-black text-xs">
                     <tr>
                       <td className="p-3 rounded-l-xl">TOTAL AKUMULASI</td>
-                      <td className="p-3 text-right">{formatCurrency(days.reduce((s: number, d: any) => s + (d.totalOmzet || 0), 0))}</td>
+                      <td className="p-3 text-right">{formatCurrency(days.reduce((s: number, d: any) => s + (d.grossOmzet ?? d.totalOmzet ?? 0), 0))}</td>
                       <td className="p-3 text-center">{daysHitTier} Hari</td>
-                      {allStaffNames.map((name, i) => {
-                        const emp = employees.find((e: any) => e.username === name);
+                      {employees.map((emp: any, i: number) => {
+                        const empId = emp.userId || emp.id;
+                        const sum = employeeSummaries.find((s: any) => (s.userId || s.id) === empId);
                         return (
                           <td key={i} className="p-3 text-center text-amber-300 font-black">
-                            {formatCurrency(emp?.totalBonusAmount || 0)}
+                            {formatCurrency(sum?.totalBonus ?? emp?.totalBonus ?? emp?.totalBonusAmount ?? 0)}
                           </td>
                         );
                       })}
@@ -2201,29 +2204,29 @@ export const ReportView: React.FC = () => {
             <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
               <h4 className="font-black text-slate-900 text-base">Rekapitulasi Total Bonus Karyawan</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {employees.map((e: any, idx: number) => {
+                {employeeSummaries.map((e: any, idx: number) => {
                   const isFT = e.employmentType === 'FULL_TIME';
                   return (
                     <div key={idx} className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between">
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
-                            {e.username.slice(0, 2).toUpperCase()}
+                            {(e.name || e.username || 'U').slice(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <div className="font-black text-slate-900 text-sm">{e.username}</div>
+                            <div className="font-black text-slate-900 text-sm">{e.name || e.username}</div>
                             <span className="text-[10px] text-slate-500 font-bold uppercase">
                               {isFT ? 'Full Time' : e.employmentType === 'DAILY_WORKER' ? 'Daily Worker' : 'Part Time'}
                             </span>
                           </div>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isFT ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
-                          {e.totalPresentDays} Hari Hadir
+                          {e.presentCount ?? e.totalPresentDays ?? 0} Hari Hadir
                         </span>
                       </div>
                       <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
-                        <span className="text-xs text-slate-500">Dapat Bonus: <strong>{e.totalBonusDays} Hari</strong></span>
-                        <span className="text-sm font-black text-amber-700">{formatCurrency(e.totalBonusAmount)}</span>
+                        <span className="text-xs text-slate-500">Dapat Bonus: <strong>{e.lateCount !== undefined ? `${(e.presentCount || 0)} Hadir` : ''}</strong></span>
+                        <span className="text-sm font-black text-amber-700">{formatCurrency(e.totalBonus ?? e.totalBonusAmount ?? 0)}</span>
                       </div>
                     </div>
                   );
