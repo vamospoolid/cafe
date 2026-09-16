@@ -460,5 +460,179 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
+// ─── Force Close & Auto-Cutoff EOD Shift ──────────────────────────────
+
+export async function runShiftAutoCutoff(): Promise<{ count: number }> {
+  try {
+    const sixteenHoursAgo = new Date(Date.now() - (16 * 60 * 60 * 1000));
+    const openShifts = await prisma.shift.findMany({
+      where: {
+        status: 'Open',
+        waktuBuka: { lt: sixteenHoursAgo }
+      },
+      include: { user: true }
+    });
+
+    if (openShifts.length === 0) return { count: 0 };
+
+    for (const shift of openShifts) {
+      const now = new Date();
+      const activeOrders = await prisma.order.findMany({
+        where: {
+          status: 'Paid',
+          OR: [
+            { paidAt: { gte: shift.waktuBuka, lte: now } },
+            { paidAt: null, createdAt: { gte: shift.waktuBuka, lte: now } }
+          ]
+        }
+      });
+
+      const cashSales = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
+      const nonCashSales = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
+
+      const cashFlows = await prisma.cashFlow.findMany({
+        where: { date: { gte: shift.waktuBuka, lte: now } }
+      });
+      const manualCashIn = cashFlows.filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang').reduce((sum, cf) => sum + cf.amount, 0);
+      const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
+
+      const debtPayments = await prisma.debtPayment.findMany({
+        where: { createdAt: { gte: shift.waktuBuka, lte: now } }
+      });
+      const cashDebtIncome = debtPayments
+        .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
+        .reduce((sum, dp) => sum + dp.amountPaid, 0);
+
+      const expectedCash = shift.saldoAwal + cashSales + cashDebtIncome + manualCashIn - manualCashOut;
+      const expectedNonCash = nonCashSales;
+
+      const closed = await prisma.shift.update({
+        where: { id: shift.id },
+        data: {
+          waktuTutup: now,
+          status: 'Closed',
+          saldoSistem: expectedCash,
+          saldoElektronik: expectedNonCash,
+          saldoFisikLaci: expectedCash,
+          selisih: 0
+        }
+      });
+
+      io.emit('shift:status_change', { status: 'Closed', shift: closed });
+    }
+
+    console.log(`[Auto-EOD Cutoff] Berhasil menutup ${openShifts.length} shift kasir gantung secara otomatis.`);
+    return { count: openShifts.length };
+  } catch (error) {
+    console.error('Error running shift auto cutoff:', error);
+    return { count: 0 };
+  }
+}
+
+// POST Force Close Shift by Admin / Supervisor
+router.post('/:id/force-close', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const shiftId = Number(req.params.id);
+    const { saldoFisikLaci = 0, catatan = '' } = req.body;
+    const userRole = ((req as any).user?.role || '').toLowerCase();
+
+    if (!['admin', 'owner', 'superadmin', 'manager', 'supervisor'].includes(userRole)) {
+      return res.status(403).json({ error: 'Hanya Admin/Owner yang berwenang melakukan Force Close Shift.' });
+    }
+
+    const shift = await prisma.shift.findUnique({
+      where: { id: shiftId },
+      include: { user: true }
+    });
+
+    if (!shift) {
+      return res.status(404).json({ error: 'Shift tidak ditemukan' });
+    }
+
+    if (shift.status === 'Closed') {
+      return res.status(400).json({ error: 'Shift ini sudah dalam status tertutup.' });
+    }
+
+    const shiftOpenTime = new Date(shift.waktuBuka);
+    const shiftCloseTime = new Date();
+    const effectiveStart = shiftOpenTime < shiftCloseTime ? shiftOpenTime : shiftCloseTime;
+    const effectiveEnd = shiftOpenTime < shiftCloseTime ? shiftCloseTime : shiftOpenTime;
+
+    const activeOrders = await prisma.order.findMany({
+      where: {
+        status: 'Paid',
+        OR: [
+          { paidAt: { gte: effectiveStart, lte: effectiveEnd } },
+          { paidAt: null, createdAt: { gte: effectiveStart, lte: effectiveEnd } }
+        ]
+      }
+    });
+
+    const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
+    const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
+
+    const cashFlows = await prisma.cashFlow.findMany({
+      where: { date: { gte: effectiveStart, lte: effectiveEnd } }
+    });
+
+    const debtPayments = await prisma.debtPayment.findMany({
+      where: { createdAt: { gte: effectiveStart, lte: effectiveEnd } }
+    });
+
+    const cashDebtIncome = debtPayments
+      .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
+      .reduce((sum, dp) => sum + dp.amountPaid, 0);
+
+    const manualCashIn = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang')
+      .reduce((sum, cf) => sum + cf.amount, 0);
+    const manualCashOut = cashFlows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
+
+    const expectedCash = shift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
+    const expectedNonCash = nonCashSalesIncome;
+
+    const actualCash = Number(saldoFisikLaci);
+    const selisih = actualCash - expectedCash;
+
+    const closedShift = await prisma.shift.update({
+      where: { id: shiftId },
+      data: {
+        waktuTutup: shiftCloseTime,
+        status: 'Closed',
+        saldoSistem: expectedCash,
+        saldoElektronik: expectedNonCash,
+        saldoFisikLaci: actualCash,
+        selisih
+      },
+      include: {
+        user: { select: { name: true, username: true } }
+      }
+    });
+
+    io.emit('shift:status_change', { status: 'Closed', shift: closedShift });
+
+    res.json({
+      message: `Shift #${shiftId} berhasil ditutup paksa oleh Admin`,
+      shift: closedShift,
+      expectedCash,
+      saldoFisikLaci: actualCash,
+      selisih
+    });
+  } catch (error) {
+    console.error('Error force closing shift:', error);
+    res.status(500).json({ error: 'Gagal melakukan force close shift' });
+  }
+});
+
+// POST Manual Trigger Auto Cutoff Shift
+router.post('/auto-cutoff', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const result = await runShiftAutoCutoff();
+    res.json({ message: `Auto Cut-off selesai. ${result.count} shift gantung tertutup otomatis.`, result });
+  } catch (error) {
+    res.status(500).json({ error: 'Gagal menjalankan auto-cutoff shift' });
+  }
+});
+
 export default router;
 

@@ -831,11 +831,104 @@ router.get('/checklist/today', async (req: Request, res: Response) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-
     res.json(checklists);
   } catch (error) {
-    console.error('Error fetching today checklists:', error);
-    res.status(500).json({ error: 'Gagal mengambil checklist hari ini' });
+    console.error('Error fetching checklists:', error);
+    res.status(500).json({ error: 'Gagal mengambil data checklist' });
+  }
+});
+
+// ─── Koreksi Presensi Staf & Auto-Cutoff EOD ──────────────────────────
+
+export async function runAttendanceAutoCutoff(): Promise<{ count: number }> {
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const unclosed = await prisma.attendance.findMany({
+      where: {
+        clockOut: null,
+        date: { lt: todayStr }
+      }
+    });
+
+    if (unclosed.length === 0) return { count: 0 };
+
+    for (const att of unclosed) {
+      const clockInDate = new Date(att.clockIn);
+      const autoClockOut = new Date(clockInDate);
+      autoClockOut.setHours(22, 0, 0, 0);
+
+      if (autoClockOut <= clockInDate) {
+        autoClockOut.setTime(clockInDate.getTime() + (8 * 60 * 60 * 1000));
+      }
+
+      const autoNote = att.notes 
+        ? `${att.notes} [Auto Clock-Out: Lupa Absen Pulang]`
+        : '[Auto Clock-Out: Lupa Absen Pulang]';
+
+      await prisma.attendance.update({
+        where: { id: att.id },
+        data: {
+          clockOut: autoClockOut,
+          notes: autoNote
+        }
+      });
+    }
+
+    console.log(`[Auto-EOD Cutoff] Berhasil menutup ${unclosed.length} presensi staf yang lupa Clock Out.`);
+    return { count: unclosed.length };
+  } catch (error) {
+    console.error('Error running attendance auto cutoff:', error);
+    return { count: 0 };
+  }
+}
+
+// PUT Adjust / Koreksi Presensi Staf (Admin / Owner only)
+router.put('/:id/adjust', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const { clockIn, clockOut, status, notes, lateMinutes } = req.body;
+    const userRole = ((req as any).user?.role || '').toLowerCase();
+
+    if (!['admin', 'owner', 'superadmin', 'manager', 'supervisor'].includes(userRole)) {
+      return res.status(403).json({ error: 'Hanya Admin/Owner yang berwenang melakukan koreksi presensi.' });
+    }
+
+    const existing = await prisma.attendance.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Data absensi tidak ditemukan' });
+    }
+
+    const updateData: any = {};
+    if (clockIn) updateData.clockIn = new Date(clockIn);
+    if (clockOut !== undefined) {
+      updateData.clockOut = clockOut ? new Date(clockOut) : null;
+    }
+    if (status) updateData.status = status;
+    if (lateMinutes !== undefined) updateData.lateMinutes = Number(lateMinutes);
+    if (notes !== undefined) updateData.notes = notes;
+
+    const updated = await prisma.attendance.update({
+      where: { id },
+      data: updateData,
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } }
+      }
+    });
+
+    res.json({ message: 'Presensi staf berhasil dikoreksi', attendance: updated });
+  } catch (error) {
+    console.error('Error adjusting attendance:', error);
+    res.status(500).json({ error: 'Gagal mengoreksi presensi staf' });
+  }
+});
+
+// POST Manual Trigger Auto Cutoff Presensi
+router.post('/auto-cutoff', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const result = await runAttendanceAutoCutoff();
+    res.json({ message: `Auto Cut-off selesai. ${result.count} presensi tertutup otomatis.`, result });
+  } catch (error) {
+    res.status(500).json({ error: 'Gagal menjalankan auto-cutoff presensi' });
   }
 });
 

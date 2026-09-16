@@ -119,8 +119,32 @@ io.on('connection', (socket) => {
   });
 });
 
+import { runShiftAutoCutoff } from './routes/shifts';
+import { runAttendanceAutoCutoff } from './routes/attendance';
+
 httpServer.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
   console.log(`[Socket.IO] Ready for real-time connections`);
+
+  // Run initial EOD check on startup
+  setTimeout(async () => {
+    try {
+      await runShiftAutoCutoff();
+      await runAttendanceAutoCutoff();
+    } catch (e) {
+      console.error('[Auto-EOD Background Task Error]', e);
+    }
+  }, 5000);
+
+  // Periodic interval (runs every 30 minutes to auto-cutoff dangling shifts/attendance)
+  setInterval(async () => {
+    try {
+      await runShiftAutoCutoff();
+      await runAttendanceAutoCutoff();
+    } catch (e) {
+      console.error('[Auto-EOD Periodic Error]', e);
+    }
+  }, 30 * 60 * 1000);
 });
+
 

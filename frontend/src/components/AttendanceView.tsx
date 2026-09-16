@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { 
   UserCheck, Calendar, Clock, Download, CheckCircle2, Fingerprint, 
   FileText, MapPin, Camera, User, TrendingUp, AlertTriangle, 
-  Eye, X, Search, RefreshCw, Smartphone, Check, Sparkles, Award
+  Eye, X, Search, RefreshCw, Smartphone, Check, Sparkles, Award, Edit3, Timer, Save
 } from 'lucide-react';
 import ClockInModal from './ClockInModal';
 import { POSContext } from '../context/POSContext';
@@ -99,7 +99,103 @@ export const AttendanceView: React.FC = () => {
   // Modal Detail Karyawan
   const [selectedUserSummary, setSelectedUserSummary] = useState<IndividualSummary | null>(null);
 
+  // Modal Koreksi Presensi Staf (Admin / Owner only)
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+  const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
+  const [adjustForm, setAdjustForm] = useState({
+    clockInTime: '',
+    clockOutTime: '',
+    status: 'Hadir',
+    lateMinutes: 0,
+    notes: ''
+  });
+  const [savingAdjust, setSavingAdjust] = useState(false);
+  const [runningAutoCutoff, setRunningAutoCutoff] = useState(false);
+
   const posContext = useContext(POSContext);
+
+  const handleOpenAdjustModal = (att: any) => {
+    setEditingAttendance(att);
+    const inTime = att.clockIn ? new Date(att.clockIn).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':') : '09:00';
+    const outTime = att.clockOut ? new Date(att.clockOut).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }).replace('.', ':') : '22:00';
+    
+    setAdjustForm({
+      clockInTime: inTime,
+      clockOutTime: att.clockOut ? outTime : '',
+      status: att.status || 'Hadir',
+      lateMinutes: att.lateMinutes || 0,
+      notes: att.notes || ''
+    });
+    setIsAdjustModalOpen(true);
+  };
+
+  const handleSaveAdjust = async () => {
+    if (!editingAttendance) return;
+    setSavingAdjust(true);
+    try {
+      const dateBase = editingAttendance.date || getTodayStr();
+      let newClockIn = editingAttendance.clockIn;
+      if (adjustForm.clockInTime) {
+        newClockIn = new Date(`${dateBase}T${adjustForm.clockInTime}:00`).toISOString();
+      }
+      let newClockOut = null;
+      if (adjustForm.clockOutTime) {
+        newClockOut = new Date(`${dateBase}T${adjustForm.clockOutTime}:00`).toISOString();
+      }
+
+      const res = await fetch(`/api/attendance/${editingAttendance.id}/adjust`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          clockIn: newClockIn,
+          clockOut: newClockOut,
+          status: adjustForm.status,
+          lateMinutes: Number(adjustForm.lateMinutes) || 0,
+          notes: adjustForm.notes
+        })
+      });
+
+      if (res.ok) {
+        toast('Presensi staf berhasil dikoreksi!', 'success');
+        setIsAdjustModalOpen(false);
+        setEditingAttendance(null);
+        fetchAttendances();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal mengoreksi presensi', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Terjadi kesalahan saat menyimpan koreksi', 'error');
+    } finally {
+      setSavingAdjust(false);
+    }
+  };
+
+  const handleRunAutoCutoff = async () => {
+    setRunningAutoCutoff(true);
+    try {
+      const res = await fetch('/api/attendance/auto-cutoff', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(data.message || 'Auto Cut-off presensi selesai!', 'success');
+        fetchAttendances();
+      } else {
+        toast(data.error || 'Gagal menjalankan auto cut-off', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Terjadi kesalahan saat auto cut-off', 'error');
+    } finally {
+      setRunningAutoCutoff(false);
+    }
+  };
 
   const fetchAttendances = async () => {
     setLoading(true);
@@ -455,12 +551,23 @@ export const AttendanceView: React.FC = () => {
                   </button>
                 </div>
 
-                <button
-                  onClick={exportDailyPDF}
-                  className="w-full sm:w-auto justify-center px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all flex items-center gap-2"
-                >
-                  <FileText size={15} className="text-rose-500" /> Export PDF Harian
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={handleRunAutoCutoff}
+                    disabled={runningAutoCutoff}
+                    className="flex-1 sm:flex-initial px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                    title="Tutup otomatis presensi yang belum clock-out kemarin"
+                  >
+                    <Timer size={14} className="text-amber-600" />
+                    {runningAutoCutoff ? 'Memproses...' : 'Auto Cut-off EOD'}
+                  </button>
+                  <button
+                    onClick={exportDailyPDF}
+                    className="flex-1 sm:flex-initial justify-center px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+                  >
+                    <FileText size={15} className="text-rose-500" /> Export PDF
+                  </button>
+                </div>
               </div>
 
               {/* Mobile Cards View (< 640px) */}
@@ -505,17 +612,26 @@ export const AttendanceView: React.FC = () => {
                           </div>
                         </div>
 
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1 shrink-0 ${
-                            att.status === 'Hadir'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : att.status === 'Terlambat'
-                              ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}
-                        >
-                          {att.status} {att.lateMinutes ? `(+${att.lateMinutes}m)` : ''}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1 shrink-0 ${
+                              att.status === 'Hadir'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : att.status === 'Terlambat'
+                                ? 'bg-rose-50 text-rose-600 border border-rose-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            {att.status} {att.lateMinutes ? `(+${att.lateMinutes}m)` : ''}
+                          </span>
+                          <button
+                            onClick={() => handleOpenAdjustModal(att)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 transition-colors"
+                            title="Koreksi Jam / Status"
+                          >
+                            <Edit3 size={13} />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
@@ -566,19 +682,20 @@ export const AttendanceView: React.FC = () => {
                       <th className="py-3.5 px-4">Durasi Kerja</th>
                       <th className="py-3.5 px-4">Jarak GPS</th>
                       <th className="py-3.5 px-4 text-center">Status Absensi</th>
+                      <th className="py-3.5 px-4 text-right">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                     {loading ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                        <td colSpan={9} className="py-12 text-center text-slate-400">
                           <RefreshCw size={24} className="animate-spin inline-block text-indigo-600 mb-2" />
                           <p>Memuat data absensi...</p>
                         </td>
                       </tr>
                     ) : attendances.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                        <td colSpan={9} className="py-12 text-center text-slate-400">
                           <UserCheck size={32} className="mx-auto text-slate-300 mb-2" />
                           <p>Tidak ada data absensi untuk tanggal {dateFilter}.</p>
                         </td>
@@ -645,6 +762,15 @@ export const AttendanceView: React.FC = () => {
                             >
                               {att.status} {att.lateMinutes ? `(+${att.lateMinutes}m)` : ''}
                             </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => handleOpenAdjustModal(att)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-lg text-xs font-bold transition-all border border-slate-200 inline-flex items-center gap-1"
+                              title="Koreksi Jam Masuk / Jam Pulang"
+                            >
+                              <Edit3 size={12} /> Koreksi
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -1362,6 +1488,113 @@ export const AttendanceView: React.FC = () => {
                 </button>
               </div>
               <img src={selectedPhoto.url} alt="Selfie Zoom" className="w-full rounded-2xl object-cover aspect-square border border-slate-200" />
+            </div>
+          </div>
+        )}
+
+        {/* MODAL KOREKSI PRESENSI STAF (ADMIN / OWNER) */}
+        {isAdjustModalOpen && editingAttendance && (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-100 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                    <Edit3 size={18} />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm">Koreksi Presensi Karyawan</h4>
+                    <p className="text-[11px] text-slate-500">{editingAttendance.user?.name} • Tanggal {editingAttendance.date}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsAdjustModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-3.5 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Jam Masuk (Clock In)</label>
+                    <input
+                      type="time"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-900 outline-none focus:border-indigo-500"
+                      value={adjustForm.clockInTime}
+                      onChange={e => setAdjustForm({ ...adjustForm, clockInTime: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Jam Pulang (Clock Out)</label>
+                    <input
+                      type="time"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-900 outline-none focus:border-indigo-500"
+                      value={adjustForm.clockOutTime}
+                      onChange={e => setAdjustForm({ ...adjustForm, clockOutTime: e.target.value })}
+                      placeholder="--:--"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Status Kehadiran</label>
+                    <select
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-900 outline-none focus:border-indigo-500"
+                      value={adjustForm.status}
+                      onChange={e => setAdjustForm({ ...adjustForm, status: e.target.value })}
+                    >
+                      <option value="Hadir">Hadir (Tepat Waktu)</option>
+                      <option value="Terlambat">Terlambat</option>
+                      <option value="Izin">Izin</option>
+                      <option value="Sakit">Sakit</option>
+                      <option value="Cuti">Cuti</option>
+                      <option value="Libur">Libur</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">Menit Keterlambatan</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-900 outline-none focus:border-indigo-500"
+                      value={adjustForm.lateMinutes}
+                      onChange={e => setAdjustForm({ ...adjustForm, lateMinutes: Number(e.target.value) || 0 })}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Catatan / Alasan Koreksi</label>
+                  <textarea
+                    rows={2}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 outline-none focus:border-indigo-500 resize-none text-xs"
+                    placeholder="Contoh: Lupa absen pulang, staf pulang jam 22:15 dikonfirmasi supervisor."
+                    value={adjustForm.notes}
+                    onChange={e => setAdjustForm({ ...adjustForm, notes: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={savingAdjust}
+                  onClick={handleSaveAdjust}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  <Save size={14} />
+                  {savingAdjust ? 'Menyimpan...' : 'Simpan Koreksi'}
+                </button>
+              </div>
             </div>
           </div>
         )}

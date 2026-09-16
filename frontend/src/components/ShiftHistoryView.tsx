@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { History, Clock, FileText, CheckCircle, Play, Square, Download, RefreshCw, AlertCircle, Timer } from 'lucide-react';
+import { History, Clock, FileText, CheckCircle, Play, Square, Download, RefreshCw, AlertCircle, Timer, AlertTriangle, X, ShieldAlert, Save } from 'lucide-react';
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
@@ -13,9 +13,21 @@ const ShiftHistoryView = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'open' | 'close'>('open');
+
+  // Force Close State (Admin only)
+  const [isForceCloseModalOpen, setIsForceCloseModalOpen] = useState(false);
+  const [selectedShiftToForceClose, setSelectedShiftToForceClose] = useState<any | null>(null);
+  const [forceCloseSummary, setForceCloseSummary] = useState<any | null>(null);
+  const [forceCloseForm, setForceCloseForm] = useState({
+    saldoFisikLaci: '',
+    catatan: ''
+  });
+  const [savingForceClose, setSavingForceClose] = useState(false);
+  const [runningShiftAutoCutoff, setRunningShiftAutoCutoff] = useState(false);
+
   const posContext = useContext(POSContext);
 
-  const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
+  const formatCurrency = (val: number) => `Rp ${Number(val || 0).toLocaleString('id-ID')}`;
   const formatTime = (iso: string) => {
     if (!iso) return '-';
     return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -44,7 +56,6 @@ const ShiftHistoryView = () => {
 
   const fetchActiveShift = async () => {
     try {
-      // Use /current endpoint (the correct one)
       const res = await fetch('/api/shifts/current', {
         headers: { Authorization: `Bearer ${posContext?.token}` }
       });
@@ -52,7 +63,7 @@ const ShiftHistoryView = () => {
         const data = await res.json();
         setActiveShift(data);
       } else {
-        setActiveShift(null); // No active shift
+        setActiveShift(null);
       }
     } catch (e) {
       console.error(e);
@@ -78,6 +89,93 @@ const ShiftHistoryView = () => {
   const handleCloseShift = () => {
     setModalMode('close');
     setIsModalOpen(true);
+  };
+
+  const handleOpenForceCloseModal = async (shift: any) => {
+    setSelectedShiftToForceClose(shift);
+    setSavingForceClose(false);
+    try {
+      // Fetch pre-reconciliation summary
+      const res = await fetch('/api/shifts/current-summary', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setForceCloseSummary(data);
+        setForceCloseForm({
+          saldoFisikLaci: String(data.expectedCash || shift.saldoAwal || 0),
+          catatan: 'Tutup Shift Paksa oleh Admin / Supervisor (Kasir Berhalangan)'
+        });
+      } else {
+        setForceCloseSummary({ expectedCash: shift.saldoAwal });
+        setForceCloseForm({
+          saldoFisikLaci: String(shift.saldoAwal || 0),
+          catatan: 'Tutup Shift Paksa oleh Admin / Supervisor (Kasir Berhalangan)'
+        });
+      }
+    } catch (e) {
+      setForceCloseSummary({ expectedCash: shift.saldoAwal });
+      setForceCloseForm({
+        saldoFisikLaci: String(shift.saldoAwal || 0),
+        catatan: 'Tutup Shift Paksa oleh Admin / Supervisor (Kasir Berhalangan)'
+      });
+    }
+    setIsForceCloseModalOpen(true);
+  };
+
+  const handleSaveForceClose = async () => {
+    if (!selectedShiftToForceClose) return;
+    setSavingForceClose(true);
+    try {
+      const res = await fetch(`/api/shifts/${selectedShiftToForceClose.id}/force-close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          saldoFisikLaci: Number(forceCloseForm.saldoFisikLaci) || 0,
+          catatan: forceCloseForm.catatan
+        })
+      });
+
+      if (res.ok) {
+        toast(`Shift #${selectedShiftToForceClose.id} berhasil ditutup paksa!`, 'success');
+        setIsForceCloseModalOpen(false);
+        setSelectedShiftToForceClose(null);
+        fetchData();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal menutup shift paksa', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Terjadi kesalahan saat menutup shift paksa', 'error');
+    } finally {
+      setSavingForceClose(false);
+    }
+  };
+
+  const handleRunShiftAutoCutoff = async () => {
+    setRunningShiftAutoCutoff(true);
+    try {
+      const res = await fetch('/api/shifts/auto-cutoff', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(data.message || 'Auto Cut-off shift gantung selesai!', 'success');
+        fetchData();
+      } else {
+        toast(data.error || 'Gagal menjalankan auto cut-off shift', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Terjadi kesalahan saat auto cut-off shift', 'error');
+    } finally {
+      setRunningShiftAutoCutoff(false);
+    }
   };
 
   const handleDownloadShiftSlip = async (shift: any) => {
@@ -127,7 +225,16 @@ const ShiftHistoryView = () => {
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">Kelola pembukaan dan penutupan shift kasir setiap harinya</p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <button
+            onClick={handleRunShiftAutoCutoff}
+            disabled={runningShiftAutoCutoff}
+            className="flex-1 sm:flex-initial px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all"
+            title="Tutup otomatis shift kasir kemarin yang masih menggantung"
+          >
+            <Timer size={14} className="text-amber-600" />
+            {runningShiftAutoCutoff ? 'Memproses...' : 'Auto Cut-off EOD'}
+          </button>
           <button
             className="flex-1 sm:flex-initial btn bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 py-2.5 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all"
             onClick={fetchData}
@@ -163,12 +270,21 @@ const ShiftHistoryView = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleCloseShift}
-            className="self-start sm:self-center shrink-0 px-5 py-2.5 rounded-xl bg-white text-indigo-700 font-black text-xs shadow hover:bg-indigo-50 active:scale-95 transition-all flex items-center gap-2"
-          >
-            <Square size={14} /> Tutup Shift & Rekap
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => handleOpenForceCloseModal(activeShift)}
+              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow active:scale-95 transition-all flex items-center gap-1.5"
+              title="Tutup paksa oleh Admin/Supervisor"
+            >
+              <ShieldAlert size={14} /> Force Close (Admin)
+            </button>
+            <button
+              onClick={handleCloseShift}
+              className="px-5 py-2.5 rounded-xl bg-white text-indigo-700 font-black text-xs shadow hover:bg-indigo-50 active:scale-95 transition-all flex items-center gap-2"
+            >
+              <Square size={14} /> Tutup Shift & Rekap
+            </button>
+          </div>
         </div>
       ) : (
         <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
@@ -245,7 +361,15 @@ const ShiftHistoryView = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end pt-1">
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    {shift.status === 'Open' && (
+                      <button
+                        className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-all border border-amber-200 flex items-center gap-1.5"
+                        onClick={() => handleOpenForceCloseModal(shift)}
+                      >
+                        <ShieldAlert size={13} /> Force Close
+                      </button>
+                    )}
                     <button
                       className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-xl text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5"
                       onClick={() => handleDownloadShiftSlip(shift)}
@@ -311,13 +435,24 @@ const ShiftHistoryView = () => {
                         )}
                       </td>
                       <td className="text-right">
-                        <button
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-lg text-xs font-bold transition-all border border-slate-200 inline-flex items-center gap-1"
-                          onClick={() => handleDownloadShiftSlip(shift)}
-                          title="Unduh Dokumen Berita Acara Shift PDF"
-                        >
-                          <Download size={12} /> Slip PDF
-                        </button>
+                        <div className="inline-flex items-center gap-1.5">
+                          {shift.status === 'Open' && (
+                            <button
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition-all border border-amber-200 inline-flex items-center gap-1"
+                              onClick={() => handleOpenForceCloseModal(shift)}
+                              title="Tutup Paksa Shift (Khusus Admin/Supervisor)"
+                            >
+                              <ShieldAlert size={12} /> Force Close
+                            </button>
+                          )}
+                          <button
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-lg text-xs font-bold transition-all border border-slate-200 inline-flex items-center gap-1"
+                            onClick={() => handleDownloadShiftSlip(shift)}
+                            title="Unduh Dokumen Berita Acara Shift PDF"
+                          >
+                            <Download size={12} /> Slip PDF
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -327,6 +462,110 @@ const ShiftHistoryView = () => {
           </>
         )}
       </div>
+
+      {/* ── MODAL FORCE CLOSE SHIFT (ADMIN / OWNER) ────────────────────────── */}
+      {isForceCloseModalOpen && selectedShiftToForceClose && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                  <ShieldAlert size={20} />
+                </div>
+                <div>
+                  <h4 className="font-black text-slate-900 text-base">Tutup Shift Paksa (Force Close)</h4>
+                  <p className="text-[11px] text-slate-500">
+                    Kasir: <strong>{selectedShiftToForceClose.user?.name}</strong> • Shift #{selectedShiftToForceClose.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsForceCloseModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
+              <div className="font-bold flex items-center gap-1">
+                <AlertTriangle size={14} className="text-amber-600" /> Perhatian Supervisor / Admin:
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Fitur ini digunakan saat kasir lupa menutup shift atau berhalangan hadir. Masukkan uang fisik yang telah dihitung dari laci kasir untuk rekonsiliasi.
+              </p>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold block">Modal Awal Kas:</span>
+                  <span className="font-bold text-slate-800">{formatCurrency(selectedShiftToForceClose.saldoAwal)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold block">Kas Sistem (Ekspektasi):</span>
+                  <span className="font-black text-indigo-600 text-sm">{formatCurrency(forceCloseSummary?.expectedCash || selectedShiftToForceClose.saldoAwal)}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Saldo Uang Fisik Aktual di Laci (Rp)</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-black text-slate-900 text-sm outline-none focus:border-indigo-500"
+                  value={forceCloseForm.saldoFisikLaci}
+                  onChange={e => setForceCloseForm({ ...forceCloseForm, saldoFisikLaci: e.target.value })}
+                  placeholder="0"
+                />
+                <div className="mt-1 flex justify-between items-center text-[11px]">
+                  <span className="text-slate-500 font-medium">Selisih Uang Kas:</span>
+                  {(() => {
+                    const expected = Number(forceCloseSummary?.expectedCash || selectedShiftToForceClose.saldoAwal || 0);
+                    const actual = Number(forceCloseForm.saldoFisikLaci || 0);
+                    const diff = actual - expected;
+                    return (
+                      <span className={`font-black ${diff === 0 ? 'text-slate-600' : diff > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {diff === 0 ? '0 (Klop / Seimbang)' : `${diff > 0 ? '+' : ''}${formatCurrency(diff)} (${diff > 0 ? 'Lebih' : 'Kurang'})`}
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Catatan Berita Acara Supervisor</label>
+                <textarea
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 outline-none focus:border-indigo-500 resize-none text-xs"
+                  value={forceCloseForm.catatan}
+                  onChange={e => setForceCloseForm({ ...forceCloseForm, catatan: e.target.value })}
+                  placeholder="Contoh: Ditutup oleh Supervisor karena kasir pulang darurat."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsForceCloseModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={savingForceClose}
+                onClick={handleSaveForceClose}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <Save size={14} />
+                {savingForceClose ? 'Memproses...' : 'Konfirmasi Tutup Shift Paksa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <OpenShiftModal
         isOpen={isModalOpen}
@@ -339,4 +578,5 @@ const ShiftHistoryView = () => {
 };
 
 export default ShiftHistoryView;
+
 
