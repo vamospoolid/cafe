@@ -1491,13 +1491,42 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       },
       summary: {
         totalRevenue: totalGrossRevenue,
+        grandTotalRevenue: totalGrossRevenue,
         totalDirectExpense: foodTotalExpense + drinkTotalExpense,
         totalSharedOpex: sharedOpex,
+        sharedOpexTotal: sharedOpex,
         totalExpense: foodTotalExpense + drinkTotalExpense + sharedOpex,
+        grandTotalExpense: foodTotalExpense + drinkTotalExpense + sharedOpex,
         totalNetProfit,
+        grandTotalNetProfit: totalNetProfit,
         ownerShare: totalOwnerProfit,
+        totalOwnerShare: totalOwnerProfit,
         pjRamenShare: totalPjRamenProfit,
-        pjDrinkShare: totalPjDrinkProfit
+        pjDrinkShare: totalPjDrinkProfit,
+        totalPjShare: totalPjRamenProfit + totalPjDrinkProfit,
+        opexMode,
+        food: {
+          revenue: foodRevenue,
+          expense: foodTotalExpense,
+          grossNet: foodGrossProfit,
+          sharedOpexDeduction: foodSharedOpexPortion,
+          finalNet: foodNetProfit,
+          ownerShare: ownerFoodShare,
+          pjShare: pjFoodShare,
+          profitSharingPct: ramenPct,
+          ownerPct
+        },
+        drink: {
+          revenue: drinkRevenue,
+          expense: drinkTotalExpense,
+          grossNet: drinkGrossProfit,
+          sharedOpexDeduction: drinkSharedOpexPortion,
+          finalNet: drinkNetProfit,
+          ownerShare: ownerDrinkShare,
+          pjShare: pjDrinkShare,
+          profitSharingPct: drinkPct,
+          ownerPct
+        }
       },
       dailyBreakdown
     });

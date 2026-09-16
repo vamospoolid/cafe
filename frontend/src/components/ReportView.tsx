@@ -571,8 +571,12 @@ export const ReportView: React.FC = () => {
         const netMarginPct = totalRev > 0 ? Math.round((netProf / totalRev) * 100) : 0;
         const hppRatioPct = totalRev > 0 ? Math.round((totalHpp / totalRev) * 100) : 0;
 
-        // Fallback or loaded category breakdown
-        const catBreakdown = reportData.categoryBreakdown || (() => {
+        // Safe category breakdown calculation
+        const cb = reportData.categoryBreakdown;
+        let foodStats = cb?.food;
+        let drinkStats = cb?.drink;
+
+        if (!foodStats || !drinkStats || typeof foodStats.revenue === 'undefined') {
           let fRev = 0, fQty = 0, fCost = 0;
           let dRev = 0, dQty = 0, dCost = 0;
           rawProducts.forEach((p: any) => {
@@ -590,26 +594,29 @@ export const ReportView: React.FC = () => {
             }
           });
           const combined = fRev + dRev;
-          return {
-            food: {
-              revenue: fRev,
-              qty: fQty,
-              cost: fCost,
-              profit: fRev - fCost,
-              margin: fRev > 0 ? Math.round(((fRev - fCost) / fRev) * 100) : 0,
-              percentage: combined > 0 ? Math.round((fRev / combined) * 100) : 0
-            },
-            drink: {
-              revenue: dRev,
-              qty: dQty,
-              cost: dCost,
-              profit: dRev - dCost,
-              margin: dRev > 0 ? Math.round(((dRev - dCost) / dRev) * 100) : 0,
-              percentage: combined > 0 ? Math.round((dRev / combined) * 100) : 0
-            },
-            other: { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 }
+          foodStats = {
+            revenue: fRev,
+            qty: fQty,
+            cost: fCost,
+            profit: fRev - fCost,
+            margin: fRev > 0 ? Math.round(((fRev - fCost) / fRev) * 100) : 0,
+            percentage: combined > 0 ? Math.round((fRev / combined) * 100) : 0
           };
-        })();
+          drinkStats = {
+            revenue: dRev,
+            qty: dQty,
+            cost: dCost,
+            profit: dRev - dCost,
+            margin: dRev > 0 ? Math.round(((dRev - dCost) / dRev) * 100) : 0,
+            percentage: combined > 0 ? Math.round((dRev / combined) * 100) : 0
+          };
+        }
+
+        const catBreakdown = {
+          food: foodStats || { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 },
+          drink: drinkStats || { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 },
+          other: cb?.other || { revenue: 0, qty: 0, cost: 0, profit: 0, margin: 0, percentage: 0 }
+        };
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -1664,7 +1671,7 @@ export const ReportView: React.FC = () => {
         const daily = profitSharingData?.dailyBreakdown || [];
         const exp = profitSharingData?.expensesBreakdown || { foodExpenses: [], drinkExpenses: [], sharedExpenses: [] };
 
-        if (!ps) {
+        if (!ps || !ps.food || !ps.drink) {
           return (
             <div className="bg-white rounded-2xl p-8 text-center text-slate-500 border border-slate-200">
               <Percent className="w-12 h-12 mx-auto text-indigo-400 mb-2 animate-bounce" />
