@@ -570,33 +570,52 @@ export default function WarehouseView() {
   return (
     <div className="p-3 sm:p-6 pb-28 sm:pb-16 w-full flex flex-col gap-4">
       {/* Top Header & Title */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row justify-between sm:items-center gap-3.5">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
-            <Boxes className="text-indigo-600" size={26} /> Manajemen Gudang Bahan Baku
+          <h2 className="text-lg sm:text-2xl font-black flex items-center gap-2 text-slate-900 leading-tight">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Boxes size={20} />
+            </div>
+            <span>Gudang Persediaan Bahan</span>
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Central Warehouse Management &bull; Multi-Unit Supply Chain &bull; Rekonsiliasi Settlement
+          <p className="text-xs text-slate-500 font-medium mt-1">
+            Pencatatan aset stok gudang &amp; distribusi pemakaian bahan ke dapur
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+
+        {/* Action Buttons Toolbar (Mobile 2-Column Grid / Desktop Row) */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Tombol 1: Input Belanja Masuk */}
           <button
+            type="button"
             onClick={() => setShowInboundModal(true)}
-            className="btn btn-primary shadow-sm hover:shadow flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold cursor-pointer"
+            className="flex-1 sm:flex-initial py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            title="Catat belanja bahan masuk ke gudang"
           >
-            <Plus size={15} /> + Penerimaan Pasokan Masuk
+            <Plus size={15} />
+            <span>+ Belanja Masuk</span>
           </button>
+
+          {/* Tombol 2: Distribusi ke Dapur */}
           <button
-            onClick={() => setShowSaleModal(true)}
-            className="btn bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold cursor-pointer transition-all"
-          >
-            <TrendingUp size={15} /> + Penjualan Grosir (B2B)
-          </button>
-          <button
+            type="button"
             onClick={() => setShowTransferModal(true)}
-            className="btn bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1.5 py-2 px-3.5 rounded-xl text-xs font-bold cursor-pointer"
+            className="flex-1 sm:flex-initial py-2.5 px-3.5 bg-indigo-50 hover:bg-indigo-100 active:scale-[0.98] text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            title="Kirim / ambil bahan dari gudang ke dapur"
           >
-            <ArrowRightLeft size={15} /> Request Bahan ke Dapur
+            <ArrowRightLeft size={15} />
+            <span>Kirim ke Dapur</span>
+          </button>
+
+          {/* Tombol 3: Jual Grosir (B2B) */}
+          <button
+            type="button"
+            onClick={() => setShowSaleModal(true)}
+            className="col-span-2 sm:col-span-1 py-2 sm:py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 active:scale-[0.98] text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            title="Penjualan bahan grosir ke luar"
+          >
+            <TrendingUp size={14} />
+            <span>+ Jual Grosir (B2B)</span>
           </button>
         </div>
       </div>
