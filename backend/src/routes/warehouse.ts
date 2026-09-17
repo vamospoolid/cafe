@@ -192,15 +192,29 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
         });
       }
 
-      // 3. If funded by Central/Holding Capital, record to Owner/Central Fund Ledger
-      if ((paymentSource || 'DANA_PRIBADI_OWNER') === 'DANA_PRIBADI_OWNER') {
+      // 3. Catat transaksi keuangan berdasarkan sumber dana
+      const source = paymentSource || 'DANA_PRIBADI_OWNER';
+      if (source === 'KASIR_PETTY_CASH' || source === 'KASIR') {
+        // Potong kas kecil / laci kasir
+        await tx.cashFlow.create({
+          data: {
+            type: 'Pengeluaran',
+            category: 'Belanja Bahan Baku (Gudang)',
+            amount: totalAmount,
+            description: `Belanja bahan masuk gudang (${processedItems.length} item - ${invoiceNumber})`,
+            userId,
+            date: date ? new Date(date) : new Date()
+          }
+        });
+      } else {
+        // Modal Owner / Transfer Bank (Tidak memotong laci kasir)
         await tx.ownerFundTransaction.create({
           data: {
             type: 'CAPITAL_IN',
             amount: totalAmount,
             referenceType: 'INBOUND',
             referenceId: invoiceNumber,
-            description: `Penerimaan pasokan gudang via modal pusat (${processedItems.length} item - ${invoiceNumber})`,
+            description: `Penerimaan pasokan gudang via dana owner/bank (${processedItems.length} item - ${invoiceNumber})`,
             userId,
             date: date ? new Date(date) : new Date()
           }
@@ -443,6 +457,195 @@ router.post('/transfers', authenticateToken, async (req: Request, res: Response)
   } catch (error: any) {
     console.error('Error creating transfer request:', error);
     res.status(500).json({ error: 'Gagal membuat permintaan bahan: ' + error.message });
+  }
+});
+
+// ─── 5b. DISTRIBUSI LANGSUNG (1-KLIK) GUDANG KE DAPUR ─────────────────────
+// Langsung potong stok gudang, tambah stok dapur, dan hitung nilai uang HPP pemakaian
+router.post('/quick-distribute', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { notes, items, targetCategory } = req.body;
+    const userId = (req as any).user.id;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Daftar bahan yang didistribusikan wajib diisi' });
+    }
+
+    const reqNumber = generateDocNumber('DIST');
+    let totalTransferCost = 0;
+    const processedItems: any[] = [];
+
+    // Validasi & Siapkan data
+    for (const it of items) {
+      const ing = await prisma.ingredient.findUnique({ where: { id: Number(it.ingredientId) } });
+      if (!ing) continue;
+
+      const rQty = Number(it.requestedQty) || 0;
+      if (rQty <= 0) continue;
+
+      // Cek konversi
+      const isPurchaseUnit = it.requestedUnit === ing.purchaseUnit && (ing.conversionRatio || 1) > 0;
+      const baseQty = isPurchaseUnit ? (rQty * (ing.conversionRatio || 1)) : rQty;
+
+      // Cek stok gudang cukup
+      if (ing.warehouseStock < baseQty) {
+        return res.status(400).json({
+          error: `Stok gudang untuk "${ing.name}" tidak mencukupi. Tersedia di gudang: ${ing.warehouseStock} ${ing.unit}, diminta: ${baseQty} ${ing.unit}`
+        });
+      }
+
+      const transferPrice = ing.buyPrice || 0;
+      const subtotal = baseQty * transferPrice;
+      totalTransferCost += subtotal;
+
+      processedItems.push({
+        ingredientId: ing.id,
+        itemName: ing.name,
+        requestedUnit: it.requestedUnit || ing.unit,
+        requestedQty: rQty,
+        baseQty,
+        transferPrice,
+        subtotal
+      });
+    }
+
+    if (processedItems.length === 0) {
+      return res.status(400).json({ error: 'Tidak ada item dengan jumlah valid untuk didistribusikan' });
+    }
+
+    // Eksekusi transaksi atomik
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Buat dokumen distribusi dengan status langsung RECEIVED
+      const requisition = await tx.warehouseRequisition.create({
+        data: {
+          reqNumber,
+          requestedById: userId,
+          approvedById: userId,
+          status: 'RECEIVED',
+          totalTransferCost,
+          notes: notes || 'Distribusi langsung dari Gudang ke Dapur/Bar',
+          requestedAt: new Date(),
+          approvedAt: new Date(),
+          receivedAt: new Date(),
+          items: {
+            create: processedItems
+          }
+        },
+        include: {
+          requestedBy: { select: { name: true } },
+          items: true
+        }
+      });
+
+      // 2. Update stok gudang (-) dan stok dapur (+)
+      for (const it of processedItems) {
+        const ing = await tx.ingredient.findUnique({ where: { id: it.ingredientId } });
+        if (!ing) continue;
+
+        await tx.ingredient.update({
+          where: { id: it.ingredientId },
+          data: {
+            warehouseStock: { decrement: it.baseQty },
+            stock: { increment: it.baseQty }
+          }
+        });
+
+        // 3. Catat log mutasi dapur
+        await tx.ingredientLog.create({
+          data: {
+            ingredientId: it.ingredientId,
+            change: it.baseQty,
+            cost: it.subtotal,
+            type: 'Distribusi',
+            referenceId: reqNumber,
+            description: `Distribusi Gudang ➔ ${targetCategory || 'Dapur'}: ${it.requestedQty} ${it.requestedUnit} (${it.baseQty} ${ing.unit})`,
+            userId
+          }
+        });
+      }
+
+      // 4. Catat transaksi modal pusat / transfer biaya
+      await tx.ownerFundTransaction.create({
+        data: {
+          type: 'TRANSFER_TO_RESTO',
+          amount: totalTransferCost,
+          referenceType: 'REQUISITION',
+          referenceId: reqNumber,
+          description: `Distribusi langsung bahan ke Dapur/Bar (${processedItems.length} item - ${reqNumber})`,
+          userId,
+          date: new Date()
+        }
+      });
+
+      return requisition;
+    });
+
+    // Sinkronisasi status menu sold out
+    await syncMenuSoldOutStatus();
+
+    if (io) {
+      io.emit('warehouse:stock_updated', { type: 'QUICK_DISTRIBUTE', reqNumber });
+    }
+
+    res.status(201).json({
+      message: `Distribusi ${processedItems.length} bahan ke dapur berhasil diselesaikan!`,
+      requisition: result
+    });
+  } catch (error: any) {
+    console.error('Error during quick distribute:', error);
+    res.status(500).json({ error: 'Gagal mendistribusikan bahan ke dapur: ' + error.message });
+  }
+});
+
+// ─── 5c. LAPORAN PEMAKAIAN / DISTRIBUSI DAPUR ─────────────────────────────
+router.get('/kitchen-usage-report', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const where: any = {
+      status: 'RECEIVED'
+    };
+
+    if (startDate && endDate) {
+      where.receivedAt = {
+        gte: new Date(`${startDate}T00:00:00.000Z`),
+        lte: new Date(`${endDate}T23:59:59.999Z`)
+      };
+    }
+
+    const requisitions = await prisma.warehouseRequisition.findMany({
+      where,
+      orderBy: { receivedAt: 'desc' },
+      include: {
+        requestedBy: { select: { id: true, name: true, role: true } },
+        items: {
+          include: {
+            ingredient: { select: { name: true, category: true, unit: true } }
+          }
+        }
+      }
+    });
+
+    const totalCost = requisitions.reduce((sum, r) => sum + (r.totalTransferCost || 0), 0);
+
+    // Grouping by category
+    const categoryTotals: Record<string, number> = { FOOD: 0, DRINK: 0, PACKAGING: 0, OTHER: 0 };
+    for (const r of requisitions) {
+      for (const it of r.items) {
+        const cat = it.ingredient?.category || 'OTHER';
+        categoryTotals[cat] = (categoryTotals[cat] || 0) + (it.subtotal || 0);
+      }
+    }
+
+    res.json({
+      totalCost,
+      totalDistributions: requisitions.length,
+      categoryTotals,
+      requisitions
+    });
+  } catch (error: any) {
+    console.error('Error fetching kitchen usage report:', error);
+    res.status(500).json({ error: 'Gagal mengambil laporan pemakaian dapur' });
   }
 });
 

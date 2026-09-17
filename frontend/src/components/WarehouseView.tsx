@@ -308,12 +308,12 @@ export default function WarehouseView() {
   const submitTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (transferForm.items.length === 0 || !transferForm.items[0].ingredientId) {
-      toast('Pilih minimal satu bahan yang diminta', 'warning');
+      toast('Pilih minimal satu bahan yang didistribusikan', 'warning');
       return;
     }
 
     try {
-      const res = await fetch('/api/warehouse/transfers', {
+      const res = await fetch('/api/warehouse/quick-distribute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -324,7 +324,7 @@ export default function WarehouseView() {
 
       const data = await res.json();
       if (res.ok) {
-        toast('Permintaan bahan ke gudang berhasil diajukan!', 'success');
+        toast(data.message || 'Distribusi bahan ke dapur berhasil diselesaikan!', 'success');
         setShowTransferModal(false);
         setTransferForm({
           notes: '',
@@ -332,7 +332,7 @@ export default function WarehouseView() {
         });
         fetchData();
       } else {
-        toast(data.error || 'Gagal mengajukan transfer bahan', 'error');
+        toast(data.error || 'Gagal mendistribusikan bahan', 'error');
       }
     } catch (err) {
       console.error(err);
@@ -1791,8 +1791,8 @@ export default function WarehouseView() {
                       value={inboundForm.paymentSource}
                       onChange={e => setInboundForm({ ...inboundForm, paymentSource: e.target.value })}
                     >
-                      <option value="DANA_PRIBADI_OWNER">🏢 Modal Pengadaan Pusat (Non-Operasional Cabang)</option>
-                      <option value="KAS_MUKI">🏪 Kas Operasional Outlet / Cabang</option>
+                      <option value="DANA_PRIBADI_OWNER">🏢 Kas Owner / Rekening Bank (Tidak potong laci kasir)</option>
+                      <option value="KASIR_PETTY_CASH">🏪 Laci Kasir / Petty Cash (Potong uang shift kasir)</option>
                     </select>
                   </div>
 
@@ -1816,11 +1816,11 @@ export default function WarehouseView() {
                   <div>
                     {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? (
                       <span>
-                        <strong>Mode Modal Pengadaan Pusat Aktif:</strong> Nilai total belanja barang ini akan dicatat sebagai penambahan <strong>Investasi Pengadaan Pusat di Gudang</strong>. Kas harian kasir cabang <u>sama sekali tidak berkurang</u> hingga barang didistribusikan ke unit operasional dapur cabang.
+                        <strong>Mode Kas Owner / Bank Aktif:</strong> Pembelian belanja bahan ini dicatat sebagai <strong>Aset Persediaan di Gudang</strong>. Uang di laci kasir kasir <u>sama sekali tidak berkurang</u>.
                       </span>
                     ) : (
                       <span>
-                        <strong>Mode Kas Operasional Cabang:</strong> Nilai total belanja akan langsung dipotong dari arus kas harian operasional cabang.
+                        <strong>Mode Laci Kasir (Petty Cash):</strong> Pembelian bahan ini langsung memotong kas operasional / kasir shift berjalan.
                       </span>
                     )}
                   </div>
@@ -2172,120 +2172,139 @@ export default function WarehouseView() {
         </div>
       )}
 
-      {/* ─── MODAL: REQUEST BAHAN DAPUR ─────────────────────────────────── */}
+      {/* ─── MODAL: DISTRIBUSI BAHAN KE DAPUR (1-KLIK) ───────────────────── */}
       {showTransferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-100 p-5 sm:p-6 flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <h3 className="font-black text-slate-900 text-base sm:text-lg flex items-center gap-2">
-                <ArrowRightLeft className="text-indigo-600" size={20} /> Pengajuan Permintaan Bahan Dapur
-              </h3>
-              <button onClick={() => setShowTransferModal(false)} className="icon-btn hover:bg-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:rounded-3xl rounded-none shadow-2xl border border-slate-100 flex flex-col min-h-0">
+            {/* Header */}
+            <div className="flex justify-between items-center px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+                  <ArrowRightLeft size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">
+                    Distribusi Bahan ke Dapur
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">Stok gudang berkurang, siap dimasak di dapur</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowTransferModal(false)} 
+                className="w-9 h-9 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center active:scale-95 transition-all shadow-xs"
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={submitTransfer} className="flex-1 overflow-y-auto pt-3 flex flex-col gap-4">
-              <div className="space-y-2.5">
+            {/* Scrollable Form Body */}
+            <form onSubmit={submitTransfer} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-black text-slate-800 uppercase">Daftar Bahan Yang Diambil</span>
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider">Daftar Bahan Yang Dikeluarkan</span>
                   <button
                     type="button"
                     onClick={handleAddTransferItem}
-                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 active:scale-95 transition-all"
                   >
-                    <Plus size={14} /> + Tambah Baris
+                    <Plus size={14} /> + Tambah Bahan
                   </button>
                 </div>
 
-                {transferForm.items.map((it, idx) => {
-                  const foundIng = stockList.find(s => s.id === Number(it.ingredientId));
-                  return (
-                    <div key={idx} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/70 flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="flex-1 px-3 py-2 text-xs font-bold bg-white rounded-xl border border-slate-200"
-                          value={it.ingredientId}
-                          onChange={e => handleTransferItemChange(idx, 'ingredientId', e.target.value)}
-                          required
-                        >
-                          <option value="">-- Pilih Bahan Baku --</option>
-                          {stockList.map(s => (
-                            <option key={s.id} value={s.id}>
-                              {s.name} (Stok Gudang: {s.warehouseStock} {s.unit})
-                            </option>
-                          ))}
-                        </select>
-                        {transferForm.items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTransferItem(idx)}
-                            className="text-rose-500 hover:text-rose-700 p-1"
-                          >
-                            <X size={16} />
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Jumlah Diminta</label>
-                          <input
-                            type="number"
-                            step="any"
-                            className="w-full px-2.5 py-1.5 text-xs font-bold bg-white rounded-lg border border-slate-200"
-                            value={it.requestedQty}
-                            onChange={e => handleTransferItemChange(idx, 'requestedQty', Number(e.target.value))}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Satuan</label>
+                <div className="space-y-3">
+                  {transferForm.items.map((it, idx) => {
+                    const foundIng = stockList.find(s => s.id === Number(it.ingredientId));
+                    return (
+                      <div key={idx} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2.5">
+                        <div className="flex items-center gap-2">
                           <select
-                            className="w-full px-2.5 py-1.5 text-xs font-bold bg-white rounded-lg border border-slate-200"
-                            value={it.requestedUnit}
-                            onChange={e => handleTransferItemChange(idx, 'requestedUnit', e.target.value)}
+                            className="flex-1 px-3 py-2.5 text-xs font-bold bg-white rounded-xl border border-slate-200 outline-none focus:border-indigo-600 cursor-pointer"
+                            value={it.ingredientId}
+                            onChange={e => handleTransferItemChange(idx, 'ingredientId', e.target.value)}
+                            required
                           >
-                            {foundIng && (
-                              <>
-                                <option value={foundIng.unit}>{foundIng.unit} (Satuan Dapur)</option>
-                                {foundIng.purchaseUnit && (
-                                  <option value={foundIng.purchaseUnit}>{foundIng.purchaseUnit} (Isi {foundIng.conversionRatio || 1} {foundIng.unit})</option>
-                                )}
-                              </>
-                            )}
+                            <option value="">-- Pilih Bahan Baku --</option>
+                            {stockList.map(s => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} (Stok Gudang: {s.warehouseStock} {s.unit})
+                              </option>
+                            ))}
                           </select>
+                          {transferForm.items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTransferItem(idx)}
+                              className="text-rose-500 hover:text-rose-700 p-2 rounded-xl bg-rose-50 hover:bg-rose-100 transition-colors"
+                              title="Hapus baris"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Jumlah Diambil</label>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.01"
+                              className="w-full px-3 py-2 text-xs font-black bg-white rounded-xl border border-slate-200 outline-none focus:border-indigo-600"
+                              value={it.requestedQty}
+                              onChange={e => handleTransferItemChange(idx, 'requestedQty', Number(e.target.value))}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Satuan</label>
+                            <select
+                              className="w-full px-3 py-2 text-xs font-bold bg-white rounded-xl border border-slate-200 outline-none focus:border-indigo-600 cursor-pointer"
+                              value={it.requestedUnit}
+                              onChange={e => handleTransferItemChange(idx, 'requestedUnit', e.target.value)}
+                            >
+                              {foundIng && (
+                                <>
+                                  <option value={foundIng.unit}>{foundIng.unit} (Satuan Dapur)</option>
+                                  {foundIng.purchaseUnit && (
+                                    <option value={foundIng.purchaseUnit}>{foundIng.purchaseUnit} (Isi {foundIng.conversionRatio || 1} {foundIng.unit})</option>
+                                  )}
+                                </>
+                              )}
+                            </select>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Catatan / Keperluan Dapur</label>
+                  <input
+                    type="text"
+                    className="w-full px-3.5 py-2.5 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-indigo-600"
+                    placeholder="Contoh: Persiapan shift siang / restock kuah ramen"
+                    value={transferForm.notes}
+                    onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Catatan Koki / Dapur</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 outline-none"
-                  placeholder="Misal: Persiapan weekend / ramen batch siang"
-                  value={transferForm.notes}
-                  onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              {/* Sticky Footer */}
+              <div className="p-4 sm:p-5 bg-white border-t border-slate-200/80 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowTransferModal(false)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                  className="flex-1 sm:flex-initial px-5 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold active:scale-95 transition-all text-center"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="btn btn-primary px-5 py-2.5 rounded-xl text-xs font-bold shadow-md"
+                  className="flex-1 sm:flex-initial px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                 >
-                  Ajukan Permintaan
+                  <Check size={16} /> Kirim ke Dapur (1-Klik)
                 </button>
               </div>
             </form>

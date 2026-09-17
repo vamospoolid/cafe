@@ -1420,13 +1420,18 @@ export const IngredientView: React.FC = () => {
                               </span>
                               <div>
                                 <div className="font-black text-slate-900">{ing.name}</div>
-                                <div className="flex items-center gap-1.5 mt-0.5">
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                   <span className="text-[10px] text-purple-700 font-bold uppercase tracking-wider">
                                     {cat === 'FOOD' ? 'Dapur' : (cat === 'DRINK' ? 'Bar' : 'Kemasan')}
                                   </span>
                                   {ing.subCategory && (
                                     <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/60">
                                       &gt; {ing.subCategory}
+                                    </span>
+                                  )}
+                                  {typeof ing.warehouseStock === 'number' && ing.warehouseStock > 0 && (
+                                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60 inline-flex items-center gap-1">
+                                      <Boxes size={10} /> Gudang: {ing.warehouseStock.toLocaleString('id-ID')} {ing.unit}
                                     </span>
                                   )}
                                 </div>
