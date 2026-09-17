@@ -5,7 +5,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, Sparkles, Filter, DollarSign, ArrowRight, 
   ShieldAlert, FileText, Coffee, ShoppingBag, Truck, BarChart3, PieChart, 
   ArrowUpRight, ArrowDownRight, Layers, HelpCircle, Send, ShoppingCart,
-  Download, Printer, MessageCircle, Copy, Boxes
+  Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -106,8 +106,8 @@ export const IngredientView: React.FC = () => {
   const token = posContext?.token;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
-  // Tab State: 'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage'
-  const [activeTab, setActiveTab] = useState<'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage'>('master');
+  // Tab State: 'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage' | 'staff_activity'
+  const [activeTab, setActiveTab] = useState<'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage' | 'staff_activity'>('master');
 
   // Master Ingredients Data
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -117,6 +117,14 @@ export const IngredientView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'all' | 'low' | 'out' | 'safe'>('all');
+
+  // Staff Activity & Loss Analytics State
+  const [staffActivityData, setStaffActivityData] = useState<any>(null);
+  const [staffActivityLoading, setStaffActivityLoading] = useState(false);
+  const [staffDatePreset, setStaffDatePreset] = useState<'today' | 'yesterday' | 'last7' | 'this_month' | 'custom'>('this_month');
+  const [staffStartDate, setStaffStartDate] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+  const [staffEndDate, setStaffEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedStaffUserFilter, setSelectedStaffUserFilter] = useState<string>('ALL');
 
   // Daily Usage & COGS Analytics State
   const [usageData, setUsageData] = useState<any>(null);
@@ -530,6 +538,53 @@ export const IngredientView: React.FC = () => {
     }
   };
 
+  const fetchStaffActivityAnalytics = async (start?: string, end?: string, uId?: string) => {
+    setStaffActivityLoading(true);
+    try {
+      const s = start !== undefined ? start : staffStartDate;
+      const e = end !== undefined ? end : staffEndDate;
+      const user = uId !== undefined ? uId : selectedStaffUserFilter;
+      const url = new URL(`${window.location.origin}${API}/ingredients/staff-activity-analytics`);
+      if (s) url.searchParams.set('startDate', `${s}T00:00:00.000Z`);
+      if (e) url.searchParams.set('endDate', `${e}T23:59:59.999Z`);
+      if (user && user !== 'ALL') url.searchParams.set('userId', user);
+
+      const res = await fetch(url.toString(), { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setStaffActivityData(data);
+      }
+    } catch (e) {
+      console.error('Error staff activity analytics:', e);
+    } finally {
+      setStaffActivityLoading(false);
+    }
+  };
+
+  const setStaffPresetDate = (preset: 'today' | 'yesterday' | 'last7' | 'this_month') => {
+    setStaffDatePreset(preset);
+    const now = new Date();
+    let s = new Date();
+    let e = new Date();
+
+    if (preset === 'today') {
+      // today
+    } else if (preset === 'yesterday') {
+      s.setDate(now.getDate() - 1);
+      e.setDate(now.getDate() - 1);
+    } else if (preset === 'last7') {
+      s.setDate(now.getDate() - 6);
+    } else if (preset === 'this_month') {
+      s = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const startStr = s.toISOString().split('T')[0];
+    const endStr = e.toISOString().split('T')[0];
+    setStaffStartDate(startStr);
+    setStaffEndDate(endStr);
+    fetchStaffActivityAnalytics(startStr, endStr, selectedStaffUserFilter);
+  };
+
   const setLossPresetDate = (preset: 'today' | 'yesterday' | 'last7' | 'this_month') => {
     setLossPreset(preset);
     const now = new Date();
@@ -664,12 +719,13 @@ export const IngredientView: React.FC = () => {
   useEffect(() => {
     if (!token) return;
     if (activeTab === 'loss') fetchLossAnalytics();
+    else if (activeTab === 'staff_activity') fetchStaffActivityAnalytics();
     else if (activeTab === 'shopping') fetchShoppingAnalytics();
     else if (activeTab === 'movements') fetchMovements();
     else if (activeTab === 'forecast') fetchForecast();
     else if (activeTab === 'opname') fetchOpnameHistory();
     else if (activeTab === 'daily_usage') fetchDailyUsage();
-  }, [activeTab, movementTypeFilter, movementIngredientFilter, usageCategoryFilter, usageTypeFilter, token]);
+  }, [activeTab, movementTypeFilter, movementIngredientFilter, usageCategoryFilter, usageTypeFilter, selectedStaffUserFilter, token]);
 
   const initOpnameItems = (ings: Ingredient[]) => {
     setOpnameItems(
@@ -1079,9 +1135,9 @@ export const IngredientView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 7 TAB UTAMA BAHAN BAKU (RESPONSIVE)
+          2. NAVIGASI 8 TAB UTAMA BAHAN BAKU (RESPONSIVE)
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-1.5 sm:p-2 border border-slate-200 shadow-sm flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-1.5 sm:gap-2 shrink-0">
+      <div className="bg-white rounded-2xl p-1.5 sm:p-2 border border-slate-200 shadow-sm flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-2 shrink-0">
         {[
           { 
             id: 'master', 
@@ -1103,6 +1159,13 @@ export const IngredientView: React.FC = () => {
             subtitle: 'Audit Waste & Kerugian', 
             icon: TrendingDown, 
             badge: (lossData?.summary?.totalLossCount || 0) > 0 ? `${lossData?.summary?.totalLossCount} Insiden` : null
+          },
+          { 
+            id: 'staff_activity', 
+            title: 'Analisis Staf Dapur', 
+            subtitle: 'Audit & Akuntabilitas', 
+            icon: ChefHat,
+            badge: (staffActivityData?.staffList?.length || 0) > 0 ? `${staffActivityData?.staffList?.length} Staf` : 'KPI'
           },
           { 
             id: 'movements', 
@@ -2093,6 +2156,424 @@ export const IngredientView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
+          TAB: ANALISIS AKTIVITAS & AKUNTABILITAS STAF DAPUR
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'staff_activity' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* HEADER & FILTER BAR */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <ChefHat size={20} className="text-violet-600" />
+                  Analisis Aktivitas & Akuntabilitas Staf Dapur
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Evaluasi kinerja tim: distribusi tindakan, klasifikasi kerugian (Human Error vs Basi), dan konsumsi staf.
+                </p>
+              </div>
+
+              {/* Filter Per Staf */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <select
+                  value={selectedStaffUserFilter}
+                  onChange={e => {
+                    setSelectedStaffUserFilter(e.target.value);
+                    fetchStaffActivityAnalytics(staffStartDate, staffEndDate, e.target.value);
+                  }}
+                  className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 w-full sm:w-48"
+                >
+                  <option value="ALL">Semua Anggota Tim</option>
+                  {staffActivityData?.staffList?.map((s: any) => (
+                    <option key={s.user.id} value={s.user.id.toString()}>
+                      {s.user.name} ({s.user.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Quick Date Range Filter */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+              <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1">
+                <Filter size={14} /> Periode:
+              </span>
+              {[
+                { label: 'Hari Ini', val: 'today' },
+                { label: 'Kemarin', val: 'yesterday' },
+                { label: '7 Hari Terakhir', val: 'last7' },
+                { label: 'Bulan Ini', val: 'this_month' }
+              ].map(p => (
+                <button
+                  key={p.val}
+                  onClick={() => setStaffPresetDate(p.val as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    staffDatePreset === p.val
+                      ? 'bg-violet-600 text-white shadow-sm'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+
+              <div className="flex items-center gap-2 ml-auto flex-wrap">
+                <input
+                  type="date"
+                  value={staffStartDate}
+                  onChange={e => {
+                    setStaffStartDate(e.target.value);
+                    setStaffDatePreset('custom');
+                    fetchStaffActivityAnalytics(e.target.value, staffEndDate, selectedStaffUserFilter);
+                  }}
+                  className="px-2.5 py-1 text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium"
+                />
+                <span className="text-xs text-slate-400">s/d</span>
+                <input
+                  type="date"
+                  value={staffEndDate}
+                  onChange={e => {
+                    setStaffEndDate(e.target.value);
+                    setStaffDatePreset('custom');
+                    fetchStaffActivityAnalytics(staffStartDate, e.target.value, selectedStaffUserFilter);
+                  }}
+                  className="px-2.5 py-1 text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium"
+                />
+              </div>
+            </div>
+          </div>
+
+          {staffActivityLoading ? (
+            <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center text-slate-400">
+              <RefreshCw className="animate-spin inline-block mb-2 text-violet-600" size={24} />
+              <p>Menganalisis data aktivitas & kinerja staf dapur...</p>
+            </div>
+          ) : (
+            <>
+              {/* TOP 4 KPI CARDS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Total Tindakan */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Aksi Tim</p>
+                    <h3 className="text-2xl font-black text-slate-900 mt-0.5">
+                      {(staffActivityData?.summary?.teamTotalActions || 0).toLocaleString('id-ID')}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Mutasi stok, restock, waste & opname
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                    <Activity size={24} />
+                  </div>
+                </div>
+
+                {/* Total Kerugian (Loss / Waste) */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold text-rose-500 uppercase tracking-wider">Total Biaya Waste</p>
+                    <h3 className="text-2xl font-black text-rose-600 mt-0.5">
+                      Rp {(staffActivityData?.summary?.teamTotalLossCost || 0).toLocaleString('id-ID')}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {(staffActivityData?.summary?.teamLossCount || 0)} insiden tercatat
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <TrendingDown size={24} />
+                  </div>
+                </div>
+
+                {/* Human Error Loss */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold text-amber-500 uppercase tracking-wider">Kelalaian / Salah Masak</p>
+                    <h3 className="text-2xl font-black text-amber-600 mt-0.5">
+                      Rp {(staffActivityData?.summary?.teamHumanErrorCost || 0).toLocaleString('id-ID')}
+                    </h3>
+                    <p className="text-[11px] text-amber-700 font-bold mt-0.5">
+                      {staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0}% dari seluruh waste
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <Flame size={24} />
+                  </div>
+                </div>
+
+                {/* Staff Meal / Konsumsi Karyawan */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Makan Karyawan</p>
+                    <h3 className="text-2xl font-black text-emerald-700 mt-0.5">
+                      Rp {(staffActivityData?.summary?.teamStaffMealCost || 0).toLocaleString('id-ID')}
+                    </h3>
+                    <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
+                      Tercatat resmi sebagai konsumsi
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Utensils size={24} />
+                  </div>
+                </div>
+              </div>
+
+              {/* DUA GRAFIK VISUAL BREAKDOWN & PERSENTASE */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* GRAFIK 1: KOMPOSISI DISTRIBUSI TINDAKAN TIM */}
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                        <PieChart size={18} className="text-violet-600" />
+                        Distribusi Tindakan Operasional Tim (%)
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Persentase fokus jenis interaksi stok yang dilakukan staf.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3.5 pt-1">
+                    {/* Restock Bar */}
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span>
+                          📥 Restock & Pasokan Masuk
+                        </span>
+                        <span className="text-indigo-600">
+                          {staffActivityData?.summary?.teamActivityPercentages?.restock || 0}% ({staffActivityData?.summary?.teamRestockCount || 0} aksi)
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.min(100, staffActivityData?.summary?.teamActivityPercentages?.restock || 0)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Penyesuaian & Opname Bar */}
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block"></span>
+                          🔧 Penyesuaian & Opname Fisik
+                        </span>
+                        <span className="text-sky-600">
+                          {staffActivityData?.summary?.teamActivityPercentages?.adjustment || 0}% ({staffActivityData?.summary?.teamAdjustmentCount || 0} aksi)
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-sky-500 to-sky-600 rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.min(100, staffActivityData?.summary?.teamActivityPercentages?.adjustment || 0)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Waste / Rusak Bar */}
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+                          ⚠️ Catat Kerusakan / Stock Loss
+                        </span>
+                        <span className="text-rose-600">
+                          {staffActivityData?.summary?.teamActivityPercentages?.loss || 0}% ({staffActivityData?.summary?.teamLossCount || 0} aksi)
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.min(100, staffActivityData?.summary?.teamActivityPercentages?.loss || 0)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* GRAFIK 2: BREAKDOWN KLASIFIKASI KERUGIAN */}
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                        <BarChart3 size={18} className="text-rose-600" />
+                        Breakdown Faktor Kerugian (Waste vs Konsumsi)
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Membedakan kerugian kelalaian manusia, kadaluarsa, dan makan staf.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3.5 pt-1">
+                    {/* Human Error Bar */}
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+                          🍳 Human Error (Gosong / Tumpah / Salah Olah)
+                        </span>
+                        <span className="text-rose-600">
+                          {staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0}% (Rp {(staffActivityData?.summary?.teamHumanErrorCost || 0).toLocaleString('id-ID')})
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.min(100, staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Spoilage / Expired Bar */}
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                          🥀 Basi / Kadaluarsa Alamiah
+                        </span>
+                        <span className="text-amber-600">
+                          {staffActivityData?.summary?.teamLossCompositionPercentages?.spoilage || 0}% (Rp {(staffActivityData?.summary?.teamSpoilageCost || 0).toLocaleString('id-ID')})
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.min(100, staffActivityData?.summary?.teamLossCompositionPercentages?.spoilage || 0)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Staff Meal Bar */}
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-slate-700 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                          🍱 Konsumsi Resmi Staf (Staff Meal)
+                        </span>
+                        <span className="text-emerald-700">
+                          {staffActivityData?.summary?.teamLossCompositionPercentages?.staffMeal || 0}% (Rp {(staffActivityData?.summary?.teamStaffMealCost || 0).toLocaleString('id-ID')})
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.min(100, staffActivityData?.summary?.teamLossCompositionPercentages?.staffMeal || 0)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* TABEL LEADERBOARD & AKUNTABILITAS PER STAF */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <Users size={18} className="text-indigo-600" />
+                      Rincian Aktivitas & Akuntabilitas Per Anggota Tim
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Evaluasi objektif kontribusi restock, pemeliharaan stok, dan beban kerugian per individu.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50/80 text-[10px] font-black text-slate-500 uppercase">
+                      <tr>
+                        <th className="py-3 px-4">Nama Staf</th>
+                        <th className="py-3 px-4 text-center">Role / Peran</th>
+                        <th className="py-3 px-4 text-right">Total Aksi</th>
+                        <th className="py-3 px-4">Distribusi Aktivitas (%)</th>
+                        <th className="py-3 px-4 text-right">Total Loss (Rp)</th>
+                        <th className="py-3 px-4 text-center">Beban Tim (%)</th>
+                        <th className="py-3 px-4 text-center">Status KPI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                      {staffActivityData?.staffList?.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400">
+                            Belum ada rekaman aktivitas mutasi stok oleh staf pada periode ini.
+                          </td>
+                        </tr>
+                      ) : (
+                        staffActivityData?.staffList?.map((s: any) => {
+                          const isHighLoss = s.teamLossSharePercentage > 40 && s.totalLossCost > 50000;
+                          const isZeroLoss = s.totalLossCost === 0;
+
+                          return (
+                            <tr key={s.user.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-3 px-4 font-black text-slate-900 flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-black shrink-0">
+                                  {s.user.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div>{s.user.name}</div>
+                                  <div className="text-[10px] text-slate-400 font-normal">@{s.user.username}</div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                  s.user.role === 'Dapur' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                  s.user.role === 'Admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {s.user.role}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right font-black text-slate-900">
+                                {s.totalActions}
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-1.5 text-[10px]">
+                                  <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-bold" title="Restock">
+                                    📥 {s.activityPercentages?.restock || 0}%
+                                  </span>
+                                  <span className="px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded font-bold" title="Opname / Koreksi">
+                                    🔧 {s.activityPercentages?.adjustment || 0}%
+                                  </span>
+                                  <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-bold" title="Loss / Rusak">
+                                    ⚠️ {s.activityPercentages?.loss || 0}%
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-right font-black text-rose-600">
+                                Rp {s.totalLossCost.toLocaleString('id-ID')}
+                              </td>
+                              <td className="py-3 px-4 text-center font-bold text-slate-700">
+                                {s.teamLossSharePercentage}%
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {isZeroLoss ? (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center gap-1 mx-auto w-max">
+                                    <Award size={12} /> Sangat Hemat (0 Loss)
+                                  </span>
+                                ) : isHighLoss ? (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center gap-1 mx-auto w-max">
+                                    <Flame size={12} /> Perlu Review Resep
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center gap-1 mx-auto w-max">
+                                    <UserCheck size={12} /> Normal / Wajar
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
           TAB 4: KARTU STOK & ALUR DISTRIBUSI
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'movements' && (
@@ -3011,7 +3492,32 @@ export const IngredientView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Alasan Loss</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Alasan Loss / Pengurangan</label>
+                  
+                  {/* 1-Tap Quick Reason Chips */}
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {[
+                      { label: 'Kadaluarsa / Basi', val: 'Busuk / Kadaluarsa', color: 'border-amber-200 text-amber-700 bg-amber-50/60' },
+                      { label: 'Gosong / Salah Masak', val: 'Kesalahan Masak', color: 'border-rose-200 text-rose-700 bg-rose-50/60' },
+                      { label: 'Tumpah / Rusak Fisik', val: 'Tumpah / Rusak', color: 'border-orange-200 text-orange-700 bg-orange-50/60' },
+                      { label: 'Makan Staf (Konsumsi)', val: 'Makan Karyawan / Konsumsi Staf', color: 'border-emerald-200 text-emerald-700 bg-emerald-50/60' },
+                      { label: 'Sisa Trimming', val: 'Sisa Trimming / Kupas', color: 'border-purple-200 text-purple-700 bg-purple-50/60' },
+                    ].map(tag => (
+                      <button
+                        key={tag.val}
+                        type="button"
+                        onClick={() => setLossForm({ ...lossForm, reason: tag.val })}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                          lossForm.reason === tag.val 
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
+                            : `${tag.color} hover:opacity-80`
+                        }`}
+                      >
+                        {tag.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <select
                     value={lossForm.reason}
                     onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
@@ -3021,6 +3527,7 @@ export const IngredientView: React.FC = () => {
                     <option value="Tumpah / Rusak">Tumpah / Rusak Fisik</option>
                     <option value="Sisa Trimming / Kupas">Sisa Trimming / Kupas</option>
                     <option value="Kesalahan Masak">Kesalahan Masak / Olah</option>
+                    <option value="Makan Karyawan / Konsumsi Staf">Makan Karyawan / Konsumsi Staf</option>
                     <option value="Lainnya">Lainnya</option>
                   </select>
                 </div>

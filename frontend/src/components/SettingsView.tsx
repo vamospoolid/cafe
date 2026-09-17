@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -165,6 +165,8 @@ const SettingsView = () => {
     loyaltySilverMultiplier: 1.2,
     loyaltyGoldMultiplier: 1.5,
     ingredientTrackingEnabled: false,
+    enableKitchenAuditMode: false,
+    enableStaffMealTracking: true,
     warehouseTransferPricing: 'AT_COST',
     warehouseMarkupPercent: 0,
     // Printer Kasir
@@ -1379,6 +1381,69 @@ const SettingsView = () => {
                   Mengubah mode tidak menghapus data. Menu <strong>Bahan Baku</strong> di sidebar hanya muncul jika Advanced Mode aktif.
                   Isi resep menu di <strong>Produk → Edit → Tab Resep</strong> sebelum mengaktifkan Advanced Mode.
                 </p>
+              </div>
+
+              {/* Kontrol Dapur & Mode Audit Opsional */}
+              <div className="pt-6 border-t border-slate-100 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
+                    <ShieldAlert size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Kontrol Dapur & Mode Audit Inventaris (Opsional)</h4>
+                    <p className="text-xs text-slate-400">Atur tingkat detail pencatatan bahan sisa/waste agar staf dapur tetap nyaman dan tidak terbebani.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Mode Audit Detail Toggle */}
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                        <Flame size={16} className="text-rose-500" />
+                        <span>Mode Audit Detail Dapur</span>
+                      </span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="enableKitchenAuditMode"
+                          checked={formData.enableKitchenAuditMode || false}
+                          onChange={handleChange}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      {formData.enableKitchenAuditMode 
+                        ? '🟢 AKTIF: Dapur dapat memilih tombol cepat alasan kerugian (Gosong, Tumpah, Basi, dll) untuk audit performa per koki.' 
+                        : '⚪ NONAKTIF (Mode Cepat): Staf dapur cukup 1-klik kurangi/tambah stok biasa tanpa form berbelit-belit.'}
+                    </p>
+                  </div>
+
+                  {/* Staff Meal Tracking Toggle */}
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                        <Utensils size={16} className="text-emerald-500" />
+                        <span>Pencatatan Makan Karyawan (Staff Meal)</span>
+                      </span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="enableStaffMealTracking"
+                          checked={formData.enableStaffMealTracking !== false}
+                          onChange={handleChange}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      Mengizinkan dapur mencatat konsumsi resmi staf agar HPP makanan terpisah dari kerugian/waste dan stok tetap akurat.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Warehouse & Transfer Pricing Settings */}

@@ -68,6 +68,10 @@ import uploadRoutes from './routes/upload';
 import databaseRoutes from './routes/database';
 import warehouseRoutes from './routes/warehouse';
 import employeeLoansRoutes from './routes/employeeLoans';
+import courseRoutes from './routes/course';
+import batchRoutes from './routes/batch';
+import liveSessionRoutes from './routes/liveSession';
+import studentProgressRoutes from './routes/studentProgress';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -93,6 +97,10 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/warehouse', warehouseRoutes);
 app.use('/api/employee-loans', employeeLoansRoutes);
+app.use('/api/courses', courseRoutes);
+app.use('/api/batches', batchRoutes);
+app.use('/api/live-sessions', liveSessionRoutes);
+app.use('/api/progress', studentProgressRoutes);
 
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', message: 'Backend is running' });

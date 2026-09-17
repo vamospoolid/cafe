@@ -513,6 +513,227 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
   }
 });
 
+// GET Analisis Aktivitas & Akuntabilitas Staf Dapur (Per-User Audit & Loss Analytics)
+router.get('/staff-activity-analytics', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate, userId } = req.query;
+    let sDate: Date | undefined;
+    let eDate: Date | undefined;
+    const dateFilter: any = {};
+
+    if (startDate && endDate) {
+      sDate = new Date(startDate as string);
+      sDate.setHours(0, 0, 0, 0);
+      eDate = new Date(endDate as string);
+      eDate.setHours(23, 59, 59, 999);
+      dateFilter.gte = sDate;
+      dateFilter.lte = eDate;
+    }
+
+    const whereCondition: any = {
+      ...(sDate && eDate ? { createdAt: dateFilter } : {})
+    };
+
+    if (userId && userId !== 'ALL') {
+      whereCondition.userId = Number(userId);
+    }
+
+    // Ambil semua log bahan baku dalam rentang tanggal
+    const allLogs = await prisma.ingredientLog.findMany({
+      where: whereCondition,
+      include: {
+        ingredient: { select: { id: true, name: true, unit: true, buyPrice: true, category: true } },
+        user: { select: { id: true, name: true, role: true, username: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Ambil daftar semua user untuk pemetaan
+    const allUsers = await prisma.user.findMany({
+      select: { id: true, name: true, role: true, username: true, status: true }
+    });
+    const userMap: Record<number, any> = {};
+    allUsers.forEach(u => {
+      userMap[u.id] = {
+        user: u,
+        totalActions: 0,
+        restockCount: 0,
+        lossCount: 0,
+        adjustmentCount: 0,
+        productionCount: 0,
+        staffMealCount: 0,
+        otherCount: 0,
+        totalLossCost: 0,
+        humanErrorCost: 0,
+        spoilageCost: 0,
+        staffMealCost: 0,
+        recentLogs: []
+      };
+    });
+
+    // User anonim/sistem untuk log tanpa userId
+    userMap[0] = {
+      user: { id: 0, name: 'Sistem / Tanpa Nama', role: 'Sistem', username: 'system' },
+      totalActions: 0,
+      restockCount: 0,
+      lossCount: 0,
+      adjustmentCount: 0,
+      productionCount: 0,
+      staffMealCount: 0,
+      otherCount: 0,
+      totalLossCost: 0,
+      humanErrorCost: 0,
+      spoilageCost: 0,
+      staffMealCost: 0,
+      recentLogs: []
+    };
+
+    let teamTotalActions = 0;
+    let teamTotalLossCost = 0;
+    let teamHumanErrorCost = 0;
+    let teamSpoilageCost = 0;
+    let teamStaffMealCost = 0;
+    let teamRestockCount = 0;
+    let teamAdjustmentCount = 0;
+    let teamLossCount = 0;
+    let teamProductionCount = 0;
+
+    allLogs.forEach(log => {
+      const uId = log.userId || 0;
+      if (!userMap[uId]) {
+        userMap[uId] = {
+          user: log.user || { id: uId, name: `User #${uId}`, role: 'Staf', username: `user_${uId}` },
+          totalActions: 0,
+          restockCount: 0,
+          lossCount: 0,
+          adjustmentCount: 0,
+          productionCount: 0,
+          staffMealCount: 0,
+          otherCount: 0,
+          totalLossCost: 0,
+          humanErrorCost: 0,
+          spoilageCost: 0,
+          staffMealCost: 0,
+          recentLogs: []
+        };
+      }
+
+      const target = userMap[uId];
+      target.totalActions += 1;
+      teamTotalActions += 1;
+
+      if (target.recentLogs.length < 10) {
+        target.recentLogs.push(log);
+      }
+
+      const logType = (log.type || '').toLowerCase();
+      const reasonStr = (log.reason || log.description || '').toLowerCase();
+      const itemCost = log.cost || (Math.abs(log.change) * (log.ingredient?.buyPrice || 0));
+
+      const isStaffMeal = reasonStr.includes('makan') || reasonStr.includes('konsumsi') || reasonStr.includes('staff meal');
+      const isHumanError = reasonStr.includes('gosong') || reasonStr.includes('salah') || reasonStr.includes('tumpah') || 
+                           reasonStr.includes('kelalaian') || reasonStr.includes('rusak fisik') || reasonStr.includes('over');
+
+      if (logType === 'restock' || logType === 'po') {
+        target.restockCount += 1;
+        teamRestockCount += 1;
+      } else if (logType === 'rusak' || logType === 'loss') {
+        target.lossCount += 1;
+        teamLossCount += 1;
+        target.totalLossCost += itemCost;
+        teamTotalLossCost += itemCost;
+
+        if (isStaffMeal) {
+          target.staffMealCount += 1;
+          target.staffMealCost += itemCost;
+          teamStaffMealCost += itemCost;
+        } else if (isHumanError) {
+          target.humanErrorCost += itemCost;
+          teamHumanErrorCost += itemCost;
+        } else {
+          target.spoilageCost += itemCost;
+          teamSpoilageCost += itemCost;
+        }
+      } else if (logType === 'penyesuaian') {
+        target.adjustmentCount += 1;
+        teamAdjustmentCount += 1;
+        if (log.change < 0) {
+          target.totalLossCost += itemCost;
+          teamTotalLossCost += itemCost;
+          if (isStaffMeal) {
+            target.staffMealCost += itemCost;
+            teamStaffMealCost += itemCost;
+          } else {
+            target.humanErrorCost += itemCost;
+            teamHumanErrorCost += itemCost;
+          }
+        }
+      } else if (logType === 'produksi') {
+        target.productionCount += 1;
+        teamProductionCount += 1;
+      } else {
+        target.otherCount += 1;
+      }
+    });
+
+    // Hitung persentase untuk masing-masing staf
+    const staffList = Object.values(userMap)
+      .filter((s: any) => s.totalActions > 0 || (s.user.id !== 0 && (s.user.role === 'Dapur' || s.user.role === 'Admin' || s.user.role === 'Kasir')))
+      .map((s: any) => {
+        const total = s.totalActions || 1;
+        const totalLoss = s.totalLossCost || 1;
+        return {
+          ...s,
+          activityPercentages: {
+            restock: Math.round(((s.restockCount / total) * 100) * 10) / 10,
+            loss: Math.round(((s.lossCount / total) * 100) * 10) / 10,
+            adjustment: Math.round(((s.adjustmentCount / total) * 100) * 10) / 10,
+            production: Math.round(((s.productionCount / total) * 100) * 10) / 10,
+            staffMeal: Math.round(((s.staffMealCount / total) * 100) * 10) / 10
+          },
+          lossCompositionPercentages: {
+            humanError: s.totalLossCost > 0 ? Math.round(((s.humanErrorCost / s.totalLossCost) * 100) * 10) / 10 : 0,
+            spoilage: s.totalLossCost > 0 ? Math.round(((s.spoilageCost / s.totalLossCost) * 100) * 10) / 10 : 0,
+            staffMeal: s.totalLossCost > 0 ? Math.round(((s.staffMealCost / s.totalLossCost) * 100) * 10) / 10 : 0
+          },
+          teamLossSharePercentage: teamTotalLossCost > 0 ? Math.round(((s.totalLossCost / teamTotalLossCost) * 100) * 10) / 10 : 0
+        };
+      })
+      .sort((a, b) => b.totalActions - a.totalActions);
+
+    res.json({
+      summary: {
+        teamTotalActions,
+        teamTotalLossCost,
+        teamHumanErrorCost,
+        teamSpoilageCost,
+        teamStaffMealCost,
+        teamRestockCount,
+        teamAdjustmentCount,
+        teamLossCount,
+        teamProductionCount,
+        teamActivityPercentages: {
+          restock: teamTotalActions > 0 ? Math.round(((teamRestockCount / teamTotalActions) * 100) * 10) / 10 : 0,
+          loss: teamTotalActions > 0 ? Math.round(((teamLossCount / teamTotalActions) * 100) * 10) / 10 : 0,
+          adjustment: teamTotalActions > 0 ? Math.round(((teamAdjustmentCount / teamTotalActions) * 100) * 10) / 10 : 0,
+          production: teamTotalActions > 0 ? Math.round(((teamProductionCount / teamTotalActions) * 100) * 10) / 10 : 0
+        },
+        teamLossCompositionPercentages: {
+          humanError: teamTotalLossCost > 0 ? Math.round(((teamHumanErrorCost / teamTotalLossCost) * 100) * 10) / 10 : 0,
+          spoilage: teamTotalLossCost > 0 ? Math.round(((teamSpoilageCost / teamTotalLossCost) * 100) * 10) / 10 : 0,
+          staffMeal: teamTotalLossCost > 0 ? Math.round(((teamStaffMealCost / teamTotalLossCost) * 100) * 10) / 10 : 0
+        },
+        startDate: startDate || null,
+        endDate: endDate || null
+      },
+      staffList
+    });
+  } catch (error) {
+    console.error('Error staff activity analytics:', error);
+    res.status(500).json({ error: 'Gagal mengambil analisis aktivitas staf' });
+  }
+});
+
 // GET Analisis Belanja Cerdas & Restock
 router.get('/shopping-analytics', authenticateToken, async (req: Request, res: Response) => {
   try {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { 
   DollarSign, Plus, ArrowUpRight, ArrowDownRight, Wallet, 
-  FileText, Tag, Layers, Search, Utensils, Coffee, Box, Zap, Users, Wrench, User, Calendar, Trash2
+  FileText, Tag, Layers, Search, Utensils, Coffee, Box, Zap, Users, Wrench, User, Calendar, Trash2,
+  Filter, RefreshCw
 } from 'lucide-react';
 import CashFlowModal from './CashFlowModal';
 import { POSContext } from '../context/POSContext';
@@ -17,6 +18,12 @@ const CashFlowView = () => {
   const [filterType, setFilterType] = useState('');
   const [selectedMainCat, setSelectedMainCat] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Date Filter State: 'all' | 'today' | 'yesterday' | 'last7' | 'this_month' | 'custom'
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'yesterday' | 'last7' | 'this_month' | 'custom'>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
   const posContext = useContext(POSContext);
 
   const formatCurrency = (val: any) => {
@@ -35,13 +42,22 @@ const CashFlowView = () => {
     }
   };
 
-  const fetchCashflow = async () => {
+  const fetchCashflow = async (s?: string, e?: string, type?: string) => {
     setLoading(true);
     try {
-      let url = '/api/cashflow';
-      if (filterType) url += `?type=${filterType}`;
+      const url = new URL(`${window.location.origin}/api/cashflow`);
+      const t = type !== undefined ? type : filterType;
+      const start = s !== undefined ? s : startDate;
+      const end = e !== undefined ? e : endDate;
 
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${posContext?.token}` } });
+      if (t) url.searchParams.set('type', t);
+      if (start && end) {
+        url.searchParams.set('startDate', start);
+        url.searchParams.set('endDate', end);
+        url.searchParams.set('tzOffset', (new Date().getTimezoneOffset()).toString());
+      }
+
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${posContext?.token}` } });
       const data = await res.json();
       if (res.ok && Array.isArray(data)) {
         setCashflows(data);
@@ -56,8 +72,38 @@ const CashFlowView = () => {
     }
   };
 
+  const setPresetDate = (preset: 'all' | 'today' | 'yesterday' | 'last7' | 'this_month') => {
+    setDatePreset(preset);
+    const now = new Date();
+    let s: Date | null = null;
+    let e: Date | null = null;
+
+    if (preset === 'today') {
+      s = new Date();
+      e = new Date();
+    } else if (preset === 'yesterday') {
+      s = new Date();
+      s.setDate(now.getDate() - 1);
+      e = new Date();
+      e.setDate(now.getDate() - 1);
+    } else if (preset === 'last7') {
+      s = new Date();
+      s.setDate(now.getDate() - 6);
+      e = new Date();
+    } else if (preset === 'this_month') {
+      s = new Date(now.getFullYear(), now.getMonth(), 1);
+      e = new Date();
+    }
+
+    const startStr = s ? s.toISOString().split('T')[0] : '';
+    const endStr = e ? e.toISOString().split('T')[0] : '';
+    setStartDate(startStr);
+    setEndDate(endStr);
+    fetchCashflow(startStr, endStr, filterType);
+  };
+
   useEffect(() => {
-    if (posContext?.token) fetchCashflow();
+    if (posContext?.token) fetchCashflow(startDate, endDate, filterType);
   }, [posContext?.token, filterType]);
 
   const handleSave = async (data: any) => {
@@ -215,6 +261,70 @@ const CashFlowView = () => {
           >
             <Plus size={16} /> 
             <span>+ Catat Kas</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Date Range / Period Filter Bar */}
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-gray-200/80 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1">
+            <Filter size={14} className="text-indigo-600" /> Filter Periode:
+          </span>
+          {[
+            { label: 'Semua Waktu', val: 'all' },
+            { label: 'Hari Ini', val: 'today' },
+            { label: 'Kemarin', val: 'yesterday' },
+            { label: 'Minggu Ini (7 Hari)', val: 'last7' },
+            { label: 'Bulan Ini', val: 'this_month' }
+          ].map(p => (
+            <button
+              key={p.val}
+              onClick={() => setPresetDate(p.val as any)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                datePreset === p.val
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/60'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom Date Pickers */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+            <Calendar size={13} className="text-slate-400" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => {
+                setStartDate(e.target.value);
+                setDatePreset('custom');
+                if (e.target.value && endDate) fetchCashflow(e.target.value, endDate, filterType);
+              }}
+              className="text-xs bg-transparent font-medium text-slate-700 outline-none"
+            />
+            <span className="text-xs text-slate-400">s/d</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => {
+                setEndDate(e.target.value);
+                setDatePreset('custom');
+                if (startDate && e.target.value) fetchCashflow(startDate, e.target.value, filterType);
+              }}
+              className="text-xs bg-transparent font-medium text-slate-700 outline-none"
+            />
+          </div>
+
+          <button
+            onClick={() => fetchCashflow(startDate, endDate, filterType)}
+            title="Muat Ulang Data Kas"
+            className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center transition-all active:scale-95 shrink-0"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>

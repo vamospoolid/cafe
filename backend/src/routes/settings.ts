@@ -66,6 +66,10 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     if (updateData.loyaltySilverMultiplier !== undefined) updateData.loyaltySilverMultiplier = Number(updateData.loyaltySilverMultiplier);
     if (updateData.loyaltyGoldMultiplier !== undefined) updateData.loyaltyGoldMultiplier = Number(updateData.loyaltyGoldMultiplier);
     
+    if (updateData.ingredientTrackingEnabled !== undefined) updateData.ingredientTrackingEnabled = Boolean(updateData.ingredientTrackingEnabled);
+    if (updateData.enableKitchenAuditMode !== undefined) updateData.enableKitchenAuditMode = Boolean(updateData.enableKitchenAuditMode);
+    if (updateData.enableStaffMealTracking !== undefined) updateData.enableStaffMealTracking = Boolean(updateData.enableStaffMealTracking);
+    
     if (updateData.enableKDS !== undefined) updateData.enableKDS = Boolean(updateData.enableKDS);
     if (updateData.autoCompleteKDSOnPay !== undefined) updateData.autoCompleteKDSOnPay = Boolean(updateData.autoCompleteKDSOnPay);
     if (updateData.autoPrintReceipt !== undefined) updateData.autoPrintReceipt = Boolean(updateData.autoPrintReceipt);
