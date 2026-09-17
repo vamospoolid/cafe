@@ -24,9 +24,6 @@ import PurchaseOrderView from './components/PurchaseOrderView';
 import StaffPWAView from './components/StaffPWAView';
 import WarehouseView from './components/WarehouseView';
 import EmployeeLoanView from './components/EmployeeLoanView';
-import CourseManagementView from './components/CourseManagementView';
-import TutorPortalView from './components/TutorPortalView';
-import StudentLearningView from './components/StudentLearningView';
 import { POSProvider, POSContext } from './context/POSContext';
 
 
@@ -89,11 +86,6 @@ const AppRoutes = () => {
         <Route path="/supplier" element={<SupplierView />} />
         <Route path="/purchase-order" element={<PurchaseOrderView />} />
         <Route path="/gudang" element={<WarehouseView />} />
-        
-        {/* Modul Bimbel / Kursus / Akademi */}
-        <Route path="/kurikulum" element={<CourseManagementView />} />
-        <Route path="/portal-tutor" element={<TutorPortalView />} />
-        <Route path="/ruang-belajar" element={<StudentLearningView />} />
 
         <Route path="*" element={<div className="p-8 text-center text-muted">Halaman tidak ditemukan...</div>} />
       </Routes>

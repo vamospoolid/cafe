@@ -32,10 +32,7 @@ import {
   Delete,
   PanelLeftClose,
   PanelLeftOpen,
-  CreditCard,
-  BookOpen,
-  GraduationCap,
-  Video
+  CreditCard
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -126,10 +123,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/shift': 'Riwayat Shift & Kasir',
     '/crm': 'Pelanggan & CRM',
     '/laporan': 'Laporan Penjualan',
-    '/pengaturan': 'Pengaturan Sistem',
-    '/kurikulum': 'Kurikulum & Materi Ajar',
-    '/portal-tutor': 'Portal Pengajar & Mentor',
-    '/ruang-belajar': 'Ruang Belajar Siswa',
+    '/pengaturan': 'Pengaturan Sistem'
   };
   const pageTitle = titleMap[location.pathname] || 'MUKI RAMEN POS';
 
@@ -372,27 +366,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <span>Laporan</span>
               </NavLink>
             )}
-            
-            {/* Group Bimbel & Akademi */}
-            <div className="sidebar-section-title">
-              <span>Bimbel & Materi Ajar</span>
-            </div>
-            {checkAccess(['Admin']) && (
-              <NavLink to="/kurikulum" title="Kurikulum & Silabus" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                <BookOpen size={20} className="shrink-0" />
-                <span>Kurikulum & Materi</span>
-              </NavLink>
-            )}
-            {checkAccess(['Admin', 'Tutor', 'Dapur']) && (
-              <NavLink to="/portal-tutor" title="Portal Pengajar & Honor" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                <GraduationCap size={20} className="shrink-0" />
-                <span>Portal Pengajar (Tutor)</span>
-              </NavLink>
-            )}
-            <NavLink to="/ruang-belajar" title="Ruang Belajar Siswa" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-              <Video size={20} className="shrink-0" />
-              <span>Ruang Belajar Siswa</span>
-            </NavLink>
             
             {checkAccess(['Admin']) && (
               <>
