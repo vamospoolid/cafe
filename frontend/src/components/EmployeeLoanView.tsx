@@ -726,165 +726,170 @@ const EmployeeLoanView: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal Input / Edit Kasbon */}
+      {/* Modal Input / Edit Kasbon (Full Page on Mobile) */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3.5 sm:p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:rounded-3xl rounded-none shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col">
+            
+            {/* Modal Header */}
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
                   <CreditCard size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-black text-slate-900">
+                  <h3 className="text-base font-black text-slate-900">
                     {editingLoan ? 'Edit Data Kasbon' : 'Input Kasbon Karyawan'}
                   </h3>
-                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium">Catat pinjaman dana operasional untuk staf</p>
+                  <p className="text-xs text-slate-500 font-medium">Catat pinjaman dana operasional untuk staf</p>
                 </div>
               </div>
               <button 
                 type="button" 
                 onClick={() => setIsFormModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center active:scale-95 transition-all"
+                className="w-9 h-9 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center active:scale-95 transition-all shadow-xs"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveLoan} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
-              {/* Karyawan */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Karyawan / Peminjam <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={formData.userId}
-                  onChange={e => setFormData(p => ({ ...p, userId: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
-                  required
-                >
-                  <option value="">-- Pilih Karyawan --</option>
-                  {employees.map(u => (
-                    <option key={u.id} value={u.id}>{u.name} — {u.role} ({u.employmentType || 'FULL_TIME'})</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Nominal & Tanggal */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Modal Scrollable Form Body */}
+            <form onSubmit={handleSaveLoan} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                {/* Karyawan */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Nominal Kasbon <span className="text-rose-500">*</span>
+                    Karyawan / Peminjam <span className="text-rose-500">*</span>
                   </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                  <select
+                    value={formData.userId}
+                    onChange={e => setFormData(p => ({ ...p, userId: e.target.value }))}
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all cursor-pointer"
+                    required
+                  >
+                    <option value="">-- Pilih Karyawan --</option>
+                    {employees.map(u => (
+                      <option key={u.id} value={u.id}>{u.name} — {u.role} ({u.employmentType || 'FULL_TIME'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Nominal & Tanggal */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Nominal Kasbon <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-3 text-xs font-bold text-slate-400">Rp</span>
+                      <input 
+                        type="number"
+                        placeholder="0"
+                        value={formData.amount}
+                        onChange={e => setFormData(p => ({ ...p, amount: e.target.value }))}
+                        className="w-full pl-9 pr-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      Tanggal Pinjam <span className="text-rose-500">*</span>
+                    </label>
                     <input 
-                      type="number"
-                      placeholder="0"
-                      value={formData.amount}
-                      onChange={e => setFormData(p => ({ ...p, amount: e.target.value }))}
-                      className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white"
+                      type="date"
+                      value={formData.date}
+                      onChange={e => setFormData(p => ({ ...p, date: e.target.value }))}
+                      className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                       required
                     />
                   </div>
                 </div>
 
+                {/* Sumber Kas */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Sumber Dana Kasbon
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <label className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                      formData.source === 'KAS_OWNER' ? 'bg-indigo-50/70 border-indigo-300 ring-2 ring-indigo-500/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                    }`}>
+                      <input 
+                        type="radio" 
+                        name="source" 
+                        value="KAS_OWNER"
+                        checked={formData.source === 'KAS_OWNER'}
+                        onChange={e => setFormData(p => ({ ...p, source: e.target.value }))}
+                        className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="text-xs font-black text-slate-800 block">Kas Owner / Bank</span>
+                        <span className="text-[10px] text-slate-500 block">Tidak potong laci kasir</span>
+                      </div>
+                    </label>
+
+                    <label className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                      formData.source === 'KASIR' ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-500/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                    }`}>
+                      <input 
+                        type="radio" 
+                        name="source" 
+                        value="KASIR"
+                        checked={formData.source === 'KASIR'}
+                        onChange={e => setFormData(p => ({ ...p, source: e.target.value }))}
+                        className="w-4 h-4 text-amber-600 focus:ring-amber-500"
+                      />
+                      <div>
+                        <span className="text-xs font-black text-slate-800 block">Laci Kasir (Petty Cash)</span>
+                        <span className="text-[10px] text-amber-600 block">Potong uang shift kasir</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Keperluan / Alasan */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Tanggal Pinjam <span className="text-rose-500">*</span>
+                    Keperluan / Alasan Kasbon
                   </label>
                   <input 
-                    type="date"
-                    value={formData.date}
-                    onChange={e => setFormData(p => ({ ...p, date: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
-                    required
+                    type="text"
+                    placeholder="Contoh: Kebutuhan keluarga mendesak, obat..."
+                    value={formData.reason}
+                    onChange={e => setFormData(p => ({ ...p, reason: e.target.value }))}
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                  />
+                </div>
+
+                {/* Disetujui Oleh */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Disetujui Oleh
+                  </label>
+                  <input 
+                    type="text"
+                    placeholder="Nama Owner / Manager"
+                    value={formData.approvedBy}
+                    onChange={e => setFormData(p => ({ ...p, approvedBy: e.target.value }))}
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                   />
                 </div>
               </div>
 
-              {/* Sumber Kas */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Sumber Dana Kasbon
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                    formData.source === 'KAS_OWNER' ? 'bg-indigo-50/70 border-indigo-300 ring-2 ring-indigo-500/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                  }`}>
-                    <input 
-                      type="radio" 
-                      name="source" 
-                      value="KAS_OWNER"
-                      checked={formData.source === 'KAS_OWNER'}
-                      onChange={e => setFormData(p => ({ ...p, source: e.target.value }))}
-                      className="text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div>
-                      <span className="text-xs font-black text-slate-800 block">Kas Owner / Bank</span>
-                      <span className="text-[10px] text-slate-500 block">Tidak potong laci kasir</span>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                    formData.source === 'KASIR' ? 'bg-amber-50/70 border-amber-300 ring-2 ring-amber-500/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
-                  }`}>
-                    <input 
-                      type="radio" 
-                      name="source" 
-                      value="KASIR"
-                      checked={formData.source === 'KASIR'}
-                      onChange={e => setFormData(p => ({ ...p, source: e.target.value }))}
-                      className="text-amber-600 focus:ring-amber-500"
-                    />
-                    <div>
-                      <span className="text-xs font-black text-slate-800 block">Laci Kasir (Petty Cash)</span>
-                      <span className="text-[10px] text-amber-600 block">Potong uang shift kasir</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Keperluan / Alasan */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Keperluan / Alasan Kasbon
-                </label>
-                <input 
-                  type="text"
-                  placeholder="Contoh: Kebutuhan keluarga mendesak, obat..."
-                  value={formData.reason}
-                  onChange={e => setFormData(p => ({ ...p, reason: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              {/* Disetujui Oleh */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Disetujui Oleh
-                </label>
-                <input 
-                  type="text"
-                  placeholder="Nama Owner / Manager"
-                  value={formData.approvedBy}
-                  onChange={e => setFormData(p => ({ ...p, approvedBy: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              {/* Footer Buttons */}
-              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
+              {/* Sticky Footer Action Bar */}
+              <div className="p-4 sm:p-5 bg-white border-t border-slate-200/80 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsFormModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold active:scale-95 transition-all"
+                  className="flex-1 sm:flex-initial px-5 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold active:scale-95 transition-all text-center"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 flex items-center gap-1.5 active:scale-95 transition-all"
+                  className="flex-1 sm:flex-initial px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                 >
                   <Check size={16} /> {editingLoan ? 'Simpan Perubahan' : 'Simpan Kasbon'}
                 </button>
@@ -894,96 +899,102 @@ const EmployeeLoanView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Pelunasan / Potong Gaji */}
+      {/* Modal Pelunasan / Potong Gaji (Full Page on Mobile) */}
       {isPayModalOpen && selectedLoanForPay && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3.5 sm:p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-md sm:rounded-3xl rounded-none shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col">
+            
+            {/* Modal Header */}
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-200 shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-200 shrink-0">
                   <DollarSign size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-black text-slate-900">Pelunasan Kasbon</h3>
-                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium">{selectedLoanForPay.user?.name}</p>
+                  <h3 className="text-base font-black text-slate-900">Pelunasan Kasbon</h3>
+                  <p className="text-xs text-slate-500 font-medium">{selectedLoanForPay.user?.name}</p>
                 </div>
               </div>
               <button 
                 type="button" 
                 onClick={() => setIsPayModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center active:scale-95 transition-all"
+                className="w-9 h-9 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center active:scale-95 transition-all shadow-xs"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSavePayment} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1">
-                <div className="flex justify-between text-slate-500">
-                  <span>Pinjaman Awal:</span>
-                  <span className="font-bold text-slate-700">{formatRupiah(selectedLoanForPay.amount)}</span>
+            {/* Modal Form Body */}
+            <form onSubmit={handleSavePayment} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1.5">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Pinjaman Awal:</span>
+                    <span className="font-bold text-slate-700">{formatRupiah(selectedLoanForPay.amount)}</span>
+                  </div>
+                  <div className="flex justify-between text-rose-600 font-black text-sm pt-1 border-t border-slate-200/60">
+                    <span>Sisa Belum Lunas:</span>
+                    <span>{formatRupiah(selectedLoanForPay.remaining)}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-rose-600 font-black">
-                  <span>Sisa Belum Lunas:</span>
-                  <span>{formatRupiah(selectedLoanForPay.remaining)}</span>
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Nominal Pembayaran <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Nominal Pembayaran <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-xs font-bold text-slate-400">Rp</span>
+                    <input 
+                      type="number"
+                      max={selectedLoanForPay.remaining}
+                      value={payFormData.amountPaid}
+                      onChange={e => setPayFormData(p => ({ ...p, amountPaid: e.target.value }))}
+                      className="w-full pl-9 pr-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Metode Pembayaran
+                  </label>
+                  <select
+                    value={payFormData.paymentMethod}
+                    onChange={e => setPayFormData(p => ({ ...p, paymentMethod: e.target.value }))}
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all cursor-pointer"
+                  >
+                    <option value="POTONG_GAJI">Potong Gaji (Payroll Deduction)</option>
+                    <option value="TUNAI">Tunai / Cash</option>
+                    <option value="TRANSFER">Transfer Bank</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Catatan Pelunasan
+                  </label>
                   <input 
-                    type="number"
-                    max={selectedLoanForPay.remaining}
-                    value={payFormData.amountPaid}
-                    onChange={e => setPayFormData(p => ({ ...p, amountPaid: e.target.value }))}
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white"
-                    required
+                    type="text"
+                    value={payFormData.notes}
+                    onChange={e => setPayFormData(p => ({ ...p, notes: e.target.value }))}
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-all"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Metode Pembayaran
-                </label>
-                <select
-                  value={payFormData.paymentMethod}
-                  onChange={e => setPayFormData(p => ({ ...p, paymentMethod: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
-                >
-                  <option value="POTONG_GAJI">Potong Gaji (Payroll Deduction)</option>
-                  <option value="TUNAI">Tunai / Cash</option>
-                  <option value="TRANSFER">Transfer Bank</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Catatan Pelunasan
-                </label>
-                <input 
-                  type="text"
-                  value={payFormData.notes}
-                  onChange={e => setPayFormData(p => ({ ...p, notes: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-slate-100">
+              {/* Sticky Footer */}
+              <div className="p-4 sm:p-5 bg-white border-t border-slate-200/80 flex items-center justify-end gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsPayModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold active:scale-95 transition-all"
+                  className="flex-1 sm:flex-initial px-5 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold active:scale-95 transition-all text-center"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-500/20 flex items-center gap-1.5 active:scale-95 transition-all"
+                  className="flex-1 sm:flex-initial px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-500/20 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                 >
                   <Check size={16} /> Proses Pelunasan
                 </button>
@@ -993,31 +1004,34 @@ const EmployeeLoanView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Detail & Riwayat Pembayaran */}
+      {/* Modal Detail & Riwayat Pembayaran (Full Page on Mobile) */}
       {detailLoan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3.5 sm:p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:rounded-3xl rounded-none shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col">
+            
+            {/* Modal Header */}
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-slate-200 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
                   <FileText size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-black text-slate-900">Detail Kasbon</h3>
-                  <p className="text-[11px] sm:text-xs text-slate-500 font-medium">{detailLoan.user?.name}</p>
+                  <h3 className="text-base font-black text-slate-900">Detail Kasbon</h3>
+                  <p className="text-xs text-slate-500 font-medium">{detailLoan.user?.name}</p>
                 </div>
               </div>
               <button 
                 type="button" 
                 onClick={() => setDetailLoan(null)}
-                className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center active:scale-95 transition-all"
+                className="w-9 h-9 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center active:scale-95 transition-all shadow-xs"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-2 gap-2.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
+              <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs">
                 <div>
                   <span className="text-slate-400 text-[10px] font-bold uppercase block">Peminjam</span>
                   <span className="font-bold text-slate-800 text-xs sm:text-sm">{detailLoan.user?.name}</span>
@@ -1036,7 +1050,7 @@ const EmployeeLoanView: React.FC = () => {
                   <span className="text-slate-400 text-[10px] font-bold uppercase block">Sisa Belum Lunas</span>
                   <span className="font-black text-rose-600 text-xs sm:text-sm">{formatRupiah(detailLoan.remaining)}</span>
                 </div>
-                <div className="col-span-2 pt-1 border-t border-slate-200">
+                <div className="col-span-2 pt-2 border-t border-slate-200">
                   <span className="text-slate-400 text-[10px] font-bold uppercase block">Keperluan / Catatan</span>
                   <span className="font-medium text-slate-700">{detailLoan.reason || '-'}</span>
                 </div>
@@ -1047,11 +1061,11 @@ const EmployeeLoanView: React.FC = () => {
                   Riwayat Pembayaran / Potongan
                 </h4>
                 {detailLoan.payments && detailLoan.payments.length > 0 ? (
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
                     {detailLoan.payments.map((p, idx) => (
-                      <div key={p.id || idx} className="p-2.5 sm:p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+                      <div key={p.id || idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
                         <div>
-                          <span className="font-black text-emerald-700 block text-xs">{formatRupiah(p.amountPaid)}</span>
+                          <span className="font-black text-emerald-700 block text-xs sm:text-sm">{formatRupiah(p.amountPaid)}</span>
                           <span className="text-[10px] text-slate-400 font-medium">
                             {new Date(p.paymentDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })} • {p.paymentMethod}
                           </span>
@@ -1068,16 +1082,17 @@ const EmployeeLoanView: React.FC = () => {
                   </p>
                 )}
               </div>
+            </div>
 
-              <div className="pt-3 flex justify-end border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setDetailLoan(null)}
-                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold active:scale-95 transition-all"
-                >
-                  Tutup
-                </button>
-              </div>
+            {/* Sticky Footer */}
+            <div className="p-4 sm:p-5 bg-white border-t border-slate-200/80 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setDetailLoan(null)}
+                className="w-full sm:w-auto px-6 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold active:scale-95 transition-all text-center"
+              >
+                Tutup Rincian
+              </button>
             </div>
           </div>
         </div>
