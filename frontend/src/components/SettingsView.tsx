@@ -1463,6 +1463,33 @@ const SettingsView = () => {
                     <strong>Catatan Modal Pengadaan Pusat:</strong> Setiap penerimaan pasokan stok partai besar ke gudang default tercatat menggunakan <em>Modal Pengadaan Pusat</em>. Kas operasional cabang tidak akan terpotong sampai barang didistribusikan ke unit operasional atau dilakukan proses settlement pengembalian.
                   </div>
                 </div>
+
+                {/* Modul Purchase Order (PO Formal) Toggle */}
+                <div className="pt-6 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Modul Purchase Order (PO Formal Supplier)
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Aktifkan jika ingin menerbitkan surat pesanan resmi (PO) ke distributor luar kota. Nonaktifkan untuk menyembunyikan menu PO dan menggunakan alur belanja langsung ke gudang yang lebih sederhana.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                      <input
+                        type="checkbox"
+                        checked={localStorage.getItem('feature_enable_po') === 'true'}
+                        onChange={(e) => {
+                          localStorage.setItem('feature_enable_po', e.target.checked ? 'true' : 'false');
+                          toast(`Modul Purchase Order ${e.target.checked ? 'diaktifkan' : 'dinonaktifkan'}. Silakan muat ulang halaman.`, 'success');
+                          setFormData(prev => ({ ...prev }));
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           )}

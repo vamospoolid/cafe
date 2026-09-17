@@ -301,10 +301,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <Truck size={20} className="shrink-0" />
                   <span>Supplier</span>
                 </NavLink>
-                <NavLink to="/purchase-order" title="Purchase Order" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <ClipboardList size={20} className="shrink-0" />
-                  <span>Purchase Order</span>
-                </NavLink>
+                {localStorage.getItem('feature_enable_po') === 'true' && (
+                  <NavLink to="/purchase-order" title="Purchase Order" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <ClipboardList size={20} className="shrink-0" />
+                    <span>Purchase Order</span>
+                  </NavLink>
+                )}
                 <NavLink to="/gudang" title="Gudang Pusat" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Boxes size={20} className="shrink-0" />
                   <span>Gudang Pusat</span>
@@ -655,8 +657,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </NavLink>
               )}
 
-              {/* Purchase Order */}
-              {checkAccess(['Admin', 'Dapur']) && (
+              {/* Purchase Order (Opsional) */}
+              {checkAccess(['Admin', 'Dapur']) && localStorage.getItem('feature_enable_po') === 'true' && (
                 <NavLink 
                   to="/purchase-order" 
                   onClick={() => setIsMoreMenuOpen(false)}
