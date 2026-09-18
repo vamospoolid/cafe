@@ -2016,65 +2016,119 @@ const SettingsView = () => {
                   <span>I. Pembagian Hasil Usaha (Profit Sharing)</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                      Bagian Owner (%)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        name="profitSharingOwnerPercent"
-                        className="form-control font-bold text-slate-800"
-                        value={formData.profitSharingOwnerPercent ?? 80}
-                        onChange={handleChange}
-                        min={0}
-                        max={100}
-                        placeholder="80"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Divisi Muki Ramen */}
+                  <div className="p-4 rounded-xl bg-white border border-orange-200/90 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
+                        <span className="text-base">🍜</span>
+                        <span>Divisi Muki Ramen (Makanan)</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-orange-100 text-orange-800">
+                        Total 100% Laba
+                      </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 80% (Pemilik Modal & Brand)</p>
+
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                          Bagian PJ Ramen
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="profitSharingRamenPercent"
+                            className="form-control font-black text-orange-600 pr-7"
+                            value={formData.profitSharingRamenPercent ?? 20}
+                            onChange={handleChange}
+                            min={0}
+                            max={100}
+                            placeholder="20"
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                          Bagian Owner
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            readOnly
+                            disabled
+                            className="form-control font-black text-indigo-700 bg-slate-100/80 pr-7 cursor-not-allowed"
+                            value={Math.max(0, 100 - (Number(formData.profitSharingRamenPercent) || 0))}
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 bg-orange-50/60 rounded-lg text-xs font-semibold text-orange-900 border border-orange-100 flex items-center justify-between">
+                      <span>Rasio Bagi Hasil:</span>
+                      <strong className="font-bold text-orange-800">
+                        {Math.max(0, 100 - (Number(formData.profitSharingRamenPercent) || 0))}% Owner : {Number(formData.profitSharingRamenPercent) || 0}% PJ Ramen
+                      </strong>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                      Bagian PJ Muki Ramen (%)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        name="profitSharingRamenPercent"
-                        className="form-control font-bold text-slate-800"
-                        value={formData.profitSharingRamenPercent ?? 20}
-                        onChange={handleChange}
-                        min={0}
-                        max={100}
-                        placeholder="20"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                  {/* Divisi Muki Drink */}
+                  <div className="p-4 rounded-xl bg-white border border-cyan-200/90 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
+                        <span className="text-base">🍹</span>
+                        <span>Divisi Muki Drink (Minuman)</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800">
+                        Total 100% Laba
+                      </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 20% dari Laba Bersih Divisi Makanan</p>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                      Bagian PJ Muki Drink (%)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        name="profitSharingDrinkPercent"
-                        className="form-control font-bold text-slate-800"
-                        value={formData.profitSharingDrinkPercent ?? 20}
-                        onChange={handleChange}
-                        min={0}
-                        max={100}
-                        placeholder="20"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                          Bagian PJ Drink
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="profitSharingDrinkPercent"
+                            className="form-control font-black text-cyan-600 pr-7"
+                            value={formData.profitSharingDrinkPercent ?? 20}
+                            onChange={handleChange}
+                            min={0}
+                            max={100}
+                            placeholder="20"
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                          Bagian Owner
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            readOnly
+                            disabled
+                            className="form-control font-black text-indigo-700 bg-slate-100/80 pr-7 cursor-not-allowed"
+                            value={Math.max(0, 100 - (Number(formData.profitSharingDrinkPercent) || 0))}
+                          />
+                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 20% dari Laba Bersih Divisi Minuman</p>
+
+                    <div className="p-2.5 bg-cyan-50/60 rounded-lg text-xs font-semibold text-cyan-900 border border-cyan-100 flex items-center justify-between">
+                      <span>Rasio Bagi Hasil:</span>
+                      <strong className="font-bold text-cyan-800">
+                        {Math.max(0, 100 - (Number(formData.profitSharingDrinkPercent) || 0))}% Owner : {Number(formData.profitSharingDrinkPercent) || 0}% PJ Drink
+                      </strong>
+                    </div>
                   </div>
                 </div>
 
@@ -2088,7 +2142,7 @@ const SettingsView = () => {
                     value={formData.profitSharingOpexMode || 'BEFORE_SPLIT'}
                     onChange={handleChange}
                   >
-                    <option value="BEFORE_SPLIT">Mode A (Rekomendasi): Dipotong Proporsional dari Omzet Sebelum Bagi Hasil 80:20</option>
+                    <option value="BEFORE_SPLIT">Mode A (Rekomendasi): Dipotong Proporsional dari Omzet Sebelum Bagi Hasil</option>
                     <option value="OWNER_COVERED">Mode B: Ditanggung Penuh oleh Owner (PJ Terima Bersih dari Omzet - Belanja Langsung)</option>
                     <option value="SPLIT_50_50">Mode C: Split Beban (50% Owner : 25% PJ Ramen : 25% PJ Drink)</option>
                   </select>

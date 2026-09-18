@@ -3320,7 +3320,7 @@ export const exportProfitSharingPDF = async (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(55, 48, 163);
-  doc.text(`BAGIAN OWNER (${config.ownerPct || 80}%)`, c3X + 4, currentY + 5);
+  doc.text('TOTAL BAGIAN OWNER', c3X + 4, currentY + 5);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(67, 56, 202);
@@ -3328,7 +3328,7 @@ export const exportProfitSharingPDF = async (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(79, 70, 229);
-  doc.text(`Setoran modal & profit owner`, c3X + 4, currentY + 16);
+  doc.text(`Ramen: ${food.ownerPct || (100 - (config.ramenPct || 20))}% | Drink: ${drink.ownerPct || (100 - (config.drinkPct || 20))}%`, c3X + 4, currentY + 16);
 
   currentY += cardH + 5;
 
@@ -3339,11 +3339,25 @@ export const exportProfitSharingPDF = async (
   doc.text('I. REKAPITULASI PEMBAGIAN HASIL (PROFIT SPLIT)', margin, currentY);
   currentY += 2;
 
+  const ramenOwnerPct = food.ownerPct || (100 - (config.ramenPct || 20));
+  const drinkOwnerPct = drink.ownerPct || (100 - (config.drinkPct || 20));
+
   const splitRows = [
-    ['Owner (Pemilik Usaha)', 'Muki Ramen + Muki Drink', `${config.ownerPct || 80}%`, formatCurrency(summary.ownerShare || 0), 'Laba Bersih gabungan setelah potongan beban'],
-    ['Penanggung Jawab Muki Ramen', 'Divisi Makanan (Kitchen)', `${config.ramenPct || 20}%`, formatCurrency(summary.pjRamenShare || 0), `Hak 20% dari laba bersih Ramen (${formatCurrency(food.netProfit || 0)})`],
-    ['Penanggung Jawab Muki Drink', 'Divisi Minuman (Bar)', `${config.drinkPct || 20}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak 20% dari laba bersih Drink (${formatCurrency(drink.netProfit || 0)})`]
+    ['Owner (Divisi Ramen)', 'Muki Ramen (Kitchen)', `${ramenOwnerPct}%`, formatCurrency(food.ownerShare || 0), `Hak ${ramenOwnerPct}% dari laba bersih Ramen (${formatCurrency(food.netProfit || 0)})`],
+    ['Penanggung Jawab Muki Ramen', 'Muki Ramen (Kitchen)', `${config.ramenPct || 20}%`, formatCurrency(summary.pjRamenShare || 0), `Hak ${config.ramenPct || 20}% dari laba bersih Ramen (${formatCurrency(food.netProfit || 0)})`],
+    ['Owner (Divisi Drink)', 'Muki Drink (Bar)', `${drinkOwnerPct}%`, formatCurrency(drink.ownerShare || 0), `Hak ${drinkOwnerPct}% dari laba bersih Drink (${formatCurrency(drink.netProfit || 0)})`],
+    ['Penanggung Jawab Muki Drink', 'Muki Drink (Bar)', `${config.drinkPct || 20}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak ${config.drinkPct || 20}% dari laba bersih Drink (${formatCurrency(drink.netProfit || 0)})`]
   ];
+
+  if (summary.other && (summary.other.revenue > 0 || summary.other.finalNet > 0)) {
+    splitRows.push([
+      'Owner (Produk Netral / Retail)',
+      'Air Mineral & Toko',
+      '100%',
+      formatCurrency(summary.other.ownerShare || summary.other.finalNet || 0),
+      `Hak 100% Owner dari laba bersih produk netral (${formatCurrency(summary.other.finalNet || 0)})`
+    ]);
+  }
 
   autoTable(doc, {
     startY: currentY + 1,
@@ -3378,8 +3392,8 @@ export const exportProfitSharingPDF = async (
     ['Laba Kotor Divisi', formatCurrency(food.grossProfit || 0), formatCurrency(drink.grossProfit || 0), formatCurrency((food.grossProfit || 0) + (drink.grossProfit || 0))],
     ['Alokasi Beban Bersama (Shared OPEX)', `(${formatCurrency(food.sharedOpexPortion || 0)})`, `(${formatCurrency(drink.sharedOpexPortion || 0)})`, `(${formatCurrency(shared.total || 0)})`],
     ['Laba Bersih Divisi', formatCurrency(food.netProfit || 0), formatCurrency(drink.netProfit || 0), formatCurrency(summary.totalNetProfit || 0)],
-    [`Bagian Owner (${config.ownerPct || 80}%)`, formatCurrency(food.ownerShare || 0), formatCurrency(drink.ownerShare || 0), formatCurrency(summary.ownerShare || 0)],
-    [`Bagian Penanggung Jawab (${config.ramenPct || 20}%)`, formatCurrency(food.pjShare || 0), formatCurrency(drink.pjShare || 0), formatCurrency((summary.pjRamenShare || 0) + (summary.pjDrinkShare || 0))]
+    ['Bagian Owner', `${formatCurrency(food.ownerShare || 0)} (${ramenOwnerPct}%)`, `${formatCurrency(drink.ownerShare || 0)} (${drinkOwnerPct}%)`, formatCurrency(summary.ownerShare || 0)],
+    ['Bagian Penanggung Jawab (PJ)', `${formatCurrency(food.pjShare || 0)} (${config.ramenPct || 20}%)`, `${formatCurrency(drink.pjShare || 0)} (${config.drinkPct || 20}%)`, formatCurrency((summary.pjRamenShare || 0) + (summary.pjDrinkShare || 0))]
   ];
 
   autoTable(doc, {
@@ -4355,4 +4369,223 @@ export const exportWarehouseSettlementPDF = async (
   }
 
   doc.save(`Laporan_Settlement_Modal_Owner_${Date.now()}.pdf`);
+};
+
+export const exportYieldVarianceAuditPDF = async (
+  settings: VenueSettings,
+  yieldData: any,
+  startDate: string,
+  endDate: string,
+  userName?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '/logo-muki-ramen.png';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {
+      console.warn('Failed to load logo, using fallback', e);
+    }
+  }
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(79, 70, 229); // #4f46e5 Indigo
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(13);
+    pdfDoc.setTextColor(15, 23, 42);
+    pdfDoc.text(settings?.storeName || 'MUKI RAMEN', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Barito II No. 18, Kebayoran Baru, Jakarta Selatan', textXOffset, 20.5);
+    pdfDoc.text(`Telp: ${settings?.phone || '0812-9988-7766'} | Sistem POS Muki Japanese Ramen`, textXOffset, 24.5);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(10);
+    pdfDoc.setTextColor(79, 70, 229);
+    pdfDoc.text('AUDIT TINGKAT KEBERHASILAN & YIELD PORSI', pageWidth - margin, 16, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(`Periode: ${formatDateID(startDate)} s/d ${formatDateID(endDate)}`, pageWidth - margin, 20.5, { align: 'right' });
+    pdfDoc.text(`Dicetak: ${new Date().toLocaleString('id-ID')} | Oleh: ${userName || 'Auditor'}`, pageWidth - margin, 24.5, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 30, pageWidth - margin, 30);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalP: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.3);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text('Dokumen Rahasia - Laporan Evaluasi Takaran SOP Dapur & Barista Restoran Muki Ramen', margin, pageHeight - 7);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalP}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  const summary = yieldData?.summary || {};
+  const items = yieldData?.items || [];
+
+  // Summary KPI Cards Box
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, 34, pageWidth - margin * 2, 24, 2.5, 2.5, 'FD');
+
+  const colW = (pageWidth - margin * 2) / 4;
+
+  // KPI 1: Rata-Rata Efisiensi
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('SKOR EFISIENSI TOKO', margin + colW * 0 + 4, 39);
+  doc.setFontSize(13);
+  doc.setTextColor(16, 185, 129); // Emerald
+  doc.text(`${summary.storeEfficiencyRate || 100}%`, margin + colW * 0 + 4, 46);
+  doc.setFontSize(6);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Akurasi Pembobotan Nilai', margin + colW * 0 + 4, 52);
+
+  // KPI 2: Total Miss Porsi
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL PORSI MISS / LOSS', margin + colW * 1 + 4, 39);
+  doc.setFontSize(13);
+  doc.setTextColor(225, 29, 72); // Rose
+  doc.text(`${summary.totalMissPortions || 0} Porsi`, margin + colW * 1 + 4, 46);
+  doc.setFontSize(6);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Setara porsi yang terbuang', margin + colW * 1 + 4, 52);
+
+  // KPI 3: Estimasi Kerugian Rupiah
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('NILAI SELISIH BAHAN (RP)', margin + colW * 2 + 4, 39);
+  doc.setFontSize(11);
+  doc.setTextColor(217, 119, 6); // Amber
+  doc.text(formatCurrency(summary.totalVarianceCost || 0), margin + colW * 2 + 4, 46);
+  doc.setFontSize(6);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Total nilai modal variance', margin + colW * 2 + 4, 52);
+
+  // KPI 4: Status Bahan
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('KONDISI ITEM BAHAN', margin + colW * 3 + 4, 39);
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${summary.perfectCount || 0} Presisi | ${summary.criticalCount || 0} Boros`, margin + colW * 3 + 4, 46);
+  doc.setFontSize(6);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Dari ${summary.totalActiveIngredients || items.length} Bahan Aktif`, margin + colW * 3 + 4, 52);
+
+  // Table Data
+  const tableData = items.map((it: any, idx: number) => {
+    const theoStr = `${(it.theoreticalQty || 0).toLocaleString('id-ID')} ${it.unit}`;
+    const actStr = `${(it.actualQty || 0).toLocaleString('id-ID')} ${it.unit}`;
+    const varStr = it.varianceQty > 0 
+      ? `+${it.varianceQty.toLocaleString('id-ID')} ${it.unit} (${it.missPortions > 0 ? `+${it.missPortions} porsi` : ''})`
+      : it.varianceQty < 0
+      ? `${it.varianceQty.toLocaleString('id-ID')} ${it.unit}`
+      : '0 (Pas)';
+
+    return [
+      (idx + 1).toString(),
+      it.name,
+      it.category === 'DRINK' ? 'Bar (Drink)' : it.category === 'FOOD' ? 'Dapur (Food)' : 'Kemasan',
+      theoStr,
+      actStr,
+      varStr,
+      formatCurrency(it.varianceCost > 0 ? it.varianceCost : 0),
+      `${it.efficiencyRate}%`,
+      it.status
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 62,
+    margin: { left: margin, right: margin, bottom: 35 },
+    head: [['NO', 'NAMA BAHAN BAKU', 'AREA', 'TARGET TEORI', 'REALITA FISIK', 'SELISIH (MISS)', 'KERUGIAN (RP)', 'EFISIENSI', 'DIAGNOSIS STATUS']],
+    body: tableData,
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 7 },
+      1: { cellWidth: 34, fontStyle: 'bold' },
+      2: { halign: 'center', cellWidth: 18 },
+      3: { halign: 'right', cellWidth: 20 },
+      4: { halign: 'right', cellWidth: 20 },
+      5: { halign: 'right', cellWidth: 26, fontStyle: 'bold' },
+      6: { halign: 'right', cellWidth: 20 },
+      7: { halign: 'center', fontStyle: 'bold', cellWidth: 16 },
+      8: { cellWidth: 'auto', fontSize: 5.5 }
+    },
+    styles: { fontSize: 6, cellPadding: 1.8, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 8;
+  if (currentY + 30 > pageHeight - 12) {
+    doc.addPage();
+    currentY = 32;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 3;
+  const roles = [
+    { title: 'PJ Dapur / Barista Lead', name: 'Kitchen / Bar Lead' },
+    { title: 'Supervisor / Auditor', name: userName || 'Store Supervisor' },
+    { title: 'Store Manager / Owner', name: 'Management Muki Ramen' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, currentY, { align: 'center' });
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, currentY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 12, currentY + 16, x + sigColWidth - 12, currentY + 16);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, currentY + 19.5, { align: 'center' });
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Audit_Yield_Efisiensi_${Date.now()}.pdf`);
 };

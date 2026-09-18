@@ -831,6 +831,296 @@ router.get('/shopping-analytics', authenticateToken, async (req: Request, res: R
   }
 });
 
+// GET Analisis Tingkat Keberhasilan Porsi & Audit Efisiensi (Yield & Variance Analysis)
+router.get('/yield-analytics', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { days, startDate, endDate, category, scope } = req.query;
+
+    let dStart: Date;
+    let dEnd: Date = new Date();
+    dEnd.setHours(23, 59, 59, 999);
+
+    if (startDate && endDate) {
+      dStart = new Date(startDate as string);
+      dStart.setHours(0, 0, 0, 0);
+      dEnd = new Date(endDate as string);
+      dEnd.setHours(23, 59, 59, 999);
+    } else {
+      const horizonDays = Math.max(1, Number(days) || 14);
+      dStart = new Date();
+      dStart.setDate(dStart.getDate() - (horizonDays - 1));
+      dStart.setHours(0, 0, 0, 0);
+    }
+
+    // 1. Ambil seluruh transaksi penjualan yang valid dalam periode
+    const orders = await prisma.order.findMany({
+      where: {
+        createdAt: { gte: dStart, lte: dEnd },
+        status: { notIn: ['Dibatalkan', 'Void', 'Cancelled'] }
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                recipes: {
+                  include: {
+                    ingredient: true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // 2. Hitung Kebutuhan Teori Resep (Theoretical Usage) & Rekam Produk Terkait
+    const theoreticalMap: Record<number, {
+      totalQty: number;
+      portionCount: number;
+      products: Record<string, { name: string; portionsSold: number; qtyPerServing: number; unit: string }>;
+    }> = {};
+
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        if (!item.product?.recipes) return;
+        item.product.recipes.forEach(rec => {
+          if (!theoreticalMap[rec.ingredientId]) {
+            theoreticalMap[rec.ingredientId] = {
+              totalQty: 0,
+              portionCount: 0,
+              products: {}
+            };
+          }
+          const usageForThisItem = item.qty * rec.qtyPerServing;
+          theoreticalMap[rec.ingredientId].totalQty += usageForThisItem;
+          theoreticalMap[rec.ingredientId].portionCount += item.qty;
+
+          const pKey = `prod-${item.productId}`;
+          if (!theoreticalMap[rec.ingredientId].products[pKey]) {
+            theoreticalMap[rec.ingredientId].products[pKey] = {
+              name: item.product.name,
+              portionsSold: 0,
+              qtyPerServing: rec.qtyPerServing,
+              unit: rec.ingredient?.unit || ''
+            };
+          }
+          theoreticalMap[rec.ingredientId].products[pKey].portionsSold += item.qty;
+        });
+      });
+    });
+
+    // 3. Ambil Mutasi Riil Pengurangan Stok Bahan (Produksi, Rusak, Penyesuaian)
+    const ingredientLogs = await prisma.ingredientLog.findMany({
+      where: {
+        createdAt: { gte: dStart, lte: dEnd },
+        change: { lt: 0 }
+      }
+    });
+
+    const actualMap: Record<number, {
+      totalActualQty: number;
+      productionQty: number;
+      lossQty: number;
+      adjustmentQty: number;
+    }> = {};
+
+    ingredientLogs.forEach(log => {
+      if (!actualMap[log.ingredientId]) {
+        actualMap[log.ingredientId] = {
+          totalActualQty: 0,
+          productionQty: 0,
+          lossQty: 0,
+          adjustmentQty: 0
+        };
+      }
+      const qty = Math.abs(log.change);
+      actualMap[log.ingredientId].totalActualQty += qty;
+      if (log.type === 'Produksi') actualMap[log.ingredientId].productionQty += qty;
+      else if (log.type === 'Rusak') actualMap[log.ingredientId].lossQty += qty;
+      else if (log.type === 'Penyesuaian') actualMap[log.ingredientId].adjustmentQty += qty;
+    });
+
+    // 4. Ambil Data Master Bahan Baku
+    const whereIng: any = {};
+    if (category && category !== 'ALL') {
+      whereIng.category = category;
+    }
+
+    const ingredients = await prisma.ingredient.findMany({
+      where: whereIng,
+      include: {
+        supplier: true,
+        recipes: {
+          include: {
+            product: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    // 5. Analisis Performa Hasil (Yield & Variance) per Bahan
+    let totalTheoreticalCost = 0;
+    let totalActualCost = 0;
+    let totalVarianceCost = 0;
+    let totalMissPortions = 0;
+    let perfectCount = 0;
+    let warningCount = 0;
+    let criticalCount = 0;
+
+    const items = ingredients.map(ing => {
+      const theo = theoreticalMap[ing.id];
+      const act = actualMap[ing.id];
+
+      const theoreticalQty = theo ? Math.round(theo.totalQty * 100) / 100 : 0;
+      const actualQty = act ? Math.round(act.totalActualQty * 100) / 100 : 0;
+      const productionQty = act ? Math.round(act.productionQty * 100) / 100 : 0;
+      const lossQty = act ? Math.round(act.lossQty * 100) / 100 : 0;
+      const adjustmentQty = act ? Math.round(act.adjustmentQty * 100) / 100 : 0;
+
+      // Hitung takaran rata-rata per porsi
+      let avgQtyPerServing = 0;
+      if (ing.recipes && ing.recipes.length > 0) {
+        const sumQty = ing.recipes.reduce((sum, r) => sum + r.qtyPerServing, 0);
+        avgQtyPerServing = sumQty / ing.recipes.length;
+      }
+      if (theo && theo.portionCount > 0 && theo.totalQty > 0) {
+        avgQtyPerServing = theo.totalQty / theo.portionCount;
+      }
+
+      // Hitung Selisih (Variance)
+      const varianceQty = Math.round((actualQty - theoreticalQty) * 100) / 100;
+      const varianceCost = Math.round(varianceQty * ing.buyPrice);
+      const theoreticalCost = Math.round(theoreticalQty * ing.buyPrice);
+      const actualCost = Math.round(actualQty * ing.buyPrice);
+
+      // Hitung Efisiensi / Akurasi Yield
+      let efficiencyRate = 100;
+      let status = 'Sempurna';
+      let statusType: 'PERFECT' | 'WARNING' | 'OVER_PORTION' | 'UNDER_PORTION' | 'INACTIVE' = 'PERFECT';
+      let recommendation = 'Takaran dapur sangat presisi & disiplin sesuai standar SOP.';
+
+      if (actualQty === 0 && theoreticalQty === 0) {
+        status = 'Tidak Ada Aktivitas';
+        statusType = 'INACTIVE';
+        efficiencyRate = 100;
+        recommendation = 'Belum ada konsumsi atau penjualan menu terkait pada periode ini.';
+      } else if (actualQty > 0 && theoreticalQty === 0) {
+        efficiencyRate = 0;
+        status = 'Loss / Tanpa Penjualan';
+        statusType = 'OVER_PORTION';
+        recommendation = 'Bahan terpotong/rusak namun tidak ada pesanan menu kasir yang tercatat.';
+      } else if (actualQty > 0) {
+        efficiencyRate = Math.round((theoreticalQty / actualQty) * 1000) / 10;
+        
+        if (efficiencyRate >= 98 && efficiencyRate <= 102) {
+          status = 'Presisi (Sesuai Standar)';
+          statusType = 'PERFECT';
+          recommendation = 'Porsi saji sangat akurat dan konsisten dengan target resep.';
+          perfectCount++;
+        } else if (efficiencyRate >= 90 && efficiencyRate < 98) {
+          status = 'Toleransi Wajar';
+          statusType = 'WARNING';
+          recommendation = 'Selisih kecil (<10%), wajar karena sisa wadah, busa, atau susut pemotongan (trimming).';
+          warningCount++;
+        } else if (efficiencyRate < 90) {
+          status = 'Pemborosan / Over-Portion';
+          statusType = 'OVER_PORTION';
+          recommendation = 'Takaran porsi terindikasi berlebih atau terdapat bahan tumpah/bocor yang belum dicatat.';
+          criticalCount++;
+        } else if (efficiencyRate > 102) {
+          status = 'Takaran Terlalu Sedikit';
+          statusType = 'UNDER_PORTION';
+          recommendation = 'Takaran bahan lebih hemat dari resep standar. Waspada keluhan rasa terlalu encer/kurang.';
+          warningCount++;
+        }
+      } else {
+        efficiencyRate = 100;
+        status = 'Presisi (Sesuai Standar)';
+        statusType = 'PERFECT';
+        perfectCount++;
+      }
+
+      // Hitung Porsi Miss
+      const missPortions = avgQtyPerServing > 0 ? Math.round((varianceQty / avgQtyPerServing) * 10) / 10 : 0;
+
+      // Akumulasi Finansial
+      totalTheoreticalCost += theoreticalCost;
+      totalActualCost += actualCost;
+      if (varianceCost > 0) {
+        totalVarianceCost += varianceCost;
+      }
+      if (missPortions > 0) {
+        totalMissPortions += missPortions;
+      }
+
+      // Klasifikasi Bahan Utama (Key Ingredient / High Impact)
+      const isKeyIngredient = ing.buyPrice >= 50 || ing.category === 'FOOD' || ing.category === 'DRINK';
+
+      return {
+        id: ing.id,
+        name: ing.name,
+        category: ing.category,
+        subCategory: ing.subCategory,
+        unit: ing.unit,
+        buyPrice: ing.buyPrice,
+        isKeyIngredient,
+        theoreticalQty,
+        actualQty,
+        productionQty,
+        lossQty,
+        adjustmentQty,
+        varianceQty,
+        varianceCost,
+        theoreticalCost,
+        actualCost,
+        efficiencyRate,
+        status,
+        statusType,
+        recommendation,
+        avgQtyPerServing: Math.round(avgQtyPerServing * 100) / 100,
+        missPortions,
+        relatedProducts: theo ? Object.values(theo.products) : (ing.recipes ? ing.recipes.map(r => ({
+          name: r.product.name,
+          portionsSold: 0,
+          qtyPerServing: r.qtyPerServing,
+          unit: ing.unit
+        })) : [])
+      };
+    });
+
+    // Filter scope jika diminta KEY_ONLY
+    const filteredItems = scope === 'KEY_ONLY' ? items.filter(i => i.isKeyIngredient) : items;
+
+    // Hitung Skor Akumulasi Toko (Cost-Weighted Store Efficiency)
+    const storeEfficiencyRate = totalActualCost > 0 
+      ? Math.min(100, Math.round((totalTheoreticalCost / totalActualCost) * 1000) / 10)
+      : 100;
+
+    res.json({
+      summary: {
+        startDate: dStart.toISOString(),
+        endDate: dEnd.toISOString(),
+        storeEfficiencyRate,
+        totalTheoreticalCost,
+        totalActualCost,
+        totalVarianceCost,
+        totalMissPortions: Math.round(totalMissPortions * 10) / 10,
+        totalActiveIngredients: items.filter(i => i.statusType !== 'INACTIVE').length,
+        perfectCount,
+        warningCount,
+        criticalCount
+      },
+      items: filteredItems
+    });
+  } catch (error) {
+    console.error('Error yield analytics:', error);
+    res.status(500).json({ error: 'Gagal menganalisis efisiensi & yield bahan' });
+  }
+});
+
 // GET Riwayat Mutasi & Distribusi Stok
 router.get('/stock-movements', authenticateToken, async (req: Request, res: Response) => {
   try {

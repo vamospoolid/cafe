@@ -367,8 +367,11 @@ export const ReportView: React.FC = () => {
       return productSortOrder === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
     });
 
-  // Top 3 Best Sellers
-  const topSellers = [...rawProducts].sort((a: any, b: any) => (b.qty || 0) - (a.qty || 0)).slice(0, 3);
+  // Top 3 Best Sellers (Exclude neutral items like air mineral/retail)
+  const topSellers = [...rawProducts]
+    .filter((p: any) => !p.isNeutral && p.group !== 'lainnya' && !p.name?.toLowerCase().includes('air mineral') && !p.name?.toLowerCase().includes('aqua') && !p.name?.toLowerCase().includes('cleo'))
+    .sort((a: any, b: any) => (b.qty || 0) - (a.qty || 0))
+    .slice(0, 3);
   const totalQtySold = rawProducts.reduce((sum: number, p: any) => sum + (p.qty || 0), 0);
   const totalMenuRevenue = rawProducts.reduce((sum: number, p: any) => sum + (p.revenue || 0), 0);
   const totalMenuProfit = rawProducts.reduce((sum: number, p: any) => sum + (p.profit || 0), 0);
@@ -1760,7 +1763,7 @@ export const ReportView: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Sistem Bagi Hasil 80 : 20
+                      Sistem Bagi Hasil Usaha (Profit Sharing)
                     </span>
                     <span className="text-xs text-slate-300">
                       Mode OPEX: <strong className="text-amber-300 uppercase">{ps.opexMode === 'SHARED_BEFORE_SPLIT' ? 'Dipotong Laba Bersama' : ps.opexMode === 'SPLIT_50_50' ? 'Dibagi 50:50' : 'Ditanggung Owner'}</strong>
@@ -1845,11 +1848,11 @@ export const ReportView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Hak Bagian Owner (80%) */}
+              {/* Hak Bagian Owner */}
               <div className="bg-gradient-to-br from-indigo-500 to-purple-700 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between">
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] font-black uppercase text-indigo-100 tracking-wider">Hak Bagian Owner</span>
-                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">{ps.food.ownerPct}% Total</span>
+                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">Laba Bersih</span>
                 </div>
                 <div className="mt-2">
                   <div className="text-xl font-black text-white">{formatCurrency(ps.totalOwnerShare)}</div>
@@ -1859,11 +1862,11 @@ export const ReportView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Hak Bagian Tim PJ (20%) */}
+              {/* Hak Bagian Tim PJ */}
               <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between">
                 <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-black uppercase text-emerald-100 tracking-wider">Hak Bagian PJ (Tim)</span>
-                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">20% Masing-2</span>
+                  <span className="text-[11px] font-black uppercase text-emerald-100 tracking-wider">Hak Bagian Tim PJ</span>
+                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">Tim Operasional</span>
                 </div>
                 <div className="mt-2">
                   <div className="text-xl font-black text-white">{formatCurrency(ps.totalPjShare)}</div>
@@ -1981,6 +1984,43 @@ export const ReportView: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Divisi 3: Produk Netral / Retail (Air Mineral & Toko) */}
+              {ps.other && (ps.other.revenue > 0 || ps.other.expense > 0) && (
+                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between lg:col-span-2">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-black">
+                          💧
+                        </div>
+                        <div>
+                          <h4 className="font-black text-slate-900 text-base">Produk Netral / Retail (Air Mineral & Toko)</h4>
+                          <span className="text-xs text-slate-400">Komoditas Netral: 100% Hak Owner / Kas Toko (Tanpa Bagi Hasil PJ)</span>
+                        </div>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200">
+                        100% Owner
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4">
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span className="text-[11px] text-slate-500 font-bold block">Omzet Air Mineral / Retail</span>
+                        <span className="text-base font-black text-slate-800">{formatCurrency(ps.other.revenue)}</span>
+                      </div>
+                      <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
+                        <span className="text-[11px] text-rose-600 font-bold block">Belanja Modal / HPP Dus</span>
+                        <span className="text-base font-black text-rose-700">-{formatCurrency(ps.other.expense)}</span>
+                      </div>
+                      <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                        <span className="text-[11px] text-indigo-700 font-bold block">Laba Bersih Masuk ke Owner (100%)</span>
+                        <span className="text-base font-black text-indigo-900">{formatCurrency(ps.other.finalNet)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Daily Breakdown Table */}
