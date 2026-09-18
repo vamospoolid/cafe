@@ -1242,9 +1242,9 @@ export const IngredientView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 9 TAB UTAMA BAHAN BAKU (RESPONSIVE)
+          2. NAVIGASI 9 TAB UTAMA BAHAN BAKU (GRID TANPA SCROLL SAMPING)
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-1.5 sm:p-2 border border-slate-200 shadow-sm flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-9 gap-1.5 sm:gap-2 shrink-0">
+      <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 shrink-0">
         {[
           { 
             id: 'master', 
@@ -1320,7 +1320,7 @@ export const IngredientView: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '.75rem',
-                padding: '.75rem 1rem',
+                padding: '.85rem 1rem',
                 background: isSelected 
                   ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' 
                   : '#f8fafc',
@@ -1331,8 +1331,7 @@ export const IngredientView: React.FC = () => {
                 transition: 'all 0.15s ease',
                 textAlign: 'left',
                 boxShadow: isSelected ? '0 4px 12px rgba(124, 58, 237, 0.25)' : 'none',
-                minWidth: '150px',
-                flexShrink: 0
+                width: '100%'
               }}
             >
               <div 
@@ -1340,15 +1339,15 @@ export const IngredientView: React.FC = () => {
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center',
-                  width: '36px',
-                  height: '36px',
+                  width: '38px',
+                  height: '38px',
                   borderRadius: '.65rem',
                   background: isSelected ? 'rgba(255,255,255,0.2)' : '#ede9fe',
                   color: isSelected ? '#ffffff' : '#7c3aed',
                   flexShrink: 0
                 }}
               >
-                <Icon size={18} />
+                <Icon size={19} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -1360,7 +1359,7 @@ export const IngredientView: React.FC = () => {
                     <span 
                       style={{ 
                         fontSize: '.62rem', 
-                        padding: '.12rem .4rem', 
+                        padding: '.15rem .45rem', 
                         background: isSelected ? 'rgba(255,255,255,0.25)' : '#ede9fe', 
                         color: isSelected ? '#ffffff' : '#7c3aed', 
                         borderRadius: '9999px', 
@@ -1372,7 +1371,7 @@ export const IngredientView: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <span style={{ fontSize: '.72rem', color: isSelected ? 'rgba(255,255,255,0.8)' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ fontSize: '.72rem', color: isSelected ? 'rgba(255,255,255,0.8)' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '.1rem' }}>
                   {tab.subtitle}
                 </span>
               </div>
