@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
+import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -113,6 +114,7 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     }
 
     let settings = await prisma.settings.findFirst();
+    const oldSettings = settings ? { ...settings } : null;
     
     if (settings) {
       settings = await prisma.settings.update({
@@ -124,6 +126,17 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
         data: updateData
       });
     }
+
+    // Audit Log: Settings Update
+    await AuditLogger.log({
+      action: 'SETTINGS_UPDATE',
+      resource: 'SETTINGS',
+      resourceId: String(settings.id),
+      description: `Memperbarui konfigurasi toko / hardware (${settings.storeName}).`,
+      oldValue: oldSettings,
+      newValue: updateData,
+      severity: 'WARNING'
+    }, req);
 
     res.json(settings);
   } catch (error) {

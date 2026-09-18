@@ -1,0 +1,26 @@
+{
+  "fileName": "backup-full-2026-09-18T11-53-45-085Z.json.gz.enc",
+  "filePath": "C:\\ADATA\\codepos\\backend\\backups\\backup-full-2026-09-18T11-53-45-085Z.json.gz.enc",
+  "sizeBytes": 10112,
+  "checksumSha256": "48f58312731763d695cd6766e564faf356dede70c2b62e2626e1ec0421c7411d",
+  "isEncrypted": true,
+  "scope": "PLATFORM_ALL",
+  "type": "json",
+  "createdAt": "2026-09-18T11:53:45.295Z",
+  "schemaVersion": "2026.2",
+  "recordCounts": {
+    "tenants": 12,
+    "outlets": 8,
+    "users": 11,
+    "categories": 20,
+    "products": 16,
+    "tables": 9,
+    "orders": 1,
+    "cashFlows": 0,
+    "attendances": 0,
+    "ingredients": 11,
+    "purchaseOrders": 0,
+    "debts": 0,
+    "auditLogs": 4
+  }
+}

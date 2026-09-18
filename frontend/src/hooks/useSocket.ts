@@ -15,10 +15,14 @@ let socket: Socket | null = null;
 const getSocket = (): Socket => {
   if (!socket || socket.disconnected) {
     const url = getSocketUrl();
+    const token = localStorage.getItem('pos_token') || undefined;
     socket = io(url, {
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      auth: {
+        token
+      }
     });
   }
   return socket;

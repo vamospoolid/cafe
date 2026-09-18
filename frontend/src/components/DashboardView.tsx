@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { POSContext } from '../context/POSContext';
+import OpenShiftModal from './OpenShiftModal';
 
 const COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6'];
 
@@ -63,6 +64,7 @@ const DashboardView = () => {
   const [bestSellers, setBestSellers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartMode, setChartMode] = useState<'hourly' | 'weekly' | 'monthly'>('hourly');
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
 
   const posContext = useContext(POSContext);
 
@@ -179,10 +181,14 @@ const DashboardView = () => {
               <span className="hidden md:inline text-emerald-600/70 font-semibold">&bull; Modal {formatCurrency(activeShift.saldoAwal)}</span>
             </div>
           ) : (
-            <div className="bg-amber-50 text-amber-800 border border-amber-200/80 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs">
-              <Timer size={14} className="text-amber-600" />
-              <span>Shift Kasir Belum Dibuka</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsShiftModalOpen(true)}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 hover:border-amber-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all active:scale-95 cursor-pointer"
+            >
+              <Timer size={14} className="text-amber-600 animate-bounce" />
+              <span>+ Buka Shift Kasir</span>
+            </button>
           )}
 
           <button
@@ -641,6 +647,18 @@ const DashboardView = () => {
         </div>
 
       </div>
+
+      {/* Modal Buka Shift Kasir */}
+      <OpenShiftModal
+        isOpen={isShiftModalOpen}
+        mode="open"
+        onClose={() => setIsShiftModalOpen(false)}
+        onSuccess={() => {
+          setIsShiftModalOpen(false);
+          posContext?.fetchActiveShift();
+          fetchAnalytics();
+        }}
+      />
 
     </div>
   );

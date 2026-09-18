@@ -1,31 +1,38 @@
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// GET /api/database/info - Mengambil status & ringkasan database
-router.get('/info', authenticateToken, async (req: Request, res: Response) => {
+// GET /api/database/info - Status & ringkasan metrik database
+router.get('/info', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const dbUrl = process.env.DATABASE_URL || '';
     const isPostgres = dbUrl.startsWith('postgres');
+    const tenantId = req.user?.tenantId;
+    const isPlatformAdmin = req.user?.isPlatformAdmin ?? false;
+
+    // Filter counts based on tenant if not platform admin
+    const whereTenant: any = (!isPlatformAdmin && tenantId) ? { tenantId } : {};
 
     const [userCount, orderCount, productCount, ingredientCount, saleCount] = await Promise.all([
       prisma.user.count().catch(() => 0),
-      prisma.order.count().catch(() => 0),
-      prisma.product.count().catch(() => 0),
-      prisma.ingredient.count().catch(() => 0),
-      prisma.warehouseSale.count().catch(() => 0),
+      prisma.order.count({ where: whereTenant }).catch(() => 0),
+      prisma.product.count({ where: whereTenant }).catch(() => 0),
+      prisma.ingredient.count({ where: whereTenant }).catch(() => 0),
+      prisma.warehouseSale.count({ where: whereTenant }).catch(() => 0),
     ]);
 
     res.json({
       engine: isPostgres ? 'PostgreSQL' : 'SQLite',
       status: 'Connected',
       timestamp: new Date().toISOString(),
+      isPlatformAdmin,
       counts: {
         users: userCount,
         orders: orderCount,
@@ -40,133 +47,148 @@ router.get('/info', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/database/backup - Unduh backup database (PostgreSQL / Prisma Data Snapshot)
-router.get('/backup', authenticateToken, async (req: Request, res: Response) => {
+// GET /api/database/backup - Safe Database Backup (Parametric stream & Tenant Isolation)
+router.get('/backup', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const dbUrl = process.env.DATABASE_URL || '';
     const isPostgres = dbUrl.startsWith('postgres');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const isPlatformAdmin = req.user?.isPlatformAdmin ?? false;
+    const tenantId = req.user?.tenantId;
 
-    if (isPostgres) {
-      // 1. Coba pg_dump jika pg_dump tersedia di server environment
-      const tempDumpPath = path.join(process.cwd(), `temp_backup_${Date.now()}.sql`);
-      
-      exec(`pg_dump "${dbUrl}" --clean --if-exists`, { maxBuffer: 1024 * 1024 * 50 }, async (err, stdout) => {
-        if (!err && stdout && stdout.length > 100) {
-          fs.writeFileSync(tempDumpPath, stdout, 'utf8');
-          return res.download(tempDumpPath, `backup-poscafe-${timestamp}.sql`, (downloadErr) => {
+    // Audit Log: Database Backup Request
+    await AuditLogger.log({
+      tenantId: tenantId || null,
+      action: 'DATABASE_BACKUP',
+      resource: 'SETTINGS',
+      description: `Mengunduh berkas backup data ${isPlatformAdmin ? '(Full Platform)' : `(Tenant: ${tenantId})`}.`,
+      severity: 'WARNING'
+    }, req);
+
+    // 1. Jika Platform Admin & PostgreSQL: Jalankan safe pg_dump via spawn (Safe Parametric Stream, NO raw shell exec)
+    if (isPlatformAdmin && isPostgres) {
+      try {
+        const parsedUrl = new URL(dbUrl);
+        const host = parsedUrl.hostname || 'localhost';
+        const port = parsedUrl.port || '5432';
+        const user = parsedUrl.username || 'postgres';
+        const password = parsedUrl.password || '';
+        const dbName = parsedUrl.pathname.replace(/^\//, '') || 'poscafe_db';
+
+        const dumpArgs = [
+          '-h', host,
+          '-p', port,
+          '-U', user,
+          '-d', dbName,
+          '--clean',
+          '--if-exists'
+        ];
+
+        const tempDumpPath = path.join(process.cwd(), `temp_backup_${Date.now()}.sql`);
+        const fileStream = fs.createWriteStream(tempDumpPath);
+
+        const pgDumpProcess = spawn('pg_dump', dumpArgs, {
+          env: { ...process.env, PGPASSWORD: password }
+        });
+
+        pgDumpProcess.stdout.pipe(fileStream);
+
+        pgDumpProcess.on('error', (_spawnErr) => {
+          // Fallback ke Prisma JSON export jika pg_dump binary tidak ditemukan di PATH
+          fileStream.close();
+          try { if (fs.existsSync(tempDumpPath)) fs.unlinkSync(tempDumpPath); } catch (_) {}
+          exportPrismaJsonBackup(res, timestamp, isPlatformAdmin, tenantId);
+        });
+
+        pgDumpProcess.on('close', (code) => {
+          fileStream.close();
+          if (code === 0 && fs.existsSync(tempDumpPath) && fs.statSync(tempDumpPath).size > 100) {
+            return res.download(tempDumpPath, `codepos-backup-full-${timestamp}.sql`, () => {
+              try { if (fs.existsSync(tempDumpPath)) fs.unlinkSync(tempDumpPath); } catch (_) {}
+            });
+          } else {
             try { if (fs.existsSync(tempDumpPath)) fs.unlinkSync(tempDumpPath); } catch (_) {}
-            if (downloadErr && !res.headersSent) {
-              res.status(500).json({ error: 'Gagal mengunduh file dump SQL' });
-            }
-          });
-        }
-
-        // 2. Fallback: Ekspor komprehensif seluruh tabel via Prisma JSON Snapshot
-        try {
-          const [
-            users, categories, products, tables, reservations, customers, pointLogs,
-            orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
-            ingredients, recipeItems, ingredientLogs, purchaseOrders, purchaseOrderItems,
-            debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists,
-            warehouseInbounds, warehouseInboundItems, warehouseRequisitions, warehouseRequisitionItems,
-            ownerFundTransactions, warehouseSales, warehouseSaleItems
-          ] = await Promise.all([
-            prisma.user.findMany(),
-            prisma.category.findMany(),
-            prisma.product.findMany(),
-            prisma.table.findMany(),
-            prisma.reservation.findMany(),
-            prisma.customer.findMany(),
-            prisma.pointLog.findMany(),
-            prisma.order.findMany(),
-            prisma.orderItem.findMany(),
-            prisma.cashFlow.findMany(),
-            prisma.attendance.findMany(),
-            prisma.settings.findMany(),
-            prisma.shift.findMany(),
-            prisma.supplier.findMany(),
-            prisma.ingredient.findMany(),
-            prisma.recipeItem.findMany(),
-            prisma.ingredientLog.findMany(),
-            prisma.purchaseOrder.findMany(),
-            prisma.purchaseOrderItem.findMany(),
-            prisma.debt.findMany(),
-            prisma.debtPayment.findMany(),
-            prisma.leaveRequest.findMany(),
-            prisma.shiftHandover.findMany(),
-            prisma.kitchenChecklist.findMany(),
-            prisma.warehouseInbound.findMany(),
-            prisma.warehouseInboundItem.findMany(),
-            prisma.warehouseRequisition.findMany(),
-            prisma.warehouseRequisitionItem.findMany(),
-            prisma.ownerFundTransaction.findMany(),
-            prisma.warehouseSale.findMany(),
-            prisma.warehouseSaleItem.findMany()
-          ]);
-
-          const snapshot = {
-            metadata: {
-              system: 'POS & Central Warehouse Cafe',
-              engine: 'PostgreSQL',
-              exportedAt: new Date().toISOString(),
-              version: '2026.1'
-            },
-            data: {
-              users, categories, products, tables, reservations, customers, pointLogs,
-              orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
-              ingredients, recipeItems, ingredientLogs, purchaseOrders, purchaseOrderItems,
-              debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists,
-              warehouseInbounds, warehouseInboundItems, warehouseRequisitions, warehouseRequisitionItems,
-              ownerFundTransactions, warehouseSales, warehouseSaleItems
-            }
-          };
-
-          const jsonContent = JSON.stringify(snapshot, null, 2);
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('Content-Disposition', `attachment; filename="backup-poscafe-${timestamp}.json"`);
-          return res.send(jsonContent);
-        } catch (exportErr: any) {
-          console.error('Gagal membuat fallback snapshot:', exportErr);
-          return res.status(500).json({ error: 'Gagal membuat backup data PostgreSQL' });
-        }
-      });
-    } else {
-      // Fallback untuk SQLite lokal
-      const dbPath = path.join(__dirname, '../../prisma/dev.db');
-      if (fs.existsSync(dbPath)) {
-        res.download(dbPath, `backup-poscafe-${timestamp}.db`, (err) => {
-          if (err && !res.headersSent) {
-            res.status(500).json({ error: 'Gagal mengunduh file SQLite' });
+            exportPrismaJsonBackup(res, timestamp, isPlatformAdmin, tenantId);
           }
         });
-      } else {
-        res.status(404).json({ error: 'Database aktif tidak ditemukan' });
+
+        return;
+      } catch (dumpErr) {
+        console.warn('[Backup] Safe pg_dump failed, falling back to structured JSON snapshot:', dumpErr);
       }
     }
+
+    // 2. Default & Tenant-Scoped Backup: Ekspor komprehensif seluruh tabel via Prisma Structured JSON Snapshot
+    await exportPrismaJsonBackup(res, timestamp, isPlatformAdmin, tenantId);
+
   } catch (error: any) {
     console.error('Terjadi kesalahan sistem saat backup:', error);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Terjadi kesalahan sistem saat backup' });
+      res.status(500).json({ error: 'Terjadi kesalahan sistem saat memproses backup data' });
     }
   }
 });
 
-// POST /api/database/restart - Restart server backend (di bawah PM2)
-router.post('/restart', authenticateToken, (req: Request, res: Response) => {
-  try {
-    res.status(200).json({ message: 'Server backend sedang merestart. Halaman akan dimuat ulang beberapa detik lagi...' });
-    
-    // Delay 1 detik agar respon HTTP sempat dikirim ke klien
-    setTimeout(() => {
-      console.log('[System] Restart dipicu oleh pengguna. Mematikan proses Node.js...');
-      process.exit(0); // PM2 otomatis menghidupkan kembali proses jika exit code 0/1
-    }, 1000);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Gagal memicu restart server' });
-  }
-});
+/**
+ * Structured Tenant-Aware / Platform JSON Snapshot
+ */
+async function exportPrismaJsonBackup(
+  res: Response, 
+  timestamp: string, 
+  isPlatformAdmin: boolean, 
+  tenantId?: string | null
+) {
+  const whereTenant: any = (!isPlatformAdmin && tenantId) ? { tenantId } : {};
+
+  const [
+    categories, products, tables, reservations, customers, pointLogs,
+    orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
+    ingredients, recipeItems, ingredientLogs, purchaseOrders,
+    debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists
+  ] = await Promise.all([
+    prisma.category.findMany({ where: whereTenant }),
+    prisma.product.findMany({ where: whereTenant }),
+    prisma.table.findMany({ where: whereTenant }),
+    prisma.reservation.findMany({ where: whereTenant }),
+    prisma.customer.findMany({ where: whereTenant }),
+    prisma.pointLog.findMany({ where: whereTenant }),
+    prisma.order.findMany({ where: whereTenant }),
+    prisma.orderItem.findMany(),
+    prisma.cashFlow.findMany({ where: whereTenant }),
+    prisma.attendance.findMany({ where: whereTenant }),
+    prisma.settings.findMany({ where: whereTenant }),
+    prisma.shift.findMany({ where: whereTenant }),
+    prisma.supplier.findMany({ where: whereTenant }),
+    prisma.ingredient.findMany({ where: whereTenant }),
+    prisma.recipeItem.findMany(),
+    prisma.ingredientLog.findMany({ where: whereTenant }),
+    prisma.purchaseOrder.findMany({ where: whereTenant }),
+    prisma.debt.findMany({ where: whereTenant }),
+    prisma.debtPayment.findMany({ where: whereTenant }),
+    prisma.leaveRequest.findMany({ where: whereTenant }),
+    prisma.shiftHandover.findMany({ where: whereTenant }),
+    prisma.kitchenChecklist.findMany({ where: whereTenant })
+  ]);
+
+  const snapshot = {
+    metadata: {
+      platform: 'Codenusa Multi-Tenant B2B SaaS POS',
+      scope: isPlatformAdmin ? 'PLATFORM_ALL' : `TENANT_${tenantId}`,
+      exportedAt: new Date().toISOString(),
+      schemaVersion: '2026.2'
+    },
+    data: {
+      categories, products, tables, reservations, customers, pointLogs,
+      orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
+      ingredients, recipeItems, ingredientLogs, purchaseOrders,
+      debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists
+    }
+  };
+
+  const jsonContent = JSON.stringify(snapshot, null, 2);
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="backup-codepos-${tenantId || 'platform'}-${timestamp}.json"`);
+  return res.send(jsonContent);
+}
 
 export default router;
-

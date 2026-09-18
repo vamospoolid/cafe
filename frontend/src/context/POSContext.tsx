@@ -6,14 +6,28 @@ import useSocket from '../hooks/useSocket';
 // Interfaces
 export interface User {
   id: number;
+  name?: string;
   username: string;
   role: string;
+  roleId?: string;
+  tenantId?: string;
+  outletId?: string;
+  permissionKeys?: string[];
   permissions: {
     canVoid: boolean;
     canDiscount: boolean;
     canEditMenu: boolean;
     canViewReports: boolean;
+    canManageStaff?: boolean;
   };
+  isPlatformAdmin?: boolean;
+  memberships?: Array<{
+    tenantId: string;
+    tenantName: string;
+    tenantSlug: string;
+    roleName: string;
+    status: string;
+  }>;
 }
 
 interface POSContextType {
@@ -21,12 +35,17 @@ interface POSContextType {
   token: string | null;
   settings: any;
   activeShift: any | null;
+  features: string[];
+  tenantPlan: any | null;
   isOnline: boolean;
   offlineQueueCount: number;
   login: (userData: User, token: string) => void;
   logout: () => void;
+  hasPermission: (permissionKey: string) => boolean;
+  hasFeature: (featureKey: string) => boolean;
   fetchSettings: () => Promise<void>;
   fetchActiveShift: () => Promise<void>;
+  fetchTenantFeatures: () => Promise<void>;
   syncOfflineOrders: (authToken?: string) => Promise<void>;
   refreshOfflineQueueCount: () => Promise<void>;
   triggerHaptic: (duration?: number) => void;
@@ -39,6 +58,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [settings, setSettings] = useState<any>(null);
   const [activeShift, setActiveShift] = useState<any>(null);
+  const [features, setFeatures] = useState<string[]>([]);
+  const [tenantPlan, setTenantPlan] = useState<any | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
 
@@ -48,6 +69,29 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         navigator.vibrate(duration);
       } catch (e) {}
     }
+  };
+
+  const hasFeature = (featureKey: string): boolean => {
+    // If super admin / platform admin, always true
+    if (user?.role === 'OWNER' && user?.username === 'admin') return true;
+    // Core features always allowed
+    if (featureKey === 'pos.cashier' || featureKey === 'inventory.basic' || featureKey === 'finance.cashflow') return true;
+    return features.includes(featureKey);
+  };
+
+  const hasPermission = (permissionKey: string): boolean => {
+    if (!user) return false;
+    if (user.role === 'OWNER' || user.role === 'Admin') return true;
+    if (user.permissionKeys && Array.isArray(user.permissionKeys)) {
+      return user.permissionKeys.includes(permissionKey);
+    }
+    // Fallback checking legacy boolean keys
+    if (permissionKey === 'pos.void') return !!user.permissions?.canVoid;
+    if (permissionKey === 'pos.discount') return !!user.permissions?.canDiscount;
+    if (permissionKey === 'products.manage') return !!user.permissions?.canEditMenu;
+    if (permissionKey === 'reports.view') return !!user.permissions?.canViewReports;
+    if (permissionKey === 'employees.manage') return !!user.permissions?.canManageStaff;
+    return false;
   };
 
   const refreshOfflineQueueCount = async () => {
@@ -166,17 +210,46 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     const savedToken = localStorage.getItem('pos_token');
     
     if (savedUser && savedToken) {
-      setUser(JSON.parse(savedUser));
-      setToken(savedToken);
+      try {
+        setUser(JSON.parse(savedUser));
+        setToken(savedToken);
+      } catch (e) {
+        localStorage.removeItem('pos_user');
+        localStorage.removeItem('pos_token');
+      }
     }
   }, []);
 
   const socket = useSocket();
 
+  const fetchTenantFeatures = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/features/my-features', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFeatures(data.features || []);
+      }
+      
+      const planRes = await fetch('/api/features/tenant-plan', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (planRes.ok) {
+        const planData = await planRes.json();
+        setTenantPlan(planData);
+      }
+    } catch (err) {
+      console.error('Error loading tenant features:', err);
+    }
+  };
+
   useEffect(() => {
     if (token) {
       fetchSettings();
       fetchActiveShift();
+      fetchTenantFeatures();
       if (navigator.onLine) {
         syncOfflineOrders(token);
       }
@@ -228,6 +301,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     setSettings(null);
     setActiveShift(null);
+    setFeatures([]);
+    setTenantPlan(null);
     localStorage.removeItem('pos_user');
     localStorage.removeItem('pos_token');
   };
@@ -238,12 +313,17 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       token,
       settings,
       activeShift,
+      features,
+      tenantPlan,
       isOnline,
       offlineQueueCount,
       login,
       logout,
+      hasPermission,
+      hasFeature,
       fetchSettings,
       fetchActiveShift,
+      fetchTenantFeatures,
       syncOfflineOrders,
       refreshOfflineQueueCount,
       triggerHaptic

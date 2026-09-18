@@ -24,6 +24,9 @@ import PurchaseOrderView from './components/PurchaseOrderView';
 import StaffPWAView from './components/StaffPWAView';
 import WarehouseView from './components/WarehouseView';
 import EmployeeLoanView from './components/EmployeeLoanView';
+import AuditLogView from './components/AuditLogView';
+import SaaSPlatformAdminView from './components/SaaSPlatformAdminView';
+import PlatformAdminLayout from './components/PlatformAdminLayout';
 import { POSProvider, POSContext } from './context/POSContext';
 
 
@@ -63,33 +66,52 @@ const AppRoutes = () => {
   }
 
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardView />} />
-        <Route path="/pos" element={<POSView />} />
-        <Route path="/kds" element={<KDSView />} />
-        <Route path="/meja" element={<TableView />} />
-        <Route path="/qrcode" element={<QRCodeView />} />
-        <Route path="/reservasi" element={<ReservationView />} />
-        <Route path="/produk" element={<ProductView />} />
-        <Route path="/kas" element={<CashFlowView />} />
-        <Route path="/karyawan" element={<UserView />} />
-        <Route path="/absensi" element={<AttendanceView />} />
-        <Route path="/kasbon" element={<EmployeeLoanView />} />
-        <Route path="/riwayat" element={<TransactionHistoryView />} />
-        <Route path="/shift" element={<ShiftHistoryView />} />
-        <Route path="/laporan" element={<ReportView />} />
-        <Route path="/crm" element={<CRMView />} />
-        <Route path="/pengaturan" element={<SettingsView />} />
-        <Route path="/bahan-baku" element={<IngredientView />} />
-        <Route path="/supplier" element={<SupplierView />} />
-        <Route path="/purchase-order" element={<PurchaseOrderView />} />
-        <Route path="/gudang" element={<WarehouseView />} />
+    <Routes>
+      {/* ─── STANDALONE SAAS DEVELOPER MASTER CONSOLE ─────────────────── */}
+      <Route
+        path="/platform-admin"
+        element={
+          <PlatformAdminLayout>
+            <SaaSPlatformAdminView />
+          </PlatformAdminLayout>
+        }
+      />
 
-        <Route path="*" element={<div className="p-8 text-center text-muted">Halaman tidak ditemukan...</div>} />
-      </Routes>
-    </Layout>
+      {/* ─── REGULAR CAFE POS & MERCHANT PORTAL (WRAPPED IN CAFE LAYOUT) ─ */}
+      <Route
+        path="/*"
+        element={
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<DashboardView />} />
+              <Route path="/pos" element={<POSView />} />
+              <Route path="/kds" element={<KDSView />} />
+              <Route path="/meja" element={<TableView />} />
+              <Route path="/qrcode" element={<QRCodeView />} />
+              <Route path="/reservasi" element={<ReservationView />} />
+              <Route path="/produk" element={<ProductView />} />
+              <Route path="/kas" element={<CashFlowView />} />
+              <Route path="/karyawan" element={<UserView />} />
+              <Route path="/absensi" element={<AttendanceView />} />
+              <Route path="/kasbon" element={<EmployeeLoanView />} />
+              <Route path="/riwayat" element={<TransactionHistoryView />} />
+              <Route path="/shift" element={<ShiftHistoryView />} />
+              <Route path="/laporan" element={<ReportView />} />
+              <Route path="/crm" element={<CRMView />} />
+              <Route path="/pengaturan" element={<SettingsView />} />
+              <Route path="/bahan-baku" element={<IngredientView />} />
+              <Route path="/supplier" element={<SupplierView />} />
+              <Route path="/purchase-order" element={<PurchaseOrderView />} />
+              <Route path="/gudang" element={<WarehouseView />} />
+              <Route path="/audit-log" element={<AuditLogView />} />
+
+              <Route path="*" element={<div className="p-8 text-center text-muted">Halaman tidak ditemukan...</div>} />
+            </Routes>
+          </Layout>
+        }
+      />
+    </Routes>
   );
 };
 

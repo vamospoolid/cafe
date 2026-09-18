@@ -1,16 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // GET all customers with optional search & filter
-router.get('/', authenticateToken, async (req: Request, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
     const { search, tier } = req.query;
 
-    const whereCondition: any = {};
+    const whereCondition: any = { tenantId };
 
     if (search) {
       whereCondition.OR = [
@@ -43,12 +44,13 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // GET customer detail, order history, and point logs
-router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
     const { id } = req.params;
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: Number(id) },
+    const customer = await prisma.customer.findFirst({
+      where: { id: Number(id), tenantId },
       include: {
         orders: {
           orderBy: { createdAt: 'desc' },
@@ -93,34 +95,36 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // POST register new customer
-router.post('/', authenticateToken, async (req: Request, res: Response) => {
+router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
     const { name, phone, email, birthday } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ error: 'Nama dan nomor telepon wajib diisi' });
     }
 
-    // Check unique phone
-    const existingPhone = await prisma.customer.findUnique({
-      where: { phone }
+    // Check unique phone within tenant
+    const existingPhone = await prisma.customer.findFirst({
+      where: { phone, tenantId }
     });
     if (existingPhone) {
-      return res.status(400).json({ error: 'Nomor telepon sudah terdaftar' });
+      return res.status(400).json({ error: 'Nomor telepon sudah terdaftar di outlet Anda' });
     }
 
-    // Check unique email if provided
+    // Check unique email within tenant if provided
     if (email) {
-      const existingEmail = await prisma.customer.findUnique({
-        where: { email }
+      const existingEmail = await prisma.customer.findFirst({
+        where: { email, tenantId }
       });
       if (existingEmail) {
-        return res.status(400).json({ error: 'Email sudah terdaftar' });
+        return res.status(400).json({ error: 'Email sudah terdaftar di outlet Anda' });
       }
     }
 
     const customer = await prisma.customer.create({
       data: {
+        tenantId,
         name,
         phone,
         email: email || null,
@@ -139,13 +143,14 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // PUT update customer
-router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
     const { id } = req.params;
     const { name, phone, email, birthday, pointsAdjustment, adjustmentReason } = req.body;
 
-    const existingCustomer = await prisma.customer.findUnique({
-      where: { id: Number(id) }
+    const existingCustomer = await prisma.customer.findFirst({
+      where: { id: Number(id), tenantId }
     });
 
     if (!existingCustomer) {
@@ -154,21 +159,21 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
 
     // Check phone uniqueness if updated
     if (phone && phone !== existingCustomer.phone) {
-      const existingPhone = await prisma.customer.findUnique({
-        where: { phone }
+      const existingPhone = await prisma.customer.findFirst({
+        where: { phone, tenantId, id: { not: Number(id) } }
       });
       if (existingPhone) {
-        return res.status(400).json({ error: 'Nomor telepon sudah terdaftar' });
+        return res.status(400).json({ error: 'Nomor telepon sudah terdaftar di outlet Anda' });
       }
     }
 
     // Check email uniqueness if updated
     if (email && email !== existingCustomer.email) {
-      const existingEmail = await prisma.customer.findUnique({
-        where: { email }
+      const existingEmail = await prisma.customer.findFirst({
+        where: { email, tenantId, id: { not: Number(id) } }
       });
       if (existingEmail) {
-        return res.status(400).json({ error: 'Email sudah terdaftar' });
+        return res.status(400).json({ error: 'Email sudah terdaftar di outlet Anda' });
       }
     }
 
@@ -186,6 +191,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
       updateData.points = newPoints;
       
       pointsLogData = {
+        tenantId,
         points: Number(pointsAdjustment),
         type: 'Manual',
         description: adjustmentReason || 'Penyesuaian manual oleh admin'
@@ -201,6 +207,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
       if (pointsLogData) {
         await tx.pointLog.create({
           data: {
+            tenantId,
             customerId: Number(id),
             points: pointsLogData.points,
             type: pointsLogData.type,
@@ -220,13 +227,13 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // DELETE customer
-router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
     const { id } = req.params;
 
-    // Check if customer exists
-    const customer = await prisma.customer.findUnique({
-      where: { id: Number(id) }
+    const customer = await prisma.customer.findFirst({
+      where: { id: Number(id), tenantId }
     });
 
     if (!customer) {

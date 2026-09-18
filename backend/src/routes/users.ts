@@ -1,23 +1,62 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, requirePermission, AuthRequest } from '../middlewares/authMiddleware';
+import { requireQuota } from '../middlewares/quotaMiddleware';
+import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Middleware to check if user is Admin
-const isAdmin = (req: Request, res: Response, next: Function) => {
-  if ((req as any).user.role !== 'Admin') {
-    return res.status(403).json({ error: 'Akses ditolak. Memerlukan hak akses Admin.' });
-  }
-  next();
-};
-
-// GET current logged-in user profile
-router.get('/me', authenticateToken, async (req: Request, res: Response) => {
+// GET /api/users/roles-permissions - Daftar role dan permission yang tersedia
+router.get('/roles-permissions', authenticateToken, requirePermission('employees.view'), async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+
+    const [roles, permissions] = await Promise.all([
+      prisma.role.findMany({
+        where: {
+          OR: [
+            { isSystem: true },
+            { tenantId }
+          ]
+        },
+        include: {
+          permissions: {
+            include: {
+              permission: true
+            }
+          }
+        },
+        orderBy: { name: 'asc' }
+      }),
+      prisma.permission.findMany({
+        orderBy: [{ module: 'asc' }, { name: 'asc' }]
+      })
+    ]);
+
+    const formattedRoles = roles.map(r => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      isSystem: r.isSystem,
+      permissions: r.permissions.map(p => p.permission.key)
+    }));
+
+    res.json({
+      roles: formattedRoles,
+      permissions
+    });
+  } catch (error) {
+    console.error('Error fetching roles and permissions:', error);
+    res.status(500).json({ error: 'Gagal mengambil data role dan izin' });
+  }
+});
+
+// GET /api/users/me - Profil akun aktif saat ini
+router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const user = await prisma.user.findUnique({
@@ -40,7 +79,9 @@ router.get('/me', authenticateToken, async (req: Request, res: Response) => {
 
     res.json({
       ...user,
-      permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions
+      tenantId: req.user?.tenantId,
+      role: req.user?.role,
+      permissions: req.user?.permissions
     });
   } catch (error) {
     console.error('Get profile error:', error);
@@ -48,10 +89,10 @@ router.get('/me', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// PUT update current staff security credentials (PIN / Password)
-router.put('/me/security', authenticateToken, async (req: Request, res: Response) => {
+// PUT /api/users/me/security - Update password / PIN akun sendiri
+router.put('/me/security', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { oldPin, newPin, oldPassword, newPassword } = req.body;
@@ -93,6 +134,14 @@ router.put('/me/security', authenticateToken, async (req: Request, res: Response
       select: { id: true, name: true, username: true, role: true, employmentType: true, pin: true }
     });
 
+    // Update PIN juga di TenantMembership
+    if (updateData.pin && req.user?.tenantId) {
+      await prisma.tenantMembership.updateMany({
+        where: { userId, tenantId: req.user.tenantId },
+        data: { pin: updateData.pin }
+      });
+    }
+
     res.json({ message: 'Keamanan akun berhasil diperbarui', user: updated });
   } catch (error) {
     console.error('Update security error:', error);
@@ -100,10 +149,10 @@ router.put('/me/security', authenticateToken, async (req: Request, res: Response
   }
 });
 
-// PUT update current staff profile details
-router.put('/me/profile', authenticateToken, async (req: Request, res: Response) => {
+// PUT /api/users/me/profile - Update nama profil sendiri
+router.put('/me/profile', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { name } = req.body;
@@ -124,133 +173,302 @@ router.put('/me/profile', authenticateToken, async (req: Request, res: Response)
   }
 });
 
-// GET all users (only Admin can view full list)
-router.get('/', authenticateToken, isAdmin, async (req: Request, res: Response) => {
+// GET /api/users - Daftar seluruh staf dalam tenant aktif
+router.get('/', authenticateToken, requirePermission('employees.view'), async (req: AuthRequest, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        role: true,
-        employmentType: true,
-        permissions: true,
-        status: true,
-        createdAt: true,
-      }
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+
+    // Cari user yang tergabung dalam membership tenant aktif
+    const memberships = await prisma.tenantMembership.findMany({
+      where: { tenantId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            pin: true,
+            status: true,
+            createdAt: true
+          }
+        },
+        role: {
+          include: {
+            permissions: {
+              include: {
+                permission: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { user: { name: 'asc' } }
     });
-    // Parse permissions back to JSON object for frontend
-    const mappedUsers = users.map(u => ({
-      ...u,
-      permissions: typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions
-    }));
+
+    const mappedUsers = memberships.map(m => {
+      const permissionKeys = m.role?.permissions.map(p => p.permission.key) || [];
+      return {
+        id: m.user.id,
+        name: m.user.name,
+        username: m.user.username,
+        role: m.role?.name || 'CASHIER',
+        roleId: m.roleId,
+        employmentType: m.employmentType,
+        pin: m.pin || m.user.pin,
+        status: m.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif',
+        permissionKeys,
+        permissions: {
+          canVoid: permissionKeys.includes('pos.void') || m.role?.name === 'OWNER',
+          canDiscount: permissionKeys.includes('pos.discount') || m.role?.name === 'OWNER',
+          canEditMenu: permissionKeys.includes('products.manage') || m.role?.name === 'OWNER',
+          canViewReports: permissionKeys.includes('reports.view') || m.role?.name === 'OWNER',
+          canManageStaff: permissionKeys.includes('employees.manage') || m.role?.name === 'OWNER'
+        },
+        createdAt: m.user.createdAt
+      };
+    });
+
     res.json(mappedUsers);
   } catch (error) {
-    console.error(error);
+    console.error('Get employees error:', error);
     res.status(500).json({ error: 'Gagal mengambil data karyawan' });
   }
 });
 
-// POST Create new user
-router.post('/', authenticateToken, isAdmin, async (req: Request, res: Response) => {
+// POST /api/users - Tambah staf baru ke dalam tenant
+router.post('/', authenticateToken, requirePermission('employees.manage'), requireQuota('user'), async (req: AuthRequest, res: Response) => {
   try {
-    const { name, username, password, pin, role, employmentType, permissions, status } = req.body;
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const { name, username, password, pin, role, roleId, employmentType, permissions, status } = req.body;
 
-    const existingUser = await prisma.user.findUnique({ where: { username } });
-    if (existingUser) return res.status(400).json({ error: 'Username sudah digunakan' });
+    if (!name || !username) {
+      return res.status(400).json({ error: 'Nama dan username wajib diisi' });
+    }
+
+    let existingUser = await prisma.user.findUnique({ where: { username } });
+
+    // Tentukan Role ID
+    let targetRoleId = roleId;
+    if (!targetRoleId && role) {
+      const matchedRole = await prisma.role.findFirst({
+        where: {
+          OR: [
+            { name: role.toUpperCase() },
+            { id: `role-system-${role.toLowerCase()}` }
+          ]
+        }
+      });
+      targetRoleId = matchedRole?.id || 'role-system-cashier';
+    }
 
     const passwordHash = await bcrypt.hash(password || '123456', 10);
+    const staffPin = pin || '123456';
 
-    const newUser = await prisma.user.create({
+    let userToLink;
+    if (existingUser) {
+      // User sudah ada, cek apakah sudah jadi member di tenant ini
+      const existingMembership = await prisma.tenantMembership.findUnique({
+        where: {
+          userId_tenantId: {
+            userId: existingUser.id,
+            tenantId
+          }
+        }
+      });
+
+      if (existingMembership) {
+        return res.status(400).json({ error: 'Karyawan dengan username ini sudah terdaftar di outlet Anda.' });
+      }
+
+      userToLink = existingUser;
+    } else {
+      // Buat user baru
+      userToLink = await prisma.user.create({
+        data: {
+          name,
+          username,
+          passwordHash,
+          pin: staffPin,
+          role: role || 'Kasir',
+          employmentType: employmentType || 'FULL_TIME',
+          permissions: JSON.stringify(permissions || {}),
+          status: status || 'Aktif'
+        }
+      });
+    }
+
+    // Buat membership untuk tenant aktif
+    const membership = await prisma.tenantMembership.create({
       data: {
-        name,
-        username,
-        passwordHash,
-        pin: pin || '123456',
-        role,
+        userId: userToLink.id,
+        tenantId,
+        roleId: targetRoleId,
+        pin: staffPin,
         employmentType: employmentType || 'FULL_TIME',
-        permissions: JSON.stringify(permissions),
-        status: status || 'Aktif',
+        status: status === 'Nonaktif' ? 'SUSPENDED' : 'ACTIVE'
       },
-      select: { id: true, name: true, username: true, role: true, employmentType: true }
+      include: {
+        role: true
+      }
     });
 
-    res.status(201).json(newUser);
+    // Audit Log: User Create
+    await AuditLogger.log({
+      tenantId,
+      action: 'USER_CREATE',
+      resource: 'USER',
+      resourceId: String(userToLink.id),
+      description: `Menambahkan staf "${userToLink.name}" (@${userToLink.username}) dengan role ${membership.role?.name || role}.`,
+      newValue: { name: userToLink.name, username: userToLink.username, role: membership.role?.name || role },
+      severity: 'INFO'
+    }, req);
+
+    res.status(201).json({
+      id: userToLink.id,
+      name: userToLink.name,
+      username: userToLink.username,
+      role: membership.role?.name || role,
+      employmentType: membership.employmentType,
+      status: membership.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif'
+    });
   } catch (error) {
-    console.error(error);
+    console.error('Create employee error:', error);
     res.status(500).json({ error: 'Gagal membuat akun karyawan' });
   }
 });
 
-// PUT Update user
-router.put('/:id', authenticateToken, isAdmin, async (req: Request, res: Response) => {
+// PUT /api/users/:id - Update data staf & role dalam tenant
+router.put('/:id', authenticateToken, requirePermission('employees.manage'), async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
     const { id } = req.params;
-    const { name, username, password, pin, role, employmentType, permissions, status } = req.body;
+    const { name, username, password, pin, role, roleId, employmentType, permissions, status } = req.body;
 
-    // Check if trying to edit superadmin
     const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
     if (!targetUser) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-    if (targetUser.role === 'Admin' && role !== 'Admin') {
-      return res.status(403).json({ error: 'Tidak bisa menurunkan jabatan akun Admin' });
+    // Cegah menurunkan jabatan akun OWNER / Admin utama
+    if (targetUser.role === 'Admin' && req.user?.id !== targetUser.id && req.user?.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Tidak memiliki izin untuk mengubah data Admin utama.' });
     }
 
-    const updateData: any = {
+    const updateUserData: any = {
       name,
-      username,
-      role,
-      permissions: JSON.stringify(permissions),
-      status
+      username
     };
 
-    if (employmentType !== undefined) {
-      updateData.employmentType = employmentType;
-    }
-
     if (password) {
-      updateData.passwordHash = await bcrypt.hash(password, 10);
+      updateUserData.passwordHash = await bcrypt.hash(password, 10);
     }
     if (pin) {
-      updateData.pin = pin;
+      updateUserData.pin = pin;
+    }
+    if (status) {
+      updateUserData.status = status;
     }
 
     const updatedUser = await prisma.user.update({
       where: { id: Number(id) },
-      data: updateData,
-      select: { id: true, name: true, username: true, role: true, employmentType: true }
+      data: updateUserData
     });
 
-    res.json(updatedUser);
+    // Update Role & PIN di TenantMembership
+    let targetRoleId = roleId;
+    if (!targetRoleId && role) {
+      const matchedRole = await prisma.role.findFirst({
+        where: {
+          OR: [
+            { name: role.toUpperCase() },
+            { id: `role-system-${role.toLowerCase()}` }
+          ]
+        }
+      });
+      targetRoleId = matchedRole?.id;
+    }
+
+    const updateMembershipData: any = {};
+    if (targetRoleId) updateMembershipData.roleId = targetRoleId;
+    if (pin) updateMembershipData.pin = pin;
+    if (employmentType) updateMembershipData.employmentType = employmentType;
+    if (status) updateMembershipData.status = status === 'Nonaktif' ? 'SUSPENDED' : 'ACTIVE';
+
+    await prisma.tenantMembership.upsert({
+      where: {
+        userId_tenantId: {
+          userId: Number(id),
+          tenantId
+        }
+      },
+      update: updateMembershipData,
+      create: {
+        userId: Number(id),
+        tenantId,
+        roleId: targetRoleId || 'role-system-cashier',
+        pin: pin || targetUser.pin,
+        employmentType: employmentType || 'FULL_TIME',
+        status: status === 'Nonaktif' ? 'SUSPENDED' : 'ACTIVE'
+      }
+    });
+
+    // Audit Log: User Update
+    await AuditLogger.log({
+      tenantId,
+      action: 'USER_UPDATE',
+      resource: 'USER',
+      resourceId: String(id),
+      description: `Mengubah data staf "${updatedUser.name}" (@${updatedUser.username}).`,
+      oldValue: { name: targetUser.name, role: targetUser.role, status: targetUser.status },
+      newValue: { name: updatedUser.name, role: role || updatedUser.role, status: updatedUser.status },
+      severity: 'WARNING'
+    }, req);
+
+    res.json({
+      id: updatedUser.id,
+      name: updatedUser.name,
+      username: updatedUser.username,
+      role: role || updatedUser.role,
+      employmentType: employmentType || updatedUser.employmentType
+    });
   } catch (error) {
-    console.error(error);
+    console.error('Update employee error:', error);
     res.status(500).json({ error: 'Gagal mengubah data karyawan' });
   }
 });
 
-// DELETE user
-router.delete('/:id', authenticateToken, isAdmin, async (req: Request, res: Response) => {
+// DELETE /api/users/:id - Nonaktifkan staf dari tenant (Soft delete)
+router.delete('/:id', authenticateToken, requirePermission('employees.manage'), async (req: AuthRequest, res: Response) => {
   try {
+    const tenantId = req.user?.tenantId || 'tenant-default-muki';
     const { id } = req.params;
-    
+
     const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
     if (!targetUser) return res.status(404).json({ error: 'User tidak ditemukan' });
-    
-    if (targetUser.role === 'Admin') {
-      return res.status(403).json({ error: 'Akun Admin mutlak tidak dapat dihapus' });
+
+    if (targetUser.id === req.user?.id) {
+      return res.status(400).json({ error: 'Tidak dapat menonaktifkan akun sendiri.' });
     }
 
-    // Since we don't want to break order history, we should only "deactivate" or soft-delete
-    // But for this MVP, we will actually delete them or deactivate them.
-    // Let's soft-delete them by changing status to Nonaktif.
-    await prisma.user.update({
-      where: { id: Number(id) },
-      data: { status: 'Nonaktif' }
+    // Suspend membership di tenant ini
+    await prisma.tenantMembership.updateMany({
+      where: { userId: Number(id), tenantId },
+      data: { status: 'SUSPENDED' }
     });
 
-    res.json({ message: 'Akun berhasil dinonaktifkan (Soft Delete).' });
+    // Audit Log: User Suspend
+    await AuditLogger.log({
+      tenantId,
+      action: 'USER_SUSPEND',
+      resource: 'USER',
+      resourceId: String(id),
+      description: `Menonaktifkan akses staf "${targetUser.name}" (@${targetUser.username}).`,
+      oldValue: { status: 'ACTIVE' },
+      newValue: { status: 'SUSPENDED' },
+      severity: 'WARNING'
+    }, req);
+
+    res.json({ message: 'Status karyawan berhasil dinonaktifkan dari outlet ini.' });
   } catch (error) {
-    console.error(error);
+    console.error('Delete employee error:', error);
     res.status(500).json({ error: 'Gagal menonaktifkan akun karyawan' });
   }
 });

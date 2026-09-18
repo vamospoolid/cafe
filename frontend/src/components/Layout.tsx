@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { POSContext } from '../context/POSContext';
 import NotificationBell from './NotificationBell';
+import TenantOutletSwitcher from './TenantOutletSwitcher';
 import useSocket from '../hooks/useSocket';
 import { 
   LayoutDashboard, 
@@ -32,7 +33,9 @@ import {
   Delete,
   PanelLeftClose,
   PanelLeftOpen,
-  CreditCard
+  CreditCard,
+  ShieldAlert,
+  Sparkles
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -123,6 +126,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/shift': 'Riwayat Shift & Kasir',
     '/crm': 'Pelanggan & CRM',
     '/laporan': 'Laporan Penjualan',
+    '/audit-log': 'Audit Trail & Log Aktivitas',
     '/pengaturan': 'Pengaturan Sistem'
   };
   const pageTitle = titleMap[location.pathname] || 'MUKI RAMEN POS';
@@ -185,9 +189,22 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     setPinInput(prev => prev.slice(0, -1));
   };
 
-  const userRole = posContext?.user?.role || 'Admin';
+  const userRole = posContext?.user?.role || 'OWNER';
   const checkAccess = (allowedRoles: string[]) => {
-    return allowedRoles.includes(userRole) || userRole === 'Admin';
+    if (!userRole) return true;
+    const roleUpper = String(userRole).toUpperCase();
+    // SuperAdmin, Owner, and Admin have universal access
+    if (roleUpper === 'OWNER' || roleUpper === 'ADMIN' || roleUpper === 'SUPERADMIN') {
+      return true;
+    }
+    return allowedRoles.some(r => {
+      const ru = r.toUpperCase();
+      if (ru === 'ADMIN' && (roleUpper === 'ADMIN' || roleUpper === 'OWNER' || roleUpper === 'SUPERADMIN')) return true;
+      if (ru === 'KASIR' && (roleUpper === 'KASIR' || roleUpper === 'CASHIER' || roleUpper === 'OWNER' || roleUpper === 'ADMIN')) return true;
+      if (ru === 'DAPUR' && (roleUpper === 'DAPUR' || roleUpper === 'KITCHEN' || roleUpper === 'OWNER' || roleUpper === 'ADMIN')) return true;
+      if (ru === 'GUDANG' && (roleUpper === 'GUDANG' || roleUpper === 'WAREHOUSE' || roleUpper === 'OWNER' || roleUpper === 'ADMIN')) return true;
+      return ru === roleUpper;
+    });
   };
 
   return (
@@ -221,6 +238,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
           </div>
+
+          {/* Multi-Tenant Switcher */}
+          {!isCollapsed && (
+            <div className="px-3 pb-3">
+              <TenantOutletSwitcher />
+            </div>
+          )}
         
           <nav className="nav-menu">
             {checkAccess(['Admin']) && (
@@ -370,6 +394,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             {checkAccess(['Admin']) && (
               <>
                 <div className="sidebar-section-divider"></div>
+                <NavLink to="/audit-log" title="Audit Trail Log" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ShieldAlert size={20} className="shrink-0" />
+                  <span>Audit Trail Log</span>
+                </NavLink>
                 <NavLink to="/pengaturan" title="Pengaturan Sistem" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Settings size={20} className="shrink-0" />
                   <span>Pengaturan Sistem</span>
@@ -426,7 +454,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               )}
               
               {/* Dropdown Menu (Hover) */}
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+                {(posContext?.user?.isPlatformAdmin || posContext?.user?.role === 'OWNER' || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user as any)?.roleId === 'role-system-owner') && (
+                  <NavLink
+                    to="/platform-admin"
+                    className="w-full text-left px-4 py-2.5 text-xs text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 font-extrabold transition-colors border-b border-indigo-100 flex items-center gap-2"
+                  >
+                    <Sparkles size={15} className="text-amber-500" />
+                    <span>SaaS Command Center</span>
+                  </NavLink>
+                )}
                 <button 
                   onClick={() => setIsPinModalOpen(true)}
                   className="w-full text-left px-4 py-3 text-sm text-indigo-600 hover:bg-indigo-50 font-bold transition-colors border-b border-gray-100 flex items-center gap-2"

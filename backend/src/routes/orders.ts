@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { io } from '../index';
 import { PrinterService } from '../services/PrinterService';
+import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -402,7 +403,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
       if (!offlineId) continue;
 
       // 1. Cek apakah sudah disinkronisasikan sebelumnya
-      const existing = await prisma.order.findUnique({
+      const existing = await prisma.order.findFirst({
         where: { offlineId },
         include: { items: true }
       });
@@ -426,7 +427,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
         let finalCustomerId = customerId ? Number(customerId) : null;
         if (!finalCustomerId && customerPhone) {
-          let cust = await tx.customer.findUnique({ where: { phone: customerPhone } });
+          let cust = await tx.customer.findFirst({ where: { phone: customerPhone } });
           if (!cust && customerName) {
             cust = await tx.customer.create({
               data: {
@@ -740,7 +741,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       // 0.5. Cari/Registrasi Customer jika ada phone
       let finalCustomerId = customerId ? Number(customerId) : null;
       if (!finalCustomerId && customerPhone) {
-        let cust = await tx.customer.findUnique({ where: { phone: customerPhone } });
+        let cust = await tx.customer.findFirst({ where: { phone: customerPhone } });
         if (!cust && customerName) {
           cust = await tx.customer.create({
             data: {
@@ -1296,6 +1297,17 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
     if (orderData.tableId) {
       io.emit('table:update', { tableId: orderData.tableId });
     }
+
+    // Audit Log: Order Void
+    await AuditLogger.log({
+      action: 'ORDER_VOID',
+      resource: 'ORDER',
+      resourceId: String(orderData.id),
+      description: `Void pesanan #${orderData.orderNumber} senilai Rp ${orderData.total?.toLocaleString('id-ID') || 0}.`,
+      oldValue: { status: orderData.status, total: orderData.total, orderNumber: orderData.orderNumber },
+      newValue: { status: 'Void' },
+      severity: 'CRITICAL'
+    }, req);
 
     res.json({ message: 'Order berhasil dibatalkan dan stok telah dikembalikan' });
   } catch (error) {

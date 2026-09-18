@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { X, Shield, Key, UserCheck, ShieldAlert, FileText } from 'lucide-react';
+import { X, Shield, Key, UserCheck, ShieldAlert, FileText, ShoppingCart, Utensils, Warehouse, Users, Settings } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { toast } from '../utils/alert';
 
-import { toast, confirmAlert, errorAlert } from '../utils/alert';
 interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -13,38 +13,64 @@ interface UserModalProps {
 const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onSave }) => {
   const posContext = useContext(POSContext);
   const [loading, setLoading] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     name: '',
     username: '',
     password: '',
     pin: '',
-    role: 'Kasir',
+    role: 'CASHIER',
+    roleId: '',
     employmentType: 'FULL_TIME',
     status: 'Aktif',
     permissions: {
       canVoid: false,
       canDiscount: false,
       canEditMenu: false,
-      canViewReports: false
+      canViewReports: false,
+      canManageStaff: false
     }
   });
 
   useEffect(() => {
+    // Fetch available roles from backend
+    const fetchRoles = async () => {
+      try {
+        const res = await fetch('/api/users/roles-permissions', {
+          headers: { Authorization: `Bearer ${posContext?.token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAvailableRoles(data.roles || []);
+        }
+      } catch (e) {
+        console.error('Failed to fetch roles:', e);
+      }
+    };
+
+    if (isOpen && posContext?.token) {
+      fetchRoles();
+    }
+  }, [isOpen, posContext?.token]);
+
+  useEffect(() => {
     if (initialData) {
       setFormData({
-        name: initialData.name,
-        username: initialData.username,
+        name: initialData.name || '',
+        username: initialData.username || '',
         password: '', 
-        pin: '', 
-        role: initialData.role,
+        pin: initialData.pin || '', 
+        role: initialData.role || 'CASHIER',
+        roleId: initialData.roleId || '',
         employmentType: initialData.employmentType || 'FULL_TIME',
-        status: initialData.status,
+        status: initialData.status || 'Aktif',
         permissions: initialData.permissions || {
           canVoid: false,
           canDiscount: false,
           canEditMenu: false,
-          canViewReports: false
+          canViewReports: false,
+          canManageStaff: false
         }
       });
     } else {
@@ -52,18 +78,45 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
         name: '',
         username: '',
         password: '',
-        pin: '',
-        role: 'Kasir',
+        pin: '123456',
+        role: 'CASHIER',
+        roleId: 'role-system-cashier',
         employmentType: 'FULL_TIME',
         status: 'Aktif',
-        permissions: { canVoid: false, canDiscount: false, canEditMenu: false, canViewReports: false }
+        permissions: {
+          canVoid: false,
+          canDiscount: false,
+          canEditMenu: false,
+          canViewReports: false,
+          canManageStaff: false
+        }
       });
     }
   }, [initialData, isOpen]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'role') {
+      const selectedRoleObj = availableRoles.find(r => r.name === value || r.id === value);
+      const permKeys = selectedRoleObj?.permissions || [];
+      
+      const isOwnerOrAdmin = value === 'OWNER' || value === 'ADMIN' || value === 'Admin';
+      setFormData(prev => ({
+        ...prev,
+        role: value,
+        roleId: selectedRoleObj?.id || prev.roleId,
+        permissions: {
+          canVoid: isOwnerOrAdmin || permKeys.includes('pos.void'),
+          canDiscount: isOwnerOrAdmin || permKeys.includes('pos.discount'),
+          canEditMenu: isOwnerOrAdmin || permKeys.includes('products.manage'),
+          canViewReports: isOwnerOrAdmin || permKeys.includes('reports.view'),
+          canManageStaff: isOwnerOrAdmin || permKeys.includes('employees.manage')
+        }
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handlePermissionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +151,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
       });
 
       if (res.ok) {
+        toast(isEdit ? 'Data staf berhasil diperbarui' : 'Staf baru berhasil ditambahkan', 'success');
         onSave();
         onClose();
       } else {
@@ -113,6 +167,8 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
   };
 
   if (!isOpen) return null;
+
+  const isFullAccess = formData.role === 'OWNER' || formData.role === 'ADMIN' || formData.role === 'Admin';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-fade-in">
@@ -131,7 +187,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 {initialData ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium">
-                Atur akun staf, tipe kerja, PIN absensi, dan batasan hak akses
+                Atur akun staf, Role RBAC, PIN absensi/kasir, dan batas hak akses
               </p>
             </div>
           </div>
@@ -171,20 +227,31 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  PIN Absensi & Ganti Kasir {initialData && <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>}
+                  PIN Absensi &amp; Ganti Kasir {initialData && <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>}
                 </label>
-                <input type="password" name="pin" maxLength={6} className="form-control font-mono tracking-widest text-center" placeholder="123456" value={formData.pin} onChange={handleChange} required={!initialData} />
+                <input type="password" name="pin" maxLength={8} className="form-control font-mono tracking-widest text-center" placeholder="123456" value={formData.pin} onChange={handleChange} required={!initialData} />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role / Jabatan</label>
-                <select name="role" className="form-control" value={formData.role} onChange={handleChange}>
-                  <option value="Kasir">Kasir</option>
-                  <option value="Dapur">Dapur (KDS)</option>
-                  <option value="Waiter">Pelayan (Waiter)</option>
-                  <option value="Admin">Admin / Owner</option>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role &amp; Jabatan (RBAC)</label>
+                <select name="role" className="form-control font-semibold" value={formData.role} onChange={handleChange}>
+                  {availableRoles.length > 0 ? (
+                    availableRoles.map(r => (
+                      <option key={r.id} value={r.name}>{r.name} - {r.description?.split('-')[0]}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="CASHIER">CASHIER (Kasir)</option>
+                      <option value="KITCHEN">KITCHEN (Dapur)</option>
+                      <option value="MANAGER">MANAGER (Manager Outlet)</option>
+                      <option value="WAREHOUSE">WAREHOUSE (Gudang)</option>
+                      <option value="HR">HR (Personalia)</option>
+                      <option value="ADMIN">ADMIN (Administrator)</option>
+                      <option value="OWNER">OWNER (Pemilik Usaha)</option>
+                    </>
+                  )}
                 </select>
               </div>
               <div>
@@ -204,22 +271,22 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
               </div>
             </div>
 
-            {formData.role !== 'Admin' ? (
+            {!isFullAccess ? (
               <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 mt-2">
                 <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2 mb-4">
-                  <Shield size={14} className="text-indigo-600" /> Batasan Hak Akses Fitur
+                  <Shield size={14} className="text-indigo-600" /> Kustomisasi Izin Khusus Staf Ini
                 </h4>
                 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {/* Permission 1: Void */}
-                  <label className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 hover:border-slate-300 transition-all select-none">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
+                  <label className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-all select-none">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
                         <X size={14} />
                       </div>
                       <div>
                         <div className="text-xs font-bold text-slate-800">Batalkan Pesanan (Void)</div>
-                        <div className="text-[10px] text-slate-400">Otorisasi membatalkan bill lunas & kembalikan stok</div>
+                        <div className="text-[10px] text-slate-400">Otorisasi membatalkan bill lunas &amp; kembalikan stok</div>
                       </div>
                     </div>
                     <input 
@@ -232,10 +299,10 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                   </label>
 
                   {/* Permission 2: Discount */}
-                  <label className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 hover:border-slate-300 transition-all select-none">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-                        <span className="text-[14px] font-bold">%</span>
+                  <label className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-all select-none">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                        <span className="text-[13px] font-bold">%</span>
                       </div>
                       <div>
                         <div className="text-xs font-bold text-slate-800">Berikan Diskon Harga</div>
@@ -252,14 +319,14 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                   </label>
 
                   {/* Permission 3: Edit Menu */}
-                  <label className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 hover:border-slate-300 transition-all select-none">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+                  <label className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-all select-none">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
                         <Key size={14} />
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-slate-800">Ubah Data Menu & Harga</div>
-                        <div className="text-[10px] text-slate-400">Otorisasi kelola stok, harga produk, & edit item</div>
+                        <div className="text-xs font-bold text-slate-800">Ubah Data Menu &amp; Harga</div>
+                        <div className="text-[10px] text-slate-400">Otorisasi kelola stok, harga produk, &amp; edit item</div>
                       </div>
                     </div>
                     <input 
@@ -272,14 +339,14 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                   </label>
 
                   {/* Permission 4: Reports */}
-                  <label className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 hover:border-slate-300 transition-all select-none">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                  <label className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-all select-none">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
                         <FileText size={14} />
                       </div>
                       <div>
                         <div className="text-xs font-bold text-slate-800">Lihat Laporan Penjualan</div>
-                        <div className="text-[10px] text-slate-400">Akses melihat tab laporan keuangan & analytics</div>
+                        <div className="text-[10px] text-slate-400">Akses melihat tab laporan omzet &amp; keuangan</div>
                       </div>
                     </div>
                     <input 
@@ -296,8 +363,8 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
               <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex items-start gap-3 mt-2">
                 <ShieldAlert className="text-indigo-600 mt-0.5 shrink-0" size={20} />
                 <div>
-                  <h4 className="font-bold text-indigo-900 text-sm">Akses Penuh Superadmin</h4>
-                  <p className="text-xs text-indigo-700 mt-1">Role Admin memiliki kuasa tak terbatas untuk melihat, merubah, dan menghapus seluruh data pada sistem POS.</p>
+                  <h4 className="font-bold text-indigo-900 text-sm">Hak Akses Sovereign ({formData.role})</h4>
+                  <p className="text-xs text-indigo-700 mt-1">Role ini memiliki kuasa penuh atas seluruh data operasional, kasir, inventaris, dan konfigurasi outlet.</p>
                 </div>
               </div>
             )}

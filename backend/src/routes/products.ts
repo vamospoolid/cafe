@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
+import { requireQuota } from '../middlewares/quotaMiddleware';
+import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -33,7 +35,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // Create new product
-router.post('/', authenticateToken, async (req: Request, res: Response) => {
+router.post('/', authenticateToken, requireQuota('product'), async (req: Request, res: Response) => {
   try {
     const { barcode, name, categoryId, subCategoryId, buyPrice, sellPrice, stock, minStock, imageUrl, status, recipeItems } = req.body;
     
@@ -58,6 +60,16 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       },
       include: { category: true, subCategory: true }
     });
+
+    await AuditLogger.log({
+      action: 'PRODUCT_CREATE',
+      resource: 'PRODUCT',
+      resourceId: String(product.id),
+      description: `Menambahkan produk baru "${product.name}" (Rp ${product.sellPrice.toLocaleString('id-ID')}).`,
+      newValue: { name: product.name, barcode: product.barcode, sellPrice: product.sellPrice, stock: product.stock },
+      severity: 'INFO'
+    }, req);
+
     res.status(201).json(product);
   } catch (error) {
     console.error(error);
@@ -71,6 +83,8 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     const { id } = req.params;
     const { barcode, name, categoryId, subCategoryId, buyPrice, sellPrice, stock, minStock, imageUrl, status, recipeItems } = req.body;
     
+    const oldProduct = await prisma.product.findUnique({ where: { id: Number(id) } });
+
     // We use a transaction because we need to clear old recipes and insert new ones
     const product = await prisma.$transaction(async (tx) => {
       const p = await tx.product.update({
@@ -109,6 +123,20 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
       });
     });
 
+    const isPriceChanged = oldProduct && sellPrice !== undefined && Number(oldProduct.sellPrice) !== Number(sellPrice);
+
+    await AuditLogger.log({
+      action: isPriceChanged ? 'PRICE_CHANGE' : 'PRODUCT_UPDATE',
+      resource: 'PRODUCT',
+      resourceId: String(id),
+      description: isPriceChanged
+        ? `Perubahan harga produk "${product?.name}": Rp ${oldProduct?.sellPrice?.toLocaleString('id-ID')} -> Rp ${Number(sellPrice).toLocaleString('id-ID')}`
+        : `Update data produk "${product?.name}".`,
+      oldValue: oldProduct ? { name: oldProduct.name, sellPrice: oldProduct.sellPrice, stock: oldProduct.stock, status: oldProduct.status } : null,
+      newValue: product ? { name: product.name, sellPrice: product.sellPrice, stock: product.stock, status: product.status } : null,
+      severity: isPriceChanged ? 'WARNING' : 'INFO'
+    }, req);
+
     res.json(product);
   } catch (error) {
     console.error(error);
@@ -120,6 +148,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
 router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const oldProduct = await prisma.product.findUnique({ where: { id: Number(id) } });
     
     // Check if product is in any order
     const orderCount = await prisma.orderItem.count({
@@ -132,14 +161,36 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
         where: { id: Number(id) },
         data: { status: 'Tidak Aktif' }
       });
+
+      await AuditLogger.log({
+        action: 'PRODUCT_DEACTIVATE',
+        resource: 'PRODUCT',
+        resourceId: String(id),
+        description: `Produk "${oldProduct?.name}" dinonaktifkan (memiliki riwayat transaksi).`,
+        oldValue: { status: 'Aktif' },
+        newValue: { status: 'Tidak Aktif' },
+        severity: 'WARNING'
+      }, req);
+
       return res.json({ message: 'Product has order history, marked as Tidak Aktif.' });
     }
     
     await prisma.product.delete({
       where: { id: Number(id) }
     });
-    res.json({ message: 'Product deleted successfully' });
+
+    await AuditLogger.log({
+      action: 'PRODUCT_DELETE',
+      resource: 'PRODUCT',
+      resourceId: String(id),
+      description: `Produk "${oldProduct?.name}" dihapus permanen.`,
+      oldValue: oldProduct ? { name: oldProduct.name, sellPrice: oldProduct.sellPrice } : null,
+      severity: 'CRITICAL'
+    }, req);
+
+    res.json({ message: 'Product deleted' });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });

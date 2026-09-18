@@ -10,17 +10,119 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id           Int    @id @default(autoincrement())
-  name         String
-  username     String @unique
-  passwordHash String
-  pin          String @default("123456")
-  role         String // Admin, Kasir, Dapur, Waiter
-  employmentType String @default("FULL_TIME") // FULL_TIME, DAILY_WORKER, PART_TIME
-  permissions  String // JSON stringified
-  status       String @default("Aktif")
+// ─── Core SaaS Multi-Tenant Platform Entities ─────────────────────────────
 
+model Tenant {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique // e.g. "mukiramen" -> mukiramen.codenusa.id
+  customDomain String?  @unique // e.g. "pos.mukiramen.com"
+  logoUrl      String?
+  status       String   @default("ACTIVE") // TRIAL, ACTIVE, PAST_DUE, GRACE_PERIOD, SUSPENDED, CANCELLED
+  planId       String?  // References SaaS Plan
+  plan         Plan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
+  trialEndsAt  DateTime?
+
+  // Platform & Hierarchy Relations
+  outlets             Outlet[]
+  memberships         TenantMembership[]
+  roles               Role[]
+  paymentConfig       TenantPaymentConfig?
+  sessions            UserSession[]
+  featureOverrides    TenantFeature[]
+  subscriptions       Subscription[]
+  invoices            Invoice[]
+  paymentTransactions PaymentTransaction[]
+  usageRecords        UsageRecord[]
+
+  // Business Domain Relations
+  categories           Category[]
+  products             Product[]
+  tables               Table[]
+  reservations         Reservation[]
+  customers            Customer[]
+  pointLogs            PointLog[]
+  orders               Order[]
+  cashFlows            CashFlow[]
+  attendances          Attendance[]
+  settings             Settings[]
+  shifts               Shift[]
+  suppliers            Supplier[]
+  ingredients          Ingredient[]
+  ingredientLogs       IngredientLog[]
+  purchaseOrders       PurchaseOrder[]
+  debts                Debt[]
+  debtPayments         DebtPayment[]
+  leaveRequests        LeaveRequest[]
+  shiftHandovers       ShiftHandover[]
+  kitchenChecklists    KitchenChecklist[]
+  warehouseInbounds    WarehouseInbound[]
+  warehouseRequisitions WarehouseRequisition[]
+  ownerFundTransactions OwnerFundTransaction[]
+  warehouseSales       WarehouseSale[]
+  employeeLoans        EmployeeLoan[]
+  auditLogs            AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([slug])
+}
+
+model Outlet {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  code            String   // e.g. "MUK-01", unique within tenant
+  address         String?
+  phone           String?
+  latitude        Float?
+  longitude       Float?
+  gpsRadiusMeters Float    @default(100)
+  status          String   @default("ACTIVE") // ACTIVE, INACTIVE, CLOSED
+  settings        String?  // JSON stringified outlet specific config
+
+  // Relations scoped to Outlet
+  tables               Table[]
+  reservations         Reservation[]
+  orders               Order[]
+  cashFlows            CashFlow[]
+  attendances          Attendance[]
+  shifts               Shift[]
+  shiftHandovers       ShiftHandover[]
+  kitchenChecklists    KitchenChecklist[]
+  warehouseRequisitions WarehouseRequisition[]
+  ingredientLogs       IngredientLog[]
+  purchaseOrders       PurchaseOrder[]
+  settingsRel          Settings[]
+  auditLogs            AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  username     String   @unique
+  passwordHash String
+  pin          String   @default("123456")
+  role         String   // Legacy role (Admin, Kasir, Dapur, Waiter)
+  employmentType String @default("FULL_TIME") // FULL_TIME, DAILY_WORKER, PART_TIME
+  permissions  String   // Legacy JSON stringified permissions
+  status       String   @default("Aktif")
+  isPlatformAdmin Boolean @default(false)
+
+  // Multi-Tenant Relations
+  memberships      TenantMembership[]
+  sessions         UserSession[]
+
+  // Legacy & Scoped Business Relations
   orders            Order[]
   cashFlows         CashFlow[]
   attendances       Attendance[]
@@ -37,13 +139,313 @@ model User {
   reqsApproved      WarehouseRequisition[] @relation("ReqApprovedBy")
   ownerFundTxns     OwnerFundTransaction[]
   employeeLoans     EmployeeLoan[]
+  auditLogs         AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+model TenantMembership {
+  id             String   @id @default(uuid())
+  userId         Int
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleId         String?
+  role           Role?    @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  pin            String?  // 4-8 digit quick switch PIN within this tenant
+  employmentType String   @default("FULL_TIME") // FULL_TIME, DAILY_WORKER, PART_TIME
+  status         String   @default("ACTIVE") // ACTIVE, INVITED, SUSPENDED, TERMINATED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  tenantId    String?  // Null for system-wide default roles, non-null for custom tenant roles
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String   // OWNER, ADMIN, MANAGER, SUPERVISOR, CASHIER, KITCHEN, WAREHOUSE, HR
+  description String?
+  isSystem    Boolean  @default(false)
+
+  permissions RolePermission[]
+  memberships TenantMembership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. "pos.create", "inventory.adjust", "reports.view"
+  name        String
+  module      String   // POS, INVENTORY, WAREHOUSE, HR, FINANCE, SETTINGS, PLATFORM
+  description String?
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tenantId])
+}
+
+model TenantPaymentConfig {
+  id                String   @id @default(uuid())
+  tenantId          String   @unique
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  isMidtransEnabled Boolean  @default(false)
+  midtransMode      String   @default("SANDBOX") // SANDBOX, PRODUCTION
+  serverKey         String?  // Encrypted AES-256
+  clientKey         String?
+  merchantId        String?
+  enableQRIS        Boolean  @default(true)
+  enableVA          Boolean  @default(false)
+  enableGoPay       Boolean  @default(true)
+  enableShopeePay   Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── SaaS Plans, Features & Entitlements ───────────────────────────────────
+
+model Plan {
+  id           String        @id @default(uuid())
+  code         String        @unique // STARTER, GROWTH, BUSINESS, ENTERPRISE
+  name         String
+  description  String?
+  priceMonthly Float         @default(0)
+  priceYearly  Float         @default(0)
+  maxOutlets   Int           @default(1)
+  maxUsers     Int           @default(3)
+  maxProducts  Int           @default(100)
+  isActive     Boolean       @default(true)
+  
+  features      PlanFeature[]
+  tenants       Tenant[]
+  subscriptions Subscription[]
+  invoices      Invoice[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Feature {
+  id              String          @id @default(uuid())
+  key             String          @unique // e.g. "pos", "kds", "inventory", "warehouse", "crm", "attendance", "payroll", "loans", "multi_outlet", "table_management"
+  name            String
+  module          String          // POS, OPERATIONS, WAREHOUSE, HR, FINANCE, ADVANCED
+  description     String?
+  isCore          Boolean         @default(false) // Core feature is always active on all plans
+  status          String          @default("ACTIVE") // ACTIVE, BETA, DEPRECATED
+
+  plans           PlanFeature[]
+  tenantOverrides TenantFeature[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([module])
+}
+
+model PlanFeature {
+  planId     String
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  featureId  String
+  feature    Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  limitValue Int?     // Optional quota override (e.g., max 500 orders/month)
+
+  createdAt  DateTime @default(now())
+
+  @@id([planId, featureId])
+  @@index([planId])
+  @@index([featureId])
+}
+
+model TenantFeature {
+  id         String    @id @default(uuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  featureId  String
+  feature    Feature   @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  isEnabled  Boolean   @default(true) // true = Grant/Add-on, false = Revoke/Block
+  expiresAt  DateTime?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([tenantId, featureId])
+  @@index([tenantId])
+  @@index([featureId])
+}
+
+// ─── Subscriptions, Invoices & Payment Transactions ────────────────────────
+
+model Subscription {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId             String
+  plan               Plan      @relation(fields: [planId], references: [id])
+  status             String    @default("ACTIVE") // TRIAL, ACTIVE, PAST_DUE, CANCELLED, EXPIRED
+  billingCycle       String    @default("MONTHLY") // MONTHLY, YEARLY
+  amount             Float
+  startDate          DateTime  @default(now())
+  currentPeriodStart DateTime  @default(now())
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean   @default(false)
+
+  invoices           Invoice[]
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model Invoice {
+  id              String               @id @default(uuid())
+  invoiceNumber   String               @unique // e.g. "INV-202609-0001"
+  tenantId        String
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscriptionId  String?
+  subscription    Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planId          String?
+  plan            Plan?                @relation(fields: [planId], references: [id], onDelete: SetNull)
+  amount          Float
+  taxAmount       Float                @default(0)
+  totalAmount     Float
+  status          String               @default("UNPAID") // UNPAID, PAID, VOID, REFUNDED
+  dueDate         DateTime
+  paidAt          DateTime?
+  paymentMethod   String?              // MIDTRANS_SNAP, MIDTRANS_QRIS, MIDTRANS_VA, MANUAL_TRANSFER
+  paymentProofUrl String?
+
+  transactions    PaymentTransaction[]
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model PaymentTransaction {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId       String?
+  invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  orderId         Int?      // Optional for Level 2 POS Order payment
+  order           Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  gateway         String    @default("MIDTRANS") // MIDTRANS, MANUAL
+  gatewayOrderId  String    @unique // e.g. "SAAS-INV-202609-0001" or "POS-ORD-12345"
+  transactionId   String?   // Gateway reference ID
+  paymentType     String?   // qris, bank_transfer, gopay, shopeepay, credit_card
+  amount          Float
+  status          String    @default("PENDING") // PENDING, SUCCESS, FAILED, EXPIRED, CANCELLED
+  snapToken       String?
+  snapRedirectUrl String?
+  rawResponse     String?   // JSON stringified payload from gateway
+  paidAt          DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([gatewayOrderId])
+}
+
+model UsageRecord {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  metric       String   // OUTLETS, USERS, PRODUCTS, ORDERS_MONTHLY, STORAGE_MB
+  period       String   @default("LIFETIME") // e.g. "2026-09" or "LIFETIME"
+  currentValue Int      @default(0)
+  limitValue   Int      @default(0)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, metric, period])
+  @@index([tenantId])
+  @@index([metric])
+}
+
+// ─── Immutable Audit Logging & Activity Trail ──────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId    String?
+  outlet      Outlet?  @relation(fields: [outletId], references: [id], onDelete: SetNull)
+  userId      Int?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName    String?  // Snapshot of user name at time of action
+  userRole    String?  // Snapshot of user role at time of action
+  action      String   // e.g. LOGIN, LOGOUT, VOID_ORDER, REFUND_ORDER, PRICE_CHANGE, STOCK_ADJUST, USER_CREATE, SETTINGS_UPDATE
+  resource    String   // e.g. AUTH, ORDER, PRODUCT, INVENTORY, USER, SETTINGS, BILLING, FINANCE
+  resourceId  String?  // ID or reference of the impacted record
+  description String?  // Human readable message
+  oldValue    String?  // JSON stringified state before modification
+  newValue    String?  // JSON stringified state after modification
+  ipAddress   String?
+  userAgent   String?
+  severity    String   @default("INFO") // INFO, WARNING, CRITICAL
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+// ─── Business Models (Refactored with Tenant & Outlet Scoping) ─────────────
+
 model Category {
   id            Int        @id @default(autoincrement())
+  tenantId      String?
+  tenant        Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name          String
   printerTarget String     @default("KITCHEN") // KITCHEN, BAR, NONE
   parentId      Int?
@@ -52,11 +454,15 @@ model Category {
 
   products    Product[] @relation("ProductCategory")
   subProducts Product[] @relation("ProductSubCategory")
+
+  @@index([tenantId])
 }
 
 model Product {
   id            Int       @id @default(autoincrement())
-  barcode       String?   @unique
+  tenantId      String?
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  barcode       String?
   name          String
   category      Category  @relation("ProductCategory", fields: [categoryId], references: [id])
   categoryId    Int
@@ -75,11 +481,20 @@ model Product {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, barcode])
+  @@index([tenantId])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, status])
 }
 
 model Table {
   id       Int     @id @default(autoincrement())
-  tableNo  String  @unique
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId String?
+  outlet   Outlet? @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  tableNo  String
   name     String? // Keterangan Lokasi
   capacity Int     @default(2)
   status   String  @default("Aktif") // Aktif, Perbaikan
@@ -91,10 +506,19 @@ model Table {
 
   orders       Order[]
   reservations Reservation[]
+
+  @@unique([outletId, tableNo])
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, status])
 }
 
 model Reservation {
   id           Int     @id @default(autoincrement())
+  tenantId     String?
+  tenant       Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId     String?
+  outlet       Outlet? @relation(fields: [outletId], references: [id], onDelete: Cascade)
   customerName String
   phone        String
   date         String // YYYY-MM-DD
@@ -108,13 +532,19 @@ model Reservation {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, date])
 }
 
 model Customer {
   id         Int      @id @default(autoincrement())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name       String
-  phone      String   @unique
-  email      String?  @unique
+  phone      String
+  email      String?
   birthday   String?
   points     Int      @default(0)
   tier       String   @default("Bronze") // Bronze, Silver, Gold
@@ -125,22 +555,35 @@ model Customer {
   orders    Order[]
   pointLogs PointLog[]
   debts     Debt[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([tenantId, totalSpent])
 }
 
 model PointLog {
   id          Int      @id @default(autoincrement())
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerId  Int
   points      Int // Positif untuk Earn/Refund, Negatif untuk Redeem/Void
   type        String // 'Earn', 'Redeem', 'Refund', 'Manual'
   description String?
   createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([customerId])
 }
 
 model Order {
   id            Int     @id @default(autoincrement())
-  orderNumber   String  @unique
-  offlineId     String? @unique
+  tenantId      String?
+  tenant        Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId      String?
+  outlet        Outlet? @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  orderNumber   String
+  offlineId     String?
   customerName  String
   customerPhone String?
 
@@ -149,7 +592,7 @@ model Order {
 
   table          Table?   @relation(fields: [tableId], references: [id])
   tableId        Int?
-  joinedTableIds String? // JSON stringified array of table IDs [2, 3] untuk gabungan multi-meja
+  joinedTableIds String? // JSON stringified array of table IDs [2, 3]
 
   user   User @relation(fields: [userId], references: [id])
   userId Int
@@ -163,16 +606,22 @@ model Order {
   status        String    @default("Pending") // Pending, Paid, Void
   kdsStatus     String    @default("Pending") // Pending, Cooking, Ready, Served
   servedAt      DateTime?
-  paidAt        DateTime? // Waktu transaksi pembayaran diselesaikan (untuk rekonsiliasi shift akurat)
+  paidAt        DateTime? // Waktu transaksi pembayaran diselesaikan
 
   items OrderItem[]
   debt  Debt?
+  paymentTransactions PaymentTransaction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([createdAt])
-  @@index([status])
+  @@unique([tenantId, orderNumber])
+  @@unique([tenantId, offlineId])
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([tenantId, outletId])
   @@index([userId])
   @@index([tableId])
   @@index([customerId])
@@ -180,6 +629,8 @@ model Order {
 
 model OrderItem {
   id        Int     @id @default(autoincrement())
+  tenantId  String?
+  outletId  String?
   order     Order   @relation(fields: [orderId], references: [id])
   orderId   Int
   product   Product @relation(fields: [productId], references: [id])
@@ -190,12 +641,17 @@ model OrderItem {
   subtotal  Float
   notes     String?
 
+  @@index([tenantId])
   @@index([orderId])
   @@index([productId])
 }
 
 model CashFlow {
   id          Int      @id @default(autoincrement())
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId    String?
+  outlet      Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
   type        String // Pemasukan, Pengeluaran
   category    String
   amount      Float
@@ -204,13 +660,19 @@ model CashFlow {
   userId      Int
   date        DateTime @default(now())
 
-  @@index([date])
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, date])
+  @@index([tenantId, type])
   @@index([userId])
-  @@index([type])
 }
 
 model Attendance {
   id             Int       @id @default(autoincrement())
+  tenantId       String?
+  tenant         Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId       String?
+  outlet         Outlet?   @relation(fields: [outletId], references: [id], onDelete: Cascade)
   user           User      @relation(fields: [userId], references: [id])
   userId         Int
   clockIn        DateTime  @default(now())
@@ -229,12 +691,18 @@ model Attendance {
   lateMinutes    Int       @default(0) // Jumlah menit keterlambatan
   notes          String?
 
-  @@index([userId, date])
-  @@index([date])
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, date])
+  @@index([tenantId, userId, date])
 }
 
 model Settings {
   id                       Int     @id @default(autoincrement())
+  tenantId                 String?
+  tenant                   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId                 String?
+  outlet                   Outlet? @relation(fields: [outletId], references: [id], onDelete: Cascade)
   storeName                String  @default("DEMO CAFE")
   phone                    String  @default("")
   address                  String  @default("")
@@ -263,66 +731,71 @@ model Settings {
   ingredientTrackingEnabled Boolean @default(false)
 
   // Kontrol Dapur & Audit Opsional
-  enableKitchenAuditMode    Boolean @default(false) // Mode Audit Detail: Quick Tags & rincian alasan waste di dapur
-  enableStaffMealTracking   Boolean @default(true)  // Kuota & pencatatan konsumsi makan staf resmi (Staff Meal)
+  enableKitchenAuditMode    Boolean @default(false)
+  enableStaffMealTracking   Boolean @default(true)
 
   // Konfigurasi Printer Kasir 80mm
-  printerIp          String  @default("") // IP Address printer kasir
-  printerPort        Int     @default(9100) // Port ESC/POS (default 9100)
+  printerIp          String  @default("")
+  printerPort        Int     @default(9100)
   windowsPrinterName String  @default("")
-  autoPrintKDS       Boolean @default(false) // Legacy toggle
-  autoPrintReceipt   Boolean @default(false) // Auto-print struk saat pembayaran selesai
+  autoPrintKDS       Boolean @default(false)
+  autoPrintReceipt   Boolean @default(false)
 
-  // Konfigurasi Printer Dapur (Kitchen / KOT)
+  // Konfigurasi Printer Dapur & Bar
   kitchenPrinterIp   String  @default("")
   kitchenPrinterPort Int     @default(9100)
   autoPrintKitchen   Boolean @default(false)
-
-  // Konfigurasi Printer Bar (Drinks / BOT)
-  barPrinterIp   String  @default("")
-  barPrinterPort Int     @default(9100)
-  autoPrintBar   Boolean @default(false)
+  barPrinterIp       String  @default("")
+  barPrinterPort     Int     @default(9100)
+  autoPrintBar       Boolean @default(false)
 
   // Konfigurasi Layar Dapur (KDS)
   enableKDS            Boolean @default(true)
   autoCompleteKDSOnPay Boolean @default(true)
 
   // Konfigurasi Absensi & GPS Geofencing Toko
-  storeLatitude       Float   @default(-6.200000) // Default koordinat Jakarta / lokasi toko
+  storeLatitude       Float   @default(-6.200000)
   storeLongitude      Float   @default(106.816666)
-  gpsRadiusMeters     Float   @default(100) // Radius toleransi kehadiran dalam meter
-  enableGpsValidation Boolean @default(true) // Validasi radius GPS
-  enableCameraPhoto   Boolean @default(true) // Wajib foto selfie kamera saat absen
-  workShifts          String? // JSON list shift kerja [{ id, name, start, end, lateTolerance }]
+  gpsRadiusMeters     Float   @default(100)
+  enableGpsValidation Boolean @default(true)
+  enableCameraPhoto   Boolean @default(true)
+  workShifts          String? // JSON list shift kerja
 
-  // Konfigurasi Reward & Punishment Karyawan
-  enableZeroLateBonus    Boolean @default(true) // Aktifkan Bonus Zero Late
-  zeroLateBonusAmount    Float   @default(200000) // Nominal bonus (Rp) jika 0 keterlambatan
-  zeroLateMinAttendance  Int     @default(20) // Syarat minimal hari hadir dalam 1 bulan
-  zeroLateMaxLateAllowed Int     @default(0) // Maksimal frekuensi telat yang ditoleransi (0 = mutlak on-time)
-  enableLatePenalty      Boolean @default(false) // Aktifkan pemotongan keterlambatan
-  latePenaltyType        String  @default("FLAT") // "FLAT" (per kejadian) atau "PER_MINUTE" (per menit telat)
-  latePenaltyAmount      Float   @default(10000) // Nilai denda/potongan (Rp)
-  enableAlphaPenalty     Boolean @default(false) // Aktifkan potongan alpa
-  alphaPenaltyAmount     Float   @default(50000) // Nilai denda per alpa (Rp)
+  // Reward & Punishment Karyawan
+  enableZeroLateBonus    Boolean @default(true)
+  zeroLateBonusAmount    Float   @default(200000)
+  zeroLateMinAttendance  Int     @default(20)
+  zeroLateMaxLateAllowed Int     @default(0)
+  enableLatePenalty      Boolean @default(false)
+  latePenaltyType        String  @default("FLAT")
+  latePenaltyAmount      Float   @default(10000)
+  enableAlphaPenalty     Boolean @default(false)
+  alphaPenaltyAmount     Float   @default(50000)
 
-  // Konfigurasi Gudang Pusat & Transfer Pricing
-  warehouseTransferPricing String @default("AT_COST") // "AT_COST" atau "MARKUP"
-  warehouseMarkupPercent   Float  @default(0) // Margin % jika transfer ke resto memakai markup
+  // Gudang Pusat & Transfer Pricing
+  warehouseTransferPricing String @default("AT_COST")
+  warehouseMarkupPercent   Float  @default(0)
 
-  // Konfigurasi Sistem Bagi Hasil (Profit Sharing)
-  profitSharingOwnerPercent Float  @default(80) // 80% Bagian Owner
-  profitSharingRamenPercent Float  @default(20) // 20% Bagian PJ Muki Ramen
-  profitSharingDrinkPercent Float  @default(20) // 20% Bagian PJ Muki Drink
-  profitSharingOpexMode     String @default("BEFORE_SPLIT") // "BEFORE_SPLIT", "OWNER_COVERED", "SPLIT_50_50"
+  // Bagi Hasil (Profit Sharing)
+  profitSharingOwnerPercent Float  @default(80)
+  profitSharingRamenPercent Float  @default(20)
+  profitSharingDrinkPercent Float  @default(20)
+  profitSharingOpexMode     String @default("BEFORE_SPLIT")
 
-  // Konfigurasi Bonus Harian Omzet Karyawan Full Time
+  // Bonus Harian Omzet Karyawan Full Time
   enableDailyOmzetBonus Boolean @default(true)
-  dailyOmzetTiers       String? // JSON list: [{ minOmzet: 2500000, bonus: 5000 }, ...]
+  dailyOmzetTiers       String?
+
+  @@index([tenantId])
+  @@index([outletId])
 }
 
 model Shift {
   id              Int       @id @default(autoincrement())
+  tenantId        String?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId        String?
+  outlet          Outlet?   @relation(fields: [outletId], references: [id], onDelete: Cascade)
   userId          Int
   user            User      @relation(fields: [userId], references: [id])
   waktuBuka       DateTime  @default(now())
@@ -334,21 +807,25 @@ model Shift {
   selisih         Float?
   status          String    @default("Open") // Open, Closed
 
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, status])
+  @@index([tenantId, waktuBuka])
   @@index([userId])
-  @@index([status])
-  @@index([waktuBuka])
 }
 
 // ─── Inventaris & Pembelian ────────────────────────────────────────────
 
 model Supplier {
-  id      Int     @id @default(autoincrement())
-  name    String
-  contact String? // Nama PIC
-  phone   String?
-  email   String?
-  address String?
-  notes   String?
+  id       Int     @id @default(autoincrement())
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String
+  contact  String?
+  phone    String?
+  email    String?
+  address  String?
+  notes    String?
 
   ingredients       Ingredient[]
   purchaseOrders    PurchaseOrder[]
@@ -356,25 +833,29 @@ model Supplier {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 model Ingredient {
   id          Int       @id @default(autoincrement())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String
-  category    String    @default("FOOD") // FOOD (Dapur), DRINK (Bar), PACKAGING (Kemasan/Showcase)
-  subCategory String? // Sub-kategori: Daging & Seafood, Sayuran Segar, Biji Kopi, dsb.
+  category    String    @default("FOOD") // FOOD, DRINK, PACKAGING
+  subCategory String?
   unit        String // gram, ml, buah, liter, kg
   stock       Float     @default(0)
-  minStock    Float     @default(0) // Batas minimum → alert stok menipis
-  buyPrice    Float     @default(0) // Harga beli per unit (untuk HPP otomatis)
+  minStock    Float     @default(0)
+  buyPrice    Float     @default(0)
   supplier    Supplier? @relation(fields: [supplierId], references: [id])
   supplierId  Int?
 
   // Konversi Satuan Grosir & Gudang Pusat
-  purchaseUnit      String? // Karton, Dus, Karung, Bal, Jerigen
-  conversionRatio   Float   @default(1) // 1 purchaseUnit = X base unit (contoh: 1 Karton = 12 Botol)
-  warehouseStock    Float   @default(0) // Stok fisik di Gudang Pusat dalam base unit
-  warehouseMinStock Float   @default(0) // Batas minimum stok di Gudang Pusat
+  purchaseUnit      String?
+  conversionRatio   Float   @default(1)
+  warehouseStock    Float   @default(0)
+  warehouseMinStock Float   @default(0)
 
   recipes                   RecipeItem[]
   stockLogs                 IngredientLog[]
@@ -386,43 +867,56 @@ model Ingredient {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([tenantId])
   @@index([category])
   @@index([supplierId])
 }
 
 model RecipeItem {
   id            Int        @id @default(autoincrement())
+  tenantId      String?
   product       Product    @relation(fields: [productId], references: [id])
   productId     Int
   ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
   ingredientId  Int
-  qtyPerServing Float // Qty bahan baku per 1 sajian
+  qtyPerServing Float
 
   @@unique([productId, ingredientId])
+  @@index([tenantId])
 }
 
 model IngredientLog {
   id           Int        @id @default(autoincrement())
+  tenantId     String?
+  tenant       Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId     String?
+  outlet       Outlet?    @relation(fields: [outletId], references: [id], onDelete: Cascade)
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
   ingredientId Int
   change       Float // (+) restock/refund, (-) produksi/rusak
-  cost         Float      @default(0) // Nilai rupiah mutasi / kerugian (change * buyPrice)
+  cost         Float      @default(0)
   type         String // 'Produksi', 'Restock', 'Penyesuaian', 'Rusak', 'PO', 'Void', 'Distribusi'
-  reason       String? // 'Busuk / Kadaluarsa', 'Tumpah / Rusak', 'Sisa Trimming / Kupas', 'Kesalahan Masak', 'Lainnya'
+  reason       String?
   description  String?
-  referenceId  String? // Order number / PO number
+  referenceId  String?
   user         User?      @relation(fields: [userId], references: [id])
   userId       Int?
   createdAt    DateTime   @default(now())
 
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, type])
   @@index([ingredientId])
-  @@index([createdAt])
-  @@index([type])
 }
 
 model PurchaseOrder {
   id          Int      @id @default(autoincrement())
-  poNumber    String   @unique // PO-20240628-001
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId    String?
+  outlet      Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  poNumber    String
   supplier    Supplier @relation(fields: [supplierId], references: [id])
   supplierId  Int
   user        User     @relation(fields: [userId], references: [id])
@@ -438,30 +932,32 @@ model PurchaseOrder {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  @@unique([tenantId, poNumber])
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
   @@index([supplierId])
-  @@index([status])
 }
 
 model PurchaseOrderItem {
-  id   Int           @id @default(autoincrement())
-  po   PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  poId Int
-
-  // Simple Mode: tautkan ke produk jadi
-  product   Product? @relation(fields: [productId], references: [id])
-  productId Int?
-
-  // Advanced Mode: tautkan ke bahan baku
-  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id])
+  id           Int           @id @default(autoincrement())
+  tenantId     String?
+  po           PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  poId         Int
+  product      Product?      @relation(fields: [productId], references: [id])
+  productId    Int?
+  ingredient   Ingredient?   @relation(fields: [ingredientId], references: [id])
   ingredientId Int?
 
-  itemName    String // Snapshot nama saat PO dibuat
+  itemName    String
   unit        String
   qtyOrdered  Float
   qtyReceived Float  @default(0)
   unitPrice   Float
   subtotal    Float
 
+  @@index([tenantId])
   @@index([poId])
   @@index([ingredientId])
   @@index([productId])
@@ -469,128 +965,164 @@ model PurchaseOrderItem {
 
 model Debt {
   id         Int           @id @default(autoincrement())
+  tenantId   String?
+  tenant     Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerId Int
   order      Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
   orderId    Int?          @unique
-  amount     Float // Jumlah piutang awal
-  remaining  Float // Sisa piutang yang belum dibayar
-  status     String        @default("Belum Lunas") // "Belum Lunas", "Lunas"
-  dueDate    DateTime? // Tanggal jatuh tempo
+  amount     Float
+  remaining  Float
+  status     String        @default("Belum Lunas")
+  dueDate    DateTime?
   notes      String?
   payments   DebtPayment[]
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
+
+  @@index([tenantId])
 }
 
 model DebtPayment {
   id            Int      @id @default(autoincrement())
+  tenantId      String?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   debt          Debt     @relation(fields: [debtId], references: [id], onDelete: Cascade)
   debtId        Int
   amountPaid    Float
-  paymentMethod String // Tunai, Transfer, Kartu
+  paymentMethod String
   user          User     @relation(fields: [userId], references: [id])
   userId        Int
   createdAt     DateTime @default(now())
+
+  @@index([tenantId])
 }
 
 // ─── Administrasi Staf, Cuti/Izin, Handover & SOP Dapur ─────────────────
 
 model LeaveRequest {
   id         Int      @id @default(autoincrement())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user       User     @relation(fields: [userId], references: [id])
   userId     Int
   type       String // 'Izin', 'Sakit', 'Cuti', 'Tukar Shift', 'Lainnya'
-  startDate  String // YYYY-MM-DD
-  endDate    String // YYYY-MM-DD
+  startDate  String
+  endDate    String
   reason     String
-  photoUrl   String? // Bukti surat dokter / lampiran foto
-  status     String   @default("Pending") // 'Pending', 'Approved', 'Rejected'
-  approvedBy String? // Nama Admin / Manager yang menyetujui
+  photoUrl   String?
+  status     String   @default("Pending")
+  approvedBy String?
   adminNotes String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 model ShiftHandover {
   id              Int      @id @default(autoincrement())
+  tenantId        String?
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId        String?
+  outlet          Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
   user            User     @relation(fields: [userId], references: [id])
   userId          Int
-  shiftName       String // e.g. "Shift Pagi -> Shift Siang"
-  date            String // YYYY-MM-DD
-  cashBalance     Float    @default(0) // Sisa uang kas kecil / laci
-  equipmentStatus String? // e.g. "Semua mesin normal, grinder 2 kalibrasi aman"
-  notes           String // Catatan tugas / pesanan titipan
+  shiftName       String
+  date            String
+  cashBalance     Float    @default(0)
+  equipmentStatus String?
+  notes           String
   createdAt       DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([outletId])
 }
 
 model KitchenChecklist {
   id        Int      @id @default(autoincrement())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId  String?
+  outlet    Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
   type      String // 'OPENING' atau 'CLOSING'
-  date      String // YYYY-MM-DD
+  date      String
   shiftName String?
-  itemsJson String // JSON array [{ title, checked, note }]
+  itemsJson String
   notes     String?
   createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([outletId])
 }
 
 // ─── Manajemen Gudang Pusat (Central Warehouse) & Multi-Satuan ─────────────
 
 model WarehouseInbound {
   id            Int                    @id @default(autoincrement())
-  invoiceNumber String                 @unique // INB-YYYYMMDD-XXX
+  tenantId      String?
+  tenant        Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceNumber String
   supplier      Supplier?              @relation(fields: [supplierId], references: [id])
   supplierId    Int?
-  supplierName  String? // Fallback nama toko/pasar offline
+  supplierName  String?
   user          User                   @relation(fields: [userId], references: [id])
   userId        Int
-  totalAmount   Float // Total modal belanja
-  paymentSource String                 @default("DANA_PRIBADI_OWNER") // DANA_PRIBADI_OWNER, KAS_MUKI
+  totalAmount   Float
+  paymentSource String                 @default("DANA_PRIBADI_OWNER")
   notes         String?
   date          DateTime               @default(now())
-  isVoided      Boolean                @default(false) // Dibatalkan / koreksi salah input
-  voidReason    String? // Alasan pembatalan (audit trail)
-  voidedAt      DateTime? // Waktu pembatalan
+  isVoided      Boolean                @default(false)
+  voidReason    String?
+  voidedAt      DateTime?
   items         WarehouseInboundItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([date])
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId])
+  @@index([tenantId, date])
   @@index([supplierId])
   @@index([userId])
 }
 
 model WarehouseInboundItem {
   id              Int              @id @default(autoincrement())
+  tenantId        String?
   inbound         WarehouseInbound @relation(fields: [inboundId], references: [id], onDelete: Cascade)
   inboundId       Int
   ingredient      Ingredient       @relation(fields: [ingredientId], references: [id])
   ingredientId    Int
   itemName        String
-  purchaseUnit    String // Karton, Karung, Bal, Jerigen
-  purchaseQty     Float // Qty belanja grosir (misal 2 Karton)
-  conversionRatio Float            @default(1) // 12
-  baseQty         Float // purchaseQty * conversionRatio (24 Botol)
-  purchasePrice   Float // Harga per karton (misal Rp 240.000)
-  basePrice       Float // purchasePrice / conversionRatio (Rp 20.000)
-  subtotal        Float // purchaseQty * purchasePrice (Rp 480.000)
+  purchaseUnit    String
+  purchaseQty     Float
+  conversionRatio Float            @default(1)
+  baseQty         Float
+  purchasePrice   Float
+  basePrice       Float
+  subtotal        Float
 
+  @@index([tenantId])
   @@index([inboundId])
   @@index([ingredientId])
 }
 
 model WarehouseRequisition {
   id                Int                        @id @default(autoincrement())
-  reqNumber         String                     @unique // REQ-YYYYMMDD-XXX
+  tenantId          String?
+  tenant            Tenant?                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId          String?
+  outlet            Outlet?                    @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  reqNumber         String
   requestedBy       User                       @relation("ReqRequestedBy", fields: [requestedById], references: [id])
   requestedById     Int
   approvedBy        User?                      @relation("ReqApprovedBy", fields: [approvedById], references: [id])
   approvedById      Int?
-  status            String                     @default("PENDING") // PENDING, APPROVED, RECEIVED, REJECTED, VOIDED
-  totalTransferCost Float                      @default(0) // Total nilai HPP barang yang masuk dapur cabang
+  status            String                     @default("PENDING")
+  totalTransferCost Float                      @default(0)
   notes             String?
   requestedAt       DateTime                   @default(now())
   approvedAt        DateTime?
@@ -602,34 +1134,41 @@ model WarehouseRequisition {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([requestedAt])
-  @@index([status])
+  @@unique([tenantId, reqNumber])
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, requestedAt])
+  @@index([tenantId, status])
   @@index([requestedById])
 }
 
 model WarehouseRequisitionItem {
   id            Int                  @id @default(autoincrement())
+  tenantId      String?
   requisition   WarehouseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
   requisitionId Int
   ingredient    Ingredient           @relation(fields: [ingredientId], references: [id])
   ingredientId  Int
   itemName      String
-  requestedUnit String // Satuan yg dipilih saat request (Karton atau Botol)
-  requestedQty  Float // Jumlah yang diminta
-  baseQty       Float // Konversi ke base unit yang keluar gudang & masuk dapur
-  transferPrice Float // Harga per base unit
-  subtotal      Float // baseQty * transferPrice
+  requestedUnit String
+  requestedQty  Float
+  baseQty       Float
+  transferPrice Float
+  subtotal      Float
 
+  @@index([tenantId])
   @@index([requisitionId])
   @@index([ingredientId])
 }
 
 model OwnerFundTransaction {
   id            Int      @id @default(autoincrement())
+  tenantId      String?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   type          String // CAPITAL_IN, TRANSFER_TO_RESTO, REIMBURSEMENT_PAID
   amount        Float
-  referenceType String? // INBOUND, REQUISITION, REIMBURSEMENT
-  referenceId   String? // Invoice / Req number
+  referenceType String?
+  referenceId   String?
   description   String
   date          DateTime @default(now())
   user          User     @relation(fields: [userId], references: [id])
@@ -637,22 +1176,25 @@ model OwnerFundTransaction {
 
   createdAt DateTime @default(now())
 
-  @@index([date])
+  @@index([tenantId])
+  @@index([tenantId, date])
   @@index([userId])
 }
 
 model WarehouseSale {
   id              Int                 @id @default(autoincrement())
-  invoiceNumber   String              @unique // INV-B2B-YYYYMMDD-XXX
-  customerName    String // Nama Toko / Mitra / Umum
+  tenantId        String?
+  tenant          Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceNumber   String
+  customerName    String
   customerPhone   String?
   customerAddress String?
   saleDate        DateTime            @default(now())
-  paymentMethod   String              @default("TRANSFER") // TRANSFER, CASH_OWNER, TEMPO
-  paymentStatus   String              @default("PAID") // PAID, UNPAID
-  totalAmount     Float // Total Nilai Penjualan
-  totalHppCost    Float // Total Modal Beli (HPP)
-  grossProfit     Float // totalAmount - totalHppCost
+  paymentMethod   String              @default("TRANSFER")
+  paymentStatus   String              @default("PAID")
+  totalAmount     Float
+  totalHppCost    Float
+  grossProfit     Float
   notes           String?
   isVoided        Boolean             @default(false)
   voidReason      String?
@@ -664,70 +1206,75 @@ model WarehouseSale {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([saleDate])
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId])
+  @@index([tenantId, saleDate])
   @@index([soldById])
   @@index([paymentStatus])
 }
 
 model WarehouseSaleItem {
   id              Int           @id @default(autoincrement())
+  tenantId        String?
   sale            WarehouseSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
   saleId          Int
   ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
   ingredientId    Int
   itemName        String
-  saleUnit        String // Karton, Dus, Karung, Jerigen, Botol, dsb.
-  saleQty         Float // Jumlah unit yang dijual
+  saleUnit        String
+  saleQty         Float
   conversionRatio Float         @default(1)
-  baseQty         Float // saleQty * conversionRatio (satuan dasar yg dipotong dari gudang)
-  unitCostPrice   Float // HPP beli per saleUnit
-  unitSalePrice   Float // Harga jual per saleUnit
-  subtotalCost    Float // saleQty * unitCostPrice
-  subtotal        Float // saleQty * unitSalePrice
-  profit          Float // subtotal - subtotalCost
+  baseQty         Float
+  unitCostPrice   Float
+  unitSalePrice   Float
+  subtotalCost    Float
+  subtotal        Float
+  profit          Float
 
+  @@index([tenantId])
   @@index([saleId])
   @@index([ingredientId])
 }
 
-// ─── Manajemen Kasbon / Pinjaman Karyawan (Employee Loans) ─────────────
-
 model EmployeeLoan {
   id          Int       @id @default(autoincrement())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      Int
-  amount      Float     // Jumlah kasbon awal
-  remaining   Float     // Sisa kasbon yang belum lunas
-  date        DateTime  @default(now()) // Tanggal pinjam
-  source      String    @default("KAS_OWNER") // "KAS_OWNER", "KASIR"
-  reason      String?   // Keperluan / catatan pinjaman
-  status      String    @default("Belum Lunas") // "Belum Lunas", "Lunas"
-  approvedBy  String?   // Nama yang menyetujui (Owner / Manager)
-  settledAt   DateTime? // Tanggal saat dilunasi
-  settledNote String?   // Catatan pelunasan (misal: "Dipotong Gaji Periode...")
+  amount      Float
+  remaining   Float
+  date        DateTime  @default(now())
+  source      String    @default("KAS_OWNER")
+  reason      String?
+  status      String    @default("Belum Lunas")
+  approvedBy  String?
+  settledAt   DateTime?
+  settledNote String?
 
   payments    EmployeeLoanPayment[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  @@index([tenantId])
   @@index([userId])
-  @@index([status])
-  @@index([date])
+  @@index([tenantId, status])
+  @@index([tenantId, date])
 }
 
 model EmployeeLoanPayment {
   id            Int          @id @default(autoincrement())
+  tenantId      String?
   loan          EmployeeLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
   loanId        Int
   amountPaid    Float
   paymentDate   DateTime     @default(now())
-  paymentMethod String       @default("POTONG_GAJI") // "POTONG_GAJI", "TUNAI", "TRANSFER"
+  paymentMethod String       @default("POTONG_GAJI")
   notes         String?
-  paidBy        String?      // Nama yang memproses
+  paidBy        String?
   createdAt     DateTime     @default(now())
 
+  @@index([tenantId])
   @@index([loanId])
 }
-
-
