@@ -86,7 +86,9 @@ echo "   -> Generating Prisma Client..."
 npx prisma generate
 
 echo "   -> Applying Database Schema & RLS Migrations..."
-npx prisma db push --skip-generate
+npx prisma db push --accept-data-loss --skip-generate
+npx ts-node prisma/seed_foundation.ts || true
+npx ts-node prisma/seed_features.ts || true
 node dist/src/scripts/apply_rls.js || true
 
 echo "   -> Compiling TypeScript Backend..."
