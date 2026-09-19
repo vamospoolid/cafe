@@ -400,10 +400,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <ShieldAlert size={20} className="shrink-0" />
                   <span>Audit Trail Log</span>
                 </NavLink>
-                <NavLink to="/cabang" title="Cabang & Paket Langganan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <Store size={20} className="shrink-0" />
-                  <span>Cabang &amp; Paket</span>
-                </NavLink>
                 <NavLink to="/pengaturan" title="Pengaturan Sistem" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Settings size={20} className="shrink-0" />
                   <span>Pengaturan Sistem</span>
@@ -461,15 +457,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               
               {/* Dropdown Menu (Hover) */}
               <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                {(posContext?.user?.isPlatformAdmin || posContext?.user?.role === 'OWNER' || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user as any)?.roleId === 'role-system-owner') && (
-                  <NavLink
-                    to="/platform-admin"
-                    className="w-full text-left px-4 py-2.5 text-xs text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 font-extrabold transition-colors border-b border-indigo-100 flex items-center gap-2"
-                  >
-                    <Sparkles size={15} className="text-amber-500" />
-                    <span>SaaS Command Center</span>
-                  </NavLink>
-                )}
                 <button 
                   onClick={() => setIsPinModalOpen(true)}
                   className="w-full text-left px-4 py-3 text-sm text-indigo-600 hover:bg-indigo-50 font-bold transition-colors border-b border-gray-100 flex items-center gap-2"
