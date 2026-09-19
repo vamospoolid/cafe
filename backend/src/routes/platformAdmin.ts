@@ -143,6 +143,7 @@ router.get('/tenants', authenticateToken, requirePlatformAdmin, async (_req: Aut
   try {
     const tenants = await prisma.tenant.findMany({
       include: {
+        plan: true,
         outlets: true,
         subscriptions: {
           include: { plan: true },
@@ -169,17 +170,31 @@ router.get('/tenants', authenticateToken, requirePlatformAdmin, async (_req: Aut
     const formatted = tenants.map(t => {
       const ownerMember = t.memberships.find(m => m.role?.name === 'OWNER' || m.role?.name === 'Admin') || t.memberships[0];
       const currentSub = t.subscriptions[0];
+      const outletPhone = t.outlets[0]?.phone;
+
+      // Prioritas phone: t.phone -> outletPhone -> ''
+      const phone = t.phone || outletPhone || '';
+      // Format WhatsApp compatible number (e.g., 0812... -> 62812...)
+      let waNumber = phone.replace(/[^0-9]/g, '');
+      if (waNumber.startsWith('0')) {
+        waNumber = '62' + waNumber.slice(1);
+      }
 
       return {
         id: t.id,
         name: t.name,
         slug: t.slug,
         status: t.status,
+        ownerName: t.ownerName || ownerMember?.user?.name || ownerMember?.user?.username || 'Owner',
+        phone: t.phone || outletPhone || '',
+        waNumber: waNumber || null,
+        email: t.email || '',
+        notes: t.notes || '',
         createdAt: t.createdAt,
         trialEndsAt: t.trialEndsAt,
         owner: {
           id: ownerMember?.user?.id,
-          name: ownerMember?.user?.name || ownerMember?.user?.username || 'Owner',
+          name: t.ownerName || ownerMember?.user?.name || ownerMember?.user?.username || 'Owner',
           username: ownerMember?.user?.username
         },
         subscription: currentSub ? {
@@ -187,9 +202,22 @@ router.get('/tenants', authenticateToken, requirePlatformAdmin, async (_req: Aut
           status: currentSub.status,
           planName: currentSub.plan?.name || 'Growth Plan',
           planCode: currentSub.plan?.code || 'GROWTH',
+          maxOutlets: currentSub.plan?.maxOutlets ?? 1,
+          maxUsers: currentSub.plan?.maxUsers ?? 3,
+          maxProducts: currentSub.plan?.maxProducts ?? 100,
           billingCycle: currentSub.billingCycle,
           currentPeriodEnd: currentSub.currentPeriodEnd
-        } : null,
+        } : (t.plan ? {
+          id: null,
+          status: t.status,
+          planName: t.plan.name,
+          planCode: t.plan.code,
+          maxOutlets: t.plan.maxOutlets,
+          maxUsers: t.plan.maxUsers,
+          maxProducts: t.plan.maxProducts,
+          billingCycle: 'MONTHLY',
+          currentPeriodEnd: t.trialEndsAt
+        } : null),
         outletsCount: t._count.outlets,
         usersCount: t._count.memberships,
         ordersCount: t._count.orders
@@ -208,16 +236,16 @@ router.get('/tenants', authenticateToken, requirePlatformAdmin, async (_req: Aut
 });
 
 /**
- * POST /api/platform-admin/tenants/:id/status
+ * PATCH & POST /api/platform-admin/tenants/:id/status
  * Suspend, Activate, or set Trial for a tenant
  */
-router.post('/tenants/:id/status', authenticateToken, requirePlatformAdmin, async (req: AuthRequest, res: Response) => {
+const handleStatusUpdate = async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
     const { status } = req.body;
 
-    if (!['ACTIVE', 'SUSPENDED', 'TRIAL', 'INACTIVE'].includes(status)) {
-      return res.status(400).json({ error: 'Status tidak valid' });
+    if (!['ACTIVE', 'SUSPENDED', 'TRIAL', 'GRACE_PERIOD', 'INACTIVE'].includes(status)) {
+      return res.status(400).json({ error: 'Status tidak valid. Pilihan: ACTIVE, SUSPENDED, TRIAL, GRACE_PERIOD' });
     }
 
     const updated = await prisma.tenant.update({
@@ -240,6 +268,116 @@ router.post('/tenants/:id/status', authenticateToken, requirePlatformAdmin, asyn
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Gagal memperbarui status tenant' });
+  }
+};
+router.patch('/tenants/:id/status', authenticateToken, requirePlatformAdmin, handleStatusUpdate);
+router.post('/tenants/:id/status', authenticateToken, requirePlatformAdmin, handleStatusUpdate);
+
+/**
+ * PATCH /api/platform-admin/tenants/:id/plan
+ * Switch / Upgrade SaaS Plan for a tenant and update subscription
+ */
+router.patch('/tenants/:id/plan', authenticateToken, requirePlatformAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const { planId, billingCycle = 'MONTHLY' } = req.body;
+
+    const plan = await prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan) {
+      return res.status(404).json({ error: 'Paket langganan (Plan) tidak ditemukan' });
+    }
+
+    // Update Tenant planId
+    const updatedTenant = await prisma.tenant.update({
+      where: { id },
+      data: { planId }
+    });
+
+    // Update or create active subscription
+    const existingSub = await prisma.subscription.findFirst({
+      where: { tenantId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (existingSub) {
+      await prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          planId,
+          status: 'ACTIVE',
+          billingCycle
+        }
+      });
+    } else {
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + (billingCycle === 'YEARLY' ? 365 : 30) * 24 * 60 * 60 * 1000);
+      const planAmount = (billingCycle === 'YEARLY' ? plan.priceYearly : plan.priceMonthly) || 0;
+      await prisma.subscription.create({
+        data: {
+          tenantId: id,
+          planId,
+          status: 'ACTIVE',
+          billingCycle,
+          amount: planAmount,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd
+        }
+      });
+    }
+
+    await AuditLogger.log({
+      tenantId: id,
+      action: 'SUBSCRIPTION_UPDATE',
+      resource: 'PLATFORM_ADMIN',
+      description: `Mengubah paket tenant ${updatedTenant.name} menjadi ${plan.name} (${plan.code})`,
+      severity: 'WARNING'
+    }, req);
+
+    return res.json({
+      success: true,
+      message: `Paket tenant ${updatedTenant.name} berhasil diubah ke ${plan.name}`,
+      tenant: updatedTenant,
+      plan
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Gagal mengubah paket tenant' });
+  }
+});
+
+/**
+ * PATCH /api/platform-admin/tenants/:id/contact
+ * Update tenant CRM contact details (ownerName, phone, email, notes)
+ */
+router.patch('/tenants/:id/contact', authenticateToken, requirePlatformAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const { ownerName, phone, email, notes } = req.body;
+
+    const updated = await prisma.tenant.update({
+      where: { id },
+      data: {
+        ...(ownerName !== undefined ? { ownerName } : {}),
+        ...(phone !== undefined ? { phone } : {}),
+        ...(email !== undefined ? { email } : {}),
+        ...(notes !== undefined ? { notes } : {})
+      }
+    });
+
+    await AuditLogger.log({
+      tenantId: id,
+      action: 'TENANT_UPDATE',
+      resource: 'PLATFORM_ADMIN',
+      description: `Memperbarui data kontak CRM tenant ${updated.name}`,
+      severity: 'INFO'
+    }, req);
+
+    return res.json({
+      success: true,
+      message: `Data kontak tenant ${updated.name} berhasil diperbarui`,
+      tenant: updated
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Gagal memperbarui kontak tenant' });
   }
 });
 

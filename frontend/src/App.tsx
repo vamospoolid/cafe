@@ -25,6 +25,7 @@ import StaffPWAView from './components/StaffPWAView';
 import WarehouseView from './components/WarehouseView';
 import EmployeeLoanView from './components/EmployeeLoanView';
 import AuditLogView from './components/AuditLogView';
+import TenantOutletHubView from './components/TenantOutletHubView';
 import SaaSPlatformAdminView from './components/SaaSPlatformAdminView';
 import PlatformAdminLayout from './components/PlatformAdminLayout';
 import { POSProvider, POSContext } from './context/POSContext';
@@ -105,6 +106,7 @@ const AppRoutes = () => {
               <Route path="/purchase-order" element={<PurchaseOrderView />} />
               <Route path="/gudang" element={<WarehouseView />} />
               <Route path="/audit-log" element={<AuditLogView />} />
+              <Route path="/cabang" element={<TenantOutletHubView />} />
 
               <Route path="*" element={<div className="p-8 text-center text-muted">Halaman tidak ditemukan...</div>} />
             </Routes>

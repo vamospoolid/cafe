@@ -157,11 +157,15 @@ import paymentRoutes from './routes/payments';
 import auditLogsRoutes from './routes/auditLogs';
 import healthRoutes from './routes/health';
 import platformAdminRoutes from './routes/platformAdmin';
+import outletsRoutes from './routes/outlets';
+import tenantsRoutes from './routes/tenants';
 import { requireFeature } from './middlewares/featureMiddleware';
 
 app.use('/api/health', healthRoutes);
 app.use('/api/platform-admin', platformAdminRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/outlets', outletsRoutes);
+app.use('/api/tenants', tenantsRoutes);
 app.use('/api/features', featureRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);

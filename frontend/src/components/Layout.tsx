@@ -35,7 +35,8 @@ import {
   PanelLeftOpen,
   CreditCard,
   ShieldAlert,
-  Sparkles
+  Sparkles,
+  Store
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -127,6 +128,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/crm': 'Pelanggan & CRM',
     '/laporan': 'Laporan Penjualan',
     '/audit-log': 'Audit Trail & Log Aktivitas',
+    '/cabang': 'Manajemen Cabang & Paket Langganan',
     '/pengaturan': 'Pengaturan Sistem'
   };
   const pageTitle = titleMap[location.pathname] || 'MUKI RAMEN POS';
@@ -397,6 +399,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <NavLink to="/audit-log" title="Audit Trail Log" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <ShieldAlert size={20} className="shrink-0" />
                   <span>Audit Trail Log</span>
+                </NavLink>
+                <NavLink to="/cabang" title="Cabang & Paket Langganan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Store size={20} className="shrink-0" />
+                  <span>Cabang &amp; Paket</span>
                 </NavLink>
                 <NavLink to="/pengaturan" title="Pengaturan Sistem" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Settings size={20} className="shrink-0" />
