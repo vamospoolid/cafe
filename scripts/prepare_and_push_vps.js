@@ -250,6 +250,9 @@ async function runRemoteVpsDeploy() {
 
         # Pastikan PORT tetap 5001 (isolasi mutlak dari Vamos di port 5000)
         sed -i 's/PORT=.*/PORT=5001/g' .env 2>/dev/null || true
+        # Pastikan JWT_SECRET kuat (>= 32 karakter) untuk production boot guard
+        sed -i '/JWT_SECRET=/d' .env 2>/dev/null || true
+        echo 'JWT_SECRET="c0d3nu5a_s44s_jwt_m4st3r_s3cr3t_pr0duct10n_k3y_998877665544332211"' >> .env
 
         echo "   -> Menginstal dependencies backend..."
         npm install --silent
@@ -285,6 +288,9 @@ async function runRemoteVpsDeploy() {
           cp /etc/letsencrypt/live/codenusa.id/fullchain.pem /etc/letsencrypt/live/codenusa.id/chain.pem
         fi
 
+        # Bersihkan konfigurasi lama yang konflik dengan domain yang sama
+        rm -f /etc/nginx/sites-enabled/codepos 2>/dev/null || true
+
         cp "${REMOTE_DIR}/deployment/nginx/codenusa.conf" /etc/nginx/sites-available/codenusa
         ln -sf /etc/nginx/sites-available/codenusa /etc/nginx/sites-enabled/codenusa
         nginx -t
@@ -301,8 +307,8 @@ async function runRemoteVpsDeploy() {
         echo "🔄 [6/6] Me-restart daemon PM2 (${PM2_NAME})..."
         cd "${REMOTE_DIR}"
         if pm2 show "${PM2_NAME}" > /dev/null 2>&1; then
-          echo "   -> Reloading existing ${PM2_NAME}..."
-          pm2 reload ecosystem.config.js --update-env
+          echo "   -> Reloading existing ${PM2_NAME} with updated env..."
+          pm2 restart "${PM2_NAME}" --update-env
         else
           echo "   -> Starting new ${PM2_NAME} via ecosystem.config.js..."
           pm2 start ecosystem.config.js
