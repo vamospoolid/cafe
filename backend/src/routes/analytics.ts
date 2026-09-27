@@ -82,13 +82,35 @@ function getPastDays(days: number, tzOffsetMinutes: number | string = -420) {
   return result;
 }
 
-// Helper to classify food vs drink vs lainnya
+// Helper to classify food vs drink vs lainnya (netral / retail)
 export function getCategoryGroup(prod: any): 'makanan' | 'minuman' | 'lainnya' {
   const target = (prod?.category?.printerTarget || '').toUpperCase();
   const cat = (prod?.category?.name || '').toLowerCase();
   const name = (prod?.name || '').toLowerCase();
+
+  // 1. Explicit Printer Target Priority
   if (target === 'BAR') return 'minuman';
   if (target === 'KITCHEN') return 'makanan';
+  if (target === 'NONE' || target === 'CASHIER') return 'lainnya';
+
+  // 2. Explicit Neutral / Retail Categories
+  if (
+    cat.includes('netral') || cat.includes('umum') || cat.includes('retail') ||
+    cat.includes('titipan') || cat.includes('konsinyasi') || cat.includes('merchandise')
+  ) {
+    return 'lainnya';
+  }
+
+  // 3. Air Mineral / Kemasan Siap Saji (Unless explicitly assigned to BAR/KITCHEN)
+  if (
+    name.includes('air mineral') || name.includes('aqua') ||
+    name.includes('minerale') || name.includes('cleo') ||
+    name === 'mineral' || name === 'air putih' || cat.includes('air mineral')
+  ) {
+    return 'lainnya';
+  }
+
+  // 4. Drink Categories
   if (
     cat.includes('minum') || cat.includes('drink') || cat.includes('beverage') ||
     cat.includes('bevvies') || cat.includes('kopi') || cat.includes('coffee') ||
@@ -96,6 +118,8 @@ export function getCategoryGroup(prod: any): 'makanan' | 'minuman' | 'lainnya' {
     cat.includes('juice') || cat.includes('boba') || cat.includes('latte') ||
     cat.includes('mocktail') || cat.includes('float') || cat.includes('es ')
   ) return 'minuman';
+
+  // 5. Food Categories
   if (
     cat.includes('makan') || cat.includes('food') || cat.includes('ramen') ||
     cat.includes('mie') || cat.includes('nasi') || cat.includes('salties') ||
@@ -103,12 +127,16 @@ export function getCategoryGroup(prod: any): 'makanan' | 'minuman' | 'lainnya' {
     cat.includes('dimsum') || cat.includes('bento') || cat.includes('dessert') ||
     cat.includes('pastry') || cat.includes('sweeties') || cat.includes('roti')
   ) return 'makanan';
+
+  // 6. Name-based Classification
   if (
     name.includes('kopi') || name.includes('coffee') || name.includes('tea') ||
     name.includes('teh') || name.includes('jus') || name.includes('juice') ||
     name.includes('latte') || name.includes('espresso') || name.includes('susu') ||
-    name.includes('ice') || name.includes('es ') || name.includes('drink')
+    name.includes('ice') || name.includes('es ') || name.includes('drink') ||
+    name.includes('sparkling') || name.includes('soda') || name.includes('softdrink')
   ) return 'minuman';
+
   return 'makanan';
 }
 
@@ -201,7 +229,7 @@ router.get('/best-sellers', authenticateToken, async (req: Request, res: Respons
           qty: 'desc'
         }
       },
-      take: 5
+      take: 20 // Take more to allow filtering out neutral products
     });
 
     const productIds = orderItems.map(item => item.productId);
@@ -212,14 +240,19 @@ router.get('/best-sellers', authenticateToken, async (req: Request, res: Respons
       }
     });
 
-    const bestSellers = orderItems.map(item => {
-      const product = products.find(p => p.id === item.productId);
-      return {
-        id: item.productId,
-        name: product?.name || 'Produk Dihapus',
-        qty: item._sum.qty
-      };
-    });
+    const bestSellers = orderItems
+      .map(item => {
+        const product = products.find(p => p.id === item.productId);
+        const group = getCategoryGroup(product);
+        return {
+          id: item.productId,
+          name: product?.name || 'Produk Dihapus',
+          qty: item._sum.qty || 0,
+          group
+        };
+      })
+      .filter(item => item.group === 'makanan' || item.group === 'minuman')
+      .slice(0, 5);
 
     res.json(bestSellers);
   } catch (error) {
@@ -574,7 +607,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     };
 
     const categoryMap: Record<string, { qty: number, revenue: number }> = {};
-    const productMap: Record<number, { name: string, category: string, qty: number, revenue: number, cost: number }> = {};
+    const productMap: Record<number, { name: string, category: string, group?: string, isNeutral?: boolean, qty: number, revenue: number, cost: number }> = {};
 
     let periodDineIn = 0;
     let periodTakeaway = 0;
@@ -656,6 +689,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
           productMap[pId] = {
             name: item.product?.name || 'Produk Dihapus',
             category: catName,
+            group,
+            isNeutral: group === 'lainnya',
             qty: 0,
             revenue: 0,
             cost: 0
@@ -702,6 +737,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
         id: Number(id),
         name: data.name,
         category: data.category,
+        group: data.group,
+        isNeutral: data.isNeutral,
         qty: data.qty,
         revenue: data.revenue,
         cost: data.cost,
@@ -1428,6 +1465,10 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     const drinkPct = settings?.profitSharingDrinkPercent ?? 20;
     const opexMode = settings?.profitSharingOpexMode ?? 'BEFORE_SPLIT'; // 'BEFORE_SPLIT', 'OWNER_COVERED', 'SPLIT_50_50'
 
+    // Owner portion per division (each division is an independent 100% pool)
+    const ownerFoodPct = Math.max(0, 100 - ramenPct);
+    const ownerDrinkPct = Math.max(0, 100 - drinkPct);
+
     // 2. Fetch Orders in range
     const orders = await prisma.order.findMany({
       where: {
@@ -1494,6 +1535,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     // Categorize Expenses from CashFlow
     let foodDirectExpense = 0;
     let drinkDirectExpense = 0;
+    let otherDirectExpense = 0;
     let sharedOpex = 0;
     const expenseList: any[] = [];
 
@@ -1504,6 +1546,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
           foodDirectExpense += cf.amount;
         } else if (division === 'drink') {
           drinkDirectExpense += cf.amount;
+        } else if (division === 'neutral') {
+          otherDirectExpense += cf.amount;
         } else {
           sharedOpex += cf.amount;
         }
@@ -1525,6 +1569,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
 
     const foodGrossProfit = foodRevenue - foodTotalExpense;
     const drinkGrossProfit = drinkRevenue - drinkTotalExpense;
+    const otherGrossProfit = otherRevenue - otherTotalExpense;
 
     let foodSharedOpexPortion = 0;
     let drinkSharedOpexPortion = 0;
@@ -1532,11 +1577,14 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
 
     let foodNetProfit = foodGrossProfit;
     let drinkNetProfit = drinkGrossProfit;
+    const otherNetProfit = otherGrossProfit;
 
     let ownerFoodShare = 0;
     let pjFoodShare = 0;
     let ownerDrinkShare = 0;
     let pjDrinkShare = 0;
+    const ownerOtherShare = otherNetProfit; // 100% Owner
+    const pjOtherShare = 0;
 
     if (opexMode === 'BEFORE_SPLIT') {
       const totalDivRevenue = (foodRevenue + drinkRevenue) || 1;
@@ -1549,19 +1597,19 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       foodNetProfit = foodNetAfterOpex;
       drinkNetProfit = drinkNetAfterOpex;
 
-      ownerFoodShare = foodNetAfterOpex * (ownerPct / 100);
+      ownerFoodShare = foodNetAfterOpex * (ownerFoodPct / 100);
       pjFoodShare = foodNetAfterOpex * (ramenPct / 100);
 
-      ownerDrinkShare = drinkNetAfterOpex * (ownerPct / 100);
+      ownerDrinkShare = drinkNetAfterOpex * (ownerDrinkPct / 100);
       pjDrinkShare = drinkNetAfterOpex * (drinkPct / 100);
     } else if (opexMode === 'OWNER_COVERED') {
       ownerSharedOpexPortion = sharedOpex;
 
       pjFoodShare = foodGrossProfit * (ramenPct / 100);
-      const rawOwnerFood = foodGrossProfit * (ownerPct / 100);
+      const rawOwnerFood = foodGrossProfit * (ownerFoodPct / 100);
 
       pjDrinkShare = drinkGrossProfit * (drinkPct / 100);
-      const rawOwnerDrink = drinkGrossProfit * (ownerPct / 100);
+      const rawOwnerDrink = drinkGrossProfit * (ownerDrinkPct / 100);
 
       ownerFoodShare = rawOwnerFood - (sharedOpex * (foodRevenue / ((foodRevenue + drinkRevenue) || 1)));
       ownerDrinkShare = rawOwnerDrink - (sharedOpex * (drinkRevenue / ((foodRevenue + drinkRevenue) || 1)));
@@ -1574,11 +1622,11 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       pjFoodShare = (foodGrossProfit * (ramenPct / 100)) - foodSharedOpexPortion;
       pjDrinkShare = (drinkGrossProfit * (drinkPct / 100)) - drinkSharedOpexPortion;
 
-      ownerFoodShare = (foodGrossProfit * (ownerPct / 100)) - (sharedOpex * 0.25);
-      ownerDrinkShare = (drinkGrossProfit * (ownerPct / 100)) - (sharedOpex * 0.25);
+      ownerFoodShare = (foodGrossProfit * (ownerFoodPct / 100)) - (sharedOpex * 0.25);
+      ownerDrinkShare = (drinkGrossProfit * (ownerDrinkPct / 100)) - (sharedOpex * 0.25);
     }
 
-    const totalOwnerProfit = ownerFoodShare + ownerDrinkShare;
+    const totalOwnerProfit = ownerFoodShare + ownerDrinkShare + ownerOtherShare;
     const totalPjRamenProfit = pjFoodShare;
     const totalPjDrinkProfit = pjDrinkShare;
     const totalNetProfit = totalOwnerProfit + totalPjRamenProfit + totalPjDrinkProfit;
@@ -1604,6 +1652,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       let dFoodHpp = 0;
       let dDrinkRev = 0;
       let dDrinkHpp = 0;
+      let dOtherRev = 0;
+      let dOtherHpp = 0;
 
       dayOrders.forEach(o => {
         o.items.forEach(item => {
@@ -1616,18 +1666,23 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
           } else if (grp === 'minuman') {
             dDrinkRev += item.subtotal;
             dDrinkHpp += cost;
+          } else {
+            dOtherRev += item.subtotal;
+            dOtherHpp += cost;
           }
         });
       });
 
       let dFoodExp = 0;
       let dDrinkExp = 0;
+      let dOtherExp = 0;
       let dSharedOpex = 0;
 
       dayCashFlows.forEach(cf => {
         const div = getExpenseDivision(cf);
         if (div === 'food') dFoodExp += cf.amount;
         else if (div === 'drink') dDrinkExp += cf.amount;
+        else if (div === 'neutral') dOtherExp += cf.amount;
         else dSharedOpex += cf.amount;
       });
 
@@ -1635,6 +1690,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       const dDrinkCost = dDrinkHpp + dDrinkExp;
       const dFoodNet = dFoodRev - dFoodCost;
       const dDrinkNet = dDrinkRev - dDrinkCost;
+      const dOtherNet = dOtherRev - dOtherCost;
 
       dailyBreakdown.push({
         date: dayDateStr,
@@ -1644,13 +1700,19 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         foodExpense: dFoodCost,
         foodNet: dFoodNet,
         foodPjShare: dFoodNet * (ramenPct / 100),
+        foodOwnerShare: dFoodNet * (ownerFoodPct / 100),
         drinkRevenue: dDrinkRev,
         drinkExpense: dDrinkCost,
         drinkNet: dDrinkNet,
         drinkPjShare: dDrinkNet * (drinkPct / 100),
+        drinkOwnerShare: dDrinkNet * (ownerDrinkPct / 100),
+        otherRevenue: dOtherRev,
+        otherExpense: dOtherCost,
+        otherNet: dOtherNet,
+        otherOwnerShare: dOtherNet,
         sharedOpex: dSharedOpex,
-        totalOmzet: dFoodRev + dDrinkRev,
-        ownerShareTotal: (dFoodNet * (ownerPct / 100)) + (dDrinkNet * (ownerPct / 100)) - (opexMode === 'OWNER_COVERED' ? dSharedOpex : 0)
+        totalOmzet: dFoodRev + dDrinkRev + dOtherRev,
+        ownerShareTotal: (dFoodNet * (ownerFoodPct / 100)) + (dDrinkNet * (ownerDrinkPct / 100)) + dOtherNet - (opexMode === 'OWNER_COVERED' ? dSharedOpex : 0)
       });
 
       iterDate.setUTCDate(iterDate.getUTCDate() + 1);
@@ -1662,6 +1724,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       period: { startDate: sStr, endDate: eStr },
       config: {
         ownerPct,
+        ownerFoodPct,
+        ownerDrinkPct,
         ramenPct,
         drinkPct,
         opexMode
@@ -1677,6 +1741,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         netProfit: foodNetProfit,
         ownerShare: ownerFoodShare,
         pjShare: pjFoodShare,
+        ownerPct: ownerFoodPct,
+        profitSharingPct: ramenPct,
         qtySold: foodQty,
         percentage: totalGrossRevenue > 0 ? Math.round((foodRevenue / totalGrossRevenue) * 100) : 0
       },
@@ -1691,8 +1757,25 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         netProfit: drinkNetProfit,
         ownerShare: ownerDrinkShare,
         pjShare: pjDrinkShare,
+        ownerPct: ownerDrinkPct,
+        profitSharingPct: drinkPct,
         qtySold: drinkQty,
         percentage: totalGrossRevenue > 0 ? Math.round((drinkRevenue / totalGrossRevenue) * 100) : 0
+      },
+      otherDivision: {
+        name: 'PRODUK NETRAL / RETAIL (Air Mineral & Toko)',
+        revenue: otherRevenue,
+        hpp: otherHpp,
+        directExpense: otherDirectExpense,
+        totalExpense: otherTotalExpense,
+        grossProfit: otherGrossProfit,
+        netProfit: otherNetProfit,
+        ownerShare: ownerOtherShare,
+        pjShare: pjOtherShare,
+        ownerPct: 100,
+        profitSharingPct: 0,
+        qtySold: otherQty,
+        percentage: totalGrossRevenue > 0 ? Math.round((otherRevenue / totalGrossRevenue) * 100) : 0
       },
       sharedOpex: {
         total: sharedOpex,
@@ -1704,11 +1787,11 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       summary: {
         totalRevenue: totalGrossRevenue,
         grandTotalRevenue: totalGrossRevenue,
-        totalDirectExpense: foodTotalExpense + drinkTotalExpense,
+        totalDirectExpense: foodTotalExpense + drinkTotalExpense + otherTotalExpense,
         totalSharedOpex: sharedOpex,
         sharedOpexTotal: sharedOpex,
-        totalExpense: foodTotalExpense + drinkTotalExpense + sharedOpex,
-        grandTotalExpense: foodTotalExpense + drinkTotalExpense + sharedOpex,
+        totalExpense: foodTotalExpense + drinkTotalExpense + otherTotalExpense + sharedOpex,
+        grandTotalExpense: foodTotalExpense + drinkTotalExpense + otherTotalExpense + sharedOpex,
         totalNetProfit,
         grandTotalNetProfit: totalNetProfit,
         ownerShare: totalOwnerProfit,
@@ -1726,7 +1809,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
           ownerShare: ownerFoodShare,
           pjShare: pjFoodShare,
           profitSharingPct: ramenPct,
-          ownerPct
+          ownerPct: ownerFoodPct
         },
         drink: {
           revenue: drinkRevenue,
@@ -1737,7 +1820,17 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
           ownerShare: ownerDrinkShare,
           pjShare: pjDrinkShare,
           profitSharingPct: drinkPct,
-          ownerPct
+          ownerPct: ownerDrinkPct
+        },
+        other: {
+          revenue: otherRevenue,
+          expense: otherTotalExpense,
+          grossNet: otherGrossProfit,
+          finalNet: otherNetProfit,
+          ownerShare: ownerOtherShare,
+          pjShare: pjOtherShare,
+          profitSharingPct: 0,
+          ownerPct: 100
         }
       },
       dailyBreakdown

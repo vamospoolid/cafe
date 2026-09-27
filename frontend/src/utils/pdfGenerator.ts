@@ -3311,11 +3311,24 @@ export const exportProfitSharingPDF = async (
   doc.text('I. DISTRIBUSI ALOKASI BAGI HASIL BERSIH (NET PROFIT)', margin, currentY);
   currentY += 2;
 
+  const ramenOwnerPct = food.ownerPct || (100 - (config.ramenPct || 20));
+  const drinkOwnerPct = drink.ownerPct || (100 - (config.drinkPct || 20));
+
   const splitRows = [
     ['Owner (Pemilik Usaha)', 'Divisi Makanan + Minuman', `${config.ownerPct || 80}%`, formatCurrency(summary.ownerShare || 0), 'Laba Bersih gabungan setelah potongan beban'],
     ['Pengelola Makanan', 'Divisi Makanan (Kitchen)', `${config.ramenPct || 20}%`, formatCurrency(summary.pjRamenShare || 0), `Hak ${config.ramenPct || 20}% dari laba bersih Dapur (${formatCurrency(food.netProfit || 0)})`],
     ['Pengelola Minuman', 'Divisi Minuman (Bar)', `${config.drinkPct || 20}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak ${config.drinkPct || 20}% dari laba bersih Bar (${formatCurrency(drink.netProfit || 0)})`]
   ];
+
+  if (summary.other && (summary.other.revenue > 0 || summary.other.finalNet > 0)) {
+    splitRows.push([
+      'Owner (Produk Netral / Retail)',
+      'Air Mineral & Toko',
+      '100%',
+      formatCurrency(summary.other.ownerShare || summary.other.finalNet || 0),
+      `Hak 100% Owner dari laba bersih produk netral (${formatCurrency(summary.other.finalNet || 0)})`
+    ]);
+  }
 
   autoTable(doc, {
     startY: currentY + 1,

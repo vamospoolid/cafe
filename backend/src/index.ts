@@ -294,6 +294,8 @@ app.get('/api/app/version', (_req, res) => {
 });
 app.use('/api', manifestRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/outlets', outletsRoutes);
+app.use('/api/tenants', tenantsRoutes);
 app.use('/api/features', featureRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/support', supportRoutes);

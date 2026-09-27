@@ -242,6 +242,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/laporan': isBengkel ? 'Laporan Bengkel' : isRetail ? 'Laporan Penjualan & Margin Grosir' : isLaundry ? 'Laporan Laundry & Tonase' : 'Laporan Penjualan',
     '/retail/surat-jalan': 'Surat Jalan & Armada Toko',
     '/audit-log': 'Audit Trail & Log Aktivitas',
+    '/cabang': 'Manajemen Cabang & Paket Langganan',
     '/pengaturan': 'Pengaturan Sistem'
   };
   const pageTitle = titleMap[location.pathname] || (posContext?.settings?.storeName ? `${posContext.settings.storeName} POS` : 'CodePOS');
