@@ -1356,7 +1356,7 @@ export const IngredientView: React.FC = () => {
           Desktop: Structured 3-Column Bento Grid
       ────────────────────────────────────────────────────────────── */}
       {/* Mobile Horizontal Pill Scrollable Bar */}
-      <div className="flex sm:hidden items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5 -mx-1 snap-x scroll-px-2 shrink-0">
+      <div className="bento-nav-mobile flex sm:!hidden items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5 -mx-1 snap-x scroll-px-2 shrink-0">
         {[
           { id: 'master', title: isLaundry ? 'Bahan Kimia' : 'Master Bahan', icon: Package, badge: ingredients.length > 0 ? `${ingredients.length}` : null },
           { id: 'daily_usage', title: isLaundry ? 'Konsumsi Kimia' : 'Konsumsi Harian', icon: BarChart3, badge: (usageData?.items?.length || 0) > 0 ? `${usageData?.items?.length}` : null },
@@ -1395,7 +1395,7 @@ export const IngredientView: React.FC = () => {
       </div>
 
       {/* Desktop & Tablet Bento Grid */}
-      <div className="hidden sm:grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3 shrink-0 bg-white rounded-3xl p-3 sm:p-4 border border-slate-200 shadow-sm">
+      <div className="bento-nav-desktop hidden sm:!grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3 shrink-0 bg-white rounded-3xl p-3 sm:p-4 border border-slate-200 shadow-sm">
         {[
           { 
             id: 'master', 

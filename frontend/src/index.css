@@ -2038,3 +2038,21 @@ input:checked + .toggle-slider:before {
 .text-green-400 { color: #34D399; }
 .text-red-400   { color: #F87171; }
 
+/* ── Bahan Baku Bento & Pill Tab Responsive Helpers ─────────── */
+@media (min-width: 640px) {
+  .bento-nav-desktop {
+    display: grid !important;
+  }
+  .bento-nav-mobile {
+    display: none !important;
+  }
+}
+@media (max-width: 639.98px) {
+  .bento-nav-desktop {
+    display: none !important;
+  }
+  .bento-nav-mobile {
+    display: flex !important;
+  }
+}
+
