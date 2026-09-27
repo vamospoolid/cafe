@@ -1,38 +1,106 @@
-import React, { useContext } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useContext, useEffect, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import POSView from './components/POSView';
 import KDSView from './components/KDSView';
 import TableView from './components/TableView';
 import QRCodeView from './components/QRCodeView';
 import ReservationView from './components/ReservationView';
-import ProductView from './components/ProductView';
-import TransactionHistoryView from './components/TransactionHistoryView';
-import ShiftHistoryView from './components/ShiftHistoryView';
 import DashboardView from './components/DashboardView';
-import CashFlowView from './components/CashFlowView';
-import UserView from './components/UserView';
-import AttendanceView from './components/AttendanceView';
-import SettingsView from './components/SettingsView';
 import LoginView from './components/LoginView';
-import ReportView from './components/ReportView';
-import CRMView from './components/CRMView';
+import LandingPageView from './components/LandingPageView';
+import CustomerSupportWidget from './components/CustomerSupportWidget';
 import DineInView from './components/DineInView';
-import IngredientView from './components/IngredientView';
-import SupplierView from './components/SupplierView';
-import PurchaseOrderView from './components/PurchaseOrderView';
 import StaffPWAView from './components/StaffPWAView';
-import WarehouseView from './components/WarehouseView';
-import EmployeeLoanView from './components/EmployeeLoanView';
-import AuditLogView from './components/AuditLogView';
-import SaaSPlatformAdminView from './components/SaaSPlatformAdminView';
 import PlatformAdminLayout from './components/PlatformAdminLayout';
+import DeviceActivationView from './components/DeviceActivationView';
+import InAppUpdateBanner from './components/InAppUpdateBanner';
 import { POSProvider, POSContext } from './context/POSContext';
+import { seedLocalCatalogCache } from './utils/catalogCacheSeeder';
+import FeatureGuard from './components/FeatureGuard';
+import { VerticalProvider, useVertical } from './context/VerticalContext';
+import VerticalGuard from './components/VerticalGuard';
+import ChunkErrorBoundary from './components/ChunkErrorBoundary';
 
+// ─── Code Splitting & Dynamic Imports for Large Modules (Bundle Optimization) ─────
+const BengkelRoutes = React.lazy(() => import('./verticals/bengkel/BengkelRoutes'));
+const RetailRoutes = React.lazy(() => import('./verticals/retail/RetailRoutes'));
+const POSBengkel = React.lazy(() => import('./verticals/bengkel/POSBengkel'));
+const POSRetail = React.lazy(() => import('./verticals/retail/POSRetail'));
+const POSLaundry = React.lazy(() => import('./verticals/laundry/POSLaundry'));
+const LaundryKanbanView = React.lazy(() => import('./verticals/laundry/LaundryKanbanView'));
+const ReportViewAdaptive = React.lazy(() => import('./components/ReportViewAdaptive'));
+const ProductView = React.lazy(() => import('./components/ProductView'));
+const TransactionHistoryView = React.lazy(() => import('./components/TransactionHistoryView'));
+const ShiftHistoryView = React.lazy(() => import('./components/ShiftHistoryView'));
+const CashFlowView = React.lazy(() => import('./components/CashFlowView'));
+const UserView = React.lazy(() => import('./components/UserView'));
+const AttendanceView = React.lazy(() => import('./components/AttendanceView'));
+const SettingsView = React.lazy(() => import('./components/SettingsView'));
+const CRMView = React.lazy(() => import('./components/CRMView'));
+const IngredientView = React.lazy(() => import('./components/IngredientView'));
+const SupplierView = React.lazy(() => import('./components/SupplierView'));
+const PurchaseOrderView = React.lazy(() => import('./components/PurchaseOrderView'));
+const WarehouseView = React.lazy(() => import('./components/WarehouseView'));
+const EmployeeLoanView = React.lazy(() => import('./components/EmployeeLoanView'));
+const AuditLogView = React.lazy(() => import('./components/AuditLogView'));
+const SaaSPlatformAdminView = React.lazy(() => import('./components/SaaSPlatformAdminView'));
+
+const RouteSuspenseFallback = () => (
+  <div className="flex-1 flex flex-col items-center justify-center p-12 min-h-[350px] text-center bg-slate-50 gap-2.5">
+    <div className="w-8 h-8 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+    <span className="text-xs font-bold text-slate-500">Memuat Halaman...</span>
+  </div>
+);
+
+const POSViewAdaptive = () => {
+  const { isBengkel, isRetail, isLaundry } = useVertical();
+  if (isBengkel) {
+    return (
+      <Suspense fallback={<div className="p-8 text-center text-purple-600 font-bold text-xs">Memuat POS Kasir Bengkel...</div>}>
+        <POSBengkel />
+      </Suspense>
+    );
+  }
+  if (isRetail) {
+    return (
+      <Suspense fallback={<div className="p-8 text-center text-emerald-600 font-bold text-xs">Memuat POS Kasir Toko Grosir...</div>}>
+        <POSRetail />
+      </Suspense>
+    );
+  }
+  if (isLaundry) {
+    return (
+      <Suspense fallback={<div className="p-8 text-center text-cyan-600 font-bold text-xs">Memuat POS Kasir Laundry...</div>}>
+        <POSLaundry />
+      </Suspense>
+    );
+  }
+  return <POSView />;
+};
 
 const AppRoutes = () => {
   const context = useContext(POSContext);
-  
+  const navigate = useNavigate();
+
+  // Seed IndexedDB catalog cache setiap kali token berubah (login/refresh)
+  useEffect(() => {
+    if (context?.token && navigator.onLine) {
+      seedLocalCatalogCache(context.token).catch(console.warn);
+    }
+  }, [context?.token]);
+
+  // Rute publik landing page SaaS (bisa diakses langsung kapan saja via /landing atau /landing-page)
+  const isLandingRoute = window.location.pathname === '/landing' || window.location.pathname === '/landing-page';
+  if (isLandingRoute) {
+    return (
+      <>
+        <LandingPageView onNavigateLogin={() => navigate('/login')} />
+        <CustomerSupportWidget />
+      </>
+    );
+  }
+
   // Jika ini rute staff PWA mandiri (bisa dibuka di HP staf/dapur), biarkan terbuka
   const isStaffRoute = window.location.pathname.startsWith('/staff') || window.location.pathname.startsWith('/dapur-app');
   if (isStaffRoute) {
@@ -47,7 +115,6 @@ const AppRoutes = () => {
 
   // Jika ini rute dine-in pelanggan mandiri, biarkan terbuka tanpa login
   const isDineInRoute = window.location.pathname.startsWith('/dinein/table/');
-  
   if (isDineInRoute) {
     return (
       <Routes>
@@ -56,71 +123,122 @@ const AppRoutes = () => {
     );
   }
 
-  // Jika belum login (tidak ada token), arahkan semua ke halaman Login
+  // Jika belum login (tidak ada token), arahkan ke Landing Page atau Login
   if (!context?.token) {
     return (
-      <Routes>
-        <Route path="*" element={<LoginView />} />
-      </Routes>
+      <>
+        <Routes>
+          <Route path="/" element={<LandingPageView />} />
+          <Route path="/login" element={<LoginView />} />
+          <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/login')} />} />
+          <Route path="/register" element={<LandingPageView />} />
+          <Route path="/order" element={<DineInView />} />
+          <Route path="/staff" element={<StaffPWAView />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+        <CustomerSupportWidget />
+        <InAppUpdateBanner />
+      </>
     );
   }
 
   return (
-    <Routes>
-      {/* ─── STANDALONE SAAS DEVELOPER MASTER CONSOLE ─────────────────── */}
-      <Route
-        path="/platform-admin"
-        element={
-          <PlatformAdminLayout>
-            <SaaSPlatformAdminView />
-          </PlatformAdminLayout>
-        }
-      />
+    <ChunkErrorBoundary>
+      <InAppUpdateBanner />
+      <Routes>
+        {/* ─── STANDALONE SAAS DEVELOPER MASTER CONSOLE ─────────────────── */}
+        <Route
+          path="/platform-admin"
+          element={
+            <PlatformAdminLayout>
+              <Suspense fallback={<RouteSuspenseFallback />}>
+                <SaaSPlatformAdminView />
+              </Suspense>
+            </PlatformAdminLayout>
+          }
+        />
 
-      {/* ─── REGULAR CAFE POS & MERCHANT PORTAL (WRAPPED IN CAFE LAYOUT) ─ */}
-      <Route
-        path="/*"
-        element={
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<DashboardView />} />
-              <Route path="/pos" element={<POSView />} />
-              <Route path="/kds" element={<KDSView />} />
-              <Route path="/meja" element={<TableView />} />
-              <Route path="/qrcode" element={<QRCodeView />} />
-              <Route path="/reservasi" element={<ReservationView />} />
-              <Route path="/produk" element={<ProductView />} />
-              <Route path="/kas" element={<CashFlowView />} />
-              <Route path="/karyawan" element={<UserView />} />
-              <Route path="/absensi" element={<AttendanceView />} />
-              <Route path="/kasbon" element={<EmployeeLoanView />} />
-              <Route path="/riwayat" element={<TransactionHistoryView />} />
-              <Route path="/shift" element={<ShiftHistoryView />} />
-              <Route path="/laporan" element={<ReportView />} />
-              <Route path="/crm" element={<CRMView />} />
-              <Route path="/pengaturan" element={<SettingsView />} />
-              <Route path="/bahan-baku" element={<IngredientView />} />
-              <Route path="/supplier" element={<SupplierView />} />
-              <Route path="/purchase-order" element={<PurchaseOrderView />} />
-              <Route path="/gudang" element={<WarehouseView />} />
-              <Route path="/audit-log" element={<AuditLogView />} />
+        {/* ─── REGULAR MERCHANT PORTAL & POS (WRAPPED IN LAYOUT) ─────────── */}
+        <Route
+          path="/*"
+          element={
+            <Layout>
+              <Suspense fallback={<RouteSuspenseFallback />}>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={<DashboardView />} />
+                  <Route path="/pos" element={<POSViewAdaptive />} />
+                  <Route
+                    path="/bengkel/*"
+                    element={
+                      <VerticalGuard allow="BENGKEL">
+                        <Suspense fallback={<div className="p-8 text-center text-purple-600 font-bold text-xs">Memuat modul Bengkel...</div>}>
+                          <BengkelRoutes />
+                        </Suspense>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
+                    path="/retail/*"
+                    element={
+                      <VerticalGuard allow="RETAIL">
+                        <Suspense fallback={<div className="p-8 text-center text-amber-600 font-bold text-xs">Memuat modul Toko Grosir...</div>}>
+                          <RetailRoutes />
+                        </Suspense>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
+                    path="/laundry-kanban"
+                    element={
+                      <VerticalGuard allow="LAUNDRY">
+                        <Suspense fallback={<div className="p-8 text-center text-cyan-600 font-bold text-xs">Memuat Papan Status Cucian...</div>}>
+                          <LaundryKanbanView />
+                        </Suspense>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route path="/kds" element={<FeatureGuard featureKey="pos.kds"><KDSView /></FeatureGuard>} />
+                  <Route path="/meja" element={<FeatureGuard featureKey="pos.tables"><TableView /></FeatureGuard>} />
+                  <Route path="/qrcode" element={<QRCodeView />} />
+                  <Route path="/reservasi" element={<FeatureGuard featureKey="pos.reservations"><ReservationView /></FeatureGuard>} />
+                  <Route path="/produk" element={<ProductView />} />
+                  <Route path="/kas" element={<CashFlowView />} />
+                  <Route path="/karyawan" element={<UserView />} />
+                  <Route path="/absensi" element={<FeatureGuard featureKey="hr.attendance"><AttendanceView /></FeatureGuard>} />
+                  <Route path="/kasbon" element={<FeatureGuard featureKey="finance.loans"><EmployeeLoanView /></FeatureGuard>} />
+                  <Route path="/riwayat" element={<TransactionHistoryView />} />
+                  <Route path="/shift" element={<ShiftHistoryView />} />
+                  <Route path="/laporan" element={<ReportViewAdaptive />} />
+                  <Route path="/crm" element={<FeatureGuard featureKey="crm.loyalty"><CRMView /></FeatureGuard>} />
+                  <Route path="/pengaturan" element={<SettingsView />} />
+                  <Route path="/bahan-baku" element={<FeatureGuard featureKey="inventory.advanced"><IngredientView /></FeatureGuard>} />
+                  <Route path="/supplier" element={<SupplierView />} />
+                  <Route path="/purchase-order" element={<FeatureGuard featureKey="warehouse.management"><PurchaseOrderView /></FeatureGuard>} />
+                  <Route path="/gudang" element={<FeatureGuard featureKey="warehouse.management"><WarehouseView /></FeatureGuard>} />
+                  <Route path="/audit-log" element={<AuditLogView />} />
+                  <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/dashboard')} />} />
 
-              <Route path="*" element={<div className="p-8 text-center text-muted">Halaman tidak ditemukan...</div>} />
-            </Routes>
-          </Layout>
-        }
-      />
-    </Routes>
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </Suspense>
+            </Layout>
+          }
+        />
+      </Routes>
+    </ChunkErrorBoundary>
   );
 };
 
 function App() {
   return (
     <POSProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
+      <VerticalProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </VerticalProvider>
     </POSProvider>
   );
 }

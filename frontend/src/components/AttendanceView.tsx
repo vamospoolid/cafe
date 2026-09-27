@@ -12,6 +12,7 @@ import { toast } from '../utils/alert';
 import { exportIndividualAppraisalPDF } from '../utils/pdfGenerator';
 
 import { getTodayStr, formatLocalDate } from '../utils/dateUtils';
+import { useVertical } from '../context/VerticalContext';
 
 interface IndividualSummary {
   user: {
@@ -113,6 +114,7 @@ export const AttendanceView: React.FC = () => {
   const [runningAutoCutoff, setRunningAutoCutoff] = useState(false);
 
   const posContext = useContext(POSContext);
+  const { isBengkel, isRetail, isLaundry, isCafe } = useVertical();
 
   const handleOpenAdjustModal = (att: any) => {
     setEditingAttendance(att);
@@ -414,8 +416,17 @@ export const AttendanceView: React.FC = () => {
   const totalLateCountMonth = summaries.reduce((acc, s) => acc + (s.stats?.totalTerlambat || 0), 0);
   const totalWorkHoursMonth = summaries.reduce((acc, s) => acc + (s.stats?.totalWorkHours || 0), 0);
 
-  // Role check: Only Admin can view attendance management dashboard
-  if (posContext?.user && posContext.user.role !== 'Admin') {
+  // Role check: Admin, Owner, or Management can view attendance management dashboard
+  const userRole = (posContext?.user?.role || '').toUpperCase();
+  const canAccessAttendance = 
+    userRole === 'ADMIN' || 
+    userRole === 'OWNER' || 
+    userRole === 'MANAGER' || 
+    userRole === 'SUPERADMIN' || 
+    posContext?.hasPermission('employees.view') || 
+    posContext?.hasPermission('employees.manage');
+
+  if (posContext?.user && !canAccessAttendance) {
     return (
       <div className="p-8 text-center flex flex-col items-center justify-center gap-3 min-h-[50vh]">
         <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
@@ -433,142 +444,143 @@ export const AttendanceView: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
         <div className="hidden sm:block">
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
-            <UserCheck className="text-primary" size={24} /> Absensi &amp; Rekapitulasi Staf
+            <UserCheck className="text-indigo-600" size={24} /> Absensi &amp; Rekapitulasi Staf
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">Monitoring kehadiran real-time via GPS geofencing, foto selfie kamera, dan shift rolling</p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        {/* Action Buttons: Terminal Absensi (Primary) & PWA Staf (Secondary) */}
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
           <a
             href="/staff"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full sm:w-auto btn bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 shadow-sm flex items-center justify-center gap-1.5 py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+            className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all text-center"
           >
-            <Smartphone size={15} /> PWA Staf
+            <Smartphone size={14} className="text-amber-600 shrink-0" />
+            <span className="truncate">PWA Staf</span>
           </a>
 
           <button
-            className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all active:scale-95"
+            type="button"
             onClick={() => setIsModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 py-2.5 px-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-200 active:scale-95 transition-all cursor-pointer text-center"
           >
-            <Fingerprint size={16} /> Terminal Absensi
+            <Fingerprint size={15} className="shrink-0" />
+            <span className="truncate">Terminal Absensi</span>
           </button>
         </div>
       </div>
 
-        {/* TAB CONTROLS (HORIZONTALLY SCROLLABLE ON MOBILE) */}
-        <div className="overflow-x-auto no-scrollbar pb-1">
-          <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-max min-w-full sm:w-fit">
+      {/* TAB CONTROLS (HORIZONTALLY SCROLLABLE PILL BAR ON MOBILE) */}
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-0.5 -mx-1 snap-x scroll-px-2 shrink-0">
+        {[
+          { id: 'daily', title: 'Log Harian', fullTitle: 'Log Harian', icon: Clock },
+          { id: 'individual', title: 'Rekap Staf', fullTitle: 'Rekapitulasi Bulanan', icon: User },
+          { 
+            id: 'leaves', 
+            title: 'Izin & Cuti', 
+            fullTitle: 'Pengajuan Izin & Sakit', 
+            icon: FileText,
+            badge: leavesList.filter(l => l.status === 'Pending').length > 0 ? `${leavesList.filter(l => l.status === 'Pending').length}` : null
+          },
+          { 
+            id: 'sop_handover', 
+            title: isBengkel ? 'SOP Bengkel' : isRetail ? 'SOP Toko' : isLaundry ? 'SOP Cuci' : 'SOP Dapur', 
+            fullTitle: isBengkel ? 'SOP Bengkel & Handover' : isRetail ? 'SOP Toko & Handover' : isLaundry ? 'SOP Cuci & Handover' : 'SOP Dapur & Handover', 
+            icon: Sparkles 
+          },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isSelected = activeTab === tab.id;
+          return (
             <button
-              onClick={() => setActiveTab('daily')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'daily'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`snap-start shrink-0 flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer ${
+                isSelected
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-600/30'
+                  : 'bg-white border border-slate-200/90 text-slate-700 hover:bg-slate-50'
               }`}
             >
-              <Clock size={15} />
-              <span>Log Harian</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('individual')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'individual'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <User size={15} />
-              <span>Rekapitulasi Bulanan</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('leaves')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'leaves'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileText size={15} />
-              <span>Pengajuan Izin & Sakit</span>
-              {leavesList.filter(l => l.status === 'Pending').length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center shadow-sm">
-                  {leavesList.filter(l => l.status === 'Pending').length}
+              <Icon size={14} className={isSelected ? 'text-white' : 'text-indigo-600'} />
+              <span className="sm:hidden">{tab.title}</span>
+              <span className="hidden sm:inline">{tab.fullTitle || tab.title}</span>
+              {tab.badge && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700 border border-rose-200'
+                }`}>
+                  {tab.badge}
                 </span>
               )}
             </button>
-            <button
-              onClick={() => setActiveTab('sop_handover')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'sop_handover'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Sparkles size={15} />
-              <span>SOP Dapur & Handover</span>
-            </button>
-          </div>
-        </div>
+          );
+        })}
+      </div>
 
-        {/* ─────────────────────────────────────────────────────────────
-            TAB 1: LOG HARIAN ABSENSI
-            ───────────────────────────────────────────────────────────── */}
-        {activeTab === 'daily' && (
-          <div className="space-y-4">
-            {/* KPI STATS HARIAN */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm text-center sm:text-left">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Hadir</span>
-                <span className="text-xl sm:text-2xl font-black text-indigo-600 mt-0.5 block">{totalHadirToday}</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm text-center sm:text-left">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Tepat Waktu</span>
-                <span className="text-xl sm:text-2xl font-black text-emerald-600 mt-0.5 block">{onTimeToday}</span>
-              </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm text-center sm:text-left">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Terlambat</span>
-                <span className="text-xl sm:text-2xl font-black text-rose-600 mt-0.5 block">{lateToday}</span>
-              </div>
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 1: LOG HARIAN ABSENSI
+          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'daily' && (
+        <div className="space-y-3.5 sm:space-y-4">
+          {/* KPI STATS HARIAN */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs text-center flex flex-col justify-between">
+              <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider block truncate">Total Hadir</span>
+              <span className="text-lg sm:text-2xl font-black text-indigo-600 mt-1 block">{totalHadirToday}</span>
+              <span className="text-[9px] sm:text-[10px] text-slate-400 font-medium block truncate mt-0.5">staf aktif</span>
             </div>
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-emerald-200/80 shadow-xs text-center flex flex-col justify-between bg-gradient-to-b from-white to-emerald-50/20">
+              <span className="text-[9px] sm:text-[10px] font-black text-emerald-700 uppercase tracking-wider block truncate">Tepat Waktu</span>
+              <span className="text-lg sm:text-2xl font-black text-emerald-600 mt-1 block">{onTimeToday}</span>
+              <span className="text-[9px] sm:text-[10px] text-emerald-700/80 font-medium block truncate mt-0.5">sesuai shift</span>
+            </div>
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-xs text-center flex flex-col justify-between bg-gradient-to-b from-white to-rose-50/20">
+              <span className="text-[9px] sm:text-[10px] font-black text-rose-700 uppercase tracking-wider block truncate">Terlambat</span>
+              <span className="text-lg sm:text-2xl font-black text-rose-600 mt-1 block">{lateToday}</span>
+              <span className="text-[9px] sm:text-[10px] text-rose-700/80 font-medium block truncate mt-0.5">lewat batas</span>
+            </div>
+          </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <Calendar size={18} className="text-slate-400 shrink-0" />
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden p-3.5 sm:p-6 space-y-3.5 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 border-b border-slate-100 pb-3 sm:pb-4">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 sm:w-auto">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   <input
                     type="date"
-                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                    className="w-full sm:w-auto pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-colors"
                     value={dateFilter}
                     onChange={e => setDateFilter(e.target.value)}
                   />
-                  <button
-                    onClick={() => setDateFilter(getTodayStr())}
-                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-bold text-slate-700"
-                  >
-                    Hari Ini
-                  </button>
                 </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    onClick={handleRunAutoCutoff}
-                    disabled={runningAutoCutoff}
-                    className="flex-1 sm:flex-initial px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
-                    title="Tutup otomatis presensi yang belum clock-out kemarin"
-                  >
-                    <Timer size={14} className="text-amber-600" />
-                    {runningAutoCutoff ? 'Memproses...' : 'Auto Cut-off EOD'}
-                  </button>
-                  <button
-                    onClick={exportDailyPDF}
-                    className="flex-1 sm:flex-initial justify-center px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
-                  >
-                    <FileText size={15} className="text-rose-500" /> Export PDF
-                  </button>
-                </div>
+                <button
+                  onClick={() => setDateFilter(getTodayStr())}
+                  className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold active:scale-95 transition-all shrink-0 cursor-pointer"
+                >
+                  Hari Ini
+                </button>
               </div>
+
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+                <button
+                  onClick={handleRunAutoCutoff}
+                  disabled={runningAutoCutoff}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/90 rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+                  title="Tutup otomatis presensi yang belum clock-out kemarin"
+                >
+                  <Timer size={14} className="text-amber-600 shrink-0" />
+                  <span className="truncate">{runningAutoCutoff ? 'Proses...' : 'Cut-off EOD'}</span>
+                </button>
+                <button
+                  onClick={exportDailyPDF}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+                >
+                  <FileText size={14} className="text-rose-500 shrink-0" />
+                  <span className="truncate">Export PDF</span>
+                </button>
+              </div>
+            </div>
 
               {/* Mobile Cards View (< 640px) */}
               <div className="sm:hidden divide-y divide-slate-100">
@@ -786,41 +798,46 @@ export const AttendanceView: React.FC = () => {
             TAB 2: REKAPITULASI BULANAN INDIVIDU KARYAWAN
             ───────────────────────────────────────────────────────────── */}
         {activeTab === 'individual' && (
-          <div className="space-y-4">
+          <div className="space-y-3.5 sm:space-y-4">
             {/* KPI STATS BULANAN */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm text-center sm:text-left">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Staf</span>
-                <span className="text-xl sm:text-2xl font-black text-indigo-600 mt-0.5 block">{totalEmployeesSummary}</span>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs text-center flex flex-col justify-between">
+                <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider block truncate">Total Staf</span>
+                <span className="text-lg sm:text-2xl font-black text-indigo-600 mt-1 block">{totalEmployeesSummary}</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-400 font-medium block truncate mt-0.5">terdaftar</span>
               </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm text-center sm:text-left">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Telat Bulan Ini</span>
-                <span className="text-xl sm:text-2xl font-black text-rose-600 mt-0.5 block">{totalLateCountMonth}x</span>
+              <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-xs text-center flex flex-col justify-between bg-gradient-to-b from-white to-rose-50/20">
+                <span className="text-[9px] sm:text-[10px] font-black text-rose-700 uppercase tracking-wider block truncate">Total Telat</span>
+                <span className="text-lg sm:text-2xl font-black text-rose-600 mt-1 block">{totalLateCountMonth}x</span>
+                <span className="text-[9px] sm:text-[10px] text-rose-700/80 font-medium block truncate mt-0.5">bulan ini</span>
               </div>
-              <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm text-center sm:text-left">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Jam Kerja</span>
-                <span className="text-xl sm:text-2xl font-black text-emerald-600 mt-0.5 block">{totalWorkHoursMonth} Jam</span>
+              <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-emerald-200/80 shadow-xs text-center flex flex-col justify-between bg-gradient-to-b from-white to-emerald-50/20">
+                <span className="text-[9px] sm:text-[10px] font-black text-emerald-700 uppercase tracking-wider block truncate">Jam Kerja</span>
+                <span className="text-lg sm:text-2xl font-black text-emerald-600 mt-1 block">{totalWorkHoursMonth} Jam</span>
+                <span className="text-[9px] sm:text-[10px] text-emerald-700/80 font-medium block truncate mt-0.5">akumulasi</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <Calendar size={18} className="text-slate-400 shrink-0" />
-                  <span className="text-xs font-bold text-slate-500">Periode Bulan:</span>
-                  <input
-                    type="month"
-                    className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
-                    value={monthFilter}
-                    onChange={e => setMonthFilter(e.target.value)}
-                  />
+            <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden p-3.5 sm:p-6 space-y-3.5 sm:space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 border-b border-slate-100 pb-3 sm:pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 sm:w-auto">
+                    <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <input
+                      type="month"
+                      className="w-full sm:w-auto pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+                      value={monthFilter}
+                      onChange={e => setMonthFilter(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <button
                   onClick={exportSummaryPDF}
-                  className="w-full sm:w-auto justify-center px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all flex items-center gap-2"
+                  className="flex items-center justify-center gap-1.5 py-2 px-3.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
                 >
-                  <FileText size={15} className="text-rose-500" /> Export Rekapitulasi PDF
+                  <FileText size={14} className="text-rose-500 shrink-0" />
+                  <span>Export Rekapitulasi PDF</span>
                 </button>
               </div>
 
@@ -1196,7 +1213,7 @@ export const AttendanceView: React.FC = () => {
                   <div className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
                     <h4 className="text-xs font-black text-rose-900 uppercase tracking-wider flex items-center gap-2">
                       <TrendingUp size={16} className="text-rose-600" />
-                      3. Pilar Pengendalian Stock Loss & Dapur
+                      3. Pilar Pengendalian Stock Loss &amp; {isBengkel ? 'Bengkel' : isRetail ? 'Toko' : isLaundry ? 'Laundry' : 'Dapur'}
                     </h4>
                     {selectedUserSummary.kitchenStats && selectedUserSummary.kitchenStats.totalLossIncidents > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
@@ -1303,20 +1320,21 @@ export const AttendanceView: React.FC = () => {
             TAB 3: PENGAJUAN IZIN & SAKIT KARYAWAN (APPROVAL FLOW)
             ───────────────────────────────────────────────────────────── */}
         {activeTab === 'leaves' && (
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden p-3.5 sm:p-6 space-y-3.5 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 border-b border-slate-100 pb-3 sm:pb-4">
               <div>
-                <h3 className="text-base font-black text-slate-800">Daftar Pengajuan Izin & Sakit</h3>
-                <p className="text-xs text-slate-500">Persetujuan atau penolakan permohonan izin karyawan secara online.</p>
+                <h3 className="text-sm sm:text-base font-black text-slate-800">Daftar Pengajuan Izin &amp; Sakit</h3>
+                <p className="text-[11px] sm:text-xs text-slate-500">Persetujuan atau penolakan permohonan izin staf online.</p>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+              {/* Status Filter Tabs (Scrollable on Mobile) */}
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-slate-100 p-1 rounded-xl shrink-0">
                 {(['ALL', 'Pending', 'Approved', 'Rejected'] as const).map(st => (
                   <button
                     key={st}
                     onClick={() => setLeaveStatusFilter(st)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                      leaveStatusFilter === st ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                      leaveStatusFilter === st ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
                     {st === 'ALL' ? 'Semua' : st === 'Pending' ? 'Menunggu' : st === 'Approved' ? 'Disetujui' : 'Ditolak'}
@@ -1330,11 +1348,11 @@ export const AttendanceView: React.FC = () => {
                 Tidak ada data pengajuan izin dengan filter ini.
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2.5 sm:space-y-3">
                 {leavesList.map(item => (
                   <div
                     key={item.id}
-                    className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 shadow-xs"
                   >
                     <div className="space-y-1.5 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1370,18 +1388,18 @@ export const AttendanceView: React.FC = () => {
                     </div>
 
                     {item.status === 'Pending' && (
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-200/60">
                         <button
                           type="button"
                           onClick={() => handleUpdateLeaveStatus(item.id, 'Approved')}
-                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95"
+                          className="flex items-center justify-center py-2 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-xs transition-all active:scale-95 cursor-pointer text-center"
                         >
                           ✓ Setujui
                         </button>
                         <button
                           type="button"
                           onClick={() => handleUpdateLeaveStatus(item.id, 'Rejected')}
-                          className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-sm transition-all active:scale-95"
+                          className="flex items-center justify-center py-2 px-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-xs transition-all active:scale-95 cursor-pointer text-center"
                         >
                           ✕ Tolak
                         </button>
@@ -1395,18 +1413,18 @@ export const AttendanceView: React.FC = () => {
         )}
 
         {/* ─────────────────────────────────────────────────────────────
-            TAB 4: MONITORING SOP DAPUR & HANDOVER SERAH TERIMA SHIFT
+            TAB 4: MONITORING SOP & HANDOVER SERAH TERIMA SHIFT
             ───────────────────────────────────────────────────────────── */}
         {activeTab === 'sop_handover' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Checklist SOP Harian */}
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                  <Sparkles size={16} className="text-indigo-600" />
-                  <span>Kepatuhan SOP Buka / Tutup Dapur Hari Ini</span>
+            <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-3.5 sm:space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
+                  <Sparkles size={16} className="text-indigo-600 shrink-0" />
+                  <span>Kepatuhan SOP Buka / Tutup {isBengkel ? 'Bengkel' : isRetail ? 'Toko & Gudang' : isLaundry ? 'Laundry' : 'Dapur'} Hari Ini</span>
                 </h3>
-                <span className="text-xs font-bold text-slate-400">{todaySopList.length} Sesi</span>
+                <span className="text-[11px] font-bold text-slate-400 shrink-0">{todaySopList.length} Sesi</span>
               </div>
 
               {todaySopList.length === 0 ? (
@@ -1443,13 +1461,13 @@ export const AttendanceView: React.FC = () => {
             </div>
 
             {/* Handover Serah Terima Shift */}
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                  <UserCheck size={16} className="text-indigo-600" />
+            <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-3.5 sm:p-6 space-y-3.5 sm:space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-xs sm:text-sm font-black text-slate-800 flex items-center gap-2">
+                  <UserCheck size={16} className="text-indigo-600 shrink-0" />
                   <span>Log Serah Terima (Handover) Shift</span>
                 </h3>
-                <span className="text-xs font-bold text-slate-400">{handoverList.length} Catatan</span>
+                <span className="text-[11px] font-bold text-slate-400 shrink-0">{handoverList.length} Catatan</span>
               </div>
 
               {handoverList.length === 0 ? (

@@ -304,8 +304,20 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2rem;
+  padding: 0 1.5rem;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    height: 3.5rem !important;
+    padding: 0 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+  .topbar-actions {
+    gap: 0.35rem !important;
+  }
 }
 
 .page-title {
@@ -389,7 +401,19 @@ body {
 
 @media (max-width: 768px) {
   .page-content {
-    padding-bottom: 6.5rem !important;
+    padding-bottom: 4.5rem;
+  }
+
+  /* Khusus Halaman Kasir / POS: Fit to viewport tanpa sisa whitespace raksasa di bawah */
+  .page-content.page-content-pos,
+  .page-content:has(.pos-layout) {
+    padding-bottom: 4rem !important; /* Presisi setinggi bottom navigation bar mobile (h-16 / 64px) */
+    overflow: hidden !important;
+  }
+
+  .pos-main {
+    padding: 0.75rem !important;
+    gap: 0.75rem !important;
   }
 }
 
@@ -1636,4 +1660,381 @@ input:checked + .toggle-slider:before {
     display: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   OFFLINE STATUS BAR & SYNC PANEL
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Status Bar ─────────────────────────────────────────────── */
+.offline-status-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  padding: 7px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.3s ease;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+}
+
+.offline-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1400px;
+  margin: 0 auto;
+  gap: 8px;
+}
+
+.offline-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.offline-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.85;
+}
+
+.offline-bar-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.offline-bar-text {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.offline-bar-count { opacity: 0.9; }
+.offline-bar-hint  { opacity: 0.65; font-size: 11px; }
+
+/* Color Variants */
+.offline-bar-red {
+  background: linear-gradient(90deg, #7F1D1D 0%, #991B1B 100%);
+  color: #FEE2E2;
+  animation: bar-pulse-red 2.5s ease-in-out infinite;
+}
+
+.offline-bar-yellow {
+  background: linear-gradient(90deg, #78350F 0%, #92400E 100%);
+  color: #FEF3C7;
+}
+
+.offline-bar-orange {
+  background: linear-gradient(90deg, #7C2D12 0%, #9A3412 100%);
+  color: #FFEDD5;
+}
+
+@keyframes bar-pulse-red {
+  0%, 100% { background: linear-gradient(90deg, #7F1D1D 0%, #991B1B 100%); }
+  50%       { background: linear-gradient(90deg, #991B1B 0%, #B91C1C 100%); }
+}
+
+/* Pulse Dot */
+.offline-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pulse-red {
+  background: #F87171;
+  box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.6);
+  animation: dot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.6); }
+  60%  { box-shadow: 0 0 0 8px rgba(248, 113, 113, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+}
+
+/* Sync Button inside bar */
+.offline-sync-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.offline-sync-btn:hover { background: rgba(255,255,255,0.28); }
+
+/* Spin animation */
+.spin-anim {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Sync Panel Overlay ──────────────────────────────────────── */
+.offline-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9998;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 36px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.offline-panel {
+  background: #1C1C2E;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  animation: slideDown 0.25s ease;
+  color: #E2E8F0;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-16px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.offline-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.offline-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #F1F5F9;
+}
+
+.offline-panel-close {
+  background: rgba(255,255,255,0.08);
+  border: none;
+  border-radius: 8px;
+  color: #94A3B8;
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.offline-panel-close:hover {
+  background: rgba(255,255,255,0.15);
+  color: #F1F5F9;
+}
+
+/* ── Stat Grid ──────────────────────────────────────────────── */
+.offline-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.offline-stat-card {
+  background: rgba(255,255,255,0.05);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #94A3B8;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.stat-pending .stat-value  { color: #FBBF24; }
+.stat-synced .stat-value   { color: #34D399; }
+.stat-total .stat-value    { color: #818CF8; }
+
+/* ── Action Buttons ─────────────────────────────────────────── */
+.offline-panel-actions {
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.offline-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  flex: 1;
+  justify-content: center;
+}
+
+.offline-action-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.offline-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-sync   { background: linear-gradient(135deg, #7C3AED, #6D28D9); color: #fff; }
+.btn-export { background: rgba(255,255,255,0.07); color: #94A3B8; border: 1px solid rgba(255,255,255,0.1); }
+
+/* ── Sections ───────────────────────────────────────────────── */
+.offline-section {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.offline-section:last-child { border-bottom: none; }
+
+.offline-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #64748B;
+  margin-bottom: 10px;
+}
+
+.offline-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  color: #64748B;
+  font-size: 13px;
+}
+
+/* ── Orders List ────────────────────────────────────────────── */
+.offline-orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.offline-order-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 10px 12px;
+  transition: background 0.2s;
+}
+
+.offline-order-item.status-failed { border-color: rgba(248, 113, 113, 0.3); background: rgba(127,29,29,0.2); }
+.offline-order-item.status-synced { border-color: rgba(52, 211, 153, 0.2); opacity: 0.7; }
+.offline-order-item.status-syncing { border-color: rgba(251, 191, 36, 0.3); }
+
+.order-item-top, .order-item-mid, .order-item-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.order-item-mid { margin-top: 4px; }
+.order-item-bottom { margin-top: 3px; opacity: 0.65; font-size: 11px; }
+
+.order-number   { font-weight: 700; font-size: 13px; color: #F1F5F9; }
+.order-customer { font-size: 12px; color: #94A3B8; }
+.order-total    { font-weight: 700; font-size: 13px; color: #34D399; }
+.order-time     { font-size: 11px; color: #64748B; }
+.order-items-count { font-size: 11px; color: #64748B; }
+.order-error    { font-size: 10px; color: #F87171; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Status Badges ──────────────────────────────────────────── */
+.offline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-pending  { background: rgba(251,191,36,0.15);  color: #FBBF24; border: 1px solid rgba(251,191,36,0.3); }
+.badge-syncing  { background: rgba(99,102,241,0.15);  color: #818CF8; border: 1px solid rgba(99,102,241,0.3); }
+.badge-synced   { background: rgba(52,211,153,0.12);  color: #34D399; border: 1px solid rgba(52,211,153,0.25); }
+.badge-failed   { background: rgba(248,113,113,0.15); color: #F87171; border: 1px solid rgba(248,113,113,0.3); }
+
+/* ── Sync Logs ──────────────────────────────────────────────── */
+.sync-logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.sync-log-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+}
+
+.log-icon    { flex-shrink: 0; font-size: 13px; }
+.log-detail  { flex: 1; color: #CBD5E1; }
+.log-time    { flex-shrink: 0; font-size: 10px; color: #64748B; }
+.log-success { border-left: 2px solid #34D399; }
+.log-error   { border-left: 2px solid #F87171; }
+
+/* ── text-green-400 helper (for inline usage) ───────────────── */
+.text-green-400 { color: #34D399; }
+.text-red-400   { color: #F87171; }
 

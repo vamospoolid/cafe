@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
-import { ChefHat, Clock, CheckCircle, Bell, ArrowRight, Flame, CheckCircle2, User, Undo2, RotateCcw, Volume2, X } from 'lucide-react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import { ChefHat, Clock, CheckCircle, Bell, ArrowRight, Flame, CheckCircle2, User, Undo2, RotateCcw, Volume2, VolumeX, X } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import useSocket from '../hooks/useSocket';
 
@@ -14,12 +14,35 @@ const KDSView = () => {
   const prevOrderIds = useRef<number[]>([]);
   const socket = useSocket();
 
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    return localStorage.getItem('kds_audio_muted') === 'true';
+  });
+
   const [isSocketConnected, setIsSocketConnected] = useState(socket.connected);
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(() => {
     return localStorage.getItem('kds_selected_category') || 'all';
   });
   const [isSummaryOpen, setIsSummaryOpen] = useState(true);
+
+  // Buat lookup map kategori untuk menentukan stationTarget dari item pesanan
+  const categoryMap = useMemo(() => {
+    const map = new Map<number, any>();
+    const registerCat = (c: any) => {
+      map.set(c.id, c);
+      if (Array.isArray(c.subCategories)) {
+        c.subCategories.forEach((sc: any) => {
+          map.set(sc.id, {
+            ...sc,
+            stationTarget: sc.stationTarget || c.stationTarget || 'KITCHEN',
+            printerTarget: sc.printerTarget || c.printerTarget || 'KITCHEN'
+          });
+        });
+      }
+    };
+    categories.forEach(registerCat);
+    return map;
+  }, [categories]);
 
   // Screen Wake Lock to prevent screen sleep/lock on KDS tablet
   useEffect(() => {
@@ -80,23 +103,47 @@ const KDSView = () => {
     localStorage.setItem('kds_selected_category', selectedCategoryId);
   }, [selectedCategoryId]);
 
-  // Sound generator
-  const playBeep = () => {
+  // Toggle Mute Audio
+  const toggleMute = () => {
+    setIsMuted(prev => {
+      const next = !prev;
+      localStorage.setItem('kds_audio_muted', String(next));
+      if (!next) {
+        setTimeout(() => playKitchenChime(), 100);
+      }
+      return next;
+    });
+  };
+
+  // Kitchen Chime Bell Synthesizer (Realistic dual-tone metallic chime)
+  const playKitchenChime = () => {
+    if (isMuted) return;
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
       
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // High pitch notification beep
-      gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-      
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.3);
+      // Tone 1: High crisp strike (1046.5 Hz - C6)
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(1046.5, audioCtx.currentTime);
+      gain1.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.start(audioCtx.currentTime);
+      osc1.stop(audioCtx.currentTime + 1.2);
+
+      // Tone 2: Harmonic resonance (1318.5 Hz - E6) slightly delayed
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1318.5, audioCtx.currentTime + 0.08);
+      gain2.gain.setValueAtTime(0.18, audioCtx.currentTime + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.5);
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.start(audioCtx.currentTime + 0.08);
+      osc2.stop(audioCtx.currentTime + 1.5);
     } catch (e) {
       console.warn("AudioContext blocked or not supported", e);
     }
@@ -104,6 +151,7 @@ const KDSView = () => {
 
   // Urgent Void/Cancellation Alarm (double beep siren)
   const playCancellationAlarm = () => {
+    if (isMuted) return;
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioCtx.createOscillator();
@@ -182,14 +230,14 @@ const KDSView = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Sync new orders beep sound
+  // Sync new orders chime bell sound
   useEffect(() => {
     const pendingOrders = orders.filter(o => o.kdsStatus === 'Pending');
     const currentIds = pendingOrders.map(o => o.id);
     const hasNewOrder = currentIds.some(id => !prevOrderIds.current.includes(id));
     
     if (hasNewOrder && prevOrderIds.current.length > 0) {
-      playBeep();
+      playKitchenChime();
     }
     prevOrderIds.current = currentIds;
   }, [orders]);
@@ -219,20 +267,36 @@ const KDSView = () => {
     const onConnect = () => setIsSocketConnected(true);
     const onDisconnect = () => setIsSocketConnected(false);
 
+    const handleNewOrder = (data: any) => {
+      playKitchenChime();
+      fetchKDSOrders();
+    };
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
-    socket.on('order:new', fetchKDSOrders);
+    socket.on('order:new', handleNewOrder);
     socket.on('order:void', fetchKDSOrders);
+    let categoryDebounceTimer: any = null;
+    const handleCategoriesUpdated = () => {
+      if (categoryDebounceTimer) clearTimeout(categoryDebounceTimer);
+      categoryDebounceTimer = setTimeout(() => {
+        fetchCategories();
+      }, 300);
+    };
+
     socket.on('kds:statusChanged', fetchKDSOrders);
     socket.on('order:paid', fetchKDSOrders);
+    socket.on('categories:updated', handleCategoriesUpdated);
 
     return () => {
+      if (categoryDebounceTimer) clearTimeout(categoryDebounceTimer);
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
-      socket.off('order:new', fetchKDSOrders);
+      socket.off('order:new', handleNewOrder);
       socket.off('order:void', fetchKDSOrders);
       socket.off('kds:statusChanged', fetchKDSOrders);
       socket.off('order:paid', fetchKDSOrders);
+      socket.off('categories:updated', handleCategoriesUpdated);
     };
   }, [socket]);
 
@@ -278,7 +342,7 @@ const KDSView = () => {
     }
   };
 
-  // Helper untuk menentukan warna card berdasarkan status dan waktu tunggu
+  // Helper untuk menentukan warna card berdasarkan status dan waktu tunggu (Aging Timer)
   const getCardStyle = (status: string, createdAt: string) => {
     if (status === 'Cancelled') {
       return 'bg-red-50/95 border-red-500 text-slate-800 shadow-lg shadow-red-150/20 animate-pulse border-l-4 border-l-red-600 hover:border-red-400 transition-all duration-200';
@@ -286,26 +350,26 @@ const KDSView = () => {
 
     const waitMins = (new Date().getTime() - new Date(createdAt).getTime()) / 60000;
     
-    // 1. Overdue warning (red pulse) - highest priority if not ready
+    // 1. Overdue (> 15 menit) - Merah Berkedip
     if (status !== 'Ready' && waitMins > 15) {
-      return 'bg-rose-50/50 border-rose-200 text-slate-800 shadow-md shadow-rose-100/10 animate-pulse border-l-4 border-l-rose-500 hover:border-rose-300 transition-all duration-200';
+      return 'bg-rose-50/70 border-rose-300 text-slate-800 shadow-md shadow-rose-100/20 animate-pulse border-l-4 border-l-rose-600 hover:border-rose-400 transition-all duration-200';
     }
     
-    // 2. SLA Warning (> 10m) - amber warning if not ready
-    if (status !== 'Ready' && waitMins > 10) {
-      return 'bg-amber-50/60 border-amber-200 text-slate-800 shadow-sm border-l-4 border-l-amber-500 hover:border-amber-300 transition-all duration-200';
+    // 2. Perhatian SLA (7 - 15 menit) - Kuning/Amber
+    if (status !== 'Ready' && waitMins >= 7) {
+      return 'bg-amber-50/60 border-amber-300 text-slate-800 shadow-sm border-l-4 border-l-amber-500 hover:border-amber-400 transition-all duration-200';
     }
 
-    // 3. Normal status coloring
+    // 3. Normal status coloring (< 7 menit)
     if (status === 'Ready') {
       return 'bg-emerald-50/30 border-emerald-200 text-slate-800 shadow-sm border-l-4 border-l-emerald-500 hover:border-emerald-300 transition-all duration-200';
     }
     if (status === 'Cooking') {
-      return 'bg-amber-50/20 border-amber-200/80 text-slate-800 shadow-sm border-l-4 border-l-amber-500 hover:border-amber-300 transition-all duration-200';
+      return 'bg-blue-50/20 border-blue-200/80 text-slate-800 shadow-sm border-l-4 border-l-blue-500 hover:border-blue-300 transition-all duration-200';
     }
     
-    // default (Pending / Antrean)
-    return 'bg-indigo-50/20 border-indigo-200/60 text-slate-800 shadow-sm border-l-4 border-l-indigo-500 hover:border-indigo-300 transition-all duration-200';
+    // default (< 7 menit Pending / Antrean) - Hijau Segar
+    return 'bg-emerald-50/20 border-emerald-200/60 text-slate-800 shadow-sm border-l-4 border-l-emerald-500 hover:border-emerald-300 transition-all duration-200';
   };
 
   const getStatusBadge = (status: string) => {
@@ -330,8 +394,8 @@ const KDSView = () => {
     if (status === 'Cancelled') return 'text-red-600 font-extrabold';
     if (status === 'Ready') return 'text-emerald-600 font-bold';
     const waitMins = (new Date().getTime() - new Date(createdAt).getTime()) / 60000;
-    if (waitMins > 15) return 'text-rose-600 font-black';
-    if (waitMins > 10) return 'text-amber-600 font-bold';
+    if (waitMins > 15) return 'text-rose-600 font-black animate-pulse';
+    if (waitMins >= 7) return 'text-amber-600 font-black';
     return 'text-emerald-600 font-bold';
   };
 
@@ -340,12 +404,12 @@ const KDSView = () => {
     if (status === 'Ready') return null;
     const waitMins = (new Date().getTime() - new Date(createdAt).getTime()) / 60000;
     if (waitMins > 15) {
-      return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700 animate-pulse">OVERDUE (15m+)</span>;
+      return <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-300 animate-pulse flex items-center gap-1">🔴 OVERDUE ({Math.floor(waitMins)}m)</span>;
     }
-    if (waitMins > 10) {
-      return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700">WARNING (10m+)</span>;
+    if (waitMins >= 7) {
+      return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">🟡 PERHATIAN ({Math.floor(waitMins)}m)</span>;
     }
-    return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">AMAN</span>;
+    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">🟢 AMAN</span>;
   };
 
   if (loading) {
@@ -360,10 +424,25 @@ const KDSView = () => {
   // Filter dan olah data order berdasarkan stasiun yang dipilih
   const getFilteredOrders = (rawOrders: any[]) => {
     if (selectedCategoryId === 'all') return rawOrders;
+
+    const isStationFilter = selectedCategoryId.startsWith('station:');
+    const targetStation = isStationFilter ? selectedCategoryId.replace('station:', '').toUpperCase() : null;
+
     return rawOrders
       .map(order => {
         const filteredItems = order.items.filter((item: any) => {
-          return String(item.product?.categoryId) === String(selectedCategoryId);
+          const catId = Number(item.product?.subCategoryId || item.product?.categoryId);
+          const catObj = categoryMap.get(catId) || categoryMap.get(Number(item.product?.categoryId));
+
+          if (isStationFilter) {
+            const itemStation = (catObj?.stationTarget || catObj?.printerTarget || 'KITCHEN').toUpperCase();
+            return itemStation === targetStation;
+          } else {
+            const targetId = selectedCategoryId.startsWith('cat:') 
+              ? selectedCategoryId.replace('cat:', '') 
+              : selectedCategoryId;
+            return String(item.product?.categoryId) === String(targetId) || String(item.product?.subCategoryId) === String(targetId);
+          }
         });
         return {
           ...order,
@@ -439,12 +518,20 @@ const KDSView = () => {
               onChange={(e) => setSelectedCategoryId(e.target.value)}
               className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-sm rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             >
-              <option value="all">Semua Stasiun (All)</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={String(cat.id)}>
-                  {cat.name}
-                </option>
-              ))}
+              <optgroup label="Stasiun Dapur Utama">
+                <option value="all">🍽️ Semua Stasiun (All)</option>
+                <option value="station:KITCHEN">🍳 Dapur Utama (Kitchen)</option>
+                <option value="station:BAR">☕ Barista & Minuman (Bar)</option>
+                <option value="station:GRILL">🥩 Panggang & Grill</option>
+                <option value="station:DESSERT">🍰 Pastry & Dessert</option>
+              </optgroup>
+              <optgroup label="Filter Kategori Spesifik">
+                {categories.map((cat) => (
+                  <option key={cat.id} value={`cat:${cat.id}`}>
+                    {cat.icon ? `${cat.icon} ` : '🏷️ '}{cat.name}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
 
@@ -471,6 +558,20 @@ const KDSView = () => {
               <RotateCcw size={14} /> Recall Meja {lastServed.table?.tableNo || 'TA'}
             </button>
           )}
+          
+          <button 
+            type="button"
+            onClick={toggleMute}
+            className={`btn shadow-sm rounded-xl px-3.5 py-2 flex items-center gap-1.5 transition-all active:scale-95 text-xs font-bold border ${
+              isMuted
+                ? 'bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-700'
+                : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-700'
+            }`}
+            title={isMuted ? 'Suara notifikasi lonceng dibisukan. Klik untuk mengaktifkan' : 'Suara notifikasi lonceng aktif. Klik untuk membisukan'}
+          >
+            {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+            <span>{isMuted ? 'Muted' : 'Audio On'}</span>
+          </button>
           
           <button 
             className="btn bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 shadow-sm rounded-xl px-4 py-2 flex items-center gap-2 transition-transform active:scale-95 text-xs font-bold" 

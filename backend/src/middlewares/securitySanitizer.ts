@@ -42,13 +42,23 @@ function sanitizeValue(value: any): any {
 export function securitySanitizerMiddleware(req: Request, _res: Response, next: NextFunction) {
   try {
     if (req.body && typeof req.body === 'object') {
-      req.body = sanitizeValue(req.body);
+      try {
+        req.body = sanitizeValue(req.body);
+      } catch {}
     }
     if (req.query && typeof req.query === 'object') {
-      req.query = sanitizeValue(req.query);
+      try {
+        for (const key of Object.keys(req.query)) {
+          (req.query as any)[key] = sanitizeValue((req.query as any)[key]);
+        }
+      } catch {}
     }
     if (req.params && typeof req.params === 'object') {
-      req.params = sanitizeValue(req.params);
+      try {
+        for (const key of Object.keys(req.params)) {
+          (req.params as any)[key] = sanitizeValue((req.params as any)[key]);
+        }
+      } catch {}
     }
   } catch (err) {
     console.error('[SecuritySanitizer] Error during payload sanitization:', err);

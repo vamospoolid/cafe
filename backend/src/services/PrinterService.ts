@@ -359,5 +359,9 @@ export const PrinterService = {
   async testPrint(ip: string, port: number, storeName: string, roleName = 'PRINTER'): Promise<void> {
     const buf = buildTestPage(storeName, roleName);
     await sendToNetwork(ip, port, buf);
+  },
+
+  async sendRawToNetwork(ip: string, port: number, data: Buffer): Promise<void> {
+    await sendToNetwork(ip, port, data);
   }
 };

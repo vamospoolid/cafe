@@ -13,3 +13,19 @@ yarn-error.log*
 *.db-shm
 *.db-wal
 
+# Build artifacts & releases
+release/
+*.apk
+*.aab
+
+# Local backups & DB dumps
+backups/
+backend/backups/
+*.gz.enc
+*.meta.json
+
+# Local uploaded files
+uploads/
+backend/uploads/
+
+

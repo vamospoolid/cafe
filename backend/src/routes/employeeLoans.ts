@@ -1,15 +1,41 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// GET all employee loans with optional filters
+function getTenantId(req: Request): string | undefined {
+  const user = (req as AuthRequest).user;
+  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+}
+
+function tenantWhere(tenantId: string | undefined): { tenantId: string } {
+  if (!tenantId) throw new Error('MISSING_TENANT_ID: EmployeeLoan query requires tenant context');
+  return { tenantId };
+}
+
+// Router-level fail-closed guard: all loan operations require authentication & tenant context
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const tenantId = getTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ 
+      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
+      code: 'MISSING_TENANT_CONTEXT' 
+    });
+  }
+  next();
+});
+
+// GET all employee loans with optional filters - Scoped to tenant
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { status, userId, startDate, endDate } = req.query;
-    const whereClause: any = {};
+    const whereClause: any = {
+      ...tenantWhere(tenantId)
+    };
 
     if (status && status !== 'ALL') {
       whereClause.status = String(status);
@@ -51,10 +77,12 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// GET loan summary statistics
+// GET loan summary statistics - Scoped to tenant
 router.get('/summary', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const allLoans = await prisma.employeeLoan.findMany({
+      where: tenantWhere(tenantId),
       include: {
         user: {
           select: { id: true, name: true, role: true }
@@ -78,13 +106,15 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // Unique employees with outstanding loans
     const uniqueEmployeesWithDebt = new Set(activeLoans.map(l => l.userId)).size;
+    const pendingApprovalCount = allLoans.filter(l => l.status === 'MENUNGGU_PERSETUJUAN').length;
 
     res.json({
       totalOutstanding,
       totalOriginalActive,
       activeLoanCount: activeLoans.length,
       totalLoansThisMonth,
-      uniqueEmployeesWithDebt
+      uniqueEmployeesWithDebt,
+      pendingApprovalCount
     });
   } catch (error) {
     console.error('Fetch Loan Summary Error:', error);
@@ -92,12 +122,19 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
   }
 });
 
-// GET my loans (for logged in staff in StaffPWA /staff)
+// GET my loans (for logged in staff in StaffPWA /staff) - Scoped to tenant
 router.get('/my', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const user = (req as AuthRequest).user;
+    const userId = user?.id;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
     const loans = await prisma.employeeLoan.findMany({
-      where: { userId },
+      where: { 
+        userId,
+        ...tenantWhere(tenantId)
+      },
       include: {
         payments: {
           orderBy: { createdAt: 'desc' }
@@ -121,15 +158,181 @@ router.get('/my', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// POST create new employee loan
+// POST request loan (from Staff PWA) - Scoped to tenant
+router.post('/request', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as AuthRequest).user;
+    const userId = user?.id;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const { amount, reason } = req.body;
+    const loanAmount = Number(amount);
+    if (!loanAmount || loanAmount <= 0) {
+      return res.status(400).json({ error: 'Nominal kasbon harus lebih besar dari 0' });
+    }
+
+    const loan = await prisma.employeeLoan.create({
+      data: {
+        tenantId,
+        userId,
+        amount: loanAmount,
+        remaining: loanAmount,
+        date: new Date(),
+        source: 'MENUNGGU',
+        reason: reason ? String(reason).trim() : 'Pengajuan Kasbon Staf',
+        status: 'MENUNGGU_PERSETUJUAN'
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, username: true, role: true }
+        }
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Permohonan kasbon berhasil diajukan dan menunggu persetujuan manajemen.',
+      data: loan
+    });
+  } catch (error: any) {
+    console.error('Request Loan Error:', error);
+    res.status(400).json({ error: error.message || 'Gagal mengajukan kasbon' });
+  }
+});
+
+// POST approve loan request - Scoped to tenant (Admin/Owner only)
+router.post('/:id/approve', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    const loanId = Number(req.params.id);
+    const { source } = req.body; // 'KAS_OWNER' | 'KASIR'
+    const authUser = (req as AuthRequest).user;
+    const outletId = authUser?.outletId;
+
+    const loan = await prisma.employeeLoan.findFirst({
+      where: { id: loanId, ...tenantWhere(tenantId) },
+      include: { user: true }
+    });
+
+    if (!loan) {
+      return res.status(404).json({ error: 'Data pengajuan kasbon tidak ditemukan' });
+    }
+    if (loan.status !== 'MENUNGGU_PERSETUJUAN') {
+      return res.status(400).json({ error: `Kasbon ini sudah berstatus ${loan.status}` });
+    }
+
+    const loanSource = source || 'KAS_OWNER';
+    const approverName = authUser?.name || authUser?.username || 'Owner / Manajemen';
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.employeeLoan.update({
+        where: { id: loanId },
+        data: {
+          status: 'Belum Lunas',
+          source: loanSource,
+          approvedBy: approverName,
+          date: new Date()
+        },
+        include: {
+          user: { select: { id: true, name: true, username: true, role: true } },
+          payments: true
+        }
+      });
+
+      if (loanSource === 'KASIR') {
+        await tx.cashFlow.create({
+          data: {
+            tenantId,
+            outletId,
+            type: 'Pengeluaran',
+            category: 'Kasbon Karyawan',
+            amount: loan.amount,
+            description: `Kasbon Tunai Kasir untuk ${loan.user.name}: ${loan.reason || 'Kasbon Karyawan'}`,
+            userId: authUser?.id || 1
+          }
+        });
+      }
+
+      return updated;
+    });
+
+    res.json({
+      success: true,
+      message: 'Pengajuan kasbon berhasil disetujui & dicairkan.',
+      data: result
+    });
+  } catch (error: any) {
+    console.error('Approve Loan Error:', error);
+    res.status(400).json({ error: error.message || 'Gagal menyetujui kasbon' });
+  }
+});
+
+// POST reject loan request - Scoped to tenant (Admin/Owner only)
+router.post('/:id/reject', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    const loanId = Number(req.params.id);
+    const { reason } = req.body;
+    const authUser = (req as AuthRequest).user;
+
+    const loan = await prisma.employeeLoan.findFirst({
+      where: { id: loanId, ...tenantWhere(tenantId) }
+    });
+
+    if (!loan) {
+      return res.status(404).json({ error: 'Data pengajuan kasbon tidak ditemukan' });
+    }
+    if (loan.status !== 'MENUNGGU_PERSETUJUAN') {
+      return res.status(400).json({ error: `Kasbon ini sudah berstatus ${loan.status}` });
+    }
+
+    const updated = await prisma.employeeLoan.update({
+      where: { id: loanId },
+      data: {
+        status: 'Ditolak',
+        remaining: 0,
+        settledNote: reason || 'Ditolak oleh manajemen',
+        approvedBy: authUser?.name || authUser?.username || 'Owner / Manajemen'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Pengajuan kasbon telah ditolak.',
+      data: updated
+    });
+  } catch (error: any) {
+    console.error('Reject Loan Error:', error);
+    res.status(400).json({ error: error.message || 'Gagal menolak kasbon' });
+  }
+});
+
+// POST create new employee loan - Scoped to tenant
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { userId, amount, date, source, reason, approvedBy } = req.body;
-    const authUser = (req as any).user;
+    const authUser = (req as AuthRequest).user;
+    const tenantId = authUser?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+    const outletId = authUser?.outletId;
 
     if (!userId) {
       return res.status(400).json({ error: 'Karyawan / staf wajib dipilih' });
     }
+
+    // Validasi kepemilikan tenant: pastikan staf memang terdaftar di tenant aktif
+    const targetMembership = await prisma.tenantMembership.findUnique({
+      where: {
+        userId_tenantId: {
+          userId: Number(userId),
+          tenantId: tenantId!
+        }
+      }
+    });
+    if (!targetMembership) {
+      return res.status(404).json({ error: 'Karyawan tidak ditemukan dalam cabang/tenant ini' });
+    }
+
     const loanAmount = Number(amount);
     if (!loanAmount || loanAmount <= 0) {
       return res.status(400).json({ error: 'Nominal kasbon harus lebih besar dari 0' });
@@ -137,12 +340,13 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
     const loanDate = date ? new Date(date) : new Date();
     const loanSource = source || 'KAS_OWNER'; // 'KAS_OWNER' | 'KASIR'
-    const approverName = approvedBy || authUser.name || authUser.username || 'Owner / Manajemen';
+    const approverName = approvedBy || authUser?.name || authUser?.username || 'Owner / Manajemen';
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create EmployeeLoan record
       const loan = await tx.employeeLoan.create({
         data: {
+          tenantId,
           userId: Number(userId),
           amount: loanAmount,
           remaining: loanAmount,
@@ -163,11 +367,13 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       if (loanSource === 'KASIR') {
         await tx.cashFlow.create({
           data: {
+            tenantId,
+            outletId,
             type: 'Pengeluaran',
             category: 'Kasbon Karyawan',
             amount: loanAmount,
             description: `Kasbon Tunai Kasir untuk ${loan.user.name}: ${reason || 'Kasbon Karyawan'}`,
-            userId: authUser.id
+            userId: authUser?.id || 1
           }
         });
       }
@@ -182,14 +388,15 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// PUT update employee loan
+// PUT update employee loan - Scoped to tenant
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const loanId = Number(req.params.id);
     const { amount, reason, date, source, approvedBy } = req.body;
 
-    const existing = await prisma.employeeLoan.findUnique({
-      where: { id: loanId },
+    const existing = await prisma.employeeLoan.findFirst({
+      where: { id: loanId, ...tenantWhere(tenantId) },
       include: { payments: true }
     });
 
@@ -202,8 +409,8 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     const newRemaining = Math.max(0, newAmount - totalPaid);
     const newStatus = newRemaining === 0 ? 'Lunas' : 'Belum Lunas';
 
-    const updated = await prisma.employeeLoan.update({
-      where: { id: loanId },
+    await prisma.employeeLoan.updateMany({
+      where: { id: loanId, ...tenantWhere(tenantId) },
       data: {
         amount: newAmount,
         remaining: newRemaining,
@@ -212,7 +419,11 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
         source: source !== undefined ? source : existing.source,
         date: date ? new Date(date) : existing.date,
         approvedBy: approvedBy !== undefined ? approvedBy : existing.approvedBy
-      },
+      }
+    });
+
+    const updated = await prisma.employeeLoan.findFirst({
+      where: { id: loanId, ...tenantWhere(tenantId) },
       include: {
         user: { select: { id: true, name: true, role: true } },
         payments: true
@@ -226,12 +437,13 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// POST payment / settlement for a single loan
+// POST payment / settlement for a single loan - Scoped to tenant
 router.post('/:id/payments', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const loanId = Number(req.params.id);
     const { amountPaid, paymentMethod, notes } = req.body;
-    const authUser = (req as any).user;
+    const authUser = (req as AuthRequest).user;
 
     const payAmt = Number(amountPaid);
     if (!payAmt || payAmt <= 0) {
@@ -239,8 +451,8 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      const loan = await tx.employeeLoan.findUnique({
-        where: { id: loanId },
+      const loan = await tx.employeeLoan.findFirst({
+        where: { id: loanId, ...tenantWhere(tenantId) },
         include: { user: true }
       });
 
@@ -260,11 +472,12 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
       // 1. Create payment record
       await tx.employeeLoanPayment.create({
         data: {
+          tenantId,
           loanId,
           amountPaid: payAmt,
           paymentMethod: paymentMethod || 'POTONG_GAJI',
           notes: notes || (isSettled ? 'Pelunasan Kasbon' : 'Cicilan Kasbon'),
-          paidBy: authUser.name || authUser.username || 'Owner'
+          paidBy: authUser?.name || authUser?.username || 'Owner'
         }
       });
 
@@ -283,6 +496,26 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
         }
       });
 
+      // 3. Catat entri CashFlow penerimaan kas jika dibayar tunai atau transfer
+      const pm = (paymentMethod || 'POTONG_GAJI').toUpperCase();
+      const isCashPayment = pm === 'TUNAI' || pm === 'CASH' || pm === 'KASIR';
+      const isTransferPayment = pm === 'TRANSFER' || pm === 'BANK' || pm === 'NON_TUNAI';
+
+      if (isCashPayment || isTransferPayment) {
+        await tx.cashFlow.create({
+          data: {
+            tenantId,
+            outletId: authUser?.outletId,
+            userId: authUser?.id || 1,
+            type: 'Pemasukan',
+            category: isCashPayment ? 'Pengembalian Kasbon - Tunai' : 'Pengembalian Kasbon - Non-Tunai',
+            amount: payAmt,
+            description: `Pengembalian kasbon via ${pm} dari staf ${loan.user.name} (${isSettled ? 'Lunas' : 'Cicilan'})`,
+            date: new Date()
+          }
+        });
+      }
+
       return updatedLoan;
     });
 
@@ -293,14 +526,16 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
   }
 });
 
-// POST bulk settle loans during Payroll closing
+// POST bulk settle loans during Payroll closing - Scoped to tenant
 router.post('/bulk-settle-payroll', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { userId, loanIds, period, notes } = req.body;
-    const authUser = (req as any).user;
+    const authUser = (req as AuthRequest).user;
 
     const whereClause: any = {
-      status: 'Belum Lunas'
+      status: 'Belum Lunas',
+      ...tenantWhere(tenantId)
     };
 
     if (loanIds && Array.isArray(loanIds) && loanIds.length > 0) {
@@ -330,11 +565,12 @@ router.post('/bulk-settle-payroll', authenticateToken, async (req: Request, res:
         // Create payment record
         await tx.employeeLoanPayment.create({
           data: {
+            tenantId,
             loanId: loan.id,
             amountPaid: remainingToPay,
             paymentMethod: 'POTONG_GAJI',
             notes: notes || `Potong Gaji Otomatis ${period || ''}`.trim(),
-            paidBy: authUser.name || authUser.username || 'Owner'
+            paidBy: authUser?.name || authUser?.username || 'Owner'
           }
         });
 
@@ -364,12 +600,22 @@ router.post('/bulk-settle-payroll', authenticateToken, async (req: Request, res:
   }
 });
 
-// DELETE loan record
+// DELETE loan record - Scoped to tenant
 router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const loanId = Number(req.params.id);
-    await prisma.employeeLoan.delete({
-      where: { id: loanId }
+
+    const existing = await prisma.employeeLoan.findFirst({
+      where: { id: loanId, ...tenantWhere(tenantId) }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Data kasbon tidak ditemukan' });
+    }
+
+    await prisma.employeeLoan.deleteMany({
+      where: { id: loanId, ...tenantWhere(tenantId) }
     });
 
     res.json({ message: 'Data kasbon berhasil dihapus' });

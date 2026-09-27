@@ -12,12 +12,13 @@ async function main() {
   const tenantArg = args.find(a => a.startsWith('--tenant='));
   const tenantId = tenantArg ? tenantArg.split('=')[1] : undefined;
 
+  const useGfs = args.includes('--gfs') || !args.some(a => a.startsWith('--retention='));
   const retentionArg = args.find(a => a.startsWith('--retention='));
-  const retentionDays = retentionArg ? parseInt(retentionArg.split('=')[1], 10) : 30;
+  const retentionDays = retentionArg ? parseInt(retentionArg.split('=')[1], 10) : undefined;
 
   console.log(`[Config] Encryption: ${isEncrypted ? 'AES-256 Enabled 🔒' : 'Disabled ⚠️'}`);
   console.log(`[Config] Scope: ${tenantId ? `Tenant (${tenantId})` : 'Full Platform (All Tenants)'}`);
-  console.log(`[Config] Retention Policy: ${retentionDays} Days`);
+  console.log(`[Config] Retention Policy: ${useGfs ? 'GFS Rotation (7 Daily, 4 Weekly, 3 Monthly)' : `${retentionDays} Days`}`);
 
   try {
     console.log('\n[1/3] Generating database snapshot & packaging...');
@@ -35,7 +36,7 @@ async function main() {
     console.log(`   🏷️  Scope: ${backup.scope}`);
 
     if (shouldPurge) {
-      console.log(`\n[2/3] Executing automated backup retention purge (> ${retentionDays} days)...`);
+      console.log(`\n[2/3] Executing automated backup retention purge (${useGfs ? 'GFS Policy' : `> ${retentionDays} days`})...`);
       const purgeResult = await BackupService.purgeOldBackups(retentionDays);
       console.log(`✅ Retention Purge Completed:`);
       console.log(`   🗑️  Deleted: ${purgeResult.deletedCount} files`);

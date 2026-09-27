@@ -1,7 +1,6 @@
+import prisma from '../db';
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 const BUSINESS_TABLES = [
   'Category',

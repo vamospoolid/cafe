@@ -42,10 +42,30 @@ const DineInView = () => {
   const [loading, setLoading] = useState(true);
   const [orderSuccess, setOrderSuccess] = useState<any>(null);
   const [isLandingPage, setIsLandingPage] = useState(true);
+  const [storeBranding, setStoreBranding] = useState<any>({
+    storeName: 'KAFE & RESTORAN',
+    logoUrl: '/logo.png',
+    address: ''
+  });
 
   useEffect(() => {
     const initData = async () => {
       try {
+        // Fetch Store Branding
+        try {
+          const brandRes = await fetch('/api/settings/public');
+          if (brandRes.ok) {
+            const brandData = await brandRes.json();
+            if (brandData?.storeName) {
+              setStoreBranding({
+                storeName: brandData.storeName,
+                logoUrl: brandData.logoUrl || '/logo.png',
+                address: brandData.address || ''
+              });
+            }
+          }
+        } catch (_) {}
+
         // Fetch Table Info
         const tableRes = await fetch(`/api/tables/public/${tableId}`);
         if (tableRes.ok) {
@@ -216,11 +236,82 @@ const DineInView = () => {
     return `Rp ${(val || 0).toLocaleString('id-ID')}`;
   };
 
+  // Real-time listener for order payment confirmation
+  const [isPayingMidtrans, setIsPayingMidtrans] = useState(false);
+  const [isPaidOnline, setIsPaidOnline] = useState(false);
+
+  useEffect(() => {
+    if (!socket || !orderSuccess) return;
+
+    const handleOrderPaid = (data: any) => {
+      console.log('[DineIn Socket] order:paid received:', data);
+      if (data?.order?.id === orderSuccess.id || data?.order?.orderNumber === orderSuccess.orderNumber) {
+        setIsPaidOnline(true);
+        setOrderSuccess((prev: any) => ({ ...prev, status: 'Paid', paymentMethod: data?.order?.paymentMethod || 'MIDTRANS_QRIS' }));
+        Swal.fire({
+          icon: 'success',
+          title: '🎉 Pembayaran Lunas!',
+          text: 'Pembayaran QRIS Anda telah terkonfirmasi otomatis oleh sistem kasir.',
+          timer: 3500,
+          showConfirmButton: false
+        });
+      }
+    };
+
+    socket.on('order:paid', handleOrderPaid);
+    return () => {
+      socket.off('order:paid', handleOrderPaid);
+    };
+  }, [socket, orderSuccess]);
+
+  const handlePayMidtrans = async () => {
+    if (!orderSuccess) return;
+    setIsPayingMidtrans(true);
+    try {
+      const res = await fetch('/api/payments/public/charge-dinein', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: orderSuccess.id })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Gagal memproses gateway pembayaran');
+      }
+
+      if (data.snapToken && (window as any).snap) {
+        (window as any).snap.pay(data.snapToken, {
+          onSuccess: function(result: any) {
+            console.log('Payment success:', result);
+            setIsPaidOnline(true);
+          },
+          onPending: function(result: any) {
+            console.log('Payment pending:', result);
+            Swal.fire('Menunggu Pembayaran', 'Silakan selesaikan pembayaran QRIS di aplikasi E-Wallet Anda.', 'info');
+          },
+          onError: function(result: any) {
+            console.error('Payment error:', result);
+            Swal.fire('Pembayaran Gagal', 'Silakan coba lagi atau bayar manual di kasir.', 'error');
+          }
+        });
+      } else if (data.snapRedirectUrl) {
+        window.open(data.snapRedirectUrl, '_blank');
+      } else {
+        Swal.fire('QRIS Siap', 'Silakan scan QRIS untuk menyelesaikan pesanan Anda.', 'info');
+      }
+    } catch (err: any) {
+      console.error('Midtrans DineIn Pay Error:', err);
+      Swal.fire('Info', err.message || 'Gagal membuka pembayaran online. Anda tetap dapat membayar tunai di kasir.', 'info');
+    } finally {
+      setIsPayingMidtrans(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col justify-center items-center bg-slate-955 text-white">
         <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-500 mb-4"></div>
-        <p className="text-slate-400 font-bold">Menyiapkan Menu Sol Cafe...</p>
+        <p className="text-slate-400 font-bold">Menyiapkan Menu Toko...</p>
       </div>
     );
   }
@@ -229,14 +320,25 @@ const DineInView = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-955 text-white">
         <div className="bg-slate-900 p-8 rounded-3xl shadow-2xl border border-slate-800 max-w-md w-full text-center space-y-6">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto animate-bounce">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${isPaidOnline || orderSuccess.status === 'Paid' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 animate-bounce'}`}>
             <CheckCircle size={48} />
           </div>
           <div>
-            <h2 className="text-2xl font-black text-white">Pesanan Terkirim!</h2>
+            <h2 className="text-2xl font-black text-white">
+              {isPaidOnline || orderSuccess.status === 'Paid' ? '🎉 Pembayaran Lunas!' : 'Pesanan Terkirim!'}
+            </h2>
             <p className="text-slate-400 mt-2 font-medium text-sm">
-              Pesanan Anda dengan nomor <strong className="text-slate-200">{orderSuccess.orderNumber}</strong> sedang dipersiapkan di dapur kafe.
+              Nomor Pesanan: <strong className="text-white">{orderSuccess.orderNumber}</strong>
             </p>
+            {isPaidOnline || orderSuccess.status === 'Paid' ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <Check size={14} /> Terkonfirmasi Lunas Otomatis
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full text-xs font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                <Clock size={14} /> Menunggu Pembayaran
+              </span>
+            )}
           </div>
           
           <div className="bg-slate-950/45 rounded-2xl p-4 text-left border border-slate-800 space-y-3">
@@ -258,13 +360,29 @@ const DineInView = () => {
             </div>
           </div>
 
-          <p className="text-[10px] text-slate-500 leading-normal">Silakan lakukan pembayaran di kasir setelah selesai makan dengan menyebutkan nomor meja.</p>
+          {/* Action Buttons: Bayar Langsung vs Bayar di Kasir */}
+          {!(isPaidOnline || orderSuccess.status === 'Paid') && (
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={handlePayMidtrans}
+                disabled={isPayingMidtrans}
+                className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-black rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                <Sparkles size={18} />
+                <span>{isPayingMidtrans ? 'Menghubungkan Midtrans...' : 'Bayar Langsung (QRIS / E-Wallet)'}</span>
+              </button>
+              <p className="text-[11px] text-slate-400">
+                Atau Anda juga dapat melakukan pembayaran tunai di kasir dengan menyebutkan nomor meja.
+              </p>
+            </div>
+          )}
           
           <button 
-            onClick={() => setOrderSuccess(null)}
-            className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-slate-955 font-extrabold rounded-2xl shadow-lg transition-transform active:scale-[0.98]"
+            onClick={() => { setOrderSuccess(null); setIsPaidOnline(false); }}
+            className="w-full py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-2xl transition-colors text-xs"
           >
-            Pesan Menu Tambahan
+            + Pesan Menu Tambahan
           </button>
         </div>
       </div>
@@ -282,7 +400,7 @@ const DineInView = () => {
         {/* Top Navbar */}
         <header className="p-5 flex justify-between items-center z-10 max-w-md mx-auto w-full">
           <span className="text-xl font-black tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-            MUKI RAMEN
+            {storeBranding.storeName || 'KAFE & RESTORAN'}
           </span>
           <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-black text-emerald-400">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
@@ -297,14 +415,24 @@ const DineInView = () => {
             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 pointer-events-none" />
             <div className="flex justify-between items-start">
               <div className="w-12 h-12 rounded-2xl bg-white p-1.5 flex items-center justify-center overflow-hidden">
-                <img src="/logo-muki-ramen.png" alt="MUKI RAMEN" className="w-full h-full object-contain" />
+                <img 
+                  src={storeBranding.logoUrl || '/logo.png'} 
+                  alt={storeBranding.storeName} 
+                  className="w-full h-full object-contain" 
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (target.src !== window.location.origin + '/logo.png') {
+                      target.src = '/logo.png';
+                    }
+                  }}
+                />
               </div>
               <span className="text-[10px] font-bold text-white/40 tracking-widest uppercase">Self-Order QR</span>
             </div>
             <div className="space-y-1">
-              <h3 className="text-sm font-black text-white/90">Authentic Japanese Ramen</h3>
+              <h3 className="text-sm font-black text-white/90">{storeBranding.storeName}</h3>
               <p className="text-[10px] text-white/50 leading-relaxed">
-                Pesan ramen lezat dan menu favorit langsung dari HP Anda.
+                Pesan menu lezat dan minuman favorit langsung dari HP Anda.
               </p>
             </div>
           </div>
@@ -312,10 +440,10 @@ const DineInView = () => {
           {/* Titles */}
           <div className="text-center space-y-3">
             <h2 className="text-2xl font-black tracking-tight leading-tight">
-              Selamat Datang di <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-200">MUKI RAMEN</span>
+              Selamat Datang di <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-amber-200">{storeBranding.storeName}</span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
-              Pesan menu favorit Anda langsung dari meja tanpa perlu mengantre. Ramen dan hidangan lezat akan disajikan hangat ke meja Anda!
+              Pesan menu favorit Anda langsung dari meja tanpa perlu mengantre. Pesanan akan segera disajikan ke meja Anda!
             </p>
           </div>
 
@@ -376,7 +504,7 @@ const DineInView = () => {
 
         {/* Footer */}
         <footer className="p-6 text-center text-[10px] text-white/30 z-10">
-          &copy; 2026 MUKI RAMEN &bull; Premium QR Ordering System
+          &copy; 2026 {storeBranding.storeName} &bull; Premium QR Ordering System
         </footer>
       </div>
     );
@@ -389,10 +517,20 @@ const DineInView = () => {
         <div className="flex justify-between items-center max-w-3xl mx-auto">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white p-1 text-slate-900 flex items-center justify-center overflow-hidden">
-              <img src="/logo-muki-ramen.png" alt="MUKI RAMEN" className="w-full h-full object-contain" />
+              <img 
+                src={storeBranding.logoUrl || '/logo.png'} 
+                alt={storeBranding.storeName} 
+                className="w-full h-full object-contain" 
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  if (target.src !== window.location.origin + '/logo.png') {
+                    target.src = '/logo.png';
+                  }
+                }}
+              />
             </div>
             <div>
-              <h1 className="text-base font-black text-white leading-tight">MUKI RAMEN</h1>
+              <h1 className="text-base font-black text-white leading-tight">{storeBranding.storeName}</h1>
               <p className="text-xs text-slate-400 font-medium flex items-center gap-1">
                 <MapPin size={12} className="text-slate-500" />
                 <span>Dine-In &bull; <strong className="text-amber-400">Meja {tableRef}</strong></span>
@@ -457,13 +595,14 @@ const DineInView = () => {
             <button 
               key={cat.id}
               onClick={() => setSelectedCategoryId(cat.id)}
-              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                 selectedCategoryId === cat.id 
                   ? 'bg-amber-500 text-slate-955 shadow-md shadow-amber-500/10' 
                   : 'bg-slate-900 text-slate-355 border border-slate-800 hover:bg-slate-800'
               }`}
             >
-              {cat.name}
+              {cat.icon && <span>{cat.icon}</span>}
+              <span>{cat.name}</span>
             </button>
           ))}
         </div>

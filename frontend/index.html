@@ -11,10 +11,16 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="format-detection" content="telephone=no" />
     
-    <title>MUKI RAMEN - Japanese Ramen Bar & POS</title>
+    <title>Codenusa POS - Sistem POS & Ekosistem Bisnis Kafe Multi-Outlet SaaS #1 di Indonesia</title>
+    <meta name="description" content="Platform POS & KDS multi-outlet terlengkap untuk kafe, resto & coffeeshop. Transaksi kasir 1.2 detik, offline-first sync, otomatisasi resep HPP, central warehouse, dan QRIS Midtrans dinamis." />
+    <meta name="keywords" content="aplikasi pos kafe, sistem kasir multi cabang, kds dapur, f&b saas, software restoran, pos offline first, codenusa pos" />
+    <meta property="og:title" content="Codenusa POS - Sistem POS Multi-Outlet SaaS F&B #1 di Indonesia" />
+    <meta property="og:description" content="Kuasai operasional kafe & resto dari satu layar pintar. Coba gratis 14 hari tanpa kartu kredit." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://codenusa.id" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/logo-muki-ramen.png" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="/api/manifest.json" />
 
     <!-- Google Fonts: Plus Jakarta Sans -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,25 +28,32 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => {
-              console.log('[PWA] Service Worker registered with scope:', reg.scope);
-              reg.onupdatefound = () => {
-                const installingWorker = reg.installing;
-                if (installingWorker) {
-                  installingWorker.onstatechange = () => {
-                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      console.log('[PWA] Versi baru terdeteksi, memuat ulang otomatis...');
-                      window.location.reload();
-                    }
-                  };
-                }
-              };
-            })
-            .catch(err => console.error('[PWA] Service Worker registration failed:', err));
-        });
+      // Di localhost development, bersihkan cache PWA lama & unregister service worker agar selalu memuat kode terbaru
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(registrations => {
+            for (let registration of registrations) {
+              registration.unregister();
+            }
+          });
+        }
+        if ('caches' in window) {
+          caches.keys().then(names => {
+            for (let name of names) {
+              caches.delete(name);
+            }
+          });
+        }
+      } else {
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then(reg => {
+                console.log('[PWA] Service Worker registered with scope:', reg.scope);
+              })
+              .catch(err => console.error('[PWA] Service Worker registration failed:', err));
+          });
+        }
       }
     </script>
   </head>

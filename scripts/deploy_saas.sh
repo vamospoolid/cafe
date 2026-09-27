@@ -2,15 +2,15 @@
 
 # ==============================================================================
 # 🚀 Codenusa Multi-Tenant B2B SaaS POS - Production Deployment Script
-# Target Directory: /var/www/codepos
-# PM2 Process: codepos-backend
+# Target Directory: /var/www/codenusa
+# PM2 Process: codenusa-backend
 # ==============================================================================
 
 set -e # Exit immediately on any command error
 
 # ─── 🛡️ STRICT ISOLATION GUARD: NEVER TOUCH LEGACY POSCAFE ──────────────────
-TARGET_DIR="/var/www/codepos"
-PM2_APP_NAME="codepos-backend"
+TARGET_DIR="/var/www/codenusa"
+PM2_APP_NAME="codenusa-backend"
 LEGACY_DIR="/var/www/poscafe"
 LEGACY_PM2="poscafe-backend"
 
@@ -86,7 +86,9 @@ echo "   -> Generating Prisma Client..."
 npx prisma generate
 
 echo "   -> Applying Database Schema & RLS Migrations..."
-npx prisma db push --accept-data-loss --skip-generate
+# KEAMANAN: --accept-data-loss DIHAPUS karena dapat menghapus tabel/kolom produksi diam-diam.
+# Jika skema memerlukan penghapusan kolom, LAKUKAN MANUAL lewat migration terencana terlebih dahulu.
+npx prisma db push --skip-generate
 npx ts-node prisma/seed_foundation.ts || true
 npx ts-node prisma/seed_features.ts || true
 node dist/src/scripts/apply_rls.js || true

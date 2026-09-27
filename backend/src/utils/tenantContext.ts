@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 
 export interface TenantContextData {
-  tenantId: string;
+  tenantId?: string | null;
   tenantSlug?: string;
   outletId?: string;
   userId?: number;
@@ -30,9 +30,9 @@ export const TenantContext = {
   /**
    * Get the current active tenantId (or fallback default)
    */
-  getTenantId(): string {
+  getTenantId(): string | undefined {
     const store = asyncLocalStorage.getStore();
-    return store?.tenantId || 'tenant-default-muki';
+    return store?.tenantId || undefined;
   },
 
   /**

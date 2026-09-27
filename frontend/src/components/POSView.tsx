@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { 
   Camera, Plus, Trash2, Minus, Search, CreditCard, User, Edit2, 
   ShoppingCart, Package, ArrowRight, X, Save, Lock, Play,
-  Maximize2, Minimize2, Download, RefreshCw, Wifi, WifiOff, Smartphone
+  Maximize2, Minimize2, Download, RefreshCw, Wifi, WifiOff, Smartphone,
+  Clock, AlertTriangle
 } from 'lucide-react';
 import CheckoutModal from './CheckoutModal';
 import CustomerModal from './CustomerModal';
@@ -11,9 +12,11 @@ import DrinkCustomizationModal from './DrinkCustomizationModal';
 import type { DrinkCustomization } from './DrinkCustomizationModal';
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
+import { ProductImage } from './ProductImage';
 import { toast } from '../utils/alert';
-import { offlineDB } from '../utils/offlineDb';
+import { offlineDb } from '../db/offlineDb';
 import { isNativePlatform, startNativeBarcodeScan } from '../utils/barcodeScannerNative';
+import { initHardwareBarcodeListener, playScannerBeep } from '../utils/hardwareBarcodeListener';
 import useSocket from '../hooks/useSocket';
 
 export interface CartItem {
@@ -33,6 +36,7 @@ export const getCategoryIcon = (name: string) => {
 };
 
 export const POSView = () => {
+  const posContext = useContext(POSContext);
   const socket = useSocket();
   const [activeCategory, setActiveCategory] = useState<number | 'Semua'>('Semua');
   const [activeSubCategory, setActiveSubCategory] = useState<number | 'Semua'>('Semua');
@@ -68,6 +72,7 @@ export const POSView = () => {
   const [drinkModalOpen, setDrinkModalOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<any>(null);
   const [isOpenShiftOpen, setIsOpenShiftOpen] = useState(false);
+  const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [searchParams] = useSearchParams();
@@ -87,6 +92,9 @@ export const POSView = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Opsi A: Hard Lock Layar Kasir jika status shift Overdue (melewati batas operasional & toleransi)
+  const isHardLocked = Boolean(posContext?.activeShift?.operatingStatus?.isOverdueShift);
 
   useEffect(() => {
     const handleResize = () => {
@@ -115,7 +123,6 @@ export const POSView = () => {
     };
   }, []);
   
-  const posContext = useContext(POSContext);
   const drinkCustomizationEnabled = posContext?.settings?.enableDrinkCustomization ?? false;
 
   useEffect(() => {
@@ -156,24 +163,49 @@ export const POSView = () => {
       }
     };
 
+    let categoryDebounceTimer: any = null;
+    const handleCategoriesUpdated = (data: any) => {
+      console.log('[POS Socket] categories:updated received:', data);
+      if (categoryDebounceTimer) clearTimeout(categoryDebounceTimer);
+      categoryDebounceTimer = setTimeout(() => {
+        fetchCategories();
+      }, 300);
+    };
+
     socket.on('menu:stock_sync', handleStockSync);
     socket.on('product:sold_out', handleProductSoldOut);
+    socket.on('categories:updated', handleCategoriesUpdated);
 
     return () => {
+      if (categoryDebounceTimer) clearTimeout(categoryDebounceTimer);
       socket.off('menu:stock_sync', handleStockSync);
       socket.off('product:sold_out', handleProductSoldOut);
+      socket.off('categories:updated', handleCategoriesUpdated);
     };
   }, [socket]);
 
   const fetchTables = async () => {
-    try {
-      const res = await fetch('/api/tables', {
-        headers: { Authorization: `Bearer ${posContext?.token}` }
-      });
-      if (res.ok) {
-        setTables(await res.json());
+    if (navigator.onLine) {
+      try {
+        const res = await fetch('/api/tables', {
+          headers: { Authorization: `Bearer ${posContext?.token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTables(data);
+          await offlineDb.saveCatalogToCache({ 
+            tables: data,
+            settings: posContext?.user?.tenantId ? { tenantId: posContext.user.tenantId } as any : undefined
+          });
+        }
+      } catch (err) {
+        const cached = await offlineDb.getCachedTables(posContext?.user?.tenantId);
+        setTables(cached);
       }
-    } catch (err) {}
+    } else {
+      const cached = await offlineDb.getCachedTables(posContext?.user?.tenantId);
+      setTables(cached);
+    }
   };
 
   const fetchCategories = async () => {
@@ -185,17 +217,31 @@ export const POSView = () => {
         if (res.ok) {
           const data = await res.json();
           setCategories(data);
-          await offlineDB.saveCategories(data);
+          await offlineDb.saveCatalogToCache({ 
+            categories: data,
+            settings: posContext?.user?.tenantId ? { tenantId: posContext.user.tenantId } as any : undefined
+          });
         }
       } catch (err) {
         console.error('Fetch categories failed, loading from cache:', err);
-        const cached = await offlineDB.getCategories();
+        const cached = await offlineDb.getCachedCategories(posContext?.user?.tenantId);
         setCategories(cached);
       }
     } else {
-      const cached = await offlineDB.getCategories();
+      const cached = await offlineDb.getCachedCategories(posContext?.user?.tenantId);
       setCategories(cached);
     }
+  };
+
+  const normalizeProduct = (p: any) => {
+    const priceVal = Number(p?.sellPrice ?? p?.price ?? 0);
+    return {
+      ...p,
+      price: priceVal,
+      sellPrice: priceVal,
+      stock: Number(p?.stock || 0),
+      minStock: Number(p?.minStock || 0)
+    };
   };
 
   const fetchProducts = async () => {
@@ -206,22 +252,27 @@ export const POSView = () => {
         });
         if (res.ok) {
           const data = await res.json();
-          const activeProducts = data.filter((p: any) => p.status === 'Aktif');
+          const activeProducts = (Array.isArray(data) ? data : [])
+            .filter((p: any) => p.status === 'Aktif')
+            .map(normalizeProduct);
           setProducts(activeProducts);
-          await offlineDB.saveProducts(activeProducts);
+          await offlineDb.saveCatalogToCache({ 
+            products: activeProducts,
+            settings: posContext?.user?.tenantId ? { tenantId: posContext.user.tenantId } as any : undefined
+          });
         }
       } catch (err) {
         console.error('Fetch products failed, loading from cache:', err);
-        const cached = await offlineDB.getProducts();
-        setProducts(cached);
+        const cached = await offlineDb.getCachedProducts(posContext?.user?.tenantId);
+        setProducts(cached.map(normalizeProduct));
       }
     } else {
-      const cached = await offlineDB.getProducts();
-      setProducts(cached);
+      const cached = await offlineDb.getCachedProducts(posContext?.user?.tenantId);
+      setProducts(cached.map(normalizeProduct));
     }
   };
 
-  const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
+  const formatCurrency = (val: number | undefined | null) => `Rp ${(Number(val) || 0).toLocaleString('id-ID')}`;
 
   const toggleFullscreen = () => {
     posContext?.triggerHaptic(20);
@@ -282,6 +333,12 @@ export const POSView = () => {
   };
 
   const handleProductClick = (product: any) => {
+    if (isHardLocked) {
+      toast('⚠️ Jam operasional toko telah berakhir. Layar kasir dikunci, mohon lakukan Tutup Shift.', 'warning');
+      setIsCloseShiftOpen(true);
+      return;
+    }
+
     if (product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe)) {
       toast(`Menu "${product.name}" sudah habis di dapur!`, 'warning');
       return;
@@ -317,13 +374,21 @@ export const POSView = () => {
   const taxRate = posContext?.settings?.taxRate || 0;
   const serviceChargeRate = posContext?.settings?.serviceCharge || 0;
 
-  const subtotal = cart.reduce((sum, item) => sum + (item.product.sellPrice * item.qty), 0);
+  const subtotal = cart.reduce((sum, item) => {
+    const p = Number(item?.product?.sellPrice ?? item?.product?.price ?? 0);
+    return sum + (p * item.qty);
+  }, 0);
   const discount = customer?.discountAmount || 0;
   const tax = (subtotal - discount) * (taxRate / 100);
   const serviceCharge = (subtotal - discount) * (serviceChargeRate / 100);
   const total = subtotal - discount + tax + serviceCharge;
 
   const handleSaveBill = async () => {
+    if (isHardLocked) {
+      toast('⚠️ Jam operasional toko telah berakhir. Mohon lakukan Tutup Shift.', 'warning');
+      setIsCloseShiftOpen(true);
+      return;
+    }
     if (cart.length === 0 || selectedTableIds.length === 0) return;
 
     try {
@@ -335,7 +400,7 @@ export const POSView = () => {
         items: cart.map(item => ({
           productId: item.product.id,
           qty: item.qty,
-          price: item.product.sellPrice,
+          price: Number(item.product.sellPrice ?? item.product.price ?? 0),
           notes: item.notes || ''
         })),
         subtotal,
@@ -430,22 +495,42 @@ export const POSView = () => {
     }
   };
 
-  const isShiftRequired = posContext?.user?.role === 'Kasir' || posContext?.user?.role === 'Admin';
-  const hasActiveShift = posContext?.activeShift !== null;
+  // Global Hardware Barcode Scanner Listener (Auto-detects USB/Bluetooth gun scans)
+  useEffect(() => {
+    const unbind = initHardwareBarcodeListener({
+      onScan: (scannedCode) => {
+        const found = products.find(p => p.barcode === scannedCode);
+        if (found) {
+          handleProductClick(found);
+          toast(`⚡ [Scan] +1 ${found.name}`, 'success');
+        } else {
+          playScannerBeep(false);
+          toast(`Produk barcode "${scannedCode}" tidak ditemukan`, 'warning');
+        }
+      }
+    });
 
-  if (isShiftRequired && !hasActiveShift) {
+    return () => {
+      unbind();
+    };
+  }, [products]);
+
+  // Shift is mandatory for all users operating the POS register
+  const hasActiveShift = !!posContext?.activeShift;
+
+  if (!hasActiveShift) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-slate-50/50 p-6 text-center min-h-[500px]">
-        <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200/80 shadow-lg flex flex-col items-center">
-          <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-6 border border-indigo-100">
+        <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200/80 shadow-lg flex flex-col items-center animate-fade-in">
+          <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-5 border border-indigo-100">
             <Lock size={28} className="animate-pulse" />
           </div>
-          <h3 className="text-lg font-bold text-slate-800">Shift Belum Dibuka</h3>
-          <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-            Untuk mulai melayani transaksi penjualan di kasir, Anda harus membuka shift baru dan memasukkan saldo modal laci awal terlebih dahulu.
+          <h3 className="text-xl font-bold text-slate-900">Buka Shift Kasir Baru</h3>
+          <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+            Untuk mulai melayani transaksi penjualan di kasir, silakan masukkan saldo modal awal kas di laci kasir terlebih dahulu.
           </p>
           <button 
-            className="w-full btn btn-primary mt-6 py-3 rounded-xl font-bold text-sm shadow-md hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+            className="w-full btn btn-primary mt-6 py-3.5 rounded-2xl font-bold text-sm shadow-lg shadow-indigo-600/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
             onClick={() => setIsOpenShiftOpen(true)}
           >
             <Play size={16} /> Buka Shift Kasir Sekarang
@@ -455,7 +540,11 @@ export const POSView = () => {
         <OpenShiftModal 
           isOpen={isOpenShiftOpen} 
           onClose={() => setIsOpenShiftOpen(false)} 
-          onSuccess={() => posContext?.fetchActiveShift()} 
+          onSuccess={() => {
+            posContext?.fetchActiveShift();
+            setIsOpenShiftOpen(false);
+            toast('✅ Shift kasir berhasil dibuka! Selamat bertugas.', 'success');
+          }} 
           mode="open" 
         />
       </div>
@@ -466,9 +555,87 @@ export const POSView = () => {
     <div className="pos-layout" style={{ flexDirection: isMobile ? 'column' : 'row', height: '100%', overflow: 'hidden' }}>
       {/* Kiri: Daftar Produk */}
       <div className="pos-main flex-1 flex flex-col overflow-y-auto">
-        {/* PWA & Tablet Kiosk Actions Bar - Sembunyikan di HP karena sudah ada Topbar */}
+        {/* PWA & Tablet Kiosk Actions Bar */}
         <div className="hidden sm:flex flex-wrap items-center justify-between gap-2 px-1 pb-1">
           <div className="flex items-center gap-2">
+            {/* Active Shift Badge & Tutup Shift Button */}
+            <div className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg shadow-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span>Shift Kasir Aktif</span>
+                {posContext?.activeShift?.saldoAwal !== undefined && (
+                  <span className="text-[11px] font-normal text-indigo-500 hidden md:inline">
+                    (Modal: Rp {Number(posContext.activeShift.saldoAwal || 0).toLocaleString('id-ID')})
+                    {posContext.activeShift.isOffline && ' • Lokal'}
+                  </span>
+                )}
+                {posContext?.activeShift?.supervisorOverride && (
+                  <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider" title="Shift dibuka dengan persetujuan PIN Supervisor di luar jam operasional">
+                    Override
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setIsCloseShiftOpen(true)}
+                className="text-[11px] font-bold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 px-2 py-0.5 rounded border border-rose-200 hover:border-rose-600 transition-colors ml-1"
+                title="Tutup shift kasir sekarang"
+              >
+                Tutup Shift
+              </button>
+            </div>
+
+            {/* Operating Hours Store Badge */}
+            {posContext?.activeShift?.operatingStatus && (
+              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border shadow-sm ${
+                posContext.activeShift.operatingStatus.status === 'STORE_OPEN'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : posContext.activeShift.operatingStatus.status === 'PREPARATION_WINDOW'
+                  ? 'bg-amber-50 text-amber-700 border-amber-300'
+                  : posContext.activeShift.operatingStatus.status === 'GRACE_PERIOD_CLOSING'
+                  ? 'bg-orange-50 text-orange-800 border-orange-300'
+                  : posContext.activeShift.operatingStatus.isOverdueShift
+                  ? 'bg-rose-50 text-rose-700 border-rose-300 font-bold'
+                  : 'bg-slate-100 text-slate-700 border-slate-300'
+              }`} title={posContext.activeShift.operatingStatus.message}>
+                {posContext.activeShift.operatingStatus.status === 'STORE_OPEN' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>
+                      Toko Buka {
+                        posContext.activeShift.operatingStatus.todaySchedule?.is24Hours ||
+                        (posContext.activeShift.operatingStatus.todaySchedule?.openTime === '00:00' && 
+                          (posContext.activeShift.operatingStatus.todaySchedule?.closeTime === '23:59' || posContext.activeShift.operatingStatus.todaySchedule?.closeTime === '24:00'))
+                          ? '24 Jam'
+                          : posContext.activeShift.operatingStatus.todaySchedule
+                          ? `(${posContext.activeShift.operatingStatus.todaySchedule.openTime} - ${posContext.activeShift.operatingStatus.todaySchedule.closeTime})`
+                          : ''
+                      }
+                    </span>
+                  </>
+                ) : posContext.activeShift.operatingStatus.status === 'PREPARATION_WINDOW' ? (
+                  <>
+                    <Clock size={13} className="text-amber-600" />
+                    <span>Persiapan Buka</span>
+                  </>
+                ) : posContext.activeShift.operatingStatus.status === 'GRACE_PERIOD_CLOSING' ? (
+                  <>
+                    <Clock size={13} className="text-orange-600" />
+                    <span>Toleransi Closing</span>
+                  </>
+                ) : posContext.activeShift.operatingStatus.isOverdueShift ? (
+                  <>
+                    <AlertTriangle size={13} className="text-rose-600 animate-bounce" />
+                    <span>Lewat Jam Tutup</span>
+                  </>
+                ) : (
+                  <>
+                    <Clock size={13} className="text-slate-500" />
+                    <span>Luar Jam Toko</span>
+                  </>
+                )}
+              </span>
+            )}
+
             {/* Status Online/Offline */}
             {posContext?.isOnline ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg shadow-sm">
@@ -478,7 +645,7 @@ export const POSView = () => {
             ) : (
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-300 rounded-lg shadow-sm">
                 <WifiOff size={13} className="text-amber-600" />
-                <span>Mode Offline (Tersimpan Lokal)</span>
+                <span>Mode Offline</span>
               </span>
             )}
 
@@ -529,6 +696,25 @@ export const POSView = () => {
             </button>
           </div>
         </div>
+
+        {/* Overdue Shift Warning Banner */}
+        {posContext?.activeShift?.operatingStatus?.isOverdueShift && (
+          <div className="mx-1 mb-2 p-3 bg-gradient-to-r from-rose-50 to-amber-50 border border-rose-300 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs text-rose-900 shadow-sm animate-pulse">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-rose-600 flex-shrink-0" />
+              <div>
+                <span className="font-bold text-rose-700">Peringatan Jam Operasional: </span>
+                <span>Shift kasir telah melewati batas waktu operasional toko & toleransi closing. Mohon segera selesaikan transaksi terakhir dan lakukan <strong>Tutup Shift</strong>.</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsCloseShiftOpen(true)}
+              className="px-3 py-1.5 bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700 active:scale-95 transition-all whitespace-nowrap text-xs shadow"
+            >
+              Tutup Shift Kasir
+            </button>
+          </div>
+        )}
 
         {/* Offline Queue Bar di HP jika ada antrean */}
         {isMobile && (posContext?.offlineQueueCount ?? 0) > 0 && (
@@ -605,13 +791,14 @@ export const POSView = () => {
                       ? 'bg-gradient-to-r from-sky-400 to-blue-500 text-white border-sky-400 shadow-md shadow-sky-100 ring-2 ring-sky-300/40' 
                       : 'bg-white text-slate-700 border-slate-200/90 hover:bg-sky-50/50 hover:border-sky-200 shadow-sm'
                   }`}
+                  style={!isSelected && cat.color ? { borderLeftColor: cat.color, borderLeftWidth: '3.5px' } : undefined}
                   onClick={() => {
                     setActiveCategory(cat.id);
                     setActiveSubCategory('Semua');
                     posContext?.triggerHaptic(10);
                   }}
                 >
-                  <span className="text-sm">{getCategoryIcon(cat.name)}</span>
+                  <span className="text-sm">{cat.icon || getCategoryIcon(cat.name)}</span>
                   <span>{cat.name}</span>
                   {catProductCount > 0 && (
                     <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${isSelected ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'}`}>
@@ -648,7 +835,7 @@ export const POSView = () => {
                 {subCats.map((sub: any) => (
                   <button
                     key={sub.id}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold transition-all shrink-0 ${
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold transition-all shrink-0 flex items-center gap-1 ${
                       activeSubCategory === sub.id
                         ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
                         : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
@@ -658,7 +845,8 @@ export const POSView = () => {
                       posContext?.triggerHaptic(10);
                     }}
                   >
-                    {sub.name}
+                    {sub.icon && <span>{sub.icon}</span>}
+                    <span>{sub.name}</span>
                   </button>
                 ))}
               </div>
@@ -689,11 +877,12 @@ export const POSView = () => {
                 }}
               >
                 <div className="product-img-wrapper bg-slate-50 flex items-center justify-center relative overflow-hidden h-28 sm:h-36 w-full">
-                  {product.imageUrl ? (
-                    <img src={product.imageUrl} alt={product.name} className={`product-img w-full h-full object-cover ${!isSoldOut ? 'group-hover:scale-105' : ''} transition-transform duration-300`} />
-                  ) : (
-                    <Package size={36} className="text-slate-300" />
-                  )}
+                  <ProductImage
+                    src={product.imageUrl}
+                    alt={product.name}
+                    categoryName={product.category?.name}
+                    className={`product-img w-full h-full object-cover ${!isSoldOut ? 'group-hover:scale-105' : ''} transition-transform duration-300`}
+                  />
 
                   {/* Quantity In-Cart Badge */}
                   {cartQty > 0 && !isSoldOut && (
@@ -723,7 +912,7 @@ export const POSView = () => {
                   
                   <div className="pt-1 mt-auto">
                     <div className="product-price font-black text-xs sm:text-sm text-indigo-600">
-                      {formatCurrency(product.sellPrice)}
+                      {formatCurrency(product.sellPrice ?? product.price)}
                     </div>
                     <div className="product-stock flex justify-between items-center text-[10px] sm:text-xs text-slate-400 mt-0.5">
                       {isSoldOut ? (
@@ -775,7 +964,7 @@ export const POSView = () => {
                     {item.notes && (
                       <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem', lineHeight: 1.3 }}>{item.notes}</div>
                     )}
-                    <div className="cart-item-price">{formatCurrency(item.product.sellPrice)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
+                    <div className="cart-item-price">{formatCurrency(item.product.sellPrice ?? item.product.price)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
                     
                     <div className="cart-item-controls mt-2">
                       <button className="qty-btn" onClick={() => decreaseQty(item.product.id)}><Minus size={14} /></button>
@@ -785,7 +974,7 @@ export const POSView = () => {
                   </div>
                   <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between'}}>
                     <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeFromCart(item.product.id)}><X size={16}/></button>
-                    <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency(item.product.sellPrice * item.qty)}</div>
+                    <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
                   </div>
                 </div>
               ))
@@ -1014,7 +1203,7 @@ export const POSView = () => {
                       {item.notes && (
                         <div className="text-[10px] text-indigo-600 font-semibold mt-0.5">{item.notes}</div>
                       )}
-                      <div className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrency(item.product.sellPrice)} x {item.qty}</div>
+                      <div className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrency(item.product.sellPrice ?? item.product.price)} x {item.qty}</div>
                       <div className="flex items-center gap-2 mt-2">
                         <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => decreaseQty(item.product.id)}><Minus size={12} /></button>
                         <span className="text-xs font-bold text-slate-800 min-w-[20px] text-center">{item.qty}</span>
@@ -1023,7 +1212,7 @@ export const POSView = () => {
                     </div>
                     <div className="flex flex-col items-end justify-between min-h-[70px]">
                       <button className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-slate-100/50" onClick={() => removeFromCart(item.product.id)}><X size={14}/></button>
-                      <div className="font-extrabold text-xs text-slate-800">{formatCurrency(item.product.sellPrice * item.qty)}</div>
+                      <div className="font-extrabold text-xs text-slate-800">{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
                     </div>
                   </div>
                 ))
@@ -1165,19 +1354,46 @@ export const POSView = () => {
               <div className="flex gap-2 pt-1">
                 {orderType === 'Dine In' && (
                   <button 
-                    className={`flex-1 font-bold rounded-xl py-3 text-xs flex items-center justify-center gap-1.5 border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all ${cart.length === 0 || selectedTableIds.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    disabled={cart.length === 0 || selectedTableIds.length === 0}
-                    onClick={() => { handleSaveBill(); setIsMobileCartOpen(false); }}
+                    className={`flex-1 font-bold rounded-xl py-3 text-xs flex items-center justify-center gap-1.5 border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all ${cart.length === 0 || selectedTableIds.length === 0 || isHardLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={cart.length === 0 || selectedTableIds.length === 0 || isHardLocked}
+                    onClick={() => { 
+                      if (isHardLocked) {
+                        setIsCloseShiftOpen(true);
+                        return;
+                      }
+                      handleSaveBill(); 
+                      setIsMobileCartOpen(false); 
+                    }}
                   >
                     <Save size={16} /> Simpan Bill {selectedTableIds.length > 1 ? `(${selectedTableIds.length})` : ''}
                   </button>
                 )}
                 <button 
-                  className="flex-1 py-3 text-xs bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5"
-                  disabled={cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)}
-                  onClick={() => { setIsCheckoutOpen(true); setIsMobileCartOpen(false); }}
+                  className={`flex-1 py-3 text-xs rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-1.5 ${
+                    isHardLocked
+                      ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-700 hover:to-red-700 animate-pulse'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95'
+                  }`}
+                  disabled={isHardLocked ? false : (cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0))}
+                  onClick={() => { 
+                    if (isHardLocked) {
+                      setIsCloseShiftOpen(true);
+                      setIsMobileCartOpen(false);
+                      return;
+                    }
+                    setIsCheckoutOpen(true); 
+                    setIsMobileCartOpen(false); 
+                  }}
                 >
-                  <CreditCard size={16} /> Pembayaran {selectedTableIds.length > 1 ? `(${selectedTableIds.length})` : ''}
+                  {isHardLocked ? (
+                    <>
+                      <Lock size={16} /> Tutup Shift (Layar Terkunci)
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard size={16} /> Pembayaran {selectedTableIds.length > 1 ? `(${selectedTableIds.length})` : ''}
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1222,6 +1438,83 @@ export const POSView = () => {
           setPendingProduct(null);
         }}
       />
+
+      {/* Modal Tutup Shift Langsung dari POS */}
+      <OpenShiftModal 
+        isOpen={isCloseShiftOpen} 
+        onClose={() => setIsCloseShiftOpen(false)} 
+        onSuccess={() => {
+          posContext?.fetchActiveShift();
+          setIsCloseShiftOpen(false);
+          toast('✅ Shift kasir berhasil ditutup!', 'success');
+        }} 
+        mode="close" 
+        isForceClose={isHardLocked}
+      />
+
+      {/* ─── OPTION A: Hard Lock Fullscreen Overlay saat Overdue Shift ────────── */}
+      {isHardLocked && !isCloseShiftOpen && (
+        <div className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-rose-200 overflow-hidden text-center p-6 sm:p-8 space-y-6 animate-in zoom-in-95 duration-200">
+            {/* Header Icon */}
+            <div className="mx-auto w-20 h-20 rounded-3xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shadow-inner relative">
+              <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-rose-600"></span>
+              </span>
+              <Lock size={36} />
+            </div>
+
+            {/* Title & Description */}
+            <div className="space-y-2">
+              <span className="inline-block px-3 py-1 bg-rose-100 text-rose-700 font-extrabold text-[11px] rounded-full uppercase tracking-wider">
+                Batas Waktu Operasional Terlampaui
+              </span>
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                Layar Kasir Terkunci (Force Close)
+              </h2>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Shift kasir ini telah melewati batas jam operasional toko &amp; toleransi closing. 
+                Sesuai SOP sistem toko, seluruh transaksi dikunci otomatis agar pembukuan keuangan tetap rapi dan tidak bercampur dengan hari berikutnya.
+              </p>
+            </div>
+
+            {/* Shift Detail Info Card */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-left space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Jadwal Operasional:</span>
+                <span className="font-bold text-slate-900">
+                  {posContext?.activeShift?.operatingStatus?.todaySchedule 
+                    ? `${posContext.activeShift.operatingStatus.todaySchedule.openTime} - ${posContext.activeShift.operatingStatus.todaySchedule.closeTime}`
+                    : '08:00 - 22:00'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Status Keterlambatan:</span>
+                <span className="font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                  Overdue &gt; {posContext?.activeShift?.operatingStatus?.overdueMinutes || 60} Menit
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>Shift Kasir Aktif:</span>
+                <span className="font-bold text-slate-900">
+                  #{posContext?.activeShift?.id || '-'} ({posContext?.activeShift?.user?.name || posContext?.user?.name || 'Kasir'})
+                </span>
+              </div>
+            </div>
+
+            {/* Primary Action Button */}
+            <button
+              type="button"
+              onClick={() => setIsCloseShiftOpen(true)}
+              className="w-full py-4 px-6 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-sm rounded-2xl shadow-xl shadow-rose-600/30 hover:shadow-2xl hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2.5"
+            >
+              <Lock size={18} />
+              <span>Hitung Kas Laci &amp; Tutup Shift Sekarang</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

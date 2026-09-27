@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin, Search, PackageSearch, MessageCircle, X, Sparkles, Building2, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin, Search, PackageSearch, MessageCircle, X, Sparkles, Building2, User, FileText, ArrowRight } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import { toast, confirmAlert } from '../utils/alert';
+import { SupplierInvoiceModal } from '../verticals/bengkel/SupplierInvoiceModal';
 
 interface Supplier {
   id: number;
@@ -14,12 +17,15 @@ interface Supplier {
   _count?: {
     purchaseOrders: number;
     ingredients: number;
+    supplierInvoices?: number;
   };
 }
 
 const API = '/api';
 
 const SupplierView: React.FC = () => {
+  const navigate = useNavigate();
+  const { isBengkel, isRetail } = useVertical();
   const posContext = useContext(POSContext);
   const token = posContext?.token;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
@@ -29,6 +35,7 @@ const SupplierView: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editData, setEditData] = useState<Supplier | null>(null);
+  const [invoiceModalSupplierId, setInvoiceModalSupplierId] = useState<number | null>(null);
   const [form, setForm] = useState({ name: '', contact: '', phone: '', email: '', address: '', notes: '' });
 
   const fetchData = async () => {
@@ -117,7 +124,13 @@ const SupplierView: React.FC = () => {
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
             <Truck className="text-primary" size={24} /> Manajemen Pemasok / Supplier
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">Kelola data vendor, kontak pemesanan bahan baku kopi &amp; dapur, serta riwayat purchase order</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {isBengkel
+              ? 'Kelola distributor suku cadang, oli, ban, serta riwayat nota faktur pembelian'
+              : isRetail
+              ? 'Kelola data distributor sembako, material bangunan, dan pesanan pengadaan barang'
+              : 'Kelola data vendor, kontak pemesanan bahan baku kopi & dapur, serta riwayat purchase order'}
+          </p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -149,10 +162,14 @@ const SupplierView: React.FC = () => {
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Bahan Baku Tertaut</span>
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">
+            {isBengkel ? 'Suku Cadang / Part' : isRetail ? 'Katalog Barang Tertaut' : 'Bahan Baku Tertaut'}
+          </span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-2xl sm:text-3xl font-black text-emerald-600">{totalBahan}</span>
-            <span className="text-xs font-bold text-slate-500">Item Bahan</span>
+            <span className="text-xs font-bold text-slate-500">
+              {isBengkel ? 'Item Part' : isRetail ? 'Item Barang' : 'Item Bahan'}
+            </span>
           </div>
         </div>
       </div>
@@ -184,7 +201,13 @@ const SupplierView: React.FC = () => {
             <Truck size={36} className="mx-auto text-slate-300 mb-2" />
             <h4 className="text-sm font-bold text-slate-700">Belum Ada Pemasok</h4>
             <p className="text-xs text-slate-400 mt-1">
-              {search ? 'Tidak ada supplier yang cocok dengan kata kunci pencarian.' : 'Silakan tambahkan supplier baru untuk melacak pemesanan bahan baku.'}
+              {search
+                ? 'Tidak ada supplier yang cocok dengan kata kunci pencarian.'
+                : isBengkel
+                ? 'Silakan tambahkan supplier baru untuk melacak pengadaan suku cadang & oli.'
+                : isRetail
+                ? 'Silakan tambahkan supplier baru untuk melacak pengadaan barang dagangan.'
+                : 'Silakan tambahkan supplier baru untuk melacak pemesanan bahan baku.'}
             </p>
           </div>
         ) : (
@@ -277,16 +300,55 @@ const SupplierView: React.FC = () => {
                   </div>
 
                   {/* Footers Stats */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-center">
-                    <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-2">
-                      <span className="text-base font-black text-indigo-700 block">{s._count?.purchaseOrders || 0}</span>
-                      <span className="text-[10px] font-bold text-indigo-500 uppercase">Purchase Order</span>
+                  {isBengkel ? (
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded-xl border border-slate-100">
+                        <span className="text-slate-500 font-medium">Nota Pembelian:</span>
+                        <span className="font-bold text-slate-800">{s._count?.supplierInvoices || 0} Faktur</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setInvoiceModalSupplierId(s.id)}
+                          className="py-1.5 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
+                          title="Input nota masuk dari supplier ini"
+                        >
+                          <Plus size={12} /> + Input Nota
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/bengkel/pengadaan')}
+                          className="py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
+                          title="Lihat riwayat nota dan hutang"
+                        >
+                          <span>Buku Hutang</span>
+                          <ArrowRight size={11} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2">
-                      <span className="text-base font-black text-emerald-700 block">{s._count?.ingredients || 0}</span>
-                      <span className="text-[10px] font-bold text-emerald-500 uppercase">Bahan Baku</span>
+                  ) : isRetail ? (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-center">
+                      <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-2">
+                        <span className="text-base font-black text-indigo-700 block">{s._count?.purchaseOrders || 0}</span>
+                        <span className="text-[10px] font-bold text-indigo-500 uppercase">Purchase Order</span>
+                      </div>
+                      <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2">
+                        <span className="text-base font-black text-emerald-700 block">{s._count?.ingredients || 0}</span>
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase">Barang Suplai</span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-center">
+                      <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-2">
+                        <span className="text-base font-black text-indigo-700 block">{s._count?.purchaseOrders || 0}</span>
+                        <span className="text-[10px] font-bold text-indigo-500 uppercase">Purchase Order</span>
+                      </div>
+                      <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2">
+                        <span className="text-base font-black text-emerald-700 block">{s._count?.ingredients || 0}</span>
+                        <span className="text-[10px] font-bold text-emerald-500 uppercase">Bahan Baku</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -310,7 +372,11 @@ const SupplierView: React.FC = () => {
                       {editData ? 'Edit Data Pemasok' : 'Tambah Pemasok Baru'}
                     </h3>
                     <p className="text-[11px] text-slate-400 font-medium">
-                      Informasi kontak & alamat vendor bahan baku
+                      {isBengkel
+                        ? 'Informasi kontak & alamat distributor suku cadang / sparepart'
+                        : isRetail
+                        ? 'Informasi kontak & alamat distributor barang grosir / material'
+                        : 'Informasi kontak & alamat vendor bahan baku'}
                     </p>
                   </div>
                 </div>
@@ -417,6 +483,16 @@ const SupplierView: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* MODAL INPUT FAKTUR KHUSUS BENGKEL */}
+        {isBengkel && (
+          <SupplierInvoiceModal
+            isOpen={!!invoiceModalSupplierId}
+            onClose={() => setInvoiceModalSupplierId(null)}
+            initialSupplierId={invoiceModalSupplierId || undefined}
+            onSuccess={fetchData}
+          />
         )}
       </div>
   );

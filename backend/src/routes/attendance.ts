@@ -1,9 +1,20 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Helper untuk multi-tenant scoping
+function getTenantId(req: Request): string | undefined {
+  const user = (req as AuthRequest).user;
+  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || (req.body?.tenantId as string);
+}
+
+function tenantWhere(tenantId: string | undefined): { tenantId: string } {
+  if (!tenantId) throw new Error('MISSING_TENANT_ID: Attendance query requires tenant context');
+  return { tenantId };
+}
 
 // Haversine Distance Formula (Meter)
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -27,10 +38,14 @@ const DEFAULT_SHIFTS = [
   { id: 'full', name: 'Shift Full / Normal (09:00 - 18:00)', start: '09:00', end: '18:00', lateTolerance: 15 }
 ];
 
-// GET Active Shifts
+// GET Active Shifts (Scoped to tenant settings)
 router.get('/shifts', async (req: Request, res: Response) => {
   try {
-    const settings = await prisma.settings.findFirst();
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context required', code: 'MISSING_TENANT_CONTEXT' });
+    const settings = await prisma.settings.findFirst({
+      where: tenantWhere(tenantId)
+    });
     let shifts = DEFAULT_SHIFTS;
     if (settings?.workShifts) {
       try {
@@ -60,20 +75,53 @@ router.post('/clock', async (req: Request, res: Response) => {
       latitude, 
       longitude, 
       photo, 
-      notes 
+      notes,
+      tenantId: bodyTenantId,
+      outletId: bodyOutletId
     } = req.body;
     
     if (!pin) return res.status(400).json({ error: 'PIN absensi dibutuhkan' });
     if (!['IN', 'OUT'].includes(type)) return res.status(400).json({ error: 'Tipe absensi tidak valid' });
 
+    const requestedTenantId = bodyTenantId || (req.headers['x-tenant-id'] as string);
+
+    // ATT-001: Fail-closed — tenantId wajib ada dari Staff App / PWA
+    // Mencegah clock-in tanpa konteks tenant (ambiguitas PIN multi-tenant)
+    if (!requestedTenantId) {
+      return res.status(400).json({
+        error: 'Tenant context dibutuhkan untuk absensi. Pastikan PWA outlet sudah terkonfigurasi.',
+        code: 'MISSING_TENANT_CONTEXT'
+      });
+    }
+
+    // ATT-001: Strict membership — hanya user yang terdaftar sebagai anggota aktif tenant ini
+    // Hapus pola fail-open: OR [memberships.some, memberships.none]
+    // memberships.none = user tanpa membership bisa clock-in di semua tenant (BERBAHAYA)
     const user = await prisma.user.findFirst({
-      where: { pin, status: 'Aktif' }
+      where: {
+        pin,
+        status: 'Aktif',
+        memberships: {
+          some: { tenantId: requestedTenantId, status: 'ACTIVE' }
+        }
+      },
+      include: {
+        memberships: {
+          where: { tenantId: requestedTenantId, status: 'ACTIVE' },
+          take: 1
+        }
+      }
     });
 
-    if (!user) return res.status(401).json({ error: 'PIN salah atau akun karyawan tidak aktif' });
+    if (!user) return res.status(401).json({ error: 'PIN salah atau akun tidak terdaftar di outlet ini' });
 
-    // Ambil konfigurasi toko
-    const settings = await prisma.settings.findFirst();
+    // resolvedTenantId = requestedTenantId (sudah divalidasi via membership di atas)
+    const resolvedTenantId = requestedTenantId;
+
+    // Ambil konfigurasi toko milik tenant karyawan
+    const settings = await prisma.settings.findFirst({
+      where: tenantWhere(resolvedTenantId)
+    });
     const storeLat = settings?.storeLatitude ?? -6.200000;
     const storeLon = settings?.storeLongitude ?? 106.816666;
     const maxRadius = settings?.gpsRadiusMeters ?? 100;
@@ -107,7 +155,8 @@ router.post('/clock', async (req: Request, res: Response) => {
     const existingLog = await prisma.attendance.findFirst({
       where: {
         userId: user.id,
-        clockIn: { gte: todayStart }
+        clockIn: { gte: todayStart },
+        ...tenantWhere(resolvedTenantId)
       },
       orderBy: { clockIn: 'desc' }
     });
@@ -151,6 +200,8 @@ router.post('/clock', async (req: Request, res: Response) => {
 
       const attendance = await prisma.attendance.create({
         data: {
+          tenantId: resolvedTenantId,
+          outletId: bodyOutletId || null,
           userId: user.id,
           date: new Date().toISOString().slice(0, 10),
           clockIn: new Date(),
@@ -215,9 +266,12 @@ router.post('/clock', async (req: Request, res: Response) => {
 // GET Attendances (List View with filter)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { date, userId, status } = req.query;
     
-    const whereClause: any = {};
+    const whereClause: any = {
+      ...tenantWhere(tenantId)
+    };
     if (date) {
       const dStart = new Date(date as string);
       dStart.setHours(0, 0, 0, 0);
@@ -259,9 +313,12 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 // GET Individual Summary / Rekapitulasi per Karyawan
 router.get('/summary-individual', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { month } = req.query; // YYYY-MM (e.g. 2026-09) or empty for all
 
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({
+      where: tenantWhere(tenantId)
+    });
     const enableZeroLateBonus = settings?.enableZeroLateBonus ?? true;
     const zeroLateBonusAmount = settings?.zeroLateBonusAmount ?? 200000;
     const zeroLateMinAttendance = settings?.zeroLateMinAttendance ?? 20;
@@ -272,8 +329,20 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
     const enableAlphaPenalty = settings?.enableAlphaPenalty ?? false;
     const alphaPenaltyAmount = settings?.alphaPenaltyAmount ?? 50000;
 
+    // ATT-002: Fail-closed + strict membership filter
+    // Hapus pola fail-open OR [memberships.some, memberships.none]
+    // User tanpa membership bukan staf tenant ini — tidak boleh muncul di rekap manapun
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    const userFilter: any = {
+      status: 'Aktif',
+      memberships: { some: { tenantId, status: 'ACTIVE' } }
+    };
+
     const users = await prisma.user.findMany({
-      where: { status: 'Aktif' },
+      where: userFilter,
       select: {
         id: true,
         name: true,
@@ -297,7 +366,7 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
 
     const summaries = await Promise.all(
       users.map(async (u) => {
-        const whereClause: any = { userId: u.id };
+        const whereClause: any = { userId: u.id, ...tenantWhere(tenantId) };
         if (dateFilter.gte) {
           whereClause.clockIn = dateFilter;
         }
@@ -355,12 +424,12 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
         // ─────────────────────────────────────────────────────────────
         // 2. KINERJA FINANSIAL KASIR (SHIFTS & ORDERS)
         // ─────────────────────────────────────────────────────────────
-        const shiftWhere: any = { userId: u.id };
+        const shiftWhere: any = { userId: u.id, ...tenantWhere(tenantId) };
         if (dateFilter.gte) {
           shiftWhere.waktuBuka = dateFilter;
         }
 
-        const orderWhere: any = { userId: u.id };
+        const orderWhere: any = { userId: u.id, ...tenantWhere(tenantId) };
         if (dateFilter.gte) {
           orderWhere.createdAt = dateFilter;
         }
@@ -378,7 +447,8 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
             where: {
               userId: u.id,
               type: 'Rusak',
-              ...(dateFilter.gte ? { createdAt: dateFilter } : {})
+              ...(dateFilter.gte ? { createdAt: dateFilter } : {}),
+              ...tenantWhere(tenantId)
             },
             include: { ingredient: true }
           })
@@ -535,17 +605,21 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
 // GET My Summary (untuk portal PWA Staf)
 router.get('/my-summary', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const user = (req as any).user;
+    const userId = user?.id;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const user = await prisma.user.findUnique({
+    const userDb = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, username: true, role: true }
     });
 
-    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+    if (!userDb) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({
+      where: tenantWhere(tenantId)
+    });
     const enableZeroLateBonus = settings?.enableZeroLateBonus ?? true;
     const zeroLateBonusAmount = settings?.zeroLateBonusAmount ?? 200000;
     const zeroLateMinAttendance = settings?.zeroLateMinAttendance ?? 20;
@@ -559,8 +633,9 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
 
     const logs = await prisma.attendance.findMany({
       where: {
-        userId: user.id,
-        clockIn: { gte: startOfMonth }
+        userId: userDb.id,
+        clockIn: { gte: startOfMonth },
+        ...tenantWhere(tenantId)
       },
       orderBy: { clockIn: 'desc' }
     });
@@ -580,12 +655,16 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
     });
 
     // Cek status hari ini
+    // ATT-006: Tambahkan tenantId ke query agar tidak return log dari tenant yang salah
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayLog = await prisma.attendance.findFirst({
       where: {
         userId: user.id,
-        clockIn: { gte: todayStart }
+        clockIn: { gte: todayStart },
+        // ATT-HARDENED: Fail-closed — jika tenantId tidak tersedia, tolak query
+        // daripada mengembalikan data dari tenant manapun (fail-open)
+        tenantId: tenantId || 'BLOCKED_NULL_TENANT'
       },
       orderBy: { clockIn: 'desc' }
     });
@@ -656,15 +735,36 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
 // ─── Leave & Permission Requests (Izin / Sakit / Cuti) ──────────────────
 
 // POST Submit Leave Request
-router.post('/leaves', async (req: Request, res: Response) => {
+// ATT-003: Validasi userId milik tenant sebelum create — mencegah injection izin atas nama staf tenant lain
+router.post('/leaves', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
     const { userId, type, startDate, endDate, reason, photoUrl } = req.body;
     if (!userId || !type || !startDate || !endDate || !reason) {
       return res.status(400).json({ error: 'Lengkapi seluruh data pengajuan izin/sakit' });
     }
 
+    // Validasi kepemilikan: userId harus anggota aktif tenant yang mengajukan
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        id: Number(userId),
+        memberships: { some: { tenantId, status: 'ACTIVE' } }
+      }
+    });
+    if (!targetUser) {
+      return res.status(404).json({
+        error: 'Karyawan tidak ditemukan atau bukan anggota outlet ini.',
+        code: 'INVALID_USER_FOR_TENANT'
+      });
+    }
+
     const leave = await prisma.leaveRequest.create({
       data: {
+        tenantId,
         userId: Number(userId),
         type,
         startDate,
@@ -686,10 +786,13 @@ router.post('/leaves', async (req: Request, res: Response) => {
 });
 
 // GET Leave Requests (Filtered by user or all for admin)
-router.get('/leaves', async (req: Request, res: Response) => {
+router.get('/leaves', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { userId, status } = req.query;
-    const whereClause: any = {};
+    const whereClause: any = {
+      ...tenantWhere(tenantId)
+    };
     if (userId) whereClause.userId = Number(userId);
     if (status) whereClause.status = String(status);
 
@@ -709,13 +812,21 @@ router.get('/leaves', async (req: Request, res: Response) => {
 });
 
 // PATCH Approve or Reject Leave Request (Admin only)
-router.patch('/leaves/:id/status', async (req: Request, res: Response) => {
+router.patch('/leaves/:id/status', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { id } = req.params;
     const { status, approvedBy, adminNotes } = req.body;
 
     if (!['Approved', 'Rejected', 'Pending'].includes(status)) {
       return res.status(400).json({ error: 'Status tidak valid' });
+    }
+
+    const existing = await prisma.leaveRequest.findFirst({
+      where: { id: Number(id), ...tenantWhere(tenantId) }
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Pengajuan izin tidak ditemukan' });
     }
 
     const updated = await prisma.leaveRequest.update({
@@ -740,8 +851,11 @@ router.patch('/leaves/:id/status', async (req: Request, res: Response) => {
 // ─── Shift Handover Logbook (Serah Terima Shift) ─────────────────────────
 
 // POST Shift Handover
-router.post('/handover', async (req: Request, res: Response) => {
+router.post('/handover', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+    const outletId = user?.outletId;
     const { userId, shiftName, cashBalance, equipmentStatus, notes } = req.body;
     if (!userId || !shiftName || !notes) {
       return res.status(400).json({ error: 'Data serah terima shift tidak lengkap' });
@@ -750,6 +864,8 @@ router.post('/handover', async (req: Request, res: Response) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const handover = await prisma.shiftHandover.create({
       data: {
+        tenantId,
+        outletId,
         userId: Number(userId),
         shiftName,
         date: todayStr,
@@ -770,10 +886,12 @@ router.post('/handover', async (req: Request, res: Response) => {
 });
 
 // GET Shift Handover Logs
-router.get('/handover', async (req: Request, res: Response) => {
+router.get('/handover', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { limit = 20 } = req.query;
     const handovers = await prisma.shiftHandover.findMany({
+      where: tenantWhere(tenantId),
       take: Number(limit),
       include: {
         user: { select: { id: true, name: true, username: true, role: true } }
@@ -791,8 +909,11 @@ router.get('/handover', async (req: Request, res: Response) => {
 // ─── Kitchen SOP Checklist (Opening & Closing) ──────────────────────────
 
 // POST Kitchen Checklist
-router.post('/checklist', async (req: Request, res: Response) => {
+router.post('/checklist', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+    const outletId = user?.outletId;
     const { userId, type, shiftName, items, notes } = req.body;
     if (!userId || !type || !items) {
       return res.status(400).json({ error: 'Lengkapi data checklist SOP' });
@@ -801,6 +922,8 @@ router.post('/checklist', async (req: Request, res: Response) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const checklist = await prisma.kitchenChecklist.create({
       data: {
+        tenantId,
+        outletId,
         userId: Number(userId),
         type, // OPENING or CLOSING
         date: todayStr,
@@ -821,11 +944,12 @@ router.post('/checklist', async (req: Request, res: Response) => {
 });
 
 // GET Today's Kitchen Checklists
-router.get('/checklist/today', async (req: Request, res: Response) => {
+router.get('/checklist/today', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const todayStr = new Date().toISOString().split('T')[0];
     const checklists = await prisma.kitchenChecklist.findMany({
-      where: { date: todayStr },
+      where: { date: todayStr, ...tenantWhere(tenantId) },
       include: {
         user: { select: { id: true, name: true, username: true, role: true } }
       },
@@ -840,13 +964,21 @@ router.get('/checklist/today', async (req: Request, res: Response) => {
 
 // ─── Koreksi Presensi Staf & Auto-Cutoff EOD ──────────────────────────
 
-export async function runAttendanceAutoCutoff(): Promise<{ count: number }> {
+// ATT-004: Tambahkan parameter tenantId opsional
+// - Dipanggil tanpa arg dari cron platform = global (semua tenant, tugas sistem)
+// - Dipanggil dengan tenantId dari endpoint manual = scoped ke tenant yang meminta saja
+export async function runAttendanceAutoCutoff(tenantId?: string): Promise<{ count: number }> {
   try {
     const todayStr = new Date().toISOString().split('T')[0];
     const unclosed = await prisma.attendance.findMany({
       where: {
         clockOut: null,
-        date: { lt: todayStr }
+        date: { lt: todayStr },
+        // ATT-HARDENED: Jika dipanggil dari cron sistem tanpa tenantId → query global (semua tenant)
+        // Ini DISENGAJA untuk cron platform. Jika dipanggil dari endpoint manual,
+        // tenantId wajib ada dan digunakan sebagai scope. Fail-closed jika endpoint manual,
+        // fail-open hanya diizinkan dari cron (tenantId === undefined, bukan null string).
+        ...(tenantId !== undefined ? { tenantId: tenantId || 'BLOCKED_NULL_TENANT' } : {})
       }
     });
 
@@ -874,7 +1006,8 @@ export async function runAttendanceAutoCutoff(): Promise<{ count: number }> {
       });
     }
 
-    console.log(`[Auto-EOD Cutoff] Berhasil menutup ${unclosed.length} presensi staf yang lupa Clock Out.`);
+    const scope = tenantId ? `tenant ${tenantId}` : 'semua tenant (platform cron)';
+    console.log(`[Auto-EOD Cutoff] Berhasil menutup ${unclosed.length} presensi staf (${scope}).`);
     return { count: unclosed.length };
   } catch (error) {
     console.error('Error running attendance auto cutoff:', error);
@@ -885,6 +1018,7 @@ export async function runAttendanceAutoCutoff(): Promise<{ count: number }> {
 // PUT Adjust / Koreksi Presensi Staf (Admin / Owner only)
 router.put('/:id/adjust', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const id = Number(req.params.id);
     const { clockIn, clockOut, status, notes, lateMinutes } = req.body;
     const userRole = ((req as any).user?.role || '').toLowerCase();
@@ -893,7 +1027,9 @@ router.put('/:id/adjust', authenticateToken, async (req: Request, res: Response)
       return res.status(403).json({ error: 'Hanya Admin/Owner yang berwenang melakukan koreksi presensi.' });
     }
 
-    const existing = await prisma.attendance.findUnique({ where: { id } });
+    const existing = await prisma.attendance.findFirst({
+      where: { id, ...tenantWhere(tenantId) }
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Data absensi tidak ditemukan' });
     }
@@ -923,12 +1059,136 @@ router.put('/:id/adjust', authenticateToken, async (req: Request, res: Response)
 });
 
 // POST Manual Trigger Auto Cutoff Presensi
+// ATT-004: Scoped ke tenant yang meminta — tidak menyentuh absensi tenant lain
 router.post('/auto-cutoff', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const result = await runAttendanceAutoCutoff();
+    const tenantId = getTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const result = await runAttendanceAutoCutoff(tenantId);
     res.json({ message: `Auto Cut-off selesai. ${result.count} presensi tertutup otomatis.`, result });
   } catch (error) {
     res.status(500).json({ error: 'Gagal menjalankan auto-cutoff presensi' });
+  }
+});
+
+// ─── POST /api/attendance/sync-offline: Batch Sync Offline Attendances ───
+router.post('/sync-offline', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const tenantId = (req as any).user?.tenantId;
+    const { attendances } = req.body;
+
+    if (!Array.isArray(attendances) || attendances.length === 0) {
+      return res.status(400).json({ error: 'Payload attendances harus berupa array' });
+    }
+
+    let syncedCount = 0;
+    const errors: string[] = [];
+
+    for (const att of attendances) {
+      try {
+        const uId = Number(att.userId);
+        const clientDate = att.clientTimestamp ? new Date(att.clientTimestamp) : new Date();
+        const dateStr = clientDate.toISOString().slice(0, 10);
+
+        // Find existing attendance for user on that date
+        const existing = await prisma.attendance.findFirst({
+          where: {
+            tenantId,
+            userId: uId,
+            date: dateStr,
+          },
+        });
+
+        // Check idempotency via offlineId first (fastest path)
+        if (att.offlineId) {
+          const byOfflineId = await prisma.attendance.findFirst({
+            where: { tenantId, offlineId: att.offlineId },
+          });
+          if (byOfflineId) {
+            syncedCount++;
+            continue; // Already synced, skip
+          }
+        }
+
+        if (att.type === 'IN') {
+          if (!existing) {
+            await prisma.attendance.create({
+              data: {
+                tenantId,
+                userId: uId,
+                date: dateStr,
+                clockIn: clientDate,
+                photoIn: att.photoBase64 || null,
+                latitudeIn: att.latitude ? Number(att.latitude) : null,
+                longitudeIn: att.longitude ? Number(att.longitude) : null,
+                status: 'Hadir',
+                notes: att.notes || 'Sync Offline',
+                offlineId: att.offlineId || null,
+              },
+            });
+          } else {
+            // Already exists, just ensure clockIn is set
+            if (!existing.clockIn) {
+              await prisma.attendance.update({
+                where: { id: existing.id },
+                data: {
+                  clockIn: clientDate,
+                  photoIn: att.photoBase64 || existing.photoIn,
+                  offlineId: att.offlineId || existing.offlineId,
+                },
+              });
+            }
+          }
+        } else if (att.type === 'OUT') {
+          if (existing) {
+            await prisma.attendance.update({
+              where: { id: existing.id },
+              data: {
+                clockOut: clientDate,
+                photoOut: att.photoBase64 || existing.photoOut,
+                latitudeOut: att.latitude ? Number(att.latitude) : null,
+                longitudeOut: att.longitude ? Number(att.longitude) : null,
+              },
+            });
+          } else {
+            // Out without existing IN record
+            await prisma.attendance.create({
+              data: {
+                tenantId,
+                userId: uId,
+                date: dateStr,
+                clockIn: clientDate,
+                clockOut: clientDate,
+                photoOut: att.photoBase64 || null,
+                latitudeOut: att.latitude ? Number(att.latitude) : null,
+                longitudeOut: att.longitude ? Number(att.longitude) : null,
+                status: 'Hadir',
+                notes: 'Clock Out (Sync Offline)',
+                offlineId: att.offlineId || null,
+              },
+            });
+          }
+        }
+
+        syncedCount++;
+
+      } catch (attErr: any) {
+        console.error('[Offline Attendance Sync Error]:', attErr);
+        errors.push(`${att.offlineId || att.userId}: ${attErr.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      syncedCount,
+      errors,
+      message: `Berhasil menyinkronkan ${syncedCount} catatan presensi staf.`,
+    });
+  } catch (err: any) {
+    console.error('Batch Offline Attendance Sync Error:', err);
+    res.status(500).json({ error: err.message || 'Gagal memproses sinkronisasi absensi offline' });
   }
 });
 

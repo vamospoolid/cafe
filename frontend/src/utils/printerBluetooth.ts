@@ -269,7 +269,7 @@ export const testPrintBluetooth = async (): Promise<void> => {
     .align('center')
     .line('================================')
     .bold(true)
-    .line('MUKI RAMEN & DRINK')
+    .line('STRUK UJI COBA PRINTER')
     .bold(false)
     .line('TEST PRINT BLUETOOTH OK')
     .line('================================')
@@ -288,13 +288,31 @@ export const testPrintBluetooth = async (): Promise<void> => {
 };
 
 /**
+ * Sinyal pembuka laci kasir otomatis RJ11 via printer thermal (ESC p 0 25 250)
+ */
+export const kickCashDrawer = async (): Promise<void> => {
+  try {
+    const drawerBytes = new Uint8Array([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+    await printRawBytes(drawerBytes);
+  } catch (err) {
+    console.warn('[Printer] Gagal mengirim sinyal kick cash drawer:', err);
+  }
+};
+
+/**
  * Print Order Receipt to Bluetooth Thermal Printer
  */
 export const printBluetoothReceipt = async (
   order: any, 
-  settings: { name: string; address?: string; phone?: string; footer?: string }
+  settings: { name: string; address?: string; phone?: string; footer?: string; paperWidth?: '58mm' | '80mm' },
+  options?: { autoKickDrawer?: boolean }
 ): Promise<void> => {
   try {
+    const is80mm = settings.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
+    const lineWidth = is80mm ? 48 : 32;
+    const divider = '='.repeat(lineWidth);
+    const subDivider = '-'.repeat(lineWidth);
+
     const encoder = new EscPosEncoder();
     
     // Header
@@ -302,7 +320,7 @@ export const printBluetoothReceipt = async (
       .initialize()
       .align('center')
       .bold(true)
-      .line(settings.name || 'MUKI RAMEN')
+      .line(settings.name || 'KAFE & RESTORAN')
       .bold(false);
 
     if (settings.address) {
@@ -313,16 +331,16 @@ export const printBluetoothReceipt = async (
     }
 
     encoded = encoded
-      .line('================================')
+      .line(divider)
       .align('left')
       .line(`No Struk : ${order.orderNumber || order.id}`)
       .line(`Tanggal  : ${new Date(order.createdAt || Date.now()).toLocaleString('id-ID')}`)
       .line(`Kasir    : ${order.user?.name || order.cashierName || 'Kasir'}`)
       .line(`Meja     : ${order.tableName || order.table?.name || 'Take Away'}`)
       .line(`Pesanan  : ${order.customerName ? order.customerName : '-'}`)
-      .line('--------------------------------');
+      .line(subDivider);
 
-    // Items list (formatted for 32 chars 58mm / 80mm)
+    // Items list (formatted for 32 chars 58mm or 48 chars 80mm)
     const items = order.items || [];
     items.forEach((item: any) => {
       const productName = item.product?.name || item.productName || item.name || 'Item';
@@ -333,11 +351,11 @@ export const printBluetoothReceipt = async (
       const qtyPriceStr = `${qty}x${Math.round(price).toLocaleString('id-ID')}`;
       const totalStr = Math.round(total).toLocaleString('id-ID');
       
-      // Calculate layout spaces
-      const maxNameLen = 14;
+      // Calculate layout spaces based on 58mm vs 80mm
+      const maxNameLen = is80mm ? 24 : 14;
       const shortName = productName.length > maxNameLen ? productName.substring(0, maxNameLen) : productName.padEnd(maxNameLen, ' ');
-      const paddedQty = qtyPriceStr.padStart(9, ' ');
-      const paddedTotal = totalStr.padStart(9, ' ');
+      const paddedQty = qtyPriceStr.padStart(is80mm ? 12 : 9, ' ');
+      const paddedTotal = totalStr.padStart(is80mm ? 12 : 9, ' ');
 
       encoded = encoded.line(`${shortName} ${paddedQty} ${paddedTotal}`);
       if (item.notes) {
@@ -352,10 +370,10 @@ export const printBluetoothReceipt = async (
     const grandTotal = order.total || order.grandTotal || subtotal;
     const cashReceived = order.cashReceived || grandTotal;
     const changeDue = order.changeDue || Math.max(0, cashReceived - grandTotal);
-    const paymentMethod = order.paymentMethod || 'TUNAI';
+    const paymentMethod = (order.paymentMethod || 'TUNAI').toUpperCase();
 
     encoded = encoded
-      .line('--------------------------------')
+      .line(subDivider)
       .align('right')
       .line(`Subtotal: Rp ${Math.round(subtotal).toLocaleString('id-ID')}`);
 
@@ -372,7 +390,7 @@ export const printBluetoothReceipt = async (
       .bold(false)
       .line(`Bayar (${paymentMethod}): Rp ${Math.round(cashReceived).toLocaleString('id-ID')}`)
       .line(`Kembali: Rp ${Math.round(changeDue).toLocaleString('id-ID')}`)
-      .line('================================')
+      .line(divider)
       .align('center')
       .line(settings.footer || 'Terima Kasih Atas Kunjungan Anda!')
       .line('\n\n\n')
@@ -380,8 +398,15 @@ export const printBluetoothReceipt = async (
 
     const bytes = encoded.encode();
     await printRawBytes(bytes);
+
+    // Otomatis kick laci kasir jika pembayaran tunai
+    const shouldKick = options?.autoKickDrawer ?? (paymentMethod === 'TUNAI' || paymentMethod === 'CASH');
+    if (shouldKick) {
+      await kickCashDrawer();
+    }
   } catch (err: any) {
     console.error('Error printing receipt via Bluetooth:', err);
     throw err;
   }
 };
+

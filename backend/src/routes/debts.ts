@@ -1,15 +1,41 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// GET all debts with optional filters (status, customerId)
-router.get('/', authenticateToken, async (req: Request, res: Response) => {
+function getTenantId(req: Request): string | undefined {
+  const user = (req as AuthRequest).user;
+  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+}
+
+function tenantWhere(tenantId: string | undefined): { tenantId: string } {
+  if (!tenantId) throw new Error('MISSING_TENANT_ID: Debt query requires tenant context');
+  return { tenantId };
+}
+
+// Router-level fail-closed guard: all debt operations require authentication & tenant context
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const tenantId = getTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ 
+      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
+      code: 'MISSING_TENANT_CONTEXT' 
+    });
+  }
+  next();
+});
+
+// GET all debts with optional filters (status, customerId) - Scoped to tenant
+router.get('/', async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { status, customerId } = req.query;
-    const whereClause: any = {};
+    const whereClause: any = {
+      ...tenantWhere(tenantId)
+    };
 
     if (status) {
       whereClause.status = String(status);
@@ -50,13 +76,17 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// GET debts for a specific customer
+// GET debts for a specific customer - Scoped to tenant
 router.get('/customer/:customerId', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { customerId } = req.params;
 
     const debts = await prisma.debt.findMany({
-      where: { customerId: Number(customerId) },
+      where: { 
+        customerId: Number(customerId),
+        ...tenantWhere(tenantId)
+      },
       include: {
         order: {
           select: {
@@ -80,12 +110,15 @@ router.get('/customer/:customerId', authenticateToken, async (req: Request, res:
   }
 });
 
-// POST payment for a debt (partial/full payment)
+// POST payment for a debt (partial/full payment) - Scoped to tenant
 router.post('/:id/payments', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+    const outletId = user?.outletId;
     const { id } = req.params;
     const { amountPaid, paymentMethod } = req.body;
-    const userId = (req as any).user.id;
+    const userId = user?.id || 1;
 
     if (!amountPaid || Number(amountPaid) <= 0) {
       return res.status(400).json({ error: 'Jumlah pembayaran harus lebih besar dari 0' });
@@ -99,9 +132,12 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
 
     // Run within transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Fetch current debt
-      const debt = await tx.debt.findUnique({
-        where: { id: debtId },
+      // 1. Fetch current debt scoped to tenant
+      const debt = await tx.debt.findFirst({
+        where: { 
+          id: debtId,
+          ...tenantWhere(tenantId)
+        },
         include: { 
           customer: true,
           order: true
@@ -124,8 +160,9 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
       const newStatus = newRemaining === 0 ? 'Lunas' : 'Belum Lunas';
 
       // 2. Create Debt Payment record
-      const payment = await tx.debtPayment.create({
+      await tx.debtPayment.create({
         data: {
+          tenantId,
           debtId,
           amountPaid: payAmt,
           paymentMethod,
@@ -147,20 +184,20 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
         }
       });
 
-      // 4. Create Cash Flow record if payment method is cash ("Tunai" or "Cash")
+      // 4. Create Cash Flow record for both cash and electronic debt payments
       const isCash = paymentMethod.toLowerCase() === 'tunai' || paymentMethod.toLowerCase() === 'cash';
-      if (isCash) {
-        const orderInfo = debt.order ? ` untuk Order ${debt.order.orderNumber}` : '';
-        await tx.cashFlow.create({
-          data: {
-            type: 'Pemasukan',
-            category: 'Pembayaran Piutang',
-            amount: payAmt,
-            description: `Pelunasan piutang dari member ${debt.customer.name}${orderInfo}`,
-            userId
-          }
-        });
-      }
+      const orderInfo = debt.order ? ` untuk Order ${debt.order.orderNumber}` : '';
+      await tx.cashFlow.create({
+        data: {
+          tenantId,
+          outletId,
+          type: 'Pemasukan',
+          category: isCash ? 'Pembayaran Piutang - Tunai' : 'Pembayaran Piutang - Non-Tunai',
+          amount: payAmt,
+          description: `Pelunasan piutang via ${paymentMethod} dari member ${debt.customer.name}${orderInfo}`,
+          userId
+        }
+      });
 
       return updatedDebt;
     });

@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   X, Image as ImageIcon, RefreshCw, ScanBarcode, Package, Tag, Layers, 
-  Beaker, Plus, Trash2, Info, AlertTriangle, Check, UploadCloud 
+  Beaker, Plus, Trash2, Info, AlertTriangle, Check, UploadCloud,
+  Sparkles, ArrowRight, Crown, Camera, Wrench
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import { toast } from '../utils/alert';
+import BarcodeScannerModal from './BarcodeScannerModal';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -23,6 +27,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
   categories,
   onManageCategories 
 }) => {
+  const { isBengkel, isRetail } = useVertical();
   const [formData, setFormData] = useState({
     name: '',
     categoryId: '',
@@ -30,10 +35,18 @@ const ProductModal: React.FC<ProductModalProps> = ({
     barcode: '',
     buyPrice: '',
     sellPrice: '',
+    sellPriceRetail: '',
+    sellPriceMitra: '',
+    sellPriceGrosir: '',
+    minQtyGrosir: '',
     stock: '',
     minStock: '1',
     status: 'Aktif',
-    imageUrl: ''
+    imageUrl: '',
+    // Bengkel spare part fields
+    brand: '',
+    vehicleType: 'UMUM',
+    storageLocation: ''
   });
 
   const [activeTab, setActiveTab] = useState<'info' | 'recipe'>('info');
@@ -41,11 +54,21 @@ const ProductModal: React.FC<ProductModalProps> = ({
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [newRecipe, setNewRecipe] = useState({ ingredientId: '', qty: '' });
 
+  const navigate = useNavigate();
   const posContext = useContext(POSContext);
-  const isAdvancedMode = posContext?.settings?.ingredientTrackingEnabled;
+  const isPlatformAdmin = posContext?.user?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user?.role === 'OWNER' && posContext?.user?.username === 'admin');
+  const hasAdvancedInventory = isPlatformAdmin || (posContext?.hasFeature ? posContext.hasFeature('inventory.advanced') : true);
+  const showTieredPricing = isBengkel || isRetail || Boolean(posContext?.settings?.enableTieredPricing);
 
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showScanner, setShowScanner] = useState(false);
+
+  const handleBarcodeDetected = (code: string) => {
+    setFormData(prev => ({ ...prev, barcode: code }));
+    setShowScanner(false);
+    toast(`Barcode terdeteksi: ${code}`, 'success');
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,17 +112,27 @@ const ProductModal: React.FC<ProductModalProps> = ({
     }
   };
 
-  // Fetch ingredients if advanced mode is on
+  // Fetch ingredients if user has advanced inventory feature and modal is open
   useEffect(() => {
-    if (isOpen && isAdvancedMode && posContext?.token) {
+    if (isOpen && hasAdvancedInventory && posContext?.token) {
       fetch('/api/ingredients', {
         headers: { Authorization: `Bearer ${posContext.token}` }
       })
-      .then(r => r.json())
-      .then(data => setIngredients(data))
-      .catch(e => console.error(e));
+      .then(r => {
+        if (!r.ok) return [];
+        return r.json();
+      })
+      .then(data => {
+        setIngredients(Array.isArray(data) ? data : []);
+      })
+      .catch(e => {
+        console.error(e);
+        setIngredients([]);
+      });
+    } else {
+      setIngredients([]);
     }
-  }, [isOpen, isAdvancedMode, posContext?.token]);
+  }, [isOpen, hasAdvancedInventory, posContext?.token]);
 
   // Set initial data for editing or reset for new product
   useEffect(() => {
@@ -112,10 +145,18 @@ const ProductModal: React.FC<ProductModalProps> = ({
           barcode: initialData.barcode || '',
           buyPrice: initialData.buyPrice ? String(initialData.buyPrice) : '',
           sellPrice: initialData.sellPrice ? String(initialData.sellPrice) : '',
+          sellPriceRetail: initialData.sellPriceRetail ? String(initialData.sellPriceRetail) : (initialData.sellPrice ? String(initialData.sellPrice) : ''),
+          sellPriceMitra: initialData.sellPriceMitra ? String(initialData.sellPriceMitra) : '',
+          sellPriceGrosir: initialData.sellPriceGrosir ? String(initialData.sellPriceGrosir) : '',
+          minQtyGrosir: initialData.minQtyGrosir ? String(initialData.minQtyGrosir) : '',
           stock: initialData.stock !== undefined ? String(initialData.stock) : '',
           minStock: initialData.minStock !== undefined ? String(initialData.minStock) : '1',
           status: initialData.status || 'Aktif',
-          imageUrl: initialData.imageUrl || ''
+          imageUrl: initialData.imageUrl || '',
+          // Bengkel spare part fields
+          brand: initialData.brand || '',
+          vehicleType: initialData.vehicleType || 'UMUM',
+          storageLocation: initialData.storageLocation || ''
         });
 
         // Set recipes if present
@@ -127,6 +168,26 @@ const ProductModal: React.FC<ProductModalProps> = ({
             unit: r.ingredient?.unit || '',
             buyPrice: r.ingredient?.buyPrice || 0
           })));
+        } else if (initialData.id && posContext?.token) {
+          // Fallback: fetch recipes directly if not pre-populated
+          fetch(`/api/recipes/product/${initialData.id}`, {
+            headers: { Authorization: `Bearer ${posContext.token}` }
+          })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data && Array.isArray(data.recipes) && data.recipes.length > 0) {
+              setRecipeItems(data.recipes.map((r: any) => ({
+                ingredientId: r.ingredientId,
+                qtyPerServing: r.qtyPerServing,
+                ingredientName: r.ingredient?.name || `Bahan #${r.ingredientId}`,
+                unit: r.ingredient?.unit || '',
+                buyPrice: r.ingredient?.buyPrice || 0
+              })));
+            } else {
+              setRecipeItems([]);
+            }
+          })
+          .catch(() => setRecipeItems([]));
         } else {
           setRecipeItems([]);
         }
@@ -139,26 +200,34 @@ const ProductModal: React.FC<ProductModalProps> = ({
           barcode: '',
           buyPrice: '',
           sellPrice: '',
+          sellPriceRetail: '',
+          sellPriceMitra: '',
+          sellPriceGrosir: '',
+          minQtyGrosir: '',
           stock: '',
           minStock: '1',
           status: 'Aktif',
-          imageUrl: ''
+          imageUrl: '',
+          // Bengkel spare part fields
+          brand: '',
+          vehicleType: 'UMUM',
+          storageLocation: ''
         });
         setRecipeItems([]);
       }
       setActiveTab('info');
     }
-  }, [isOpen, initialData, categories]);
+  }, [isOpen, initialData, categories, posContext?.token]);
 
   // Calculate HPP automatically if in recipe mode and has items
   useEffect(() => {
-    if (isAdvancedMode && recipeItems.length > 0) {
+    if (hasAdvancedInventory && recipeItems.length > 0) {
       const calculatedHPP = recipeItems.reduce((sum, item) => {
         return sum + (Number(item.qtyPerServing) * Number(item.buyPrice || 0));
       }, 0);
       setFormData(prev => ({ ...prev, buyPrice: String(calculatedHPP) }));
     }
-  }, [recipeItems, isAdvancedMode]);
+  }, [recipeItems, hasAdvancedInventory]);
 
   if (!isOpen) return null;
 
@@ -171,7 +240,13 @@ const ProductModal: React.FC<ProductModalProps> = ({
         subCategoryId: '' // Reset sub-category when main category changes
       }));
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      setFormData(prev => {
+        const next = { ...prev, [name]: value };
+        if (name === 'sellPriceRetail') {
+          next.sellPrice = value;
+        }
+        return next;
+      });
     }
   };
 
@@ -184,23 +259,38 @@ const ProductModal: React.FC<ProductModalProps> = ({
     e.preventDefault();
     if (!formData.name.trim()) return toast('Nama produk harus diisi', 'error');
     if (!formData.categoryId) return toast('Kategori produk harus dipilih', 'error');
-    if (!formData.sellPrice || Number(formData.sellPrice) < 0) return toast('Harga jual tidak valid', 'error');
+    
+    const effectiveSellPrice = showTieredPricing
+      ? Number(formData.sellPriceRetail || formData.sellPrice || 0)
+      : Number(formData.sellPrice || 0);
+
+    if (effectiveSellPrice < 0) return toast('Harga jual tidak valid', 'error');
 
     const payload: any = {
       ...formData,
       categoryId: Number(formData.categoryId),
       subCategoryId: formData.subCategoryId ? Number(formData.subCategoryId) : null,
       buyPrice: Number(formData.buyPrice) || 0,
-      sellPrice: Number(formData.sellPrice),
+      sellPrice: effectiveSellPrice,
+      sellPriceRetail: showTieredPricing ? effectiveSellPrice : undefined,
+      sellPriceMitra: showTieredPricing && formData.sellPriceMitra ? Number(formData.sellPriceMitra) : null,
+      sellPriceGrosir: showTieredPricing && formData.sellPriceGrosir ? Number(formData.sellPriceGrosir) : null,
+      minQtyGrosir: showTieredPricing && formData.minQtyGrosir ? Number(formData.minQtyGrosir) : null,
       stock: Number(formData.stock) || 0,
       minStock: Number(formData.minStock) || 0,
+      // Bengkel & Retail fields
+      brand: isBengkel ? (formData.brand || null) : null,
+      vehicleType: isBengkel ? (formData.vehicleType || null) : null,
+      storageLocation: formData.storageLocation || null,
     };
 
-    if (isAdvancedMode) {
-      payload.recipes = recipeItems.map(r => ({
-        ingredientId: r.ingredientId,
-        qtyPerServing: r.qtyPerServing
+    if (hasAdvancedInventory) {
+      const formattedRecipes = recipeItems.map(r => ({
+        ingredientId: Number(r.ingredientId),
+        qtyPerServing: Number(r.qtyPerServing)
       }));
+      payload.recipes = formattedRecipes;
+      payload.recipeItems = formattedRecipes;
     }
 
     if (onSave) {
@@ -241,7 +331,16 @@ const ProductModal: React.FC<ProductModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto">
+    <>
+      {/* Fullscreen Barcode Scanner — mobile camera overlay */}
+      {showScanner && (
+        <BarcodeScannerModal
+          onDetected={handleBarcodeDetected}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
+      <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto">
       {/* Container: Full Screen on Mobile (< md), Rounded Card Modal on Desktop (>= md) */}
       <div className="bg-white w-full h-full md:h-auto md:max-w-4xl md:rounded-3xl shadow-2xl flex flex-col md:overflow-hidden max-h-screen md:max-h-[92vh] animate-in fade-in duration-150">
         {/* Header */}
@@ -252,10 +351,14 @@ const ProductModal: React.FC<ProductModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
-                {initialData ? 'Edit Data Produk' : 'Tambah Produk Baru'}
+                {initialData 
+                  ? (isBengkel ? 'Edit Data Sparepart / Barang' : 'Edit Data Produk') 
+                  : (isBengkel ? 'Tambah Sparepart / Barang' : 'Tambah Produk Baru')}
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                {initialData ? `Perbarui info dan resep ${initialData.name}` : 'Input produk baru ke katalog POS & inventaris'}
+                {initialData 
+                  ? (isBengkel ? `Perbarui info harga & stok ${initialData.name}` : `Perbarui info dan resep ${initialData.name}`) 
+                  : (isBengkel ? 'Input sparepart atau barang baru ke katalog bengkel' : 'Input produk baru ke katalog POS & inventaris')}
               </p>
             </div>
           </div>
@@ -268,8 +371,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
           </button>
         </div>
 
-        {/* Tabs for Advanced Mode */}
-        {isAdvancedMode && (
+        {/* Tabs for Info & Recipe (Hidden for Bengkel & Retail: Recipes are F&B/Cafe specific) */}
+        {!isBengkel && !isRetail && (
           <div className="flex px-4 sm:px-6 pt-3 border-b border-slate-200 bg-white gap-3 shrink-0">
             <button 
               type="button"
@@ -287,8 +390,12 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 activeTab === 'recipe' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
-              <Beaker size={15} /> Resep & Komposisi HPP
-              {recipeItems.length > 0 && (
+              <Beaker size={15} /> Resep &amp; Komposisi HPP
+              {!hasAdvancedInventory ? (
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+                  PRO
+                </span>
+              ) : recipeItems.length > 0 && (
                 <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black flex items-center justify-center">
                   {recipeItems.length}
                 </span>
@@ -306,7 +413,9 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 {/* Kolom Kiri: Foto & Barcode */}
                 <div className="md:col-span-1 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Foto Produk</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      {isBengkel ? 'Foto Sparepart (Opsional)' : 'Foto Produk'}
+                    </label>
                     <input 
                       type="file" 
                       ref={fileInputRef} 
@@ -316,11 +425,13 @@ const ProductModal: React.FC<ProductModalProps> = ({
                     />
                     <div 
                       onClick={() => !uploading && fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-2xl bg-slate-50 h-44 flex flex-col items-center justify-center text-center cursor-pointer transition-all relative overflow-hidden group"
+                      className={`border-2 border-dashed border-slate-200 hover:border-purple-500 rounded-2xl bg-slate-50 flex flex-col items-center justify-center text-center cursor-pointer transition-all relative overflow-hidden group ${
+                        isBengkel && !formData.imageUrl ? 'h-32' : 'h-44'
+                      }`}
                     >
                       {uploading ? (
                         <div className="flex flex-col items-center justify-center p-4">
-                          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+                          <div className="w-8 h-8 border-3 border-purple-600 border-t-transparent rounded-full animate-spin mb-2"></div>
                           <span className="text-xs font-bold text-slate-600">Mengunggah foto...</span>
                         </div>
                       ) : formData.imageUrl ? (
@@ -331,11 +442,13 @@ const ProductModal: React.FC<ProductModalProps> = ({
                           </div>
                         </>
                       ) : (
-                        <div className="p-4">
-                          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600 mx-auto mb-2">
-                            <UploadCloud size={20} />
+                        <div className="p-3">
+                          <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-purple-600 mx-auto mb-1.5">
+                            <UploadCloud size={18} />
                           </div>
-                          <span className="text-xs font-bold text-slate-700 block">Pilih Foto Produk</span>
+                          <span className="text-xs font-bold text-slate-700 block">
+                            {isBengkel ? 'Pilih Foto Sparepart' : 'Pilih Foto Produk'}
+                          </span>
                           <span className="text-[10px] text-slate-400 mt-0.5 block">JPG, PNG, WEBP (Max 10MB)</span>
                         </div>
                       )}
@@ -350,12 +463,22 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         <input 
                           type="text" 
                           name="barcode"
-                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white" 
+                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500 focus:bg-white" 
                           placeholder="Scan / ketik barcode..."
                           value={formData.barcode}
                           onChange={handleChange}
                         />
                       </div>
+                      {/* Camera scan button — mobile only */}
+                      <button
+                        type="button"
+                        className="px-3 bg-slate-900 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
+                        onClick={() => setShowScanner(true)}
+                        title="Scan dengan Kamera HP"
+                      >
+                        <Camera size={15} />
+                        <span className="hidden sm:inline text-[11px]">Kamera</span>
+                      </button>
                       <button 
                         type="button" 
                         className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
@@ -365,6 +488,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         <RefreshCw size={14} />
                       </button>
                     </div>
+                    <p className="text-[10px] text-slate-400 mt-1">Ketik manual, tap 📷 untuk scan kamera HP, atau generate otomatis</p>
                   </div>
 
                   <div>
@@ -376,7 +500,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         <button
                           type="button"
                           onClick={onManageCategories}
-                          className="text-[11px] font-bold text-indigo-600 hover:underline"
+                          className="text-[11px] font-bold text-purple-700 hover:underline"
                         >
                           + Kelola Kategori
                         </button>
@@ -386,7 +510,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                       <Tag size={16} className="absolute left-3.5 top-3 text-slate-400" />
                       <select 
                         name="categoryId"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white" 
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500 focus:bg-white" 
                         value={formData.categoryId}
                         onChange={handleChange}
                         required
@@ -413,7 +537,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                           <Layers size={16} className="absolute left-3.5 top-3 text-slate-400" />
                           <select 
                             name="subCategoryId"
-                            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white" 
+                            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500 focus:bg-white" 
                             value={formData.subCategoryId}
                             onChange={handleChange}
                           >
@@ -432,58 +556,267 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 <div className="md:col-span-2 space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Nama Produk / Menu <span className="text-rose-500">*</span>
+                      {isBengkel ? 'Nama Sparepart / Barang' : 'Nama Produk / Menu'} <span className="text-rose-500">*</span>
                     </label>
                     <input 
                       type="text" 
                       name="name"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white" 
-                      placeholder="Contoh: Ramen Kuah Paitan Spesial"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base font-black text-slate-900 outline-none focus:border-purple-500 focus:bg-white" 
+                      placeholder={
+                        isBengkel 
+                          ? 'Contoh: Vanbelt Kit Beat FI Original' 
+                          : isRetail 
+                            ? 'Contoh: Minyak Goreng Bimoli 2L / Semen Tiga Roda' 
+                            : 'Contoh: Ramen Kuah Paitan Spesial'
+                      }
                       value={formData.name}
                       onChange={handleChange}
                       required
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Harga Modal (HPP) {isAdvancedMode && recipeItems.length > 0 && <span className="text-indigo-600 text-[10px]">(Auto-Resep)</span>}
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-xs">Rp</span>
-                        <input 
-                          type="number" 
-                          name="buyPrice"
-                          className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500" 
-                          placeholder="0"
-                          value={formData.buyPrice}
-                          onChange={handleChange}
-                          readOnly={isAdvancedMode && recipeItems.length > 0}
-                          style={{ backgroundColor: (isAdvancedMode && recipeItems.length > 0) ? '#f1f5f9' : 'white' }}
-                        />
+                  {/* ── IDENTITAS BENGKEL: Brand, Jenis Kendaraan, Lokasi Rak ── */}
+                  {isBengkel && (
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                        <Wrench size={15} className="text-indigo-600" />
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                          Identitas Suku Cadang
+                        </span>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">
-                        Harga Jual Kasir <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-2.5 text-indigo-600 font-bold text-xs">Rp</span>
-                        <input 
-                          type="number" 
-                          name="sellPrice"
-                          className="w-full pl-9 pr-3 py-2 bg-white border border-indigo-300 rounded-xl text-xs font-black text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" 
-                          placeholder="0"
-                          value={formData.sellPrice}
-                          onChange={handleChange}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Merk / Brand */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Merk / Brand
+                          </label>
+                          <input
+                            type="text"
+                            name="brand"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-slate-400"
+                            placeholder="AHM, Yamaha, Federal, IRC..."
+                            value={formData.brand}
+                            onChange={handleChange}
+                          />
+                        </div>
+
+                        {/* Lokasi / Rak */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                            Lokasi / Rak Gudang
+                          </label>
+                          <input
+                            type="text"
+                            name="storageLocation"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 placeholder:text-slate-400"
+                            placeholder="RAK-A1, B2, GUDANG..."
+                            value={formData.storageLocation}
+                            onChange={handleChange}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Jenis Kendaraan */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Jenis Kendaraan
+                        </label>
+                        <div className="flex gap-2">
+                          {(['MOTOR', 'MOBIL', 'UMUM'] as const).map(vt => (
+                            <button
+                              key={vt}
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, vehicleType: vt }))}
+                              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${
+                                formData.vehicleType === vt
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-800'
+                              }`}
+                            >
+                              {vt === 'MOTOR' ? '🏍 Motor' : vt === 'MOBIL' ? '🚗 Mobil' : '⚙ Umum'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {showTieredPricing ? (
+                    /* STRUKTUR HARGA MULTI-TIER (ECERAN, MITRA/WARUNG, GROSIR/PARTAI ATAU BENGKEL) */
+                    <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <Layers size={14} className="text-indigo-600" />
+                          <span>
+                            {isBengkel 
+                              ? 'Struktur Harga Multi-Tier (Otomotif & Bengkel)' 
+                              : (isRetail ? 'Struktur Harga Bertingkat (Grosir & Retail)' : 'Struktur 3-Tingkat Harga Produk')}
+                          </span>
+                        </span>
+                        <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2.5 py-0.5 rounded-full uppercase">
+                          3 Tingkat Harga
+                        </span>
+                      </div>
+
+                      {/* Jika Bukan Bengkel: Tampilkan juga input HPP (Harga Modal Beli) */}
+                      {!isBengkel && (
+                        <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                          <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Tag size={13} className="text-indigo-600" />
+                            <span>Harga Beli / Modal (HPP):</span>
+                            {hasAdvancedInventory && recipeItems.length > 0 && (
+                              <span className="text-indigo-600 text-[10px] font-bold">(Auto-Resep)</span>
+                            )}
+                          </div>
+                          <div className="relative w-44">
+                            <span className="absolute left-3 top-2 text-slate-400 font-bold text-xs">Rp</span>
+                            <input 
+                              type="number" 
+                              name="buyPrice"
+                              className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-indigo-500" 
+                              placeholder="0"
+                              value={formData.buyPrice}
+                              onChange={handleChange}
+                              readOnly={hasAdvancedInventory && recipeItems.length > 0}
+                              style={{ backgroundColor: (hasAdvancedInventory && recipeItems.length > 0) ? '#f1f5f9' : 'white' }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+                        {/* 1. Harga Retail / Eceran */}
+                        <div className="flex flex-col h-full justify-between space-y-1">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1 min-h-[1.5rem] flex items-center">
+                              {isBengkel ? 'Harga Retail (Umum)' : '1. Harga Eceran (Normal)'} <span className="text-rose-500 ml-0.5">*</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-2.5 text-indigo-600 font-bold text-xs">Rp</span>
+                              <input 
+                                type="number" 
+                                name="sellPriceRetail"
+                                className="w-full pl-9 pr-3 py-2 bg-white border border-indigo-200 rounded-xl text-xs font-black text-indigo-950 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-xs" 
+                                placeholder="0"
+                                value={formData.sellPriceRetail || formData.sellPrice}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    sellPriceRetail: val,
+                                    sellPrice: val
+                                  }));
+                                }}
+                                required
+                              />
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-1 block">Harga konsumen umum</span>
+                        </div>
+
+                        {/* 2. Harga Mitra / Warung */}
+                        <div className="flex flex-col h-full justify-between space-y-1">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 min-h-[1.5rem] flex items-center">
+                              {isBengkel ? 'HARGA MITRA / BENGKEL' : '2. HARGA MITRA / WARUNG'}
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-xs">Rp</span>
+                              <input 
+                                type="number" 
+                                name="sellPriceMitra"
+                                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-xs" 
+                                placeholder="Opsional"
+                                value={formData.sellPriceMitra}
+                                onChange={handleChange}
+                              />
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-1 block">Toko/langganan rutin</span>
+                        </div>
+
+                        {/* 3. Harga Grosir / Partai */}
+                        <div className="flex flex-col h-full justify-between space-y-1">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 min-h-[1.5rem] flex items-center">
+                              {isBengkel ? 'HARGA GROSIR' : '3. HARGA GROSIR / PARTAI'}
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-xs">Rp</span>
+                              <input 
+                                type="number" 
+                                name="sellPriceGrosir"
+                                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-xs" 
+                                placeholder="Opsional"
+                                value={formData.sellPriceGrosir}
+                                onChange={handleChange}
+                              />
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-1 block">Partai besar/dus</span>
+                        </div>
+                      </div>
+
+                      {/* Minimal Qty Grosir */}
+                      <div className="flex items-center justify-between pt-2.5 border-t border-slate-200">
+                        <span className="text-[11px] text-slate-600 font-semibold">
+                          Minimal qty untuk aktivasi harga grosir/partai:
+                        </span>
+                        <div className="flex items-center gap-1.5 w-32">
+                          <input 
+                            type="number" 
+                            name="minQtyGrosir"
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center outline-none focus:border-indigo-500 shadow-2xs" 
+                            placeholder="Contoh: 3"
+                            value={formData.minQtyGrosir}
+                            onChange={handleChange}
+                          />
+                          <span className="text-[11px] text-slate-500 font-bold">pcs/satuan</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                          Harga Modal (HPP) {hasAdvancedInventory && recipeItems.length > 0 && <span className="text-indigo-600 text-[10px]">(Auto-Resep)</span>}
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-xs">Rp</span>
+                          <input 
+                            type="number" 
+                            name="buyPrice"
+                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500" 
+                            placeholder="0"
+                            value={formData.buyPrice}
+                            onChange={handleChange}
+                            readOnly={hasAdvancedInventory && recipeItems.length > 0}
+                            style={{ backgroundColor: (hasAdvancedInventory && recipeItems.length > 0) ? '#f1f5f9' : 'white' }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">
+                          Harga Jual Kasir <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-2.5 text-indigo-600 font-bold text-xs">Rp</span>
+                          <input 
+                            type="number" 
+                            name="sellPrice"
+                            className="w-full pl-9 pr-3 py-2 bg-white border border-indigo-300 rounded-xl text-xs font-black text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" 
+                            placeholder="0"
+                            value={formData.sellPrice}
+                            onChange={handleChange}
+                            required
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Stok Awal di Toko</label>
                       <div className="relative">
@@ -499,7 +832,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Batas Minimum Stok (Alert)</label>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">STOK MINIMUM (ALERT)</label>
                       <div className="relative">
                         <AlertTriangle size={16} className="absolute left-3.5 top-3 text-amber-500" />
                         <input 
@@ -508,6 +841,20 @@ const ProductModal: React.FC<ProductModalProps> = ({
                           className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white" 
                           placeholder="1"
                           value={formData.minStock}
+                          onChange={handleChange}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Lokasi / Rak Gudang</label>
+                      <div className="relative">
+                        <Package size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                        <input 
+                          type="text" 
+                          name="storageLocation"
+                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white" 
+                          placeholder="Contoh: RAK-A1"
+                          value={formData.storageLocation}
                           onChange={handleChange}
                         />
                       </div>
@@ -547,8 +894,67 @@ const ProductModal: React.FC<ProductModalProps> = ({
                   </div>
                 </div>
               </div>
+            ) : !hasAdvancedInventory ? (
+              /* RECIPE UPSELL TAB (LOCKED FOR STARTER) */
+              <div className="py-8 px-4 text-center max-w-lg mx-auto space-y-5 animate-fade-in">
+                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center mx-auto shadow-xl shadow-amber-500/25">
+                  <Beaker size={32} />
+                </div>
+
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-black uppercase tracking-wider mb-2.5">
+                    <Sparkles size={13} className="text-amber-600" /> Tersedia di Paket Growth
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                    Kalkulasi Otomatis HPP &amp; Resep Bahan Baku
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed mt-2">
+                    Tingkatkan kafe Anda ke <strong>Paket Growth (Rp 165rb/bln)</strong> untuk mengaktifkan pemotongan stok bahan baku (susu, biji kopi, daging) otomatis per porsi saji dan kalkulasi margin keuntungan kotor per menu secara presisi.
+                  </p>
+                </div>
+
+                {/* Value highlights */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left text-xs text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-start gap-2">
+                    <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Auto-potong stok bahan baku saat kasir input transaksi</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Hitung HPP &amp; Food Cost riil per menu secara real-time</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Cegah kecurangan &amp; kebocoran stok bahan baku</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Audit waste &amp; sisa bahan baku per tutup shift</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      navigate('/pengaturan');
+                    }}
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs shadow-lg shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Sparkles size={14} /> Buka Fitur Resep — Upgrade ke Growth <ArrowRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('info')}
+                    className="w-full sm:w-auto px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-all"
+                  >
+                    Kembali ke Info Produk
+                  </button>
+                </div>
+              </div>
             ) : (
-              /* RECIPE TAB CONTENT */
+              /* RECIPE TAB CONTENT (ACTIVE FOR GROWTH/BUSINESS) */
               <div className="space-y-5">
                 {/* Banner Info */}
                 <div className="bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-200/80 rounded-2xl p-4 flex gap-3.5 items-start shadow-sm">
@@ -769,15 +1175,16 @@ const ProductModal: React.FC<ProductModalProps> = ({
             </button>
             <button 
               type="submit" 
-              className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-1.5"
+              className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20 text-white text-xs font-black shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Check size={16} />
-              {initialData ? 'Simpan Perubahan' : 'Simpan Produk'}
+              {initialData ? (isBengkel ? 'Simpan Perubahan Sparepart' : 'Simpan Perubahan') : (isBengkel ? 'Simpan Sparepart' : 'Simpan Produk')}
             </button>
           </div>
         </form>
       </div>
     </div>
+    </>
   );
 };
 

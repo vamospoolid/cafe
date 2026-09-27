@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
 import { 
   CreditCard, Plus, Search, Filter, Calendar, CheckCircle2, Clock, 
   Trash2, Edit3, DollarSign, User, AlertCircle, Eye, ChevronRight,
   TrendingDown, FileText, Check, X, Building2, Wallet, ArrowUpRight,
-  Receipt, RefreshCw
+  Receipt, RefreshCw, Printer, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -16,7 +16,8 @@ interface EmployeeLoan {
   date: string;
   source: 'KAS_OWNER' | 'KASIR';
   reason?: string;
-  status: 'Belum Lunas' | 'Lunas';
+  status: 'Belum Lunas' | 'Lunas' | 'MENUNGGU_PERSETUJUAN' | 'DITOLAK';
+  rejectReason?: string;
   approvedBy?: string;
   settledAt?: string;
   settledNote?: string;
@@ -47,7 +48,7 @@ const EmployeeLoanView: React.FC = () => {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Belum Lunas' | 'Lunas'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'MENUNGGU_PERSETUJUAN' | 'Belum Lunas' | 'Lunas'>('ALL');
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('ALL');
 
   // Modal State
@@ -61,6 +62,16 @@ const EmployeeLoanView: React.FC = () => {
     reason: '',
     approvedBy: ''
   });
+
+  // Approval Modal State
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [loanToApprove, setLoanToApprove] = useState<EmployeeLoan | null>(null);
+  const [approveSource, setApproveSource] = useState<'KAS_OWNER' | 'KASIR'>('KAS_OWNER');
+  const [processingApproval, setProcessingApproval] = useState(false);
+
+  // Print Slip Modal State
+  const [receiptLoan, setReceiptLoan] = useState<EmployeeLoan | null>(null);
+  const printAreaRef = useRef<HTMLDivElement>(null);
 
   // Payment Modal State
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
@@ -251,6 +262,81 @@ const EmployeeLoanView: React.FC = () => {
     }
   };
 
+  const handleOpenApproveModal = (loan: EmployeeLoan) => {
+    setLoanToApprove(loan);
+    setApproveSource('KAS_OWNER');
+    setIsApproveModalOpen(true);
+  };
+
+  const handleConfirmApproval = async () => {
+    if (!loanToApprove) return;
+    setProcessingApproval(true);
+    try {
+      const res = await fetch(`/api/employee-loans/${loanToApprove.id}/approve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          source: approveSource,
+          approvedBy: (posContext?.user as any)?.name || posContext?.user?.username || 'Owner / Manajemen'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast('Pengajuan kasbon berhasil disetujui & dicairkan!', 'success');
+        setIsApproveModalOpen(false);
+        setLoanToApprove(null);
+        fetchLoans();
+      } else {
+        toast(data.error || 'Gagal menyetujui kasbon', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setProcessingApproval(false);
+    }
+  };
+
+  const handleRejectLoan = async (loan: EmployeeLoan) => {
+    const confirm = await confirmAlert(
+      'Tolak Pengajuan Kasbon?',
+      `Apakah Anda yakin ingin menolak pengajuan kasbon dari ${loan.user?.name} senilai ${formatRupiah(loan.amount)}?`
+    );
+    if (!confirm.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/employee-loans/${loan.id}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          rejectReason: 'Ditolak oleh manajemen/owner'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast('Pengajuan kasbon telah ditolak', 'info');
+        fetchLoans();
+      } else {
+        toast(data.error || 'Gagal menolak kasbon', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan koneksi', 'error');
+    }
+  };
+
+  const pendingApprovalCount = useMemo(() => {
+    return loans.filter(l => l.status === 'MENUNGGU_PERSETUJUAN').length;
+  }, [loans]);
+
   const filteredLoans = useMemo(() => {
     return loans.filter(l => {
       const matchSearch = l.user?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -265,7 +351,7 @@ const EmployeeLoanView: React.FC = () => {
   }, [loans, searchQuery, statusFilter, selectedUserFilter]);
 
   return (
-    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-3.5 sm:space-y-6 pb-28 sm:pb-12 animate-in fade-in duration-200">
+    <div className="p-3 sm:p-6 w-full space-y-3.5 sm:space-y-6 pb-28 sm:pb-12 animate-in fade-in duration-200">
       
       {/* Header View */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs">

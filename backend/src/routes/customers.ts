@@ -1,17 +1,20 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // GET all customers with optional search & filter
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    // Fail-closed: tidak pernah fallback ke tenant hardcoded
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { search, tier } = req.query;
 
-    const whereCondition: any = { tenantId };
+    const whereCondition: any = { tenantId, deletedAt: null };
 
     if (search) {
       whereCondition.OR = [
@@ -46,7 +49,10 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // GET customer detail, order history, and point logs
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
 
     const customer = await prisma.customer.findFirst({
@@ -79,6 +85,27 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
               }
             }
           }
+        },
+        // Riwayat SPK bengkel — hanya ada data jika tenant bengkel
+        workOrders: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: {
+            vehicle: {
+              select: { plateNumber: true, brand: true, model: true, year: true }
+            },
+            services: {
+              select: {
+                id: true,
+                serviceName: true,
+                subtotal: true,
+                serviceType: { select: { name: true } }
+              }
+            },
+            parts: {
+              select: { id: true, partName: true, qty: true, subtotal: true }
+            }
+          }
         }
       }
     });
@@ -94,10 +121,14 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
   }
 });
 
+
 // POST register new customer
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { name, phone, email, birthday } = req.body;
 
     if (!name || !phone) {
@@ -145,7 +176,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // PUT update customer
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
     const { name, phone, email, birthday, pointsAdjustment, adjustmentReason } = req.body;
 
@@ -185,16 +219,27 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     };
 
     // Handle manual points adjustment if requested by admin
+    // CRM-004: Role guard — hanya Owner/Admin yang boleh adjust poin manual
+    // Staf kasir tidak boleh menyalahgunakan endpoint ini untuk kecurangan poin
     let pointsLogData = null;
-    if (pointsAdjustment !== undefined && pointsAdjustment !== 0) {
+    if (pointsAdjustment !== undefined && Number(pointsAdjustment) !== 0) {
+      const allowedRoles = ['OWNER', 'Owner', 'owner', 'Admin', 'admin', 'superadmin', 'SUPERADMIN', 'Manager', 'manager'];
+      const userRole = req.user?.role || '';
+      if (!allowedRoles.includes(userRole)) {
+        return res.status(403).json({
+          error: 'Hanya Owner / Admin yang dapat menyesuaikan poin secara manual',
+          code: 'INSUFFICIENT_ROLE'
+        });
+      }
+
       const newPoints = Math.max(0, existingCustomer.points + Number(pointsAdjustment));
       updateData.points = newPoints;
-      
+
       pointsLogData = {
         tenantId,
         points: Number(pointsAdjustment),
         type: 'Manual',
-        description: adjustmentReason || 'Penyesuaian manual oleh admin'
+        description: adjustmentReason || `Penyesuaian manual oleh ${req.user?.name || userRole}`
       };
     }
 
@@ -226,25 +271,29 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
   }
 });
 
-// DELETE customer
+// DELETE customer (Soft delete to Recycle Bin for 30 days)
 router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
 
     const customer = await prisma.customer.findFirst({
-      where: { id: Number(id), tenantId }
+      where: { id: Number(id), tenantId, deletedAt: null }
     });
 
     if (!customer) {
       return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }
 
-    await prisma.customer.delete({
-      where: { id: Number(id) }
+    await prisma.customer.updateMany({
+      where: { id: Number(id), tenantId },
+      data: { deletedAt: new Date() }
     });
 
-    res.json({ message: 'Pelanggan berhasil dihapus' });
+    res.json({ success: true, message: `Pelanggan "${customer.name}" berhasil dipindahkan ke Keranjang Sampah.` });
   } catch (error: any) {
     console.error('Delete Customer Error:', error);
     res.status(500).json({ error: 'Gagal menghapus pelanggan' });

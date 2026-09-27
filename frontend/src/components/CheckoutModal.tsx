@@ -2,11 +2,12 @@ import React, { useState, useContext, useEffect } from 'react';
 import { 
   X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, 
   Printer, Utensils, Coffee, Layers, Sparkles, ArrowRight, Banknote, Calendar, 
-  FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck
+  FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck,
+  MessageCircle, Send, Ticket
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
-import { offlineDB } from '../utils/offlineDb';
+import { offlineDb } from '../db/offlineDb';
 import CustomerModal from './CustomerModal';
 import ReceiptPrinter from './ReceiptPrinter';
 import SplitPrintModal from './SplitPrintModal';
@@ -14,6 +15,7 @@ import {
   getSavedBluetoothPrinter,
   printBluetoothReceipt 
 } from '../utils/printerBluetooth';
+import { generateWhatsAppReceiptUrl } from '../utils/receiptFormatter';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -46,25 +48,117 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [showItemsList, setShowItemsList] = useState(false);
   const [showNumpad, setShowNumpad]       = useState(false);
 
+  // Voucher Promo State
+  const [voucherCode, setVoucherCode] = useState<string>('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+
+  // Points Redemption State
+  const [redeemPoints, setRedeemPoints] = useState<boolean>(false);
+
   const posContext = useContext(POSContext);
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [printLoading, setPrintLoading] = useState(false);
   const [printOrderData, setPrintOrderData] = useState<any | null>(null);
+  const [showSplitPrintModal, setShowSplitPrintModal] = useState(false);
 
   const [currentCustomer, setCurrentCustomer] = useState<any>(customer || null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
-  const [showSplitPrintModal, setShowSplitPrintModal] = useState(false);
   const [fetchedFullOrder, setFetchedFullOrder] = useState<any | null>(null);
+  const [offlineOrderSnapshot, setOfflineOrderSnapshot] = useState<any | null>(null);
+  const [createdOrderObj, setCreatedOrderObj] = useState<any | null>(null);
+  const [waPhone, setWaPhone] = useState<string>(customer?.phone || '');
+
+  const handleSendWhatsAppReceipt = () => {
+    if (!waPhone.trim()) {
+      toast('Masukkan nomor WhatsApp terlebih dahulu', 'warning');
+      return;
+    }
+
+    const orderData = createdOrderObj || offlineOrderSnapshot || {
+      orderNumber: createdOrderId ? `ORD-${createdOrderId}` : 'ORD-LOKAL',
+      customerName: currentCustomer?.name || 'Pelanggan Umum',
+      customerPhone: waPhone,
+      items: cart.map(i => ({
+        name: i.product?.name || i.name,
+        qty: i.qty,
+        price: Number(i.product?.sellPrice || i.product?.price || i.price || 0),
+        notes: i.notes
+      })),
+      subtotal,
+      discount: totalDiscount,
+      tax,
+      serviceCharge,
+      total: finalTotal,
+      paymentMethod,
+      isPaid: true
+    };
+
+    const url = generateWhatsAppReceiptUrl(waPhone, orderData, posContext?.settings);
+    window.open(url, '_blank');
+    toast('Tautan nota WhatsApp dibuka!', 'success');
+  };
 
   useEffect(() => {
     setCurrentCustomer(customer || null);
+    if (customer?.phone) {
+      setWaPhone(customer.phone);
+    }
+    if (customer?.pointsUsed && customer.pointsUsed > 0) {
+      setRedeemPoints(true);
+    }
   }, [customer]);
 
   const fmt = (val: number) => `Rp ${Math.round(val || 0).toLocaleString('id-ID')}`;
   
-  const parentDiscount = customer?.discountAmount || 0;
-  const currentDiscount = currentCustomer?.discountAmount || 0;
-  const finalTotal = Math.max(0, total + parentDiscount - currentDiscount - manualDiscount);
+  const loyaltyPointValue = posContext?.settings?.loyaltyPointValue || 100;
+  const customerPoints = currentCustomer?.points || 0;
+  const maxPointDiscount = customerPoints * loyaltyPointValue;
+
+  const voucherDiscount = appliedVoucher ? (appliedVoucher.discountAmount || 0) : 0;
+  const pointsDiscount = redeemPoints 
+    ? Math.min(maxPointDiscount, Math.max(0, subtotal - voucherDiscount - manualDiscount))
+    : (currentCustomer?.discountAmount || 0);
+
+  const totalDiscount = manualDiscount + voucherDiscount + pointsDiscount;
+  const finalTotal = Math.max(0, subtotal - totalDiscount + tax + serviceCharge);
+
+  const handleApplyVoucher = async () => {
+    if (!voucherCode.trim()) {
+      toast('Masukkan kode voucher terlebih dahulu', 'warning');
+      return;
+    }
+    setVoucherLoading(true);
+    try {
+      const res = await fetch('/api/vouchers/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          code: voucherCode.trim(),
+          subtotal
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        throw new Error(data.message || 'Kode voucher tidak valid');
+      }
+      setAppliedVoucher(data);
+      toast(`✅ Voucher "${data.voucher.code}" berhasil diterapkan! Hemat ${fmt(data.discountAmount)}`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal menerapkan voucher', 'error');
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherCode('');
+    toast('Voucher dibatalkan', 'info');
+  };
   
   // Initialize cashGiven with exact total when opening or changing method
   useEffect(() => {
@@ -98,7 +192,33 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const quickAmounts = getSmartPresets(finalTotal);
 
-  const handleDirectPrint = async (id: number) => {
+  const handleDirectPrint = async (id?: number | string | null) => {
+    // If we have an offline order snapshot, print it directly
+    if (offlineOrderSnapshot) {
+      const savedBt = getSavedBluetoothPrinter();
+      if (savedBt) {
+        setPrintLoading(true);
+        try {
+          await printBluetoothReceipt(offlineOrderSnapshot, {
+            name: posContext?.settings?.storeName || 'KAFE & RESTORAN',
+            address: posContext?.settings?.address || '',
+            phone: posContext?.settings?.phone || '',
+            footer: posContext?.settings?.receiptFooter || 'Terima kasih atas kunjungan Anda!'
+          });
+          toast('Struk berhasil dicetak via Bluetooth!', 'success');
+        } catch (err: any) {
+          toast(err.message || 'Gagal cetak via Bluetooth', 'error');
+        } finally {
+          setPrintLoading(false);
+        }
+      } else {
+        setPrintOrderData(offlineOrderSnapshot);
+      }
+      return;
+    }
+
+    if (!id) return;
+
     const savedBt = getSavedBluetoothPrinter();
     if (savedBt) {
       setPrintLoading(true);
@@ -110,7 +230,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         const orderData = await orderRes.json();
         
         await printBluetoothReceipt(orderData, {
-          name: posContext?.settings?.storeName || 'MUKI RAMEN',
+          name: posContext?.settings?.storeName || 'KAFE & RESTORAN',
           address: posContext?.settings?.address || '',
           phone: posContext?.settings?.phone || '',
           footer: posContext?.settings?.receiptFooter || 'Terima kasih atas kunjungan Anda!'
@@ -242,37 +362,84 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     // Handler Mode Offline
     if (!navigator.onLine || !posContext?.isOnline) {
       try {
-        const offlineId = 'off-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-        const offlineOrder = {
+        const offlineId = 'OFF-' + (window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2, 8)));
+        const orderNumber = 'ORD-OFF-' + Date.now().toString().slice(-6);
+        const clientTimestamp = new Date().toISOString();
+
+        const offlineOrderPayload = {
           offlineId,
-          customerName: currentCustomer?.name || 'Pelanggan Umum',
-          customerPhone: currentCustomer?.phone || '',
-          customerId: currentCustomer?.id || null,
+          orderNumber,
           tableId: customer?.tableId || null,
+          tableName: customer?.tableName || undefined,
+          customerName: currentCustomer?.name || customer?.name || 'Pelanggan Walk-In',
+          customerPhone: currentCustomer?.phone || customer?.phone || '',
           items: cart.map((item: any) => ({
             productId: item.product.id,
-            qty: item.qty,
-            price: item.product.sellPrice,
-            notes: item.notes || ''
+            productName: item.product.name,
+            quantity: item.qty,
+            price: Number(item.product.sellPrice || item.product.price || 0),
+            cost: Number(item.product.cost || item.product.cogs || 0),
+            notes: item.notes || '',
+            selectedVariants: item.selectedVariants || [],
           })),
           subtotal,
-          discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
-          pointsUsed: currentCustomer?.pointsUsed || 0,
+          discount: totalDiscount,
+          voucherId: appliedVoucher ? appliedVoucher.voucher.id : undefined,
+          pointsUsed: redeemPoints ? Math.floor(pointsDiscount / loyaltyPointValue) : 0,
           tax,
-          serviceCharge,
+          service: serviceCharge,
           total: finalTotal,
-          paymentMethod: pmString,
-          isPaid: true,
-          createdAt: new Date().toISOString(),
-          paidAt: new Date().toISOString(),
-          dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
-          debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined
+          paymentMethod: paymentMethod === 'tunai' ? 'CASH' as const : paymentMethod === 'qris' ? 'QRIS_MANUAL' as const : 'DEBIT' as const,
+          cashAmountPaid: paymentMethod === 'tunai' ? cashGiven : finalTotal,
+          cashChange: paymentMethod === 'tunai' ? Math.max(0, change) : 0,
+          clientTimestamp,
+          tenantId: posContext?.user?.tenantId,
+          outletId: posContext?.user?.outletId,
+          cashierId: posContext?.user?.id ? String(posContext.user.id) : undefined,
+          cashierName: posContext?.user?.username || 'Kasir Offline',
         };
 
-        await offlineDB.addOfflineOrder(offlineOrder);
+        await offlineDb.queueOfflineOrder(offlineOrderPayload);
+
+        // Optimistic Local Stock & Table Updates
+        try {
+          await offlineDb.deductLocalCachedStock(
+            cart.map((i: any) => ({ productId: Number(i.product.id), quantity: Number(i.qty || 1) }))
+          );
+          if (customer?.tableId) {
+            await offlineDb.occupyTableOffline(Number(customer.tableId), orderNumber);
+          }
+        } catch (localUpdateErr) {
+          console.warn('[Offline Mode] Local stock/table optimistic update warning:', localUpdateErr);
+        }
+
+        const printableOffline = {
+          id: offlineId,
+          orderNumber,
+          customerName: offlineOrderPayload.customerName,
+          table: customer?.tableName ? { name: customer.tableName } : null,
+          items: offlineOrderPayload.items.map((i: any) => ({
+            product: { name: i.productName, price: i.price },
+            quantity: i.quantity,
+            price: i.price,
+            notes: i.notes,
+          })),
+          subtotal: offlineOrderPayload.subtotal,
+          discount: offlineOrderPayload.discount,
+          tax: offlineOrderPayload.tax,
+          serviceCharge: offlineOrderPayload.service,
+          total: offlineOrderPayload.total,
+          paymentMethod: pmString,
+          cashGiven: offlineOrderPayload.cashAmountPaid,
+          change: offlineOrderPayload.cashChange,
+          createdAt: clientTimestamp,
+          cashier: { username: offlineOrderPayload.cashierName },
+        };
+
+        setOfflineOrderSnapshot(printableOffline);
         setCreatedOrderId(null);
         setIsSuccess(true);
-        toast('Transaksi berhasil disimpan secara offline!', 'warning');
+        toast('✅ Transaksi tersimpan di antrean offline lokal & struk siap dicetak!', 'warning');
       } catch (err: any) {
         toast(err.message || 'Gagal menyimpan transaksi offline', 'error');
       } finally {
@@ -283,16 +450,18 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     try {
       let res: Response;
+      const actualPointsUsed = redeemPoints ? Math.floor(pointsDiscount / loyaltyPointValue) : 0;
       if (orderId) {
         res = await fetch(`/api/orders/${orderId}/payment`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${posContext?.token}` },
           body: JSON.stringify({ 
             paymentMethod: pmString, 
-            discount: (currentCustomer?.discountAmount || 0) + manualDiscount, 
+            discount: totalDiscount, 
             total: finalTotal,
             customerId: currentCustomer?.id || null,
-            pointsUsed: currentCustomer?.pointsUsed || 0,
+            pointsUsed: actualPointsUsed,
+            voucherId: appliedVoucher ? appliedVoucher.voucher.id : null,
             dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
             debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined
           }),
@@ -306,11 +475,15 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             customerPhone: currentCustomer?.phone || '',
             customerId: currentCustomer?.id || null,
             tableId: customer?.tableId || null,
-            joinedTableIds: customer?.joinedTableIds || undefined,
-            items: cart.map((item: any) => ({ productId: item.product.id, qty: item.qty, price: item.product.sellPrice, notes: item.notes || '' })),
-            subtotal,
-            discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
-            pointsUsed: currentCustomer?.pointsUsed || 0,
+            items: cart.map((item: any) => ({
+              productId: item.product.id,
+              qty: item.qty,
+              price: Number(item.product.sellPrice ?? item.product.price ?? 0),
+              notes: item.notes || ''
+            })),
+            discount: totalDiscount,
+            pointsUsed: actualPointsUsed,
+            voucherId: appliedVoucher ? appliedVoucher.voucher.id : null,
             tax, serviceCharge, total: finalTotal, paymentMethod: pmString, isPaid: true,
             dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
             debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined
@@ -323,6 +496,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const createdOrder = data.order || (data.orders && data.orders[0]) || data.orderItem?.order;
       if (createdOrder) {
         setCreatedOrderId(createdOrder.id);
+        setCreatedOrderObj(createdOrder);
+        if (createdOrder.customerPhone && !waPhone) {
+          setWaPhone(createdOrder.customerPhone);
+        }
         
         if (posContext?.settings?.autoPrintReceipt) {
           handleDirectPrint(createdOrder.id);
@@ -405,6 +582,37 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </button>
               </>
             )}
+
+            {/* WhatsApp Digital E-Receipt Box */}
+            <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3 text-left space-y-2 mt-1 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                  <MessageCircle size={15} className="text-emerald-600 shrink-0" />
+                  Kirim Struk Digital (WhatsApp)
+                </span>
+                <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full">
+                  Paperless
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <input 
+                  type="tel"
+                  placeholder="Contoh: 08123456789"
+                  value={waPhone}
+                  onChange={e => setWaPhone(e.target.value)}
+                  className="flex-1 min-w-0 text-xs px-3 py-2 rounded-xl bg-white border border-emerald-200/90 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-400 outline-none font-semibold text-slate-800 placeholder:text-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendWhatsAppReceipt}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                  title="Buka WhatsApp untuk kirim struk nota pelanggan"
+                >
+                  <Send size={13} />
+                  <span>Kirim</span>
+                </button>
+              </div>
+            </div>
             
             <button 
               onClick={() => {
@@ -531,25 +739,91 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <span className="font-semibold text-slate-700">+{fmt(serviceCharge)}</span>
                   </div>
                 )}
-                {(manualDiscount > 0 || currentDiscount > 0) && (
+                {voucherDiscount > 0 && (
+                  <div className="flex justify-between text-indigo-600 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Ticket size={12} /> Voucher ({appliedVoucher?.voucher?.code})
+                    </span>
+                    <span>-{fmt(voucherDiscount)}</span>
+                  </div>
+                )}
+                {pointsDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Sparkles size={12} /> Poin Member
+                    </span>
+                    <span>-{fmt(pointsDiscount)}</span>
+                  </div>
+                )}
+                {manualDiscount > 0 && (
                   <div className="flex justify-between text-rose-600 font-semibold">
-                    <span>Diskon & Poin</span>
-                    <span>-{fmt(currentDiscount + manualDiscount)}</span>
+                    <span>Diskon Khusus</span>
+                    <span>-{fmt(manualDiscount)}</span>
                   </div>
                 )}
               </div>
 
-              {/* Quick Discount Input */}
-              <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2 mt-1">
+              {/* VOUCHER / KUPON PROMO INPUT */}
+              <div className="mt-1">
+                {appliedVoucher ? (
+                  <div className="bg-indigo-50 border border-indigo-200/80 rounded-xl p-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+                        <Ticket size={14} />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-indigo-950 flex items-center gap-1">
+                          <span>{appliedVoucher.voucher.code}</span>
+                          <span className="text-[10px] font-bold text-indigo-600">(-{fmt(voucherDiscount)})</span>
+                        </div>
+                        <div className="text-[10px] text-indigo-500 font-medium">
+                          {appliedVoucher.voucher.description || 'Kupon promo aktif'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveVoucher}
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors"
+                      title="Hapus voucher"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl p-1.5 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+                    <Ticket size={14} className="text-slate-400 ml-1 shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="KODE VOUCHER / PROMO"
+                      value={voucherCode}
+                      onChange={e => setVoucherCode(e.target.value.toUpperCase())}
+                      onKeyDown={e => e.key === 'Enter' && handleApplyVoucher()}
+                      className="w-full text-xs font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal outline-none bg-transparent uppercase"
+                    />
+                    <button
+                      type="button"
+                      disabled={voucherLoading || !voucherCode.trim()}
+                      onClick={handleApplyVoucher}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-bold rounded-lg transition-colors shrink-0"
+                    >
+                      {voucherLoading ? 'Cek...' : 'Pakai'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Manual Discount Input */}
+              <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2">
                 <Tag size={14} className="text-slate-400 shrink-0" />
-                <span className="text-xs font-medium text-slate-500 shrink-0">Diskon Khusus:</span>
+                <span className="text-xs font-medium text-slate-500 shrink-0">Diskon Manual:</span>
                 <input
                   type="number"
                   placeholder="0"
-                  max={Math.max(0, total + parentDiscount - currentDiscount)}
+                  max={Math.max(0, subtotal - voucherDiscount - pointsDiscount)}
                   value={manualDiscount || ''}
                   onChange={e => {
-                    const maxAllowed = Math.max(0, total + parentDiscount - currentDiscount);
+                    const maxAllowed = Math.max(0, subtotal - voucherDiscount - pointsDiscount);
                     const val = Number(e.target.value) || 0;
                     setManualDiscount(Math.max(0, Math.min(val, maxAllowed)));
                   }}
@@ -563,31 +837,50 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {posContext?.settings?.loyaltyEnabled !== false && (
             <div className="mt-4 pt-3 border-t border-slate-200/80">
               {currentCustomer?.id ? (
-                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs">
-                      {currentCustomer.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-emerald-900 leading-tight flex items-center gap-1">
-                        <span>{currentCustomer.name}</span>
-                        <ShieldCheck size={12} className="text-emerald-600" />
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-200 text-emerald-800 uppercase">
-                          {currentCustomer.tier || 'Member'}
-                        </span>
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-2.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                        {currentCustomer.name.charAt(0).toUpperCase()}
                       </div>
-                      <div className="text-[10px] text-emerald-700">
-                        {currentCustomer.points || 0} Poin Tersedia
-                        {currentCustomer.discountAmount > 0 && ` • Hemat ${fmt(currentCustomer.discountAmount)}`}
+                      <div>
+                        <div className="text-xs font-bold text-emerald-900 leading-tight flex items-center gap-1">
+                          <span>{currentCustomer.name}</span>
+                          <ShieldCheck size={12} className="text-emerald-600" />
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-200 text-emerald-800 uppercase">
+                            {currentCustomer.tier || 'Member'}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-emerald-700 font-medium">
+                          {customerPoints} Poin Tersedia ({fmt(maxPointDiscount)})
+                        </div>
                       </div>
                     </div>
+                    <button 
+                      onClick={() => setIsCustomerModalOpen(true)}
+                      className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-white border border-emerald-200 px-2 py-1 rounded-lg shadow-sm"
+                    >
+                      Ganti
+                    </button>
                   </div>
-                  <button 
-                    onClick={() => setIsCustomerModalOpen(true)}
-                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-white border border-emerald-200 px-2 py-1 rounded-lg shadow-sm"
-                  >
-                    Ganti
-                  </button>
+
+                  {/* Toggle Tukar Poin */}
+                  {customerPoints > 0 && (
+                    <div className="pt-2 border-t border-emerald-100 flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-emerald-900">
+                        <input
+                          type="checkbox"
+                          checked={redeemPoints}
+                          onChange={e => setRedeemPoints(e.target.checked)}
+                          className="w-4 h-4 text-emerald-600 rounded border-emerald-300 focus:ring-emerald-500"
+                        />
+                        <span>Tukarkan Poin Member</span>
+                      </label>
+                      <span className="text-xs font-extrabold text-emerald-700">
+                        {redeemPoints ? `-${fmt(pointsDiscount)}` : `Hemat ${fmt(maxPointDiscount)}`}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : currentCustomer?.name && currentCustomer?.name !== 'Pelanggan Umum' ? (
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between">

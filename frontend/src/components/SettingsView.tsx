@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, Trash2, Headphones, MessageSquare, Send, ExternalLink, HelpCircle, CheckCircle2, AlertCircle, FileText, Wrench } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
 import { 
@@ -17,15 +18,22 @@ import {
   printRawBytes 
 } from '../utils/printerBluetooth';
 import SaaSPlanManager from './SaaSPlanManager';
+import TenantResetModal from './TenantResetModal';
+import RecycleBinModal from './RecycleBinModal';
 
 const SettingsView = () => {
-  const [activeTab, setActiveTab] = useState('profil');
+  const { isBengkel, isRetail } = useVertical();
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'profil';
+  });
   const [loading, setLoading] = useState(false);
   const posContext = useContext(POSContext);
   const [testLoading, setTestLoading] = useState(false);
   
   const [isElectronApp, setIsElectronApp] = useState(false);
   const [availablePrinters, setAvailablePrinters] = useState<any[]>([]);
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
 
   useEffect(() => {
     const win = window as any;
@@ -143,13 +151,18 @@ const SettingsView = () => {
   };
 
   const [formData, setFormData] = useState({
-    storeName: 'MUKI RAMEN',
+    storeName: '',
     phone: '',
     address: '',
     logoUrl: '',
     qrCodeBaseUrl: '',
     receiptHeader: '',
     receiptFooter: '',
+    receiptPaperSize: '80mm',
+    wifiName: '',
+    wifiPassword: '',
+    receiptShowCashier: true,
+    receiptShowTable: true,
     taxRate: 0,
     serviceCharge: 0,
     includeTax: false,
@@ -158,6 +171,7 @@ const SettingsView = () => {
     accountName: '',
     qrisUrl: '',
     enableDrinkCustomization: false,
+    enableTieredPricing: true,
     loyaltyEnabled: true,
     loyaltyEarnPerAmount: 10000,
     loyaltyPointValue: 100,
@@ -205,6 +219,7 @@ const SettingsView = () => {
     enableAlphaPenalty: false,
     alphaPenaltyAmount: 50000,
     // Sistem Bagi Hasil (Profit Sharing)
+    enableProfitSharing: true,
     profitSharingOwnerPercent: 80,
     profitSharingRamenPercent: 20,
     profitSharingDrinkPercent: 20,
@@ -212,7 +227,38 @@ const SettingsView = () => {
     // Bonus Harian Omzet Karyawan
     enableDailyOmzetBonus: true,
     dailyOmzetTiers: '',
+    // Jam Operasional Outlet & Shift Control
+    operatingHours: '',
+    earlyOpenBufferMinutes: 45,
+    closingGraceMinutes: 45,
+    enforceOperatingHours: false,
+    allowOrdersAfterClose: true,
+    // Dynamic White-Label Theming & Login Layout
+    primaryColor: '#4f46e5',
+    accentColor: '#f59e0b',
+    loginLayout: 'split_modern',
+    loginCoverUrl: '/assets/images/cafe_login_cover.png',
+    loginTagline: '',
+    faviconUrl: '',
+    hidePlatformBranding: false,
   });
+
+  const [operatingHoursList, setOperatingHoursList] = useState<Array<{
+    day: number;
+    dayName: string;
+    isOpen: boolean;
+    openTime: string;
+    closeTime: string;
+    is24Hours?: boolean;
+  }>>([
+    { day: 1, dayName: 'Senin', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 2, dayName: 'Selasa', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 3, dayName: 'Rabu', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 4, dayName: 'Kamis', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 5, dayName: 'Jumat', isOpen: true, openTime: '08:00', closeTime: '23:00', is24Hours: false },
+    { day: 6, dayName: 'Sabtu', isOpen: true, openTime: '08:00', closeTime: '23:00', is24Hours: false },
+    { day: 0, dayName: 'Minggu', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false }
+  ]);
 
   const [dailyTiersList, setDailyTiersList] = useState<Array<{ minOmzet: number; bonus: number; label?: string }>>([
     { minOmzet: 6000000, bonus: 25000, label: 'Tier >= 6.0 Juta' },
@@ -249,8 +295,70 @@ const SettingsView = () => {
           if (Array.isArray(parsedTiers) && parsedTiers.length > 0) setDailyTiersList(parsedTiers);
         } catch {}
       }
+      if (posContext.settings.operatingHours) {
+        try {
+          const parsed = typeof posContext.settings.operatingHours === 'string'
+            ? JSON.parse(posContext.settings.operatingHours)
+            : posContext.settings.operatingHours;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setOperatingHoursList(parsed.map(item => ({
+              ...item,
+              is24Hours: Boolean(
+                item.is24Hours || 
+                (item.openTime === '00:00' && (item.closeTime === '23:59' || item.closeTime === '24:00' || item.closeTime === '00:00'))
+              )
+            })));
+          }
+        } catch {}
+      }
     }
   }, [posContext?.settings]);
+
+  const handleOperatingHoursChange = (index: number, field: string, value: any) => {
+    setOperatingHoursList(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleToggle24Hours = (index: number) => {
+    setOperatingHoursList(prev => {
+      const copy = [...prev];
+      const current = copy[index];
+      const willBe24h = !current.is24Hours;
+      copy[index] = {
+        ...current,
+        isOpen: true,
+        is24Hours: willBe24h,
+        openTime: willBe24h ? '00:00' : '08:00',
+        closeTime: willBe24h ? '23:59' : '22:00'
+      };
+      return copy;
+    });
+  };
+
+  const handleSetAll24Hours = () => {
+    setOperatingHoursList(prev => prev.map(item => ({
+      ...item,
+      isOpen: true,
+      is24Hours: true,
+      openTime: '00:00',
+      closeTime: '23:59'
+    })));
+    toast('Semua hari berhasil diatur buka 24 jam non-stop! Jangan lupa klik Simpan Perubahan.', 'success');
+  };
+
+  const handleResetStandardHours = () => {
+    setOperatingHoursList(prev => prev.map(item => ({
+      ...item,
+      isOpen: true,
+      is24Hours: false,
+      openTime: '08:00',
+      closeTime: item.day === 5 || item.day === 6 ? '23:00' : '22:00'
+    })));
+    toast('Jadwal operasional dikembalikan ke jam standar (08:00 - 22:00).', 'info');
+  };
 
   const handleAddTier = () => {
     if (!newTier.minOmzet || Number(newTier.minOmzet) <= 0) return toast('Min omzet harus lebih dari 0', 'warning');
@@ -325,24 +433,29 @@ const SettingsView = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      const payload = {
+        ...formData,
+        operatingHours: JSON.stringify(operatingHoursList)
+      };
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${posContext?.token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
+      const result = await res.json().catch(() => ({}));
       if (res.ok) {
         toast('Pengaturan berhasil disimpan!', 'success');
         posContext?.fetchSettings(); // Refresh context
       } else {
-        toast('Gagal menyimpan pengaturan.', 'error');
+        toast(result.error || 'Gagal menyimpan pengaturan toko.', 'error');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast('Terjadi kesalahan jaringan.', 'error');
+      toast('Terjadi kesalahan jaringan: ' + (err?.message || ''), 'error');
     } finally {
       setLoading(false);
     }
@@ -376,20 +489,23 @@ const SettingsView = () => {
           <div className="hidden lg:block text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Kelompok Menu</div>
           
           {[
-            { id: 'profil', label: 'Profil Kafe', icon: Store },
-            { id: 'saas_plan', label: 'Paket & Add-on SaaS', icon: Sparkles },
-            { id: 'struk', label: 'Printer & KDS', icon: Receipt },
-            { id: 'pajak', label: 'Pajak & Service', icon: Percent },
-            { id: 'bayar', label: 'Metode Pembayaran', icon: CreditCard },
-            { id: 'fitur', label: 'Mode Operasional POS', icon: Settings },
-            { id: 'bagi_hasil', label: 'Bagi Hasil & Bonus', icon: Sliders },
-            { id: 'crm', label: 'CRM & Member', icon: Award },
-            { id: 'inventaris', label: 'Mode Inventaris', icon: PackageSearch },
-            { id: 'printer_bt', label: 'Printer Bluetooth', icon: Printer },
-            { id: 'database', label: 'Database & Backup', icon: Database },
-            { id: 'absensi_gps', label: 'Absensi & GPS Toko', icon: MapPin },
-            { id: 'koneksi_server', label: 'Koneksi Terminal', icon: Smartphone },
-          ].map(tab => {
+            { id: 'profil', label: isBengkel ? 'Profil Bengkel' : 'Profil Kafe', icon: Store, show: true },
+            { id: 'branding', label: 'Branding & Tampilan', icon: Sparkles, show: true },
+            { id: 'jam_operasional', label: 'Jam Operasional & Shift', icon: Clock, show: true },
+            { id: 'saas_plan', label: 'Paket & Add-on SaaS', icon: Sparkles, show: true },
+            { id: 'struk', label: isBengkel ? 'Printer Struk SPK' : 'Printer & KDS', icon: Receipt, show: true },
+            { id: 'pajak', label: 'Pajak & Service', icon: Percent, show: true },
+            { id: 'bayar', label: 'Metode Pembayaran', icon: CreditCard, show: true },
+            { id: 'fitur', label: 'Mode Operasional POS', icon: Settings, show: true },
+            { id: 'bagi_hasil', label: 'Bagi Hasil & Bonus', icon: Sliders, show: true },
+            { id: 'crm', label: 'CRM & Member', icon: Award, show: true },
+            { id: 'inventaris', label: 'Mode Inventaris', icon: PackageSearch, show: true },
+            { id: 'printer_bt', label: 'Printer Bluetooth', icon: Printer, show: true },
+            { id: 'database', label: 'Database & Backup', icon: Database, show: true },
+            { id: 'absensi_gps', label: 'Absensi & GPS Toko', icon: MapPin, show: true },
+            { id: 'koneksi_server', label: 'Koneksi Terminal', icon: Smartphone, show: true },
+            { id: 'bantuan_cs', label: 'Bantuan & CS 24/7', icon: Headphones, show: true },
+          ].filter(tab => tab.show).map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -423,8 +539,8 @@ const SettingsView = () => {
                   <Store size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">Informasi Profil Kafe</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Atur nama, nomor kontak, alamat kafe, dan logo resmi usaha.</p>
+                  <h3 className="text-base font-bold text-slate-800">{isBengkel ? 'Informasi Profil Bengkel' : 'Informasi Profil Kafe'}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{isBengkel ? 'Atur nama, nomor kontak, alamat bengkel, dan logo resmi usaha.' : 'Atur nama, nomor kontak, alamat kafe, dan logo resmi usaha.'}</p>
                 </div>
               </div>
               
@@ -441,7 +557,7 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.storeName} 
                         onChange={handleChange} 
-                        placeholder="Nama Kafe Anda"
+                        placeholder={isBengkel ? "Nama Bengkel Anda" : "Nama Kafe Anda"}
                       />
                     </div>
                   </div>
@@ -471,12 +587,12 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }}
                         value={formData.address} 
                         onChange={handleChange}
-                        placeholder="Alamat lengkap outlet kafe"
+                        placeholder={isBengkel ? "Alamat lengkap bengkel / workshop" : "Alamat lengkap outlet kafe"}
                       ></textarea>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">URL Logo Restoran / Kedai (Path / Link)</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">URL Logo {isBengkel ? 'Bengkel' : 'Restoran / Kedai'} (Path / Link)</label>
                     <div className="relative">
                       <ImageIcon size={16} className="absolute left-3 top-3.5 text-slate-400" />
                       <input 
@@ -486,12 +602,12 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.logoUrl} 
                         onChange={handleChange} 
-                        placeholder="/logo-muki-ramen.png"
+                        placeholder="https://... atau /logo.png"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Base URL QR Code / Dine-In</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Base URL {isBengkel ? 'Katalog / Reservasi' : 'QR Code / Dine-In'}</label>
                     <div className="relative">
                       <Sparkles size={16} className="absolute left-3 top-3.5 text-slate-400" />
                       <input 
@@ -501,7 +617,7 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.qrCodeBaseUrl || ''} 
                         onChange={handleChange} 
-                        placeholder="Contoh: http://mukiramen.com"
+                        placeholder={isBengkel ? "Contoh: https://bengkel-anda.com" : "Contoh: https://kafe-anda.com"}
                       />
                     </div>
                   </div>
@@ -529,7 +645,17 @@ const SettingsView = () => {
                     {formData.logoUrl ? (
                       <div className="flex flex-col items-center gap-2">
                         <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200 shadow-md p-2 flex items-center justify-center overflow-hidden">
-                          <img src={formData.logoUrl} alt="Preview Logo" className="w-full h-full object-contain" />
+                          <img 
+                            src={formData.logoUrl} 
+                            alt="Preview Logo" 
+                            className="w-full h-full object-contain" 
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              if (target.src !== window.location.origin + '/logo.png') {
+                                target.src = '/logo.png';
+                              }
+                            }}
+                          />
                         </div>
                         <span className="text-xs font-bold text-indigo-600 group-hover:underline mt-1">Klik untuk mengganti logo</span>
                         <span className="text-[10px] text-slate-400">Dimensi 1:1 direkomendasikan</span>
@@ -544,6 +670,386 @@ const SettingsView = () => {
                       </>
                     )}
                   </label>
+                  
+                  {/* Tombol Aksi Logo Cepat */}
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => ({ ...prev, logoUrl: '/logo.png' }))}
+                      className="flex-1 py-2 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200/80 flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                      title="Gunakan logo resmi CodePOS sebagai logo toko"
+                    >
+                      <Sparkles size={13} className="text-indigo-600" />
+                      Gunakan Logo Default CodePOS
+                    </button>
+                    {formData.logoUrl && formData.logoUrl !== '/logo.png' && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev: any) => ({ ...prev, logoUrl: '/logo.png' }))}
+                        className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 text-xs font-semibold border border-slate-200 transition-all"
+                        title="Reset ke logo bawaan"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'branding' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Sparkles size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-800">Branding, Warna & Tata Letak Login (White-Label)</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Kustomisasi identitas visual, skema warna CSS dinamis, preset layout login, dan branding mandiri kafe Anda.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                    <CheckCircle2 size={13} /> Multi-Tenant Isolated
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+                {/* Left Column: Customizer Controls (7 cols on XL) */}
+                <div className="xl:col-span-7 space-y-6">
+                  
+                  {/* Card 1: Color Palette Customizer */}
+                  <div className="p-5 rounded-2xl border border-slate-200/90 bg-slate-50/50 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                        <span>Warna Primer Brand (Primary Color)</span>
+                      </label>
+                      <span className="text-xs font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {formData.primaryColor || '#4f46e5'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="color" 
+                        name="primaryColor"
+                        value={formData.primaryColor || '#4f46e5'}
+                        onChange={handleChange}
+                        className="w-12 h-12 rounded-xl cursor-pointer border border-slate-300 p-1 bg-white shadow-sm"
+                      />
+                      <input 
+                        type="text" 
+                        name="primaryColor"
+                        value={formData.primaryColor || '#4f46e5'}
+                        onChange={handleChange}
+                        placeholder="#4f46e5"
+                        className="form-control font-mono text-sm max-w-[140px]"
+                      />
+                    </div>
+                    {/* Quick Preset Swatches */}
+                    <div>
+                      <span className="text-[11px] font-bold text-slate-500 mb-2 block">Pilihan Palet Estetik Populer:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { label: 'Royal Indigo', hex: '#4f46e5' },
+                          { label: 'Emerald Green', hex: '#059669' },
+                          { label: 'Roast Amber', hex: '#d97706' },
+                          { label: 'Rose Bistro', hex: '#e11d48' },
+                          { label: 'Cyan Gelato', hex: '#0891b2' },
+                          { label: 'Deep Violet', hex: '#7c3aed' },
+                          { label: 'Dark Slate', hex: '#0f172a' }
+                        ].map(swatch => (
+                          <button
+                            key={swatch.hex}
+                            type="button"
+                            onClick={() => setFormData((prev: any) => ({ ...prev, primaryColor: swatch.hex }))}
+                            className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 active:scale-95 ${
+                              formData.primaryColor === swatch.hex ? 'border-slate-800 bg-white shadow-sm' : 'border-slate-200 bg-white/80 hover:bg-white'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full shadow-inner" style={{ backgroundColor: swatch.hex }} />
+                            <span>{swatch.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Accent Color Customizer */}
+                  <div className="p-5 rounded-2xl border border-slate-200/90 bg-slate-50/50 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                        <span>Warna Aksen / Highlight (Accent Color)</span>
+                      </label>
+                      <span className="text-xs font-mono font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {formData.accentColor || '#f59e0b'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input 
+                        type="color" 
+                        name="accentColor"
+                        value={formData.accentColor || '#f59e0b'}
+                        onChange={handleChange}
+                        className="w-12 h-12 rounded-xl cursor-pointer border border-slate-300 p-1 bg-white shadow-sm"
+                      />
+                      <input 
+                        type="text" 
+                        name="accentColor"
+                        value={formData.accentColor || '#f59e0b'}
+                        onChange={handleChange}
+                        placeholder="#f59e0b"
+                        className="form-control font-mono text-sm max-w-[140px]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Card 3: Preset Layout Login Selector */}
+                  <div className="p-5 rounded-2xl border border-slate-200/90 bg-white space-y-4 shadow-sm">
+                    <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+                      Pilihan Layout Halaman Login Kasir & Admin
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {[
+                        {
+                          id: 'split_modern',
+                          name: 'Split-Screen Modern',
+                          desc: 'Separuh foto interior kafe artistik di kiri & form kasir bersih di kanan (Default ideal desktop).',
+                          tag: 'Terpopuler'
+                        },
+                        {
+                          id: 'centered_glass',
+                          name: 'Centered Glassmorphism',
+                          desc: 'Layar penuh wallpaper interior dengan efek blur mendalam & kartu kaca melayang elegan di tengah.',
+                          tag: 'Estetik'
+                        },
+                        {
+                          id: 'minimal_luxe',
+                          name: 'Minimalist Luxe Tablet',
+                          desc: 'Desain solid minimalis gelap tanpa background gambar berat. Sangat ringan (<100ms) di tablet kasir.',
+                          tag: 'Super Ringan'
+                        },
+                        {
+                          id: 'cafe_atmosphere',
+                          name: 'Artisan Cafe Boutique',
+                          desc: 'Nuansa hangat coffee shop artisanal lengkap dengan alamat toko dan jam buka kafe.',
+                          tag: 'Artisan'
+                        }
+                      ].map(layout => {
+                        const isSelected = (formData.loginLayout || 'split_modern') === layout.id;
+                        return (
+                          <div 
+                            key={layout.id}
+                            onClick={() => setFormData((prev: any) => ({ ...prev, loginLayout: layout.id }))}
+                            className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between gap-2.5 relative ${
+                              isSelected 
+                                ? 'border-indigo-600 bg-indigo-50/20 shadow-md scale-[1.01]' 
+                                : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <h4 className="font-extrabold text-xs sm:text-sm text-slate-900">{layout.name}</h4>
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                  {layout.tag}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">{layout.desc}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs font-bold mt-1">
+                              <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border ${
+                                isSelected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                              }`}>
+                                {isSelected && <Check size={10} />}
+                              </span>
+                              <span className={isSelected ? 'text-indigo-600' : 'text-slate-400'}>
+                                {isSelected ? 'Sedang Dipakai' : 'Pilih Layout Ini'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Card 4: Tagline & Wallpaper Cover */}
+                  <div className="p-5 rounded-2xl border border-slate-200/90 bg-slate-50/50 space-y-4">
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 mb-1.5 uppercase tracking-wider">
+                        Tagline / Pesan Sambutan Login
+                      </label>
+                      <input 
+                        type="text" 
+                        name="loginTagline" 
+                        value={formData.loginTagline || ''} 
+                        onChange={handleChange} 
+                        placeholder="Contoh: Ruang Temu & Seduhan Kopi Terbaik di Kota"
+                        className="form-control text-sm"
+                        maxLength={160}
+                      />
+                      <span className="text-[10px] text-slate-400 mt-1 block">Tampil di bawah nama {isBengkel ? 'bengkel' : 'kafe'} pada layar login staf.</span>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 mb-1.5 uppercase tracking-wider">
+                        Foto Wallpaper Interior {isBengkel ? 'Bengkel' : 'Kafe'} (Login Cover)
+                      </label>
+                      <div className="flex gap-3">
+                        <input 
+                          type="text" 
+                          name="loginCoverUrl" 
+                          value={formData.loginCoverUrl || ''} 
+                          onChange={handleChange} 
+                          placeholder={isBengkel ? "/assets/images/bengkel_login_cover.png atau URL eksternal" : "/assets/images/cafe_login_cover.png atau URL eksternal"}
+                          className="form-control text-xs flex-1 font-mono"
+                        />
+                        <label className="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-sm shrink-0">
+                          <UploadCloud size={14} /> Unggah Foto
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const result = event.target?.result as string;
+                                  setFormData((prev: any) => ({ ...prev, loginCoverUrl: result }));
+                                  toast('Foto wallpaper interior berhasil dipilih!', 'success');
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Card 5: Pure White-Labeling */}
+                    <div className="pt-3 border-t border-slate-200/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-black text-slate-800 block">Sembunyikan Badge "Powered by CodePOS"</span>
+                        <span className="text-[11px] text-slate-400">Pure white-label 100% tanpa identitas platform di layar login staf.</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          name="hidePlatformBranding" 
+                          checked={Boolean(formData.hidePlatformBranding)} 
+                          onChange={handleChange} 
+                          className="sr-only peer" 
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Interactive Live Preview Simulator (5 cols on XL) */}
+                <div className="xl:col-span-5 space-y-4">
+                  <div className="sticky top-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-amber-500" /> Live Simulator Pratinjau
+                      </span>
+                      <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDevice('desktop')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                            previewDevice === 'desktop' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
+                          }`}
+                        >
+                          Desktop
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDevice('mobile')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                            previewDevice === 'mobile' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'
+                          }`}
+                        >
+                          Tablet
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Miniature Simulated Screen Frame */}
+                    <div className={`mx-auto rounded-[2rem] border-4 border-slate-800 bg-slate-900 shadow-2xl overflow-hidden transition-all duration-300 relative ${
+                      previewDevice === 'mobile' ? 'max-w-[320px] h-[520px]' : 'w-full h-[460px]'
+                    }`}>
+                      {/* Top Frame Status Bar */}
+                      <div className="h-6 bg-slate-800 px-3 flex items-center justify-between text-[9px] text-slate-400 font-mono select-none">
+                        <div className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                        </div>
+                        <span>{isBengkel ? 'pos.bengkel-anda.com' : 'pos.kafe-anda.com'}</span>
+                        <span>100%</span>
+                      </div>
+
+                      {/* Screen Content Preview */}
+                      <div className="h-[calc(100%-24px)] overflow-hidden relative flex items-center justify-center p-3 text-center bg-slate-950">
+                        {/* Background Cover */}
+                        <img 
+                          src={formData.loginCoverUrl || (isBengkel ? '/assets/images/bengkel_login_cover.png' : '/assets/images/cafe_login_cover.png')} 
+                          alt="Cover" 
+                          className="absolute inset-0 w-full h-full object-cover opacity-45" 
+                        />
+                        <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" />
+
+                        {/* Miniature Card */}
+                        <div className="relative z-10 w-full max-w-[260px] bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-white/20 text-slate-800 space-y-2.5">
+                          <div className="w-10 h-10 rounded-xl bg-slate-100 mx-auto overflow-hidden p-1 shadow-inner border border-slate-200">
+                            <img 
+                              src={formData.logoUrl || '/logo.png'} 
+                              alt="Logo" 
+                              className="w-full h-full object-contain" 
+                            />
+                          </div>
+                          <div>
+                            <h5 className="font-black text-xs text-slate-900 leading-tight">{formData.storeName || (isBengkel ? 'Nama Bengkel Anda' : 'Nama Kafe Anda')}</h5>
+                            <p className="text-[9px] text-slate-500 mt-0.5 line-clamp-1">{formData.loginTagline || (isBengkel ? 'Layanan Servis & Suku Cadang Terpercaya' : 'Selamat datang di kasir POS')}</p>
+                          </div>
+                          <div className="space-y-1.5 text-left text-[9px]">
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-400">
+                              Username
+                            </div>
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-400">
+                              Password / PIN
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            style={{ backgroundColor: formData.primaryColor || '#4f46e5' }}
+                            className="w-full py-1.5 rounded-xl text-white font-extrabold text-[10px] shadow-md transition-transform active:scale-95"
+                          >
+                            Masuk Sekarang
+                          </button>
+                          {!formData.hidePlatformBranding && (
+                            <p className="text-[8px] text-slate-400 pt-1 border-t border-slate-100">
+                              Powered by CodePOS
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-center mt-3">
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={loading}
+                        className="btn btn-primary w-full py-3 rounded-2xl font-bold text-xs shadow-lg flex items-center justify-center gap-2 active:scale-95"
+                      >
+                        <Save size={15} /> {loading ? 'Menyimpan...' : 'Terapkan & Simpan Tema Brand'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -557,13 +1063,14 @@ const SettingsView = () => {
                     <Printer size={20} />
                   </div>
                   <div>
-                    <h3 className="text-base font-black text-slate-800">Multi-Printer, Split Struk & KDS</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Pengaturan cetak struk otomatis (Payment-First) dan kontrol fitur Layar Dapur (KDS).</p>
+                    <h3 className="text-base font-black text-slate-800">{isBengkel ? 'Printer Struk SPK' : 'Multi-Printer, Split Struk & KDS'}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">{isBengkel ? 'Pengaturan printer thermal untuk struk SPK bengkel.' : 'Pengaturan cetak struk otomatis (Payment-First) dan kontrol fitur Layar Dapur (KDS).'}</p>
                   </div>
                 </div>
               </div>
 
-              {/* PENGATURAN KDS (KITCHEN DISPLAY SYSTEM) */}
+              {/* PENGATURAN KDS — hanya tampil untuk Kafe */}
+              {!isBengkel && (
               <div className="bg-gradient-to-r from-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start gap-3.5">
@@ -610,9 +1117,9 @@ const SettingsView = () => {
                   </div>
                 </div>
               </div>
-              
-              {/* 3 PRINTER CARDS: KASIR, DAPUR, BAR */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              )}
+                         {/* PRINTER CARDS: KASIR (dan DAPUR, BAR jika Kafe) */}
+              <div className={`grid grid-cols-1 ${isBengkel ? 'max-w-md' : 'md:grid-cols-3'} gap-5`}>
                 
                 {/* 1. PRINTER KASIR */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
@@ -622,8 +1129,8 @@ const SettingsView = () => {
                         <Receipt size={16} />
                       </div>
                       <div>
-                        <div className="font-black text-xs text-slate-800">PRINTER KASIR</div>
-                        <div className="text-[10px] text-slate-400">Struk Tagihan Pelanggan</div>
+                        <div className="font-black text-xs text-slate-800">{isBengkel ? 'PRINTER KASIR & SPK' : 'PRINTER KASIR'}</div>
+                        <div className="text-[10px] text-slate-400">{isBengkel ? 'Struk SPK & Pembayaran' : 'Struk Tagihan Pelanggan'}</div>
                       </div>
                     </div>
                   </div>
@@ -636,7 +1143,7 @@ const SettingsView = () => {
                         name="printerIp" 
                         className="form-control text-xs font-mono" 
                         value={formData.printerIp || ''} 
-                        onChange={handleChange}
+                        onChange={handleChange} 
                         placeholder="192.168.1.200"
                       />
                     </div>
@@ -647,7 +1154,7 @@ const SettingsView = () => {
                         name="printerPort" 
                         className="form-control text-xs font-mono" 
                         value={formData.printerPort || 9100} 
-                        onChange={handleChange}
+                        onChange={handleChange} 
                         placeholder="9100"
                       />
                     </div>
@@ -660,7 +1167,7 @@ const SettingsView = () => {
                     disabled={testingTarget === 'KASIR'}
                   >
                     <Printer size={14} />
-                    {testingTarget === 'KASIR' ? 'Menguji...' : 'Uji Cetak Kasir'}
+                    {testingTarget === 'KASIR' ? 'Menguji...' : (isBengkel ? 'Uji Cetak Struk SPK' : 'Uji Cetak Kasir')}
                   </button>
 
                   <div className="pt-2 border-t border-slate-100">
@@ -677,230 +1184,383 @@ const SettingsView = () => {
                   </div>
                 </div>
 
-                {/* 2. PRINTER DAPUR (FOOD) */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                        <Utensils size={16} />
+                {!isBengkel && (
+                  <>
+                    {/* 2. PRINTER DAPUR (FOOD) */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                            <Utensils size={16} />
+                          </div>
+                          <div>
+                            <div className="font-black text-xs text-slate-800">PRINTER DAPUR (KOT)</div>
+                            <div className="text-[10px] text-slate-400">Tiket Makanan & Ramen</div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-black text-xs text-slate-800">PRINTER DAPUR (KOT)</div>
-                        <div className="text-[10px] text-slate-400">Tiket Makanan & Ramen</div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer Dapur</label>
+                          <input 
+                            type="text" 
+                            name="kitchenPrinterIp" 
+                            className="form-control text-xs font-mono" 
+                            value={formData.kitchenPrinterIp || ''} 
+                            onChange={handleChange}
+                            placeholder="192.168.1.201"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port ESC/POS</label>
+                          <input 
+                            type="number" 
+                            name="kitchenPrinterPort" 
+                            className="form-control text-xs font-mono" 
+                            value={formData.kitchenPrinterPort || 9100} 
+                            onChange={handleChange}
+                            placeholder="9100"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer Dapur</label>
-                      <input 
-                        type="text" 
-                        name="kitchenPrinterIp" 
-                        className="form-control text-xs font-mono" 
-                        value={formData.kitchenPrinterIp || ''} 
-                        onChange={handleChange}
-                        placeholder="192.168.1.201"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port ESC/POS</label>
-                      <input 
-                        type="number" 
-                        name="kitchenPrinterPort" 
-                        className="form-control text-xs font-mono" 
-                        value={formData.kitchenPrinterPort || 9100} 
-                        onChange={handleChange}
-                        placeholder="9100"
-                      />
-                    </div>
-                  </div>
+                      <button
+                        type="button"
+                        className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                        onClick={() => handleTestSpecificPrint('DAPUR', formData.kitchenPrinterIp, formData.kitchenPrinterPort)}
+                        disabled={testingTarget === 'DAPUR'}
+                      >
+                        <Printer size={14} />
+                        {testingTarget === 'DAPUR' ? 'Menguji...' : 'Uji Cetak Dapur'}
+                      </button>
 
-                  <button
-                    type="button"
-                    className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs rounded-xl border border-amber-200 flex items-center justify-center gap-1.5 transition-all shadow-sm"
-                    onClick={() => handleTestSpecificPrint('DAPUR', formData.kitchenPrinterIp, formData.kitchenPrinterPort)}
-                    disabled={testingTarget === 'DAPUR'}
-                  >
-                    <Printer size={14} />
-                    {testingTarget === 'DAPUR' ? 'Menguji...' : 'Uji Cetak Dapur'}
-                  </button>
-
-                  <div className="pt-2 border-t border-slate-100">
-                    <label className="flex items-start gap-2 cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        name="autoPrintKitchen" 
-                        className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/20 mt-0.5" 
-                        checked={formData.autoPrintKitchen || false} 
-                        onChange={handleChange}
-                      />
-                      <span className="text-[11px] font-bold text-slate-600">Auto-Print saat Simpan Bill / Order Baru</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* 3. PRINTER BAR (DRINKS) */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                        <Coffee size={16} />
-                      </div>
-                      <div>
-                        <div className="font-black text-xs text-slate-800">PRINTER BAR (BOT)</div>
-                        <div className="text-[10px] text-slate-400">Tiket Minuman & Barista</div>
+                      <div className="pt-2 border-t border-slate-100">
+                        <label className="flex items-start gap-2 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            name="autoPrintKitchen" 
+                            className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500/20 mt-0.5" 
+                            checked={formData.autoPrintKitchen || false} 
+                            onChange={handleChange}
+                          />
+                          <span className="text-[11px] font-bold text-slate-600">Auto-Print saat Simpan Bill / Order Baru</span>
+                        </label>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer Bar</label>
-                      <input 
-                        type="text" 
-                        name="barPrinterIp" 
-                        className="form-control text-xs font-mono" 
-                        value={formData.barPrinterIp || ''} 
-                        onChange={handleChange}
-                        placeholder="192.168.1.202"
-                      />
+                    {/* 3. PRINTER BAR (DRINKS) */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                            <Coffee size={16} />
+                          </div>
+                          <div>
+                            <div className="font-black text-xs text-slate-800">PRINTER BAR (BOT)</div>
+                            <div className="text-[10px] text-slate-400">Tiket Minuman & Barista</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">IP Address Printer Bar</label>
+                          <input 
+                            type="text" 
+                            name="barPrinterIp" 
+                            className="form-control text-xs font-mono" 
+                            value={formData.barPrinterIp || ''} 
+                            onChange={handleChange}
+                            placeholder="192.168.1.202"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port ESC/POS</label>
+                          <input 
+                            type="number" 
+                            name="barPrinterPort" 
+                            className="form-control text-xs font-mono" 
+                            value={formData.barPrinterPort || 9100} 
+                            onChange={handleChange}
+                            placeholder="9100"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                        onClick={() => handleTestSpecificPrint('BAR', formData.barPrinterIp, formData.barPrinterPort)}
+                        disabled={testingTarget === 'BAR'}
+                      >
+                        <Printer size={14} />
+                        {testingTarget === 'BAR' ? 'Menguji...' : 'Uji Cetak Bar'}
+                      </button>
+
+                      <div className="pt-2 border-t border-slate-100">
+                        <label className="flex items-start gap-2 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            name="autoPrintBar" 
+                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20 mt-0.5" 
+                            checked={formData.autoPrintBar || false} 
+                            onChange={handleChange}
+                          />
+                          <span className="text-[11px] font-bold text-slate-600">Auto-Print saat Simpan Bill / Order Baru</span>
+                        </label>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Port ESC/POS</label>
-                      <input 
-                        type="number" 
-                        name="barPrinterPort" 
-                        className="form-control text-xs font-mono" 
-                        value={formData.barPrinterPort || 9100} 
-                        onChange={handleChange}
-                        placeholder="9100"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="w-full py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-200 flex items-center justify-center gap-1.5 transition-all shadow-sm"
-                    onClick={() => handleTestSpecificPrint('BAR', formData.barPrinterIp, formData.barPrinterPort)}
-                    disabled={testingTarget === 'BAR'}
-                  >
-                    <Printer size={14} />
-                    {testingTarget === 'BAR' ? 'Menguji...' : 'Uji Cetak Bar'}
-                  </button>
-
-                  <div className="pt-2 border-t border-slate-100">
-                    <label className="flex items-start gap-2 cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        name="autoPrintBar" 
-                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/20 mt-0.5" 
-                        checked={formData.autoPrintBar || false} 
-                        onChange={handleChange}
-                      />
-                      <span className="text-[11px] font-bold text-slate-600">Auto-Print saat Simpan Bill / Order Baru</span>
-                    </label>
-                  </div>
-                </div>
+                  </>
+                )}
 
               </div>
 
-              {/* MAPPING KATEGORI MENU KE TARGET PRINTER */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
-                      <Layers size={18} className="text-indigo-600" />
-                      Routing Kategori Menu ke Printer Tujuan
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">Tentukan kemana struk pesanan per kategori menu akan otomatis diarahkan.</p>
+              {/* MAPPING KATEGORI MENU KE TARGET PRINTER — Khusus Kafe */}
+              {!isBengkel && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                        <Layers size={18} className="text-indigo-600" />
+                        Routing Kategori Menu ke Printer Tujuan
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Tentukan kemana struk pesanan per kategori menu akan otomatis diarahkan.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {categories.map((cat) => {
+                      const target = cat.printerTarget || 'KITCHEN';
+                      return (
+                        <div key={cat.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3">
+                          <div className="font-bold text-xs text-slate-800">{cat.name}</div>
+                          <select 
+                            className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border cursor-pointer outline-none transition-all ${
+                              target === 'KITCHEN' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                              (target === 'BAR' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-300')
+                            }`}
+                            value={target}
+                            onChange={(e) => handleUpdateCategoryTarget(cat.id, e.target.value)}
+                          >
+                            <option value="KITCHEN">🍳 Dapur (Makanan)</option>
+                            <option value="BAR">🍹 Bar (Minuman Racikan)</option>
+                            <option value="NONE">🥤 Showcase / Kasir Saja</option>
+                          </select>
+                        </div>
+                      );
+                    })}
+                    {categories.length === 0 && (
+                      <div className="col-span-full text-center py-4 text-xs text-slate-400">
+                        Memuat daftar kategori menu...
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {categories.map((cat) => {
-                    const target = cat.printerTarget || 'KITCHEN';
-                    return (
-                      <div key={cat.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3">
-                        <div className="font-bold text-xs text-slate-800">{cat.name}</div>
-                        <select 
-                          className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border cursor-pointer outline-none transition-all ${
-                            target === 'KITCHEN' ? 'bg-amber-100 text-amber-800 border-amber-300' :
-                            (target === 'BAR' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-300')
-                          }`}
-                          value={target}
-                          onChange={(e) => handleUpdateCategoryTarget(cat.id, e.target.value)}
-                        >
-                          <option value="KITCHEN">🍳 Dapur (Makanan)</option>
-                          <option value="BAR">🍹 Bar (Minuman Racikan)</option>
-                          <option value="NONE">🥤 Showcase / Kasir Saja</option>
-                        </select>
-                      </div>
-                    );
-                  })}
-                  {categories.length === 0 && (
-                    <div className="col-span-full text-center py-4 text-xs text-slate-400">
-                      Memuat daftar kategori menu...
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
               
-              {/* HEADER & FOOTER FORMAT STRUK */}
+              {/* HEADER, FOOTER, WIFI & FORMAT STRUK */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div className="space-y-5">
+                  {/* Pilihan Ukuran Lebar Kertas */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+                      Ukuran Lebar Kertas Struk Printer Thermal
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, receiptPaperSize: '80mm' }))}
+                        className={`p-3 rounded-2xl border text-xs font-extrabold flex flex-col items-center gap-1 transition-all ${
+                          formData.receiptPaperSize !== '58mm'
+                            ? 'bg-indigo-50/80 border-indigo-500 text-indigo-700 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="text-sm">80 mm</span>
+                        <span className="text-[10px] font-medium text-slate-400">Standar Kasir POS Desktop</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, receiptPaperSize: '58mm' }))}
+                        className={`p-3 rounded-2xl border text-xs font-extrabold flex flex-col items-center gap-1 transition-all ${
+                          formData.receiptPaperSize === '58mm'
+                            ? 'bg-indigo-50/80 border-indigo-500 text-indigo-700 shadow-sm'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="text-sm">58 mm</span>
+                        <span className="text-[10px] font-medium text-slate-400">Mini Thermal / Mobile Bluetooth</span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Pembuka Struk (Header)</label>
                     <textarea 
                       name="receiptHeader" 
-                      rows={3} 
+                      rows={2} 
                       className="form-control text-sm" 
                       value={formData.receiptHeader} 
                       onChange={handleChange}
-                      placeholder="Contoh: Selamat Datang di MUKI RAMEN! Nikmati hidangan autentik kami."
+                      placeholder={isBengkel ? "Contoh: Selamat Datang di Bengkel Kami! Melayani servis & suku cadang bergaransi." : "Contoh: Selamat Datang di Restoran Kami! Nikmati hidangan spesial kami."}
                     ></textarea>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris teratas struk printer setelah nama restoran.</p>
+                    <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris teratas struk printer setelah nama {isBengkel ? 'bengkel' : 'restoran'}.</p>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Penutup Struk (Footer)</label>
                     <textarea 
                       name="receiptFooter" 
-                      rows={3} 
+                      rows={2} 
                       className="form-control text-sm" 
                       value={formData.receiptFooter} 
                       onChange={handleChange}
-                      placeholder="Contoh: Arigatou Gozaimasu! Follow Instagram @mukiramen.id"
+                      placeholder={isBengkel ? "Contoh: Terima kasih atas kepercayaan Anda. Garansi servis 14 hari!" : "Contoh: Terima kasih atas kunjungan Anda! Follow Instagram @kafe.anda"}
                     ></textarea>
                     <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris paling bawah struk belanja setelah rincian total bayar.</p>
                   </div>
+
+                  {/* Wi-Fi Info Pelanggan */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Nama Wi-Fi (SSID)</label>
+                      <input
+                        type="text"
+                        name="wifiName"
+                        className="form-control text-sm"
+                        placeholder={isBengkel ? "Contoh: BENGKEL-GUEST-WIFI" : "Contoh: KAFE-FREE-WIFI"}
+                        value={formData.wifiName || ''}
+                        onChange={handleChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Password Wi-Fi</label>
+                      <input
+                        type="text"
+                        name="wifiPassword"
+                        className="form-control text-sm font-mono"
+                        placeholder={isBengkel ? "Contoh: bengkeljuara88" : "Contoh: ramenenak88"}
+                        value={formData.wifiPassword || ''}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Toggle Metadata Struk */}
+                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.receiptShowCashier !== false}
+                        onChange={e => setFormData(prev => ({ ...prev, receiptShowCashier: e.target.checked }))}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                      />
+                      <span>{isBengkel ? 'Cetak Kasir / SA' : 'Cetak Nama Kasir'}</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.receiptShowTable !== false}
+                        onChange={e => setFormData(prev => ({ ...prev, receiptShowTable: e.target.checked }))}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                      />
+                      <span>{isBengkel ? 'Cetak No. Polisi & Kendaraan' : 'Cetak Nomor Meja'}</span>
+                    </label>
+                  </div>
                 </div>
 
-                {/* Preview Struk Premium */}
+                {/* Preview Struk Thermal Live */}
                 <div className="flex flex-col items-center justify-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-inner">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-amber-500 animate-pulse" /> Live Preview Struk Kasir
+                    <Sparkles size={12} className="text-amber-500 animate-pulse" />
+                    <span>Live Preview Thermal ({formData.receiptPaperSize === '58mm' ? '58mm Mini' : '80mm Standar'})</span>
                   </div>
                   
-                  {/* Mock Receipt Container */}
-                  <div className="bg-white w-64 p-5 font-mono text-[10px] text-slate-700 shadow-lg border border-slate-200 relative">
-                    <div className="font-black text-center text-xs text-slate-800 uppercase tracking-wide mb-1">{formData.storeName || 'MUKI RAMEN'}</div>
-                    <div className="text-center text-[8px] text-slate-400 mb-2 leading-tight whitespace-pre-wrap">{formData.address || 'Jl. Senopati No. 88, Jakarta Selatan'}</div>
+                  {/* Mock Receipt Container with Realistic Thermal Width */}
+                  <div className={`bg-white ${formData.receiptPaperSize === '58mm' ? 'w-56 text-[9px] p-4' : 'w-72 text-[10px] p-5'} font-mono text-slate-700 shadow-xl border border-slate-200 relative transition-all duration-300 rounded-sm`}>
+                    <div className="font-black text-center text-xs text-slate-900 uppercase tracking-wide mb-1">
+                      {formData.storeName || (isBengkel ? 'BENGKEL MOTOR & MOBIL' : 'KAFE & RESTORAN')}
+                    </div>
+                    <div className="text-center text-[8px] text-slate-400 mb-2 leading-tight whitespace-pre-wrap">
+                      {formData.address || (isBengkel ? 'Jl. Otomotif Raya No. 12, Jakarta' : 'Jl. Senopati No. 88, Jakarta Selatan')}
+                    </div>
+                    {formData.phone && (
+                      <div className="text-center text-[8px] text-slate-400 mb-2">Telp: {formData.phone}</div>
+                    )}
                     
                     {formData.receiptHeader && (
                       <div className="border-b border-dashed border-slate-300 text-center mb-2 pb-2 text-[8px] text-slate-500 italic whitespace-pre-wrap">
                         {formData.receiptHeader}
                       </div>
                     )}
-                    
-                    <div className="text-left space-y-1 my-3">
-                      <div className="flex justify-between"><span>2x Tori Paitan Ramen</span><span>116.000</span></div>
-                      <div className="flex justify-between"><span>1x Gyoza Panggang</span><span>28.000</span></div>
-                      <div className="flex justify-between"><span>2x Ocha Dingin</span><span>24.000</span></div>
-                    </div>
-                    
-                    <div className="border-t border-dashed border-slate-300 mt-2 pt-2 text-right font-black text-slate-800 text-[11px]">
-                      TOTAL: Rp 184.800
-                    </div>
+
+                    {isBengkel ? (
+                      <>
+                        <div className="border-b border-dashed border-slate-300 pb-1.5 mb-2 text-[8px] space-y-0.5 text-slate-500">
+                          <div>No. SPK  : #SPK-20260920-001</div>
+                          <div>Waktu    : 20 Sep 2026, 12:30</div>
+                          {formData.receiptShowCashier !== false && <div>Admin/Kasir: Budi Santoso</div>}
+                          {formData.receiptShowTable !== false && (
+                            <>
+                              <div>No. Pol  : B 1234 XYZ (Vario 150)</div>
+                              <div>Odometer : 24.500 KM</div>
+                            </>
+                          )}
+                          <div>Mekanik  : Agus Pratama</div>
+                        </div>
+                        
+                        <div className="text-left space-y-1 my-2">
+                          <div className="flex justify-between font-semibold"><span>1x Tune Up & Servis Ringan</span><span>75.000</span></div>
+                          <div className="flex justify-between font-semibold"><span>1x Oli Matic SPX2 0.8L</span><span>65.000</span></div>
+                          <div className="flex justify-between font-semibold"><span>1x Kampas Rem Belakang</span><span>45.000</span></div>
+                        </div>
+
+                        <div className="border-t border-dashed border-slate-300 pt-1.5 space-y-0.5 text-[8px] text-slate-500">
+                          <div className="flex justify-between"><span>Total Jasa:</span><span>Rp 75.000</span></div>
+                          <div className="flex justify-between"><span>Total Part:</span><span>Rp 110.000</span></div>
+                        </div>
+                        
+                        <div className="border-t border-dashed border-slate-300 mt-2 pt-2 text-right font-black text-slate-900 text-[11px]">
+                          TOTAL: Rp 185.000
+                        </div>
+                        <div className="border-t border-dashed border-slate-300 mt-2 pt-1 text-center text-[8px] text-amber-700 font-bold">
+                          Garansi Servis: 14 Hari / 1.000 KM
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="border-b border-dashed border-slate-300 pb-1.5 mb-2 text-[8px] space-y-0.5 text-slate-500">
+                          <div>No. Nota : #ORD-20260920-001</div>
+                          <div>Waktu    : 20 Sep 2026, 12:30</div>
+                          {formData.receiptShowCashier !== false && <div>Kasir    : Budi Santoso</div>}
+                          {formData.receiptShowTable !== false && <div>Meja     : Meja 05 (Dine In)</div>}
+                        </div>
+                        
+                        <div className="text-left space-y-1 my-2">
+                          <div className="flex justify-between font-semibold"><span>2x Tori Paitan Ramen</span><span>116.000</span></div>
+                          <div className="flex justify-between font-semibold"><span>1x Gyoza Panggang</span><span>28.000</span></div>
+                          <div className="flex justify-between font-semibold"><span>2x Ocha Dingin</span><span>24.000</span></div>
+                        </div>
+
+                        <div className="border-t border-dashed border-slate-300 pt-1.5 space-y-0.5 text-[8px] text-slate-500">
+                          <div className="flex justify-between"><span>Subtotal:</span><span>Rp 168.000</span></div>
+                          <div className="flex justify-between"><span>PB1 (10%):</span><span>Rp 16.800</span></div>
+                        </div>
+                        
+                        <div className="border-t border-dashed border-slate-300 mt-2 pt-2 text-right font-black text-slate-900 text-[11px]">
+                          TOTAL: Rp 184.800
+                        </div>
+                      </>
+                    )}
+
+                    {/* Wi-Fi Info Box inside receipt */}
+                    {(formData.wifiName || formData.wifiPassword) && (
+                      <div className="border border-slate-300 border-dashed rounded p-1.5 my-2 text-center text-[8px] text-slate-600">
+                        <div className="font-bold">📶 Info Wi-Fi Toko:</div>
+                        {formData.wifiName && <div>SSID: <b>{formData.wifiName}</b></div>}
+                        {formData.wifiPassword && <div>Pass: <b>{formData.wifiPassword}</b></div>}
+                      </div>
+                    )}
 
                     {formData.receiptFooter && (
                       <div className="border-t border-dashed border-slate-300 mt-3 pt-2 text-center text-[8px] text-slate-500 italic whitespace-pre-wrap">
@@ -1005,53 +1665,57 @@ const SettingsView = () => {
                 <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 text-xs font-semibold text-indigo-800 flex items-start gap-3">
                   <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
                   <div>
-                    Mengaktifkan fitur-fitur di bawah ini akan menambahkan parameter opsional pada saat kasir membuat pesanan makanan/minuman di terminal POS.
+                    {isBengkel
+                      ? 'Pengaturan fitur penunjang operasional kasir dan sistem perangkat keras bengkel.'
+                      : 'Mengaktifkan fitur-fitur di bawah ini akan menambahkan parameter opsional pada saat kasir membuat pesanan makanan/minuman di terminal POS.'}
                   </div>
                 </div>
 
-                {/* Drink Customization Toggle Card */}
-                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableDrinkCustomization ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm`}>
-                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
-                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                          <Coffee size={16} className="text-indigo-600" />
-                          <span>Kustomisasi Minuman (Sugar, Ice, Temperature)</span>
-                        </span>
-                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.enableDrinkCustomization ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {formData.enableDrinkCustomization ? '✓ AKTIF' : 'NONAKTIF'}
-                        </span>
+                {/* Drink Customization Toggle Card — Khusus Kafe / Resto */}
+                {!isBengkel && (
+                  <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableDrinkCustomization ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm`}>
+                    <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                      <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                            <Coffee size={16} className="text-indigo-600" />
+                            <span>Kustomisasi Minuman (Sugar, Ice, Temperature)</span>
+                          </span>
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.enableDrinkCustomization ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                            {formData.enableDrinkCustomization ? '✓ AKTIF' : 'NONAKTIF'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                          Tampilkan opsi pilihan level gula, jumlah es, dan suhu (panas/dingin) saat kasir memasukkan item minuman ke keranjang belanja POS.
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                        Tampilkan opsi pilihan level gula, jumlah es, dan suhu (panas/dingin) saat kasir memasukkan item minuman ke keranjang belanja POS.
-                      </p>
-                    </div>
 
-                    <div className="relative mt-1 shrink-0">
-                      <input
-                        type="checkbox"
-                        name="enableDrinkCustomization"
-                        className="sr-only"
-                        checked={formData.enableDrinkCustomization}
-                        onChange={handleChange}
-                      />
-                      <div
-                        style={{
-                          width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
-                          background: formData.enableDrinkCustomization ? '#4f46e5' : '#cbd5e1',
-                          transition: 'background 0.2s', position: 'relative',
-                        }}
-                      >
-                        <div style={{
-                          position: 'absolute', top: 3,
-                          left: formData.enableDrinkCustomization ? 23 : 3,
-                          width: 18, height: 18, borderRadius: '50%', background: 'white',
-                          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                        }} />
+                      <div className="relative mt-1 shrink-0">
+                        <input
+                          type="checkbox"
+                          name="enableDrinkCustomization"
+                          className="sr-only"
+                          checked={formData.enableDrinkCustomization}
+                          onChange={handleChange}
+                        />
+                        <div
+                          style={{
+                            width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                            background: formData.enableDrinkCustomization ? '#4f46e5' : '#cbd5e1',
+                            transition: 'background 0.2s', position: 'relative',
+                          }}
+                        >
+                          <div style={{
+                            position: 'absolute', top: 3,
+                            left: formData.enableDrinkCustomization ? 23 : 3,
+                            width: 18, height: 18, borderRadius: '50%', background: 'white',
+                            transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }} />
+                        </div>
                       </div>
-                    </div>
-                  </label>
-                </div>
+                    </label>
+                  </div>
+                )}
 
                 {/* High-Precision Mode Toggle Card */}
                 <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${highPrecisionMode ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm mt-4`}>
@@ -1089,6 +1753,50 @@ const SettingsView = () => {
                         <div style={{
                           position: 'absolute', top: 3,
                           left: highPrecisionMode ? 23 : 3,
+                          width: 18, height: 18, borderRadius: '50%', background: 'white',
+                          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                        }} />
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {/* 3-Tiered Pricing Toggle Card */}
+                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableTieredPricing ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm mt-4`}>
+                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                          <Layers size={16} className="text-indigo-600" />
+                          <span>Struktur 3-Tingkat Harga Produk (Eceran, Grosir, Partai)</span>
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.enableTieredPricing ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                          {formData.enableTieredPricing ? '✓ AKTIF' : 'NONAKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                        Sediakan form input 3 tingkat harga (Eceran/Umum, Mitra/Warung, Grosir/Partai serta Minimal Qty Grosir) pada saat tambah dan edit produk di katalog. Sangat cocok untuk toko grosir, ritel, bengkel, maupun kafe berskala besar.
+                      </p>
+                    </div>
+
+                    <div className="relative mt-1 shrink-0">
+                      <input
+                        type="checkbox"
+                        name="enableTieredPricing"
+                        className="sr-only"
+                        checked={formData.enableTieredPricing}
+                        onChange={handleChange}
+                      />
+                      <div
+                        style={{
+                          width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                          background: formData.enableTieredPricing ? '#4f46e5' : '#cbd5e1',
+                          transition: 'background 0.2s', position: 'relative',
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute', top: 3,
+                          left: formData.enableTieredPricing ? 23 : 3,
                           width: 18, height: 18, borderRadius: '50%', background: 'white',
                           transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                         }} />
@@ -1342,8 +2050,8 @@ const SettingsView = () => {
               <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600"><PackageSearch size={18} /></div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">Mode Inventaris & Pelacakan Bahan Baku</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Pilih cara sistem mengelola stok dan menghitung HPP (Harga Pokok Produksi).</p>
+                  <h3 className="text-base font-bold text-slate-800">{isBengkel ? 'Mode Inventaris & Pelacakan Suku Cadang' : 'Mode Inventaris & Pelacakan Bahan Baku'}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{isBengkel ? 'Pilih cara sistem mengelola stok suku cadang dan menghitung HPP (Harga Pokok Penjualan).' : 'Pilih cara sistem mengelola stok dan menghitung HPP (Harga Pokok Produksi).'}</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1357,10 +2065,10 @@ const SettingsView = () => {
                     {!formData.ingredientTrackingEnabled && <span style={{ background: '#4f46e5', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
                   </div>
                   <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
-                    <li>HPP diinput manual per produk</li>
-                    <li>Stok dilacak per produk jadi</li>
-                    <li>PO → naikkan stok produk langsung</li>
-                    <li>✓ Cocok untuk kafe baru / operasi sederhana</li>
+                    <li>{isBengkel ? 'HPP diinput manual per suku cadang' : 'HPP diinput manual per produk'}</li>
+                    <li>{isBengkel ? 'Stok dilacak per suku cadang / item' : 'Stok dilacak per produk jadi'}</li>
+                    <li>{isBengkel ? 'PO → naikkan stok suku cadang langsung' : 'PO → naikkan stok produk langsung'}</li>
+                    <li>✓ Cocok untuk {isBengkel ? 'bengkel' : 'kafe'} baru / operasi sederhana</li>
                   </ul>
                 </div>
                 <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: true }))} className="cursor-pointer"
@@ -1373,84 +2081,87 @@ const SettingsView = () => {
                     {formData.ingredientTrackingEnabled && <span style={{ background: '#7c3aed', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
                   </div>
                   <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
-                    <li>HPP otomatis dari resep bahan baku</li>
-                    <li>Stok dilacak per bahan baku (gram, ml)</li>
-                    <li>Order → kurangi stok bahan baku otomatis</li>
-                    <li>PO → naikkan stok bahan baku</li>
-                    <li>✓ Cocok untuk kafe dengan kontrol biaya ketat</li>
+                    <li>{isBengkel ? 'HPP otomatis dari harga beli rata-rata supplier' : 'HPP otomatis dari resep bahan baku'}</li>
+                    <li>{isBengkel ? 'Stok dilacak per part, oli & kimia (liter, botol, pcs)' : 'Stok dilacak per bahan baku (gram, ml)'}</li>
+                    <li>{isBengkel ? 'SPK Selesai → kurangi stok sparepart otomatis' : 'Order → kurangi stok bahan baku otomatis'}</li>
+                    <li>{isBengkel ? 'PO → naikkan stok gudang & pit servis' : 'PO → naikkan stok bahan baku'}</li>
+                    <li>✓ Cocok untuk {isBengkel ? 'bengkel' : 'kafe'} dengan kontrol biaya ketat</li>
                   </ul>
                 </div>
               </div>
               <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', gap: '.75rem' }}>
                 <Info size={18} color="#92400e" style={{ flexShrink: 0, marginTop: '.1rem' }} />
                 <p style={{ fontSize: '.8rem', color: '#78350f', lineHeight: 1.7, margin: 0 }}>
-                  Mengubah mode tidak menghapus data. Menu <strong>Bahan Baku</strong> di sidebar hanya muncul jika Advanced Mode aktif.
-                  Isi resep menu di <strong>Produk → Edit → Tab Resep</strong> sebelum mengaktifkan Advanced Mode.
+                  {isBengkel
+                    ? <>Mengubah mode tidak menghapus data. Menu <strong>Suku Cadang & Bahan Baku</strong> di sidebar hanya muncul jika Advanced Mode aktif.</>
+                    : <>Mengubah mode tidak menghapus data. Menu <strong>Bahan Baku</strong> di sidebar hanya muncul jika Advanced Mode aktif. Isi resep menu di <strong>Produk → Edit → Tab Resep</strong> sebelum mengaktifkan Advanced Mode.</>}
                 </p>
               </div>
 
-              {/* Kontrol Dapur & Mode Audit Opsional */}
-              <div className="pt-6 border-t border-slate-100 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
-                    <ShieldAlert size={18} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800">Kontrol Dapur & Mode Audit Inventaris (Opsional)</h4>
-                    <p className="text-xs text-slate-400">Atur tingkat detail pencatatan bahan sisa/waste agar staf dapur tetap nyaman dan tidak terbebani.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Mode Audit Detail Toggle */}
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                        <Flame size={16} className="text-rose-500" />
-                        <span>Mode Audit Detail Dapur</span>
-                      </span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="enableKitchenAuditMode"
-                          checked={formData.enableKitchenAuditMode || false}
-                          onChange={handleChange}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
-                      </label>
+              {/* Kontrol Dapur & Mode Audit Opsional — Khusus Kafe */}
+              {!isBengkel && (
+                <div className="pt-6 border-t border-slate-100 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
+                      <ShieldAlert size={18} />
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      {formData.enableKitchenAuditMode 
-                        ? '🟢 AKTIF: Dapur dapat memilih tombol cepat alasan kerugian (Gosong, Tumpah, Basi, dll) untuk audit performa per koki.' 
-                        : '⚪ NONAKTIF (Mode Cepat): Staf dapur cukup 1-klik kurangi/tambah stok biasa tanpa form berbelit-belit.'}
-                    </p>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800">Kontrol Dapur & Mode Audit Inventaris (Opsional)</h4>
+                      <p className="text-xs text-slate-400">Atur tingkat detail pencatatan bahan sisa/waste agar staf dapur tetap nyaman dan tidak terbebani.</p>
+                    </div>
                   </div>
 
-                  {/* Staff Meal Tracking Toggle */}
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                        <Utensils size={16} className="text-emerald-500" />
-                        <span>Pencatatan Makan Karyawan (Staff Meal)</span>
-                      </span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="enableStaffMealTracking"
-                          checked={formData.enableStaffMealTracking !== false}
-                          onChange={handleChange}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                      </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Mode Audit Detail Toggle */}
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                          <Flame size={16} className="text-rose-500" />
+                          <span>Mode Audit Detail Dapur</span>
+                        </span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            name="enableKitchenAuditMode"
+                            checked={formData.enableKitchenAuditMode || false}
+                            onChange={handleChange}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        {formData.enableKitchenAuditMode 
+                          ? '🟢 AKTIF: Dapur dapat memilih tombol cepat alasan kerugian (Gosong, Tumpah, Basi, dll) untuk audit performa per koki.' 
+                          : '⚪ NONAKTIF (Mode Cepat): Staf dapur cukup 1-klik kurangi/tambah stok biasa tanpa form berbelit-belit.'}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Mengizinkan dapur mencatat konsumsi resmi staf agar HPP makanan terpisah dari kerugian/waste dan stok tetap akurat.
-                    </p>
+
+                    {/* Staff Meal Tracking Toggle */}
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                          <Utensils size={16} className="text-emerald-500" />
+                          <span>Pencatatan Makan Karyawan (Staff Meal)</span>
+                        </span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            name="enableStaffMealTracking"
+                            checked={formData.enableStaffMealTracking !== false}
+                            onChange={handleChange}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Mengizinkan dapur mencatat konsumsi resmi staf agar HPP makanan terpisah dari kerugian/waste dan stok tetap akurat.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Warehouse & Transfer Pricing Settings */}
               <div className="pt-6 border-t border-slate-100 space-y-4">
@@ -1459,8 +2170,14 @@ const SettingsView = () => {
                     <Boxes size={18} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-800">Gudang Pusat & Kebijakan Transfer Pricing ke Dapur</h4>
-                    <p className="text-xs text-slate-400">Tentukan harga transfer bahan baku saat dikirim dari Gudang Pusat ke Dapur Cabang.</p>
+                    <h4 className="text-sm font-bold text-slate-800">
+                      {isBengkel ? 'Gudang Pusat & Kebijakan Transfer Pricing ke Bengkel Cabang' : 'Gudang Pusat & Kebijakan Transfer Pricing ke Dapur'}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {isBengkel 
+                        ? 'Tentukan harga transfer suku cadang saat didistribusikan dari Gudang Pusat ke Bengkel Cabang / Pit Servis.' 
+                        : 'Tentukan harga transfer bahan baku saat dikirim dari Gudang Pusat ke Dapur Cabang.'}
+                    </p>
                   </div>
                 </div>
 
@@ -2005,97 +2722,141 @@ const SettingsView = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Sistem Bagi Hasil & Bonus Omzet Karyawan</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Konfigurasi persentase profit sharing divisi Muki Ramen & Muki Drink, serta skema tier reward omzet harian.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{isBengkel ? 'Konfigurasi persentase profit sharing dengan Kepala Bengkel/Mitra, serta skema tier reward omzet harian.' : 'Konfigurasi persentase profit sharing divisi Makanan & Minuman, serta skema tier reward omzet harian.'}</p>
                 </div>
               </div>
 
               {/* ── BAGIAN 1: SISTEM BAGI HASIL USAHA (PROFIT SHARING) ── */}
               <div className="p-5 sm:p-6 rounded-2xl border border-orange-200/80 bg-orange-50/30 space-y-6">
-                <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
-                  <ChefHat size={18} className="text-orange-600" />
-                  <span>I. Pembagian Hasil Usaha (Profit Sharing)</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                      Bagian Owner (%)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        name="profitSharingOwnerPercent"
-                        className="form-control font-bold text-slate-800"
-                        value={formData.profitSharingOwnerPercent ?? 80}
-                        onChange={handleChange}
-                        min={0}
-                        max={100}
-                        placeholder="80"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-orange-200/60">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-orange-100 text-orange-700">
+                      {isBengkel ? <Wrench size={20} /> : <ChefHat size={20} />}
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 80% (Pemilik Modal & Brand)</p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-950 font-bold text-sm">I. Fitur Bagi Hasil Usaha (Profit Sharing)</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${formData.enableProfitSharing ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                          {formData.enableProfitSharing ? 'Aktif' : 'Nonaktif'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-orange-800/80 mt-0.5">
+                        {isBengkel
+                          ? 'Aktifkan pembagian persentase laba bersih dengan kepala bengkel, mitra mekanik, atau pemodal.'
+                          : 'Aktifkan pembagian persentase laba bersih dengan pengelola divisi makanan/minuman, barista, atau mitra bisnis.'}
+                      </p>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                      Bagian PJ Muki Ramen (%)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        name="profitSharingRamenPercent"
-                        className="form-control font-bold text-slate-800"
-                        value={formData.profitSharingRamenPercent ?? 20}
-                        onChange={handleChange}
-                        min={0}
-                        max={100}
-                        placeholder="20"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 20% dari Laba Bersih Divisi Makanan</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                      Bagian PJ Muki Drink (%)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        name="profitSharingDrinkPercent"
-                        className="form-control font-bold text-slate-800"
-                        value={formData.profitSharingDrinkPercent ?? 20}
-                        onChange={handleChange}
-                        min={0}
-                        max={100}
-                        placeholder="20"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 20% dari Laba Bersih Divisi Minuman</p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                    Mode Pembebanan Biaya Bersama (Shared OPEX: Listrik, Air, Gas, Kemasan, Wifi)
+                  {/* Toggle Switch */}
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="enableProfitSharing"
+                      checked={formData.enableProfitSharing ?? true}
+                      onChange={handleChange}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
                   </label>
-                  <select
-                    name="profitSharingOpexMode"
-                    className="form-control font-medium text-slate-800 bg-white"
-                    value={formData.profitSharingOpexMode || 'BEFORE_SPLIT'}
-                    onChange={handleChange}
-                  >
-                    <option value="BEFORE_SPLIT">Mode A (Rekomendasi): Dipotong Proporsional dari Omzet Sebelum Bagi Hasil 80:20</option>
-                    <option value="OWNER_COVERED">Mode B: Ditanggung Penuh oleh Owner (PJ Terima Bersih dari Omzet - Belanja Langsung)</option>
-                    <option value="SPLIT_50_50">Mode C: Split Beban (50% Owner : 25% PJ Ramen : 25% PJ Drink)</option>
-                  </select>
-                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                    Biaya operasional kas kecil seperti token listrik, air galon, tabung gas, kresek kemasan & tissue akan dikurangkan secara otomatis berdasarkan opsi di atas.
-                  </p>
                 </div>
+
+                {formData.enableProfitSharing ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                          Bagian Owner (%)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="profitSharingOwnerPercent"
+                            className="form-control font-bold text-slate-800"
+                            value={formData.profitSharingOwnerPercent ?? 80}
+                            onChange={handleChange}
+                            min={0}
+                            max={100}
+                            placeholder="80"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1 font-medium">Default: 80% (Pemilik Modal & Brand)</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                          {isBengkel ? 'Bagian Kepala Bengkel / Mitra Servis (%)' : 'Bagian Pengelola Makanan / Kitchen (%)'}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="profitSharingRamenPercent"
+                            className="form-control font-bold text-slate-800"
+                            value={formData.profitSharingRamenPercent ?? 20}
+                            onChange={handleChange}
+                            min={0}
+                            max={100}
+                            placeholder="20"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1 font-medium">
+                          {isBengkel ? 'Default: 20% dari Laba Bersih Divisi Servis/Jasa' : 'Default: 20% dari Laba Bersih Divisi Makanan'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                          {isBengkel ? 'Bagian Mitra Part / Konsinyasi (%)' : 'Bagian Pengelola Minuman / Bar (%)'}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="profitSharingDrinkPercent"
+                            className="form-control font-bold text-slate-800"
+                            value={formData.profitSharingDrinkPercent ?? 20}
+                            onChange={handleChange}
+                            min={0}
+                            max={100}
+                            placeholder="20"
+                          />
+                          <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400">%</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1 font-medium">
+                          {isBengkel ? 'Default: 20% dari Laba Penjualan Suku Cadang' : 'Default: 20% dari Laba Bersih Divisi Minuman'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                        {isBengkel ? 'Mode Pembebanan Biaya Bersama (Shared OPEX: Listrik, Air, Kompresor, Wifi)' : 'Mode Pembebanan Biaya Bersama (Shared OPEX: Listrik, Air, Gas, Kemasan, Wifi)'}
+                      </label>
+                      <select
+                        name="profitSharingOpexMode"
+                        className="form-control font-medium text-slate-800 bg-white"
+                        value={formData.profitSharingOpexMode || 'BEFORE_SPLIT'}
+                        onChange={handleChange}
+                      >
+                        <option value="BEFORE_SPLIT">Mode A (Rekomendasi): Dipotong Proporsional dari Omzet Sebelum Bagi Hasil 80:20</option>
+                        <option value="OWNER_COVERED">Mode B: Ditanggung Penuh oleh Owner (PJ Terima Bersih dari Omzet - Belanja Langsung)</option>
+                        <option value="SPLIT_50_50">Mode C: Split Beban (50% Owner : 25% PJ Ramen : 25% PJ Drink)</option>
+                      </select>
+                      <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                        Biaya operasional kas kecil seperti token listrik, air galon, tabung gas, kresek kemasan & tissue akan dikurangkan secara otomatis berdasarkan opsi di atas.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-4 rounded-xl bg-white/80 border border-orange-200/60 flex items-start sm:items-center gap-3 text-xs text-slate-600">
+                    <span className="text-xl shrink-0">ℹ️</span>
+                    <div>
+                      <span className="font-bold text-slate-800 block sm:inline">Fitur Bagi Hasil Dinonaktifkan:</span>{' '}
+                      <span>Seluruh omzet dan laba bersih dihitung 100% untuk pemilik cafe/restoran. Tab & laporan bagi hasil otomatis disembunyikan dari halaman Laporan Bisnis.</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ── BAGIAN 2: SKEMA TIER REWARD BONUS OMZET HARIAN ── */}
@@ -2223,6 +2984,195 @@ const SettingsView = () => {
             </div>
           )}
 
+          {activeTab === 'bantuan_cs' && (
+            <div className="space-y-8 animate-fade-in">
+              {/* Header */}
+              <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <Headphones size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
+                      Pusat Bantuan & Layanan CS 24/7
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Online
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Dapatkan pendampingan teknis langsung dari tim engineer & support Codenusa POS.</p>
+                  </div>
+                </div>
+
+                {/* WhatsApp Direct Button */}
+                <a
+                  href={`https://wa.me/628123456789?text=Halo%20Tim%20Support%20Codenusa%20POS,%20saya%20butuh%20bantuan%20operasional%20${isBengkel ? 'bengkel' : 'kafe'}.`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all active:scale-95 shrink-0"
+                >
+                  <Phone size={15} />
+                  <span>Chat WhatsApp CS Live (VIP)</span>
+                </a>
+              </div>
+
+              {/* Grid 2 Kolom: Tiket Bantuan & Solusi Cepat */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Kolom Kiri: Form Tiket Bantuan */}
+                <div className="lg:col-span-7 bg-slate-50/70 p-5 sm:p-6 rounded-3xl border border-slate-200/80 space-y-5">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare size={18} className="text-indigo-600" />
+                    <h4 className="text-sm font-bold text-slate-800">Kirim Tiket Kendala / Permintaan Bantuan</h4>
+                  </div>
+
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget;
+                      const formDataObj = new FormData(form);
+                      const payload = {
+                        name: formDataObj.get('name') || posContext?.user?.name || 'Owner',
+                        phone: formDataObj.get('phone') || posContext?.settings?.phone || '',
+                        email: formDataObj.get('email') || '',
+                        category: formDataObj.get('category') || 'PRINTER',
+                        message: formDataObj.get('message') || '',
+                        tenantId: posContext?.user?.tenantId || 'default-tenant'
+                      };
+
+                      if (!payload.message) {
+                        return toast('Mohon deskripsikan kendala Anda.', 'warning');
+                      }
+
+                      try {
+                        const res = await fetch('/api/support/tickets', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(payload)
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          toast(`🎉 ${data.message || 'Tiket berhasil dikirim! Tim CS akan segera menghubungi.'}`, 'success');
+                          form.reset();
+                        } else {
+                          toast(data.error || 'Gagal mengirim tiket bantuan', 'error');
+                        }
+                      } catch {
+                        toast('Gagal terhubung ke server support.', 'error');
+                      }
+                    }}
+                    className="space-y-4 text-xs"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-600 mb-1">Nama Pengirim / Kasir</label>
+                        <input
+                          type="text"
+                          name="name"
+                          required
+                          defaultValue={posContext?.user?.name || ''}
+                          placeholder="Nama staf / owner"
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-600 mb-1">Nomor WhatsApp Aktif</label>
+                        <input
+                          type="tel"
+                          name="phone"
+                          required
+                          defaultValue={posContext?.settings?.phone || ''}
+                          placeholder="0812xxxxxx"
+                          className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Kategori Kendala</label>
+                      <select
+                        name="category"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                      >
+                        <option value="PRINTER">🖨️ Printer Kasir / Bluetooth / Kertas Struk</option>
+                        <option value="PAYMENT">💳 Pembayaran QRIS / EDC / Midtrans</option>
+                        {!isBengkel && <option value="KDS">🍳 Layar Dapur (KDS) & Sinkronisasi Pesanan</option>}
+                        <option value="INVENTORY">{isBengkel ? '📦 Stok Suku Cadang, Oli & Gudang Pit' : '📦 Resep HPP / Stok Bahan Baku / Gudang'}</option>
+                        <option value="OFFLINE_SYNC">⚡ Mode Offline & Sinkronisasi Data</option>
+                        <option value="FEATURE_REQUEST">✨ Usulan Fitur Baru / Konsultasi Bisnis</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Deskripsi Detail Kendala</label>
+                      <textarea
+                        name="message"
+                        required
+                        rows={4}
+                        placeholder="Jelaskan kendala yang dialami secara singkat (misal: Printer Bluetooth tidak mau pairing setelah update Android...)"
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 resize-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 active:scale-95 transition-all text-xs"
+                    >
+                      <Send size={14} />
+                      <span>Kirim Tiket ke Tim Support</span>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Kolom Kanan: FAQ & Solusi Cepat */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle size={18} className="text-amber-500" />
+                    <h4 className="text-sm font-bold text-slate-800">Panduan Mandiri Solusi Cepat</h4>
+                  </div>
+
+                  <div className="space-y-3 text-xs">
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm space-y-1.5">
+                      <h5 className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="text-emerald-500" />
+                        Printer Bluetooth Tidak Merespons?
+                      </h5>
+                      <p className="text-slate-500 leading-relaxed">
+                        Pastikan Bluetooth di tablet menyala. Masuk ke menu <strong>Pengaturan &gt; Printer Bluetooth</strong>, lalu klik <strong>"Scan &amp; Pair Perangkat"</strong>. Jika masih gagal, restart printer thermal selama 5 detik.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm space-y-1.5">
+                      <h5 className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="text-emerald-500" />
+                        Internet {isBengkel ? 'Bengkel' : 'Kafe'} Putus Tiba-Tiba?
+                      </h5>
+                      <p className="text-slate-500 leading-relaxed">
+                        Tenang! POS otomatis beralih ke <strong>Mode Offline</strong>. Anda tetap bisa melayani {isBengkel ? 'SPK servis & cetak struk' : 'pesanan kasir & mencetak struk'}. Data otomatis tersinkronisasi kembali saat internet online.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm space-y-1.5">
+                      <h5 className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="text-emerald-500" />
+                        QRIS Dinamis Tidak Muncul?
+                      </h5>
+                      <p className="text-slate-500 leading-relaxed">
+                        Pastikan Server Key Midtrans sudah dimasukkan di menu <strong>Metode Pembayaran</strong>, atau gunakan upload gambar QRIS Statis BCA/GoPay sebagai metode pembayaran alternatif.
+                      </p>
+                    </div>
+
+                    <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-1">
+                      <span className="font-bold text-indigo-900 block">📞 Hotline Darurat CS 24 Jam</span>
+                      <p className="text-indigo-700">
+                        Email: <span className="font-mono font-bold">support@codenusa.id</span><br />
+                        Telepon / WhatsApp: <span className="font-mono font-bold">+62 812-9876-5432</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Bottom Save Action for settings tabs */}
           {['profil', 'struk', 'pajak', 'bayar', 'fitur', 'bagi_hasil', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
             <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-end">
@@ -2237,6 +3187,276 @@ const SettingsView = () => {
             </div>
           )}
 
+          {activeTab === 'jam_operasional' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Clock size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Manajemen Jam Operasional & Kontrol Shift</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Atur jadwal buka-tutup harian outlet dan batas toleransi buka/tutup shift kasir.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Jadwal 7 Hari */}
+              <div className="bg-slate-50/70 p-4 sm:p-5 rounded-2xl border border-slate-200/80 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200/60">
+                  <h4 className="text-xs font-black uppercase text-slate-600 tracking-wider flex items-center gap-2">
+                    <Store size={14} className="text-indigo-600" /> Jadwal Operasional Toko (Senin - Minggu)
+                  </h4>
+                  
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleSetAll24Hours}
+                      className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs shadow-xs active:scale-95 transition flex items-center gap-1.5"
+                      title="Atur seluruh hari buka 24 jam non-stop"
+                    >
+                      <Sparkles size={13} />
+                      <span>Buka 24 Jam (Semua Hari)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetStandardHours}
+                      className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-semibold text-xs active:scale-95 transition"
+                      title="Kembalikan ke jam operasional normal (08:00 - 22:00)"
+                    >
+                      Reset Standar (08:00 - 22:00)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {operatingHoursList.map((item, idx) => (
+                    <div 
+                      key={item.day}
+                      className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-xl border transition-all ${
+                        item.isOpen 
+                          ? item.is24Hours
+                            ? 'bg-emerald-50/30 border-emerald-200/80 shadow-xs'
+                            : 'bg-white border-slate-200/90 shadow-sm' 
+                          : 'bg-slate-100/70 border-slate-200 opacity-60'
+                      }`}
+                    >
+                      {/* Left: Toggle, Day name, and 24h switch */}
+                      <div className="flex items-center justify-between w-full sm:w-auto sm:gap-4">
+                        <div className="flex items-center gap-3">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                              type="checkbox" 
+                              checked={item.isOpen} 
+                              onChange={(e) => handleOperatingHoursChange(idx, 'isOpen', e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                          <span className="text-xs font-bold text-slate-800">{item.dayName}</span>
+                        </div>
+
+                        {/* 24 Jam Quick Toggle Pill */}
+                        {item.isOpen && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggle24Hours(idx)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 border ${
+                              item.is24Hours
+                                ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs ring-2 ring-emerald-500/20'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200'
+                            }`}
+                            title="Aktifkan / nonaktifkan operasional 24 jam untuk hari ini"
+                          >
+                            <span className="text-[11px] leading-none">⚡</span>
+                            <span>24 Jam</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Right: Operational hours input or 24h badge */}
+                      {item.isOpen ? (
+                        item.is24Hours ? (
+                          <div className="flex items-center justify-between w-full sm:w-auto gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs">
+                            <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span>Buka 24 Jam Non-Stop (00:00 - 23:59)</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleToggle24Hours(idx)}
+                              className="text-[10px] text-emerald-700 underline font-semibold hover:text-emerald-900 ml-2"
+                            >
+                              Atur Jam Spesifik
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs flex-wrap sm:flex-nowrap">
+                            <span className="text-slate-500 font-medium">Buka:</span>
+                            <input 
+                              type="time" 
+                              value={item.openTime} 
+                              onChange={(e) => handleOperatingHoursChange(idx, 'openTime', e.target.value)}
+                              className="form-control text-xs py-1.5 px-2.5 w-24 sm:w-28 bg-white border border-slate-200 rounded-lg font-mono font-bold"
+                            />
+                            <span className="text-slate-400 font-bold px-0.5 sm:px-1">—</span>
+                            <span className="text-slate-500 font-medium">Tutup:</span>
+                            <input 
+                              type="time" 
+                              value={item.closeTime} 
+                              onChange={(e) => handleOperatingHoursChange(idx, 'closeTime', e.target.value)}
+                              className="form-control text-xs py-1.5 px-2.5 w-24 sm:w-28 bg-white border border-slate-200 rounded-lg font-mono font-bold"
+                            />
+                          </div>
+                        )
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-400 italic">Libur / Tidak Beroperasi</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Toleransi & Shift Control Rules */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Toleransi Persiapan */}
+                <div className="p-5 rounded-2xl border border-slate-200/80 bg-white space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Toleransi Persiapan Buka Shift
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="number" 
+                      name="earlyOpenBufferMinutes"
+                      value={formData.earlyOpenBufferMinutes ?? 45}
+                      onChange={handleChange}
+                      min="0"
+                      max="180"
+                      className="form-control text-sm font-bold w-24 text-center"
+                    />
+                    <span className="text-xs text-slate-500 font-semibold">Menit sebelum toko buka</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Kasir diizinkan membuka modal laci X menit sebelum jam operasional dimulai (untuk persiapan modal kasir dan mesin).
+                  </p>
+                </div>
+
+                {/* Toleransi Closing */}
+                <div className="p-5 rounded-2xl border border-slate-200/80 bg-white space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Toleransi Waktu Closing Shift
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="number" 
+                      name="closingGraceMinutes"
+                      value={formData.closingGraceMinutes ?? 45}
+                      onChange={handleChange}
+                      min="0"
+                      max="180"
+                      className="form-control text-sm font-bold w-24 text-center"
+                    />
+                    <span className="text-xs text-slate-500 font-semibold">Menit setelah toko tutup</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Waktu yang diberikan kepada kasir untuk menghitung uang laci setelah jam tutup toko sebelum shift dinyatakan <strong>Overdue</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Mode Strict & Allow Orders After Close */}
+              <div className="space-y-4 pt-2">
+                <div className="p-4 rounded-2xl border border-amber-200/70 bg-amber-50/40 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert size={16} className="text-amber-600" />
+                      <h4 className="text-xs font-bold text-slate-800">Mode Ketat (Strict Shift Enforcement)</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Jika diaktifkan, kasir dilarang membuka shift di luar jam operasional & persiapan kecuali memasukkan <strong>PIN Supervisor / Manajer</strong>.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                    <input 
+                      type="checkbox" 
+                      name="enforceOperatingHours"
+                      checked={Boolean(formData.enforceOperatingHours)}
+                      onChange={handleChange}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                  </label>
+                </div>
+
+                <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Check size={16} className="text-indigo-600" />
+                      <h4 className="text-xs font-bold text-slate-800">Izinkan Pesanan Setelah Jam Tutup</h4>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Tetap izinkan kasir membuat pesanan jika pelanggan masih nongkrong saat closing, dengan catatan audit khusus (*after-hours order*).
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                    <input 
+                      type="checkbox" 
+                      name="allowOrdersAfterClose"
+                      checked={formData.allowOrdersAfterClose !== false}
+                      onChange={handleChange}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Bottom Save Action for Jam Operasional */}
+              <div className="pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">
+                  Simpan konfigurasi jam operasional & toleransi shift untuk outlet Anda.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+                  <span>{loading ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Floating Sticky Save Action Bar (Always visible on mobile above bottom navigation bar) */}
+      <div className="fixed bottom-20 left-3 right-3 sm:hidden z-30 animate-in slide-in-from-bottom-5 duration-200">
+        <div className="bg-slate-900/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white leading-tight">Pengaturan</span>
+              <span className="text-[10px] text-slate-400 leading-tight">Tekan untuk simpan</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-500/30 flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+            <span>{loading ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -2484,6 +3704,8 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
   const [backups, setBackups] = useState<any[]>([]);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(true);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
 
   const fetchHealthAndBackups = async () => {
     setLoadingHealth(true);
@@ -2772,7 +3994,83 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
             </button>
           </div>
         </div>
+
+        {/* Card 3: Keranjang Sampah Sementara (Recycle Bin / 30-Day Soft Delete) */}
+        <div className="p-6 rounded-3xl border border-amber-200/90 dark:border-amber-800/60 bg-gradient-to-br from-amber-50/50 via-white to-orange-50/30 dark:from-slate-800 dark:to-amber-950/30 hover:border-amber-400 shadow-sm transition-all space-y-4 md:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 via-amber-600 to-orange-700 text-white flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+                <Trash2 size={24} className="text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Keranjang Sampah Toko (Recycle Bin)</h4>
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    Retensi 30 Hari
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                  Pulihkan menu produk, bahan baku, kategori, meja, pelanggan, atau supplier yang tidak sengaja terhapus. Item disimpan aman selama 30 hari sebelum dibersihkan permanen.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsRecycleBinOpen(true)}
+              className="btn btn-primary bg-amber-600 hover:bg-amber-700 border-amber-600 text-xs font-bold py-3 px-5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-amber-600/20 shrink-0 self-start sm:self-auto text-white"
+            >
+              <Trash2 size={16} />
+              <span>Buka Keranjang Sampah</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card 4: Tenant Reset & Starter Templates Gate (Multi-Layer Protected) */}
+        <div className="p-6 rounded-3xl border border-indigo-200/90 dark:border-indigo-800/60 bg-gradient-to-br from-indigo-50/60 via-white to-amber-50/30 dark:from-slate-800 dark:to-indigo-950/40 hover:border-indigo-400 shadow-sm transition-all space-y-4 md:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20 shrink-0">
+                <ShieldAlert size={24} className="text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pusat Reset Data & Starter Templates Usaha</h4>
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                    Multi-Tenant Safe
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                  Pasang template menu & bahan baku industri (Coffee Shop, Restoran F&B, Bakery) atau bersihkan transaksi simulasi sebelum Grand Opening dengan proteksi kata sandi ganda.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsResetModalOpen(true)}
+              className="btn btn-primary bg-indigo-600 hover:bg-indigo-700 border-indigo-600 text-xs font-bold py-3 px-5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 shrink-0 self-start sm:self-auto"
+            >
+              <Sparkles size={16} className="text-amber-300" />
+              <span>Buka Menu Reset & Template</span>
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* Recycle Bin Modal */}
+      <RecycleBinModal
+        isOpen={isRecycleBinOpen}
+        onClose={() => setIsRecycleBinOpen(false)}
+        onItemRestored={() => fetchHealthAndBackups()}
+      />
+
+      {/* Tenant Reset Modal */}
+      <TenantResetModal 
+        isOpen={isResetModalOpen} 
+        onClose={() => setIsResetModalOpen(false)} 
+        onSuccess={() => fetchHealthAndBackups()}
+      />
 
       {/* ── Table of Stored Backups ── */}
       <div className="p-6 rounded-3xl border border-slate-200 bg-white shadow-sm space-y-4">

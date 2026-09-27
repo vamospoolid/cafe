@@ -1,20 +1,41 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
-import { io } from '../index';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { io, emitToTenant } from '../index';
+import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// GET Active KDS Orders (Dapur)
+// Router-level fail-closed guard: all KDS operations require authentication & tenant context
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const user = (req as AuthRequest).user;
+  const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+  if (!tenantId) {
+    return res.status(400).json({ 
+      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
+      code: 'MISSING_TENANT_CONTEXT' 
+    });
+  }
+  next();
+});
+
+// GET Active KDS Orders (Dapur) - Terisolasi per Tenant
 // Hanya mengambil order yang belum selesai dimasak (Pending, Cooking, Ready) atau dibatalkan (Cancelled)
 router.get('/active', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'Open' }
+      where: { 
+        status: 'Open',
+        tenantId
+      }
     });
 
     const whereCondition: any = {
+      tenantId,
       OR: [
         {
           status: { not: 'Void' },
@@ -50,15 +71,29 @@ router.get('/active', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
-// PATCH Update Status Masakan
+// PATCH Update Status Masakan - Terisolasi per Tenant
 router.patch('/:id/status', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { kdsStatus } = req.body;
+    const user = (req as AuthRequest).user;
+    const tenantId = (user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string)) as string;
 
     const validStatuses = ['Pending', 'Cooking', 'Ready', 'Served', 'Cancelled'];
     if (!validStatuses.includes(kdsStatus)) {
       return res.status(400).json({ error: 'Status KDS tidak valid' });
+    }
+
+    // Pastikan order milik tenant ini
+    const existingOrder = await prisma.order.findFirst({
+      where: { 
+        id: Number(id),
+        tenantId
+      }
+    });
+
+    if (!existingOrder) {
+      return res.status(404).json({ error: 'Order tidak ditemukan' });
     }
 
     const updateData: any = { kdsStatus };
@@ -69,13 +104,13 @@ router.patch('/:id/status', authenticateToken, async (req: Request, res: Respons
     }
 
     const order = await prisma.order.update({
-      where: { id: Number(id) },
+      where: { id: existingOrder.id },
       data: updateData,
       include: { table: true }
     });
 
-    // Emit real-time event ke semua klien
-    io.emit('kds:statusChanged', {
+    // Emit real-time event ke room tenant terkait
+    emitToTenant(tenantId, 'kds:statusChanged', {
       orderId: order.id,
       orderNumber: order.orderNumber,
       kdsStatus,
@@ -84,7 +119,7 @@ router.patch('/:id/status', authenticateToken, async (req: Request, res: Respons
 
     // Event khusus saat makanan Ready → notifikasi kasir & waiter
     if (kdsStatus === 'Ready') {
-      io.emit('kds:ready', {
+      emitToTenant(tenantId, 'kds:ready', {
         orderId: order.id,
         orderNumber: order.orderNumber,
         tableNo: (order as any).table?.tableNo || null
@@ -98,11 +133,17 @@ router.patch('/:id/status', authenticateToken, async (req: Request, res: Respons
   }
 });
 
-// GET last served order for global recall
+// GET last served order for global recall - Terisolasi per Tenant
 router.get('/last-served', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+
     const lastServed = await prisma.order.findFirst({
-      where: { kdsStatus: 'Served' },
+      where: { 
+        kdsStatus: 'Served',
+        tenantId
+      },
       orderBy: { servedAt: 'desc' },
       include: {
         table: true,
@@ -120,12 +161,18 @@ router.get('/last-served', authenticateToken, async (req: Request, res: Response
   }
 });
 
-// POST undo status for KDS order
+// POST undo status for KDS order - Terisolasi per Tenant
 router.post('/:id/undo', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const order = await prisma.order.findUnique({
-      where: { id: Number(id) }
+    const user = (req as AuthRequest).user;
+    const tenantId = (user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string)) as string;
+
+    const order = await prisma.order.findFirst({
+      where: { 
+        id: Number(id),
+        tenantId
+      }
     });
 
     if (!order) {
@@ -141,11 +188,19 @@ router.post('/:id/undo', authenticateToken, async (req: Request, res: Response) 
     }
 
     const updated = await prisma.order.update({
-      where: { id: Number(id) },
+      where: { id: order.id },
       data: { 
         kdsStatus: previousStatus,
         servedAt: null
-      }
+      },
+      include: { table: true }
+    });
+
+    emitToTenant(tenantId, 'kds:statusChanged', {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      kdsStatus: previousStatus,
+      tableNo: (updated as any).table?.tableNo || null
     });
 
     res.json({ message: 'Undo berhasil', order: updated });
@@ -155,15 +210,22 @@ router.post('/:id/undo', authenticateToken, async (req: Request, res: Response) 
   }
 });
 
-// GET served history for today
+// GET served history for today - Terisolasi per Tenant
 router.get('/history', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'Open' }
+      where: { 
+        status: 'Open',
+        tenantId
+      }
     });
 
     const whereCondition: any = {
-      kdsStatus: 'Served'
+      kdsStatus: 'Served',
+      tenantId
     };
 
     if (activeShift) {

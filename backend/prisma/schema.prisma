@@ -23,6 +23,9 @@ model Tenant {
   plan         Plan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
   trialEndsAt  DateTime?
 
+  // W1-A-1: Business Vertical Type — locked at registration, only Platform Admin can change
+  businessType String   @default("CAFE") // CAFE | BENGKEL | LAUNDRY | GALON | RETAIL
+
   // Platform & Hierarchy Relations
   outlets             Outlet[]
   memberships         TenantMembership[]
@@ -62,12 +65,35 @@ model Tenant {
   warehouseSales       WarehouseSale[]
   employeeLoans        EmployeeLoan[]
   auditLogs            AuditLog[]
+  wasteLogs            WasteLog[]
+  vouchers             Voucher[]
+
+  // W1-A-4: Bengkel Vertical Relations
+  workOrders        WorkOrder[]
+  serviceTypes      ServiceType[]
+  vehicles          Vehicle[]
+  mechanicProfiles  MechanicProfile[]
+  commissionPayouts CommissionPayout[]
+  workOrderInvoices WorkOrderInvoice[]
+  partRequests      PartRequest[]
+  supplierInvoices  SupplierInvoice[]
+  supplierInvoicePayments SupplierInvoicePayment[]
+
+  // Retail / Grosir Vertical Relations
+  productUoms       ProductUOM[]
+  priceTiers        ProductPriceTier[]
+  deliveryOrders    DeliveryOrder[]
+
+  // Laundry Vertical Relations
+  laundryOrders     LaundryOrder[]
+
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([slug])
+  @@index([businessType])
 }
 
 model Outlet {
@@ -98,6 +124,9 @@ model Outlet {
   purchaseOrders       PurchaseOrder[]
   settingsRel          Settings[]
   auditLogs            AuditLog[]
+  wasteLogs            WasteLog[]
+  workOrders           WorkOrder[]
+  laundryOrders        LaundryOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -140,6 +169,8 @@ model User {
   ownerFundTxns     OwnerFundTransaction[]
   employeeLoans     EmployeeLoan[]
   auditLogs         AuditLog[]
+  wasteLogs         WasteLog[]
+  mechanicProfile   MechanicProfile?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -447,15 +478,23 @@ model Category {
   tenantId      String?
   tenant        Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name          String
-  printerTarget String     @default("KITCHEN") // KITCHEN, BAR, NONE
+  icon          String?    @default("🍽️")
+  color         String?    @default("#4f46e5")
+  sortOrder     Int        @default(0)
+  printerTarget String     @default("KITCHEN") // KITCHEN, BAR, NONE (legacy compatibility)
+  stationTarget String     @default("KITCHEN") // KITCHEN, BAR, GRILL, DESSERT, BEVERAGE, NONE
+  isActive      Boolean    @default(true)
   parentId      Int?
   parent        Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   subCategories Category[] @relation("CategoryHierarchy")
+  deletedAt     DateTime?
 
   products    Product[] @relation("ProductCategory")
   subProducts Product[] @relation("ProductSubCategory")
 
   @@index([tenantId])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, sortOrder])
 }
 
 model Product {
@@ -474,10 +513,34 @@ model Product {
   minStock      Int       @default(1)
   imageUrl      String?
   status        String    @default("Aktif")
+  deletedAt     DateTime?
 
-  orderItems OrderItem[]
-  recipes    RecipeItem[] // Komposisi bahan baku (Advanced Mode)
-  poItems    PurchaseOrderItem[] // Referensi PO (Simple Mode)
+  // W1-A-2: Bengkel 3-Tier Pricing — null = fallback to sellPrice
+  sellPriceRetail  Float?   // Harga UMUM (label & walk-in customer)
+  sellPriceMitra   Float?   // Harga MITRA (rekanan, fleet)
+  sellPriceGrosir  Float?   // Harga GROSIR (agen, beli banyak)
+  minQtyGrosir     Int?     // Minimum qty untuk dapat harga grosir
+
+  // W1-A-3: Bengkel Spare Part Fields — opsional, null untuk produk Kafe
+  brand           String?  // Merk suku cadang: AHM, Yamaha, Federal, IRC, dll
+  vehicleType     String?  // Jenis kendaraan: MOTOR | MOBIL | UMUM
+  storageLocation String?  // Lokasi rak gudang spare part: RAK-A1, GUDANG, dll
+
+  orderItems     OrderItem[]
+  recipes        RecipeItem[]        // Komposisi bahan baku (Advanced Mode)
+  poItems        PurchaseOrderItem[] // Referensi PO (Simple Mode)
+  wasteLogs      WasteLog[]
+  workOrderParts WorkOrderPart[]     // Bengkel: sparepart di SPK
+  partRequests   PartRequest[]       // Bengkel: buku catatan permintaan part kosong
+  supplierInvoiceItems SupplierInvoiceItem[] // Bengkel: rincian faktur masuk supplier
+
+  // Retail / Grosir Multi-Satuan & Pricing Tiers
+  baseUom        String              @default("PCS") // Satuan terkecil: PCS, KG, METER, LITER, dll
+  productUoms    ProductUOM[]
+  priceTiers     ProductPriceTier[]
+  warehouseInboundItems     WarehouseInboundItem[]
+  warehouseRequisitionItems WarehouseRequisitionItem[]
+  warehouseSaleItems        WarehouseSaleItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -486,6 +549,7 @@ model Product {
   @@index([tenantId])
   @@index([tenantId, categoryId])
   @@index([tenantId, status])
+  @@index([tenantId, deletedAt])
 }
 
 model Table {
@@ -499,6 +563,7 @@ model Table {
   capacity Int     @default(2)
   status   String  @default("Aktif") // Aktif, Perbaikan
   qrUrl    String?
+  deletedAt DateTime?
 
   posX  Float? @default(10) // Posisi X dalam persentase canvas (0-100)
   posY  Float? @default(10) // Posisi Y dalam persentase canvas (0-100)
@@ -511,6 +576,7 @@ model Table {
   @@index([tenantId])
   @@index([outletId])
   @@index([tenantId, status])
+  @@index([tenantId, deletedAt])
 }
 
 model Reservation {
@@ -547,18 +613,34 @@ model Customer {
   email      String?
   birthday   String?
   points     Int      @default(0)
-  tier       String   @default("Bronze") // Bronze, Silver, Gold
+  tier       String   @default("Bronze") // Bronze, Silver, Gold (loyalty CRM)
   totalSpent Float    @default(0)
+  deletedAt  DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  orders    Order[]
-  pointLogs PointLog[]
-  debts     Debt[]
+  // W1-A-3: Bengkel & Retail Pricing Tier & Credit
+  priceTier       String   @default("UMUM") // UMUM | MITRA | GROSIR
+  creditLimit     Float    @default(0)      // Limit piutang customer (bengkel B2B / bon warung)
+  creditTermDays  Int      @default(14)     // Jatuh tempo bon tempo hari
+  isCreditBlocked Boolean  @default(false)  // Blokir bon jika overlimit/macet
+
+  orders          Order[]
+  pointLogs       PointLog[]
+  debts           Debt[]
+  deliveryOrders  DeliveryOrder[]
+
+  // W1-A-3: Bengkel Relations
+  vehicles     Vehicle[]
+  workOrders   WorkOrder[]
+  woInvoices   WorkOrderInvoice[]
+  laundryOrders LaundryOrder[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
   @@index([tenantId, totalSpent])
+  @@index([tenantId, deletedAt])
+  @@index([tenantId, priceTier])
 }
 
 model PointLog {
@@ -608,9 +690,14 @@ model Order {
   servedAt      DateTime?
   paidAt        DateTime? // Waktu transaksi pembayaran diselesaikan
 
-  items OrderItem[]
-  debt  Debt?
+  voucher       Voucher? @relation(fields: [voucherId], references: [id])
+  voucherId     Int?
+  pointsUsed    Int      @default(0)
+
+  items               OrderItem[]
+  debt                Debt?
   paymentTransactions PaymentTransaction[]
+  deliveryOrders      DeliveryOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -625,6 +712,7 @@ model Order {
   @@index([userId])
   @@index([tableId])
   @@index([customerId])
+  @@index([voucherId])
 }
 
 model OrderItem {
@@ -635,11 +723,16 @@ model OrderItem {
   orderId   Int
   product   Product @relation(fields: [productId], references: [id])
   productId Int
-  qty       Int
-  price     Float
-  buyPrice  Float   @default(0)
-  subtotal  Float
-  notes     String?
+  qty           Int
+  price         Float
+  buyPrice      Float   @default(0)
+  subtotal      Float
+  notes         String?
+
+  // Retail UOM & Pricing Tier snapshot
+  uomName       String? // DUS, KARTON, BAL, SAK, PCS
+  uomRatio      Float?  // Pengali ke base unit (e.g. 40)
+  priceTierName String? // Eceran, Grosir Partai, dll
 
   @@index([tenantId])
   @@index([orderId])
@@ -647,23 +740,36 @@ model OrderItem {
 }
 
 model CashFlow {
-  id          Int      @id @default(autoincrement())
-  tenantId    String?
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  outletId    String?
-  outlet      Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  type        String // Pemasukan, Pengeluaran
-  category    String
-  amount      Float
-  description String
-  user        User     @relation(fields: [userId], references: [id])
-  userId      Int
-  date        DateTime @default(now())
+  id                 Int       @id @default(autoincrement())
+  tenantId           String?
+  tenant             Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId           String?
+  outlet             Outlet?   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  type               String // Pemasukan, Pengeluaran
+  category           String
+  amount             Float
+  description        String
+  user               User      @relation(fields: [userId], references: [id])
+  userId             Int
+  date               DateTime  @default(now())
+
+  // KAS OPERASIONAL & APPROVAL ENGINE
+  cashPocket         String    @default("KAS_OPERASIONAL") // "KAS_OPERASIONAL" | "LACI_KASIR"
+  status             String    @default("APPROVED") // "PENDING_APPROVAL" | "APPROVED" | "REJECTED"
+  receiptImage       String? // URL / Path foto struk nota belanja
+  approvedBy         Int? // User ID Owner / Supervisor yang approve
+  approvedAt         DateTime?
+  rejectionReason    String? // Alasan penolakan oleh owner
+  resolutionAction   String?   @default("NONE") // "NONE" | "REVISE" | "CONVERT_LOAN" | "RETURNED"
+  linkedIngredientId Int? // Jika belanja bahan baku dapur, untuk auto-restock
+  restockQty         Float? // Jumlah kuantitas stok yang ditambahkan
 
   @@index([tenantId])
   @@index([outletId])
   @@index([tenantId, date])
   @@index([tenantId, type])
+  @@index([tenantId, status])
+  @@index([tenantId, cashPocket])
   @@index([userId])
 }
 
@@ -689,8 +795,10 @@ model Attendance {
   isWithinRadius Boolean   @default(true)
   status         String    @default("Hadir") // Hadir, Terlambat, Di Luar Radius
   lateMinutes    Int       @default(0) // Jumlah menit keterlambatan
+  offlineId      String? // Client-generated UUID untuk idempotency saat sync offline
   notes          String?
 
+  @@unique([tenantId, offlineId])
   @@index([tenantId])
   @@index([outletId])
   @@index([tenantId, date])
@@ -709,6 +817,11 @@ model Settings {
   logoUrl                  String  @default("")
   receiptHeader            String  @default("")
   receiptFooter            String  @default("")
+  receiptPaperSize         String  @default("80mm") // "58mm" | "80mm"
+  wifiName                 String  @default("")
+  wifiPassword             String  @default("")
+  receiptShowCashier       Boolean @default(true)
+  receiptShowTable         Boolean @default(true)
   taxRate                  Float   @default(0)
   serviceCharge            Float   @default(0)
   includeTax               Boolean @default(false)
@@ -777,14 +890,32 @@ model Settings {
   warehouseMarkupPercent   Float  @default(0)
 
   // Bagi Hasil (Profit Sharing)
-  profitSharingOwnerPercent Float  @default(80)
-  profitSharingRamenPercent Float  @default(20)
-  profitSharingDrinkPercent Float  @default(20)
-  profitSharingOpexMode     String @default("BEFORE_SPLIT")
+  enableProfitSharing       Boolean @default(true)
+  profitSharingOwnerPercent Float   @default(80)
+  profitSharingRamenPercent Float   @default(20)
+  profitSharingDrinkPercent Float   @default(20)
+  profitSharingOpexMode     String  @default("BEFORE_SPLIT")
 
   // Bonus Harian Omzet Karyawan Full Time
   enableDailyOmzetBonus Boolean @default(true)
   dailyOmzetTiers       String?
+
+  // Manajemen Jam Operasional Outlet & Kontrol Shift Kasir
+  operatingHours         String? // JSON array jadwal hari: [{ day: 0..6, dayName: "Senin", isOpen: true, openTime: "08:00", closeTime: "22:00" }]
+  earlyOpenBufferMinutes Int     @default(45) // Boleh buka modal kasir X menit sebelum toko buka
+  closingGraceMinutes    Int     @default(45) // Batas waktu beres-beres laci setelah toko tutup
+  enforceOperatingHours  Boolean @default(false) // Strict Mode: Jika true, wajib PIN supervisor untuk buka di luar jam
+  allowOrdersAfterClose  Boolean @default(false) // Apakah kasir boleh transaksi setelah jam tutup?
+
+  // Dynamic White-Label Theming & Login Layout Engine
+  primaryColor         String  @default("#4f46e5")
+  accentColor          String  @default("#f59e0b")
+  loginLayout          String  @default("split_modern") // "split_modern" | "centered_glass" | "minimal_luxe" | "cafe_atmosphere"
+  loginCoverUrl        String  @default("/assets/images/cafe_login_cover.png")
+  loginTagline         String  @default("")
+  faviconUrl           String?
+  hidePlatformBranding Boolean @default(false)
+  enableTieredPricing  Boolean @default(true)
 
   @@index([tenantId])
   @@index([outletId])
@@ -805,7 +936,14 @@ model Shift {
   saldoElektronik Float?
   saldoFisikLaci  Float?
   selisih         Float?
+  denominations   String?   // JSON stringified breakdown: { "100000": 10, "50000": 5, ... }
+  varianceReason  String?   // Keterangan kasir jika ada selisih kas (kurang/lebih)
   status          String    @default("Open") // Open, Closed
+
+  // Kontrol Kepatuhan Jam Operasional
+  openingPunctuality String? // "ON_TIME", "EARLY", "LATE", "OVERRIDE"
+  lateOpenMinutes    Int     @default(0)
+  supervisorOverride String? // Nama atau username supervisor yang mengizinkan buka di luar jam
 
   @@index([tenantId])
   @@index([outletId])
@@ -826,15 +964,18 @@ model Supplier {
   email    String?
   address  String?
   notes    String?
+  deletedAt DateTime?
 
   ingredients       Ingredient[]
   purchaseOrders    PurchaseOrder[]
   warehouseInbounds WarehouseInbound[]
+  supplierInvoices  SupplierInvoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([tenantId])
+  @@index([tenantId, deletedAt])
 }
 
 model Ingredient {
@@ -850,6 +991,7 @@ model Ingredient {
   buyPrice    Float     @default(0)
   supplier    Supplier? @relation(fields: [supplierId], references: [id])
   supplierId  Int?
+  deletedAt   DateTime?
 
   // Konversi Satuan Grosir & Gudang Pusat
   purchaseUnit      String?
@@ -863,6 +1005,7 @@ model Ingredient {
   warehouseInboundItems     WarehouseInboundItem[]
   warehouseRequisitionItems WarehouseRequisitionItem[]
   warehouseSaleItems        WarehouseSaleItem[]
+  wasteLogs                 WasteLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -870,6 +1013,7 @@ model Ingredient {
   @@index([tenantId])
   @@index([category])
   @@index([supplierId])
+  @@index([tenantId, deletedAt])
 }
 
 model RecipeItem {
@@ -1094,8 +1238,10 @@ model WarehouseInboundItem {
   tenantId        String?
   inbound         WarehouseInbound @relation(fields: [inboundId], references: [id], onDelete: Cascade)
   inboundId       Int
-  ingredient      Ingredient       @relation(fields: [ingredientId], references: [id])
-  ingredientId    Int
+  ingredient      Ingredient?      @relation(fields: [ingredientId], references: [id])
+  ingredientId    Int?
+  product         Product?         @relation(fields: [productId], references: [id])
+  productId       Int?
   itemName        String
   purchaseUnit    String
   purchaseQty     Float
@@ -1108,6 +1254,7 @@ model WarehouseInboundItem {
   @@index([tenantId])
   @@index([inboundId])
   @@index([ingredientId])
+  @@index([productId])
 }
 
 model WarehouseRequisition {
@@ -1147,8 +1294,10 @@ model WarehouseRequisitionItem {
   tenantId      String?
   requisition   WarehouseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
   requisitionId Int
-  ingredient    Ingredient           @relation(fields: [ingredientId], references: [id])
-  ingredientId  Int
+  ingredient    Ingredient?          @relation(fields: [ingredientId], references: [id])
+  ingredientId  Int?
+  product       Product?             @relation(fields: [productId], references: [id])
+  productId     Int?
   itemName      String
   requestedUnit String
   requestedQty  Float
@@ -1159,6 +1308,7 @@ model WarehouseRequisitionItem {
   @@index([tenantId])
   @@index([requisitionId])
   @@index([ingredientId])
+  @@index([productId])
 }
 
 model OwnerFundTransaction {
@@ -1218,8 +1368,10 @@ model WarehouseSaleItem {
   tenantId        String?
   sale            WarehouseSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
   saleId          Int
-  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
-  ingredientId    Int
+  ingredient      Ingredient?   @relation(fields: [ingredientId], references: [id])
+  ingredientId    Int?
+  product         Product?      @relation(fields: [productId], references: [id])
+  productId       Int?
   itemName        String
   saleUnit        String
   saleQty         Float
@@ -1234,6 +1386,7 @@ model WarehouseSaleItem {
   @@index([tenantId])
   @@index([saleId])
   @@index([ingredientId])
+  @@index([productId])
 }
 
 model EmployeeLoan {
@@ -1278,3 +1431,638 @@ model EmployeeLoanPayment {
   @@index([tenantId])
   @@index([loanId])
 }
+
+// ─── Waste & Spoilage Tracking (Pencatat Kerugian HPP Bahan & Menu) ─────────────
+
+model WasteLog {
+  id           Int         @id @default(autoincrement())
+  tenantId     String?
+  tenant       Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId     String?
+  outlet       Outlet?     @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  type         String      @default("INGREDIENT") // INGREDIENT (Bahan Mentah) atau PRODUCT (Menu Jadi)
+  
+  ingredientId Int?
+  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  
+  productId    Int?
+  product      Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  
+  itemName     String
+  category     String?     // FOOD, DRINK, PACKAGING, DISH
+  unit         String      // kg, gr, porsi, ml, pcs
+  qty          Float
+  costPerUnit  Float       @default(0)
+  totalCost    Float       @default(0) // Total Kerugian HPP (Rp)
+  
+  reason       String      // Busuk / Basi, Kadaluarsa, Gosong / Overcooked, Salah Buat Dapur, Tumpah / Jatuh, Trimming Kulit/Lemak, Sisa Tutup Toko
+  notes        String?
+  photoUrl     String?
+  
+  userId       Int?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName     String?
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([tenantId])
+  @@index([outletId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, type])
+  @@index([tenantId, reason])
+  @@index([ingredientId])
+  @@index([productId])
+  @@index([userId])
+}
+
+// ─── CRM Kupon Diskon & Voucher Promo ──────────────────────────────────────
+
+model Voucher {
+  id          Int       @id @default(autoincrement())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code        String
+  description String?
+  type        String    @default("PERCENT") // 'PERCENT' | 'FIXED'
+  amount      Float
+  minSpend    Float     @default(0)
+  maxDiscount Float?
+  validFrom   DateTime  @default(now())
+  validUntil  DateTime?
+  maxUsage    Int?
+  usedCount   Int       @default(0)
+  status      String    @default("Aktif") // 'Aktif' | 'Nonaktif'
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  orders      Order[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+
+// ─── Bengkel Vertical Models ─────────────────────────────────────────────────
+// W1-A-5: Vehicle — Kendaraan terdaftar per customer per tenant
+model Vehicle {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId  Int?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  plateNumber  String   // Normalized uppercase: "B 1234 XX"
+  brand        String   // "Honda", "Yamaha", "Toyota"
+  model        String   // "Beat", "NMAX", "Avanza"
+  vehicleType  String   @default("MOTOR") // MOTOR | MOBIL
+  year         Int?
+  color        String?
+  notes        String?
+
+  workOrders   WorkOrder[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, plateNumber])
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([tenantId, vehicleType])
+}
+
+// W1-A-6: ServiceType — Katalog jasa bengkel (Tune Up, Ganti Oli, dll)
+model ServiceType {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name         String
+  description  String?
+  vehicleType  String   @default("ALL") // MOTOR | MOBIL | ALL
+
+  priceRetail  Float    // Harga UMUM
+  priceMitra   Float?   // null = pakai priceRetail
+  priceGrosir  Float?
+
+  isActive     Boolean  @default(true)
+  deletedAt    DateTime?
+
+  workOrderServices WorkOrderService[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, vehicleType])
+  @@index([tenantId, isActive])
+}
+
+// W1-A-7: WorkOrder (SPK — Surat Perintah Kerja)
+model WorkOrder {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId    String?
+  outlet      Outlet?  @relation(fields: [outletId], references: [id], onDelete: SetNull)
+
+  spkNumber    String   // Auto: "SPK-202609-0001" — unique per tenant
+
+  customerId   Int?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vehicleId    String?
+  vehicle      Vehicle?  @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  // Snapshot kendaraan (untuk walk-in tanpa registrasi di sistem)
+  vehiclePlate String?
+  vehicleBrand String?
+  vehicleModel String?
+  vehicleType  String   @default("MOTOR") // MOTOR | MOBIL
+  odometer     Int?
+  fuelLevel    String?  // E | 1/4 | 1/2 | 3/4 | F
+
+  complaint    String?  // Keluhan konsumen
+  diagnosis    String?  // Temuan mekanik
+  notes        String?
+
+  // State machine — see SKILL.md for valid transitions
+  status       String   @default("PENDING")
+  // PENDING | ASSIGNED | IN_PROGRESS | WAITING_PARTS | DONE | PAID | DELIVERED | CANCELLED
+
+  priceTier    String   @default("UMUM") // UMUM | MITRA | GROSIR
+  mechanicId   Int?     // Primary mechanic (assigned to SPK)
+  mechanicName String?  // Snapshot — denormalized for performance
+
+  // Financial totals — recalculated on every service/part add/remove
+  totalServices   Float  @default(0)
+  totalParts      Float  @default(0)
+  discount        Float  @default(0)
+  taxAmount       Float  @default(0)
+  totalAmount     Float  @default(0)
+  paidAmount      Float  @default(0)
+
+  // WA notification tracking — prevent duplicate sends
+  notifReceivedSent Boolean @default(false)
+  notifDoneSent     Boolean @default(false)
+
+  estimatedDone  DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  deliveredAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+
+  services     WorkOrderService[]
+  parts        WorkOrderPart[]
+  returns      WorkOrderReturn[]
+  invoiceItems WorkOrderInvoiceItem[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, spkNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, vehiclePlate])
+  @@index([customerId])
+  @@index([tenantId, createdAt])
+  @@index([outletId])
+}
+
+// W1-A-8: WorkOrderService — Jasa yang dikerjakan dalam SPK
+model WorkOrderService {
+  id             String       @id @default(uuid())
+  tenantId       String
+  workOrderId    String
+  workOrder      WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  serviceTypeId  String?
+  serviceType    ServiceType? @relation(fields: [serviceTypeId], references: [id], onDelete: SetNull)
+
+  serviceName    String   // Snapshot nama jasa saat SPK dibuat
+  vehicleType    String   // MOTOR | MOBIL — snapshot saat input
+  price          Float    // Harga sesuai priceTier & vehicleType
+  qty            Int      @default(1)
+  subtotal       Float
+
+  mechanicId     Int?     // Mekanik yang mengerjakan jasa ini
+  mechanicName   String?  // Snapshot
+
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([workOrderId])
+  @@index([mechanicId])
+}
+
+// W1-A-9: WorkOrderPart — Sparepart yang dipakai dalam SPK
+model WorkOrderPart {
+  id           String    @id @default(uuid())
+  tenantId     String
+  workOrderId  String
+  workOrder    WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  productId    Int?
+  product      Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  partName      String   // Snapshot / manual input jika tidak dari katalog
+  partCode      String?
+  price         Float    // Harga sesuai priceTier saat ditambahkan
+  qty           Int      @default(1)
+  subtotal      Float
+  stockDeducted Boolean  @default(false) // true = stok sudah dipotong
+
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([workOrderId])
+  @@index([productId])
+}
+
+// W1-A-10: WorkOrderReturn — Return / pembatalan SPK
+model WorkOrderReturn {
+  id          String    @id @default(uuid())
+  tenantId    String
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  type        String    // SPK_CANCELLED | PART_RETURN_STOCK
+  reason      String
+  handledBy   Int       // userId yang memproses return
+  refundAmount Float    @default(0)
+
+  items       WorkOrderReturnItem[]
+
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([workOrderId])
+}
+
+model WorkOrderReturnItem {
+  id        String          @id @default(uuid())
+  returnId  String
+  return    WorkOrderReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  partName       String
+  productId      Int?
+  qty            Int
+  unitPrice      Float
+  subtotal       Float
+  stockRestored  Boolean @default(false)
+
+  @@index([returnId])
+}
+
+// W1-A-11: MechanicProfile — Profil & komisi mekanik (BENGKEL only)
+model MechanicProfile {
+  id             String   @id @default(uuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId         Int      @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  commissionType String   @default("PERCENT") // PERCENT | NONE
+  commissionRate Float    @default(0)          // 0.20 = 20% dari subtotal jasa
+
+  pendingCommission Float  @default(0) // Akumulasi komisi belum dibayar
+  paidCommission    Float  @default(0) // Total komisi sudah dibayar
+
+  payouts        CommissionPayout[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+// W1-A-12: CommissionPayout — Rekap pembayaran komisi per periode
+model CommissionPayout {
+  id          String          @id @default(uuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mechanicId  String
+  mechanic    MechanicProfile @relation(fields: [mechanicId], references: [id], onDelete: Cascade)
+
+  period      String   // "2026-09" (YYYY-MM)
+  amount      Float
+  paidById    Int      // userId yang membayar (owner/admin)
+  notes       String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([mechanicId])
+  @@index([tenantId, period])
+}
+
+// W1-A-13: WorkOrderInvoice — Invoice formal PDF A4 (untuk mitra/perusahaan)
+model WorkOrderInvoice {
+  id            String   @id @default(uuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  invoiceNumber String   // "INV-202609-001" — unique per tenant
+  customerId    Int?
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  billingName    String
+  billingAddress String?
+  billingNpwp    String?  // NPWP klien (untuk B2B invoice)
+
+  subtotal       Float
+  taxRate        Float    @default(0)    // 0.11 untuk PPN 11%
+  taxAmount      Float    @default(0)
+  totalAmount    Float
+  paidAmount     Float    @default(0)
+
+  dueDate        DateTime?
+  status         String   @default("DRAFT")
+  // DRAFT | SENT | PARTIALLY_PAID | PAID | OVERDUE | VOID
+
+  notes          String?
+
+  workOrders     WorkOrderInvoiceItem[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([customerId])
+}
+
+model WorkOrderInvoiceItem {
+  id          String           @id @default(uuid())
+  invoiceId   String
+  invoice     WorkOrderInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  workOrderId String
+  workOrder   WorkOrder        @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  amount      Float
+
+  @@index([invoiceId])
+  @@index([workOrderId])
+}
+
+// W1-A-11: Bengkel PartRequest — Buku Catatan Permintaan Sparepart Kosong / Lost Sales (Defecta)
+model PartRequest {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId          Int?
+  product            Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  partName           String
+  brand              String?
+  vehicleType        String?   // MOTOR | MOBIL | UMUM
+  requestedQty       Int       @default(1)
+  notes              String?
+  customerName       String?
+  customerPhone      String?
+  status             String    @default("PENDING") // PENDING | IN_PURCHASE_LIST | PURCHASED | CANCELLED
+  targetPurchaseDate DateTime?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([productId])
+}
+
+// W1-A-12: Bengkel SupplierInvoice — Faktur Pembelian Suku Cadang Masuk & Hutang Tempo (Net 14 / Net 30)
+model SupplierInvoice {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplierId      Int
+  supplier        Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  invoiceNumber   String   // Nomor nota fisik dari supplier, contoh: "INV-MKS-8821"
+  invoiceDate     DateTime @default(now())
+  paymentTerm     String   @default("NET_30") // CASH | NET_7 | NET_14 | NET_30 | NET_60 | CUSTOM
+  dueDate         DateTime // Tanggal jatuh tempo
+
+  subtotal        Float
+  taxAmount       Float    @default(0)
+  totalAmount     Float
+  paidAmount      Float    @default(0)
+  remainingAmount Float    // totalAmount - paidAmount
+
+  status          String   @default("UNPAID") // UNPAID | PARTIAL | PAID | OVERDUE
+  notes           String?
+  receivedBy      String?  // Nama staf penerima fisik barang
+  proofImageUrl   String?  // Foto surat jalan/nota fisik
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items           SupplierInvoiceItem[]
+  payments        SupplierInvoicePayment[]
+
+  @@unique([tenantId, supplierId, invoiceNumber])
+  @@index([tenantId])
+  @@index([tenantId, supplierId])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+}
+
+model SupplierInvoiceItem {
+  id         String          @id @default(uuid())
+  invoiceId  String
+  invoice    SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  partName   String
+  qty        Int             @default(1)
+  buyPrice   Float           // Harga beli satuan di faktur
+  subtotal   Float           // qty * buyPrice
+
+  createdAt  DateTime        @default(now())
+
+  @@index([invoiceId])
+  @@index([productId])
+}
+
+model SupplierInvoicePayment {
+  id            String          @id @default(uuid())
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId     String
+  invoice       SupplierInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  amount        Float           // Nominal yang dibayarkan
+  paymentMethod String          // BANK_TRANSFER | CASH | DANA_PRIBADI_OWNER
+  paymentDate   DateTime        @default(now())
+  referenceNo   String?         // Nomor referensi transfer bank
+  notes         String?
+
+  createdAt     DateTime        @default(now())
+
+  @@index([tenantId])
+  @@index([invoiceId])
+}
+
+// ─── Retail / Toko Grosir Vertical Entities ────────────────────────────────
+
+model ProductUOM {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unitName        String   // "DUS", "KARTON", "BAL", "RENCENG", "SLOP", "SAK", "KG", "PCS"
+  conversionRatio Float    // Pengali ke base unit (misal 1 DUS = 40 PCS -> ratio = 40)
+  barcode         String?  // Barcode khusus untuk kemasan dus/karton
+  priceSell       Float    // Harga jual untuk satuan ini
+  isDefaultSale   Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, productId, unitName])
+  @@index([tenantId])
+  @@index([productId])
+  @@index([tenantId, barcode])
+}
+
+model ProductPriceTier {
+  id               String   @id @default(uuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId        Int
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQty           Int      // Contoh: Beli >= 5 dus
+  tierName         String   // "Eceran", "Grosir Partai", "Harga Warung", "Harga Kontraktor"
+  unitPrice        Float
+  customerCategory String?  // null = umum, "WARUNG", "KONTRAKTOR", "RESELLER"
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([productId])
+  @@index([tenantId, productId])
+}
+
+model DeliveryOrder {
+  id              String              @id @default(uuid())
+  tenantId        String
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  doNumber        String              // DO-202610-0001
+  orderId         Int?
+  order           Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customerId      Int?
+  customer        Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  driverName      String?
+  vehiclePlate    String?             // Plat armada pick-up/truk: B 1234 CD
+  shippingAddress String
+  status          String              @default("PENDING") // PENDING, LOADING, IN_TRANSIT, DELIVERED, CANCELLED
+  recipientName   String?
+  deliveredAt     DateTime?
+  notes           String?
+  items           DeliveryOrderItem[]
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([tenantId, doNumber])
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([status])
+  @@index([tenantId, status])
+}
+
+model DeliveryOrderItem {
+  id              String        @id @default(uuid())
+  deliveryOrderId String
+  deliveryOrder   DeliveryOrder @relation(fields: [deliveryOrderId], references: [id], onDelete: Cascade)
+  productName     String
+  qtyShipped      Float
+  unitName        String        // "DUS", "KARTON", "SAK", "PCS"
+
+  createdAt       DateTime      @default(now())
+
+  @@index([deliveryOrderId])
+}
+
+// ─── LAUNDRY VERTICAL MODELS ──────────────────────────────────────────────────
+model LaundryOrder {
+  id              String        @id @default(uuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId        String?
+  outlet          Outlet?       @relation(fields: [outletId], references: [id], onDelete: SetNull)
+
+  orderNumber     String        // e.g. "LD-202609-0001"
+  customerId      Int?
+  customer        Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName    String
+  customerPhone   String?
+
+  serviceCategory String        @default("KILOAN") // KILOAN | SATUAN | CAMPURAN
+  serviceSpeed    String        @default("REGULAR") // REGULAR | KILAT_24H | EXPRESS_6H
+  perfumeVariant  String?       @default("Standar") // "Akasia", "Sakura", "Ocean Fresh", dll
+  rackLocation    String?       // e.g. "Rak B-04"
+  hangerCount     Int           @default(0)
+  itemCountNotes  String?       // e.g. "12 pcs kemeja/kaos, 2 celana"
+  specialNotes    String?       // Catatan noda, kelunturan
+
+  // State Machine Cucian
+  status          String        @default("RECEIVED")
+  // RECEIVED | WASHING | DRYING | IRONING | READY | COMPLETED | CANCELLED
+
+  // Finansial
+  subtotal        Float         @default(0)
+  speedSurcharge  Float         @default(0)
+  discount        Float         @default(0)
+  totalAmount     Float         @default(0)
+  paidAmount      Float         @default(0)
+  paymentStatus   String        @default("UNPAID") // UNPAID | PARTIAL | PAID
+  paymentMethod   String?       // CASH | QRIS | TRANSFER | BON
+
+  // Operator
+  washerUserId    Int?
+  ironerUserId    Int?
+  pickupByUserId  Int?
+
+  // Notifikasi WhatsApp
+  notifReceivedSent Boolean     @default(false)
+  notifReadySent    Boolean     @default(false)
+
+  estimatedDoneAt DateTime?
+  readyAt         DateTime?
+  completedAt     DateTime?
+
+  items           LaundryOrderItem[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, paymentStatus])
+  @@index([tenantId, createdAt])
+}
+
+model LaundryOrderItem {
+  id             String       @id @default(uuid())
+  orderId        String
+  order          LaundryOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  serviceName    String       // e.g. "Cuci Kering Setrika", "Bedcover King", "Jas Pria"
+  unitType       String       @default("KG") // KG | PCS | METER
+  qty            Float        // Mendukung desimal untuk kg (e.g. 3.45)
+  pricePerUnit   Float
+  subtotal       Float
+  notes          String?
+
+  createdAt      DateTime     @default(now())
+
+  @@index([orderId])
+}
+
+
+

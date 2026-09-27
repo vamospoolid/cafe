@@ -12,6 +12,7 @@ import { toast, confirmAlert } from '../utils/alert';
 import { exportFinancialPDF, exportProfitSharingPDF, exportDailyBonusPDF } from '../utils/pdfGenerator';
 import { exportProfitSharingExcel, exportDailyBonusExcel, exportPettyCashExcel, exportSalesReportExcel, exportInventoryValuationExcel } from '../utils/excelGenerator';
 import { getTodayStr, getYesterdayStr, getLast7DaysRange, getLast30DaysRange, getThisMonthRange, getLastMonthRange, getMonthRange, formatLocalDate } from '../utils/dateUtils';
+import { AiMenuOptimizerModal } from './AiMenuOptimizerModal';
 
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'this_month' | 'last_month' | 'month_30' | 'custom';
 type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory' | 'accounting' | 'profit_sharing' | 'daily_bonus';
@@ -19,6 +20,9 @@ type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory
 export const ReportView: React.FC = () => {
   const posContext = useContext(POSContext);
   const token = posContext?.token;
+
+  // AI Menu Advisor Modal State
+  const [showAiMenuModal, setShowAiMenuModal] = useState(false);
 
   // Date Filters: Default to today
   const [quickFilter, setQuickFilter] = useState<QuickFilterType>('today');
@@ -40,6 +44,14 @@ export const ReportView: React.FC = () => {
   // PDF Export Modal State
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  const enableProfitSharing = posContext?.settings?.enableProfitSharing ?? true;
+
+  useEffect(() => {
+    if (posContext?.settings?.enableProfitSharing === false && activeTab === 'profit_sharing') {
+      setActiveTab('dashboard');
+    }
+  }, [posContext?.settings?.enableProfitSharing, activeTab]);
 
   // Product Report Search & Sorting
   const [productSearch, setProductSearch] = useState('');
@@ -201,7 +213,7 @@ export const ReportView: React.FC = () => {
         }
         await exportProfitSharingPDF(
           profitSharingData,
-          posContext?.settings || { storeName: 'MUKI RAMEN' },
+          posContext?.settings || { storeName: 'KAFE & RESTORAN' },
           { startDate, endDate },
           posContext?.user?.username || 'Admin'
         );
@@ -216,7 +228,7 @@ export const ReportView: React.FC = () => {
         }
         await exportDailyBonusPDF(
           dailyBonusData,
-          posContext?.settings || { storeName: 'MUKI RAMEN' },
+          posContext?.settings || { storeName: 'KAFE & RESTORAN' },
           { startDate, endDate },
           posContext?.user?.username || 'Admin'
         );
@@ -277,7 +289,7 @@ export const ReportView: React.FC = () => {
 
       await exportFinancialPDF(
         type,
-        posContext?.settings || { storeName: 'MUKI RAMEN' },
+        posContext?.settings || { storeName: 'KAFE & RESTORAN' },
         dataToPass,
         startDate,
         endDate,
@@ -298,19 +310,19 @@ export const ReportView: React.FC = () => {
     try {
       if (activeTab === 'profit_sharing') {
         if (!profitSharingData || !profitSharingData.summary) return toast('Tidak ada data bagi hasil untuk diekspor', 'warning');
-        exportProfitSharingExcel(profitSharingData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        exportProfitSharingExcel(profitSharingData, posContext?.settings || { storeName: 'KAFE & RESTORAN' }, { startDate, endDate });
         toast('✓ Spreadsheet Excel Bagi Hasil berhasil diunduh!', 'success');
       } else if (activeTab === 'daily_bonus') {
         if (!dailyBonusData || !dailyBonusData.days || dailyBonusData.days.length === 0) return toast('Tidak ada data bonus untuk diekspor', 'warning');
-        exportDailyBonusExcel(dailyBonusData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        exportDailyBonusExcel(dailyBonusData, posContext?.settings || { storeName: 'KAFE & RESTORAN' }, { startDate, endDate });
         toast('✓ Spreadsheet Excel Matriks Bonus berhasil diunduh!', 'success');
       } else if (activeTab === 'inventory') {
         if (!inventoryData || !inventoryData.inventory) return toast('Tidak ada data inventaris untuk diekspor', 'warning');
-        exportInventoryValuationExcel(inventoryData, posContext?.settings || { storeName: 'MUKI RAMEN' });
+        exportInventoryValuationExcel(inventoryData, posContext?.settings || { storeName: 'KAFE & RESTORAN' });
         toast('✓ Spreadsheet Excel Valuasi Stok berhasil diunduh!', 'success');
       } else {
         if (!reportData || !reportData.summary) return toast('Tidak ada data penjualan untuk diekspor', 'warning');
-        exportSalesReportExcel(reportData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        exportSalesReportExcel(reportData, posContext?.settings || { storeName: 'KAFE & RESTORAN' }, { startDate, endDate });
         toast('✓ Spreadsheet Excel Laporan Penjualan berhasil diunduh!', 'success');
       }
     } catch (err: any) {
@@ -385,7 +397,7 @@ export const ReportView: React.FC = () => {
           <div className="hidden sm:block">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-1 bg-purple-50 text-indigo-700 rounded-lg text-xs font-extrabold">
-                {posContext?.settings?.storeName || 'MUKI RAMEN'}
+                {posContext?.settings?.storeName || 'KAFE & RESTORAN'}
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
                 Laporan & Analisis Bisnis
@@ -501,9 +513,9 @@ export const ReportView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 7 TAB UTAMA LAPORAN
+          2. NAVIGASI TAB UTAMA LAPORAN
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-1.5 shrink-0">
+      <div className={`bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-sm grid grid-cols-2 sm:grid-cols-3 ${enableProfitSharing ? 'lg:grid-cols-7' : 'lg:grid-cols-6'} gap-1.5 shrink-0`}>
         {[
           { 
             id: 'dashboard', 
@@ -512,13 +524,13 @@ export const ReportView: React.FC = () => {
             icon: BarChart3,
             badge: null
           },
-          { 
+          ...(enableProfitSharing ? [{ 
             id: 'profit_sharing', 
             title: 'Bagi Hasil (80:20)', 
             subtitle: 'Ramen vs Minuman & Owner', 
             icon: Percent,
             badge: profitSharingData?.summary ? `Rp ${Math.round((profitSharingData.summary.grandTotalNetProfit || 0) / 1000)}k` : null
-          },
+          }] : []),
           { 
             id: 'daily_bonus', 
             title: 'Bonus & Absensi', 
@@ -688,82 +700,85 @@ export const ReportView: React.FC = () => {
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* Top 4 KPI Metrics with Margins & HPP Ratio */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem' }}>
+            {/* Top 4 KPI Metrics with Margins & HPP Ratio (Symmetric 2-col Mobile Grid) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
               
               {/* Card 1: Total Omzet Gross */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Total Omzet (Gross)</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
-                    <DollarSign size={18} />
+              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[96px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Total Omzet</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+                    <DollarSign size={16} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', marginTop: '.35rem' }}>
-                  {formatCurrency(totalRev)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#64748b', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #f1f5f9' }}>
-                  <span>{reportData.summary?.transactionsCount || 0} Total Transaksi</span>
-                  <span style={{ fontWeight: 800, color: '#7c3aed', background: '#f5f3ff', padding: '.1rem .4rem', borderRadius: '.35rem' }}>100% Basis</span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-tight truncate">
+                    {formatCurrency(totalRev)}
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-slate-500 font-medium truncate mt-0.5 flex items-center justify-between">
+                    <span>{reportData.summary?.transactionsCount || 0} Transaksi</span>
+                    <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[9.5px]">Basis 100%</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Card 2: Laba Bersih Operasional + Net Margin % */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #bbf7d0', boxShadow: '0 2px 4px rgba(16,185,129,0.06)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '.03em' }}>Laba Bersih Operasional</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a' }}>
-                    <TrendingUp size={18} />
+              {/* Card 2: Laba Bersih Operasional */}
+              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-emerald-200/80 shadow-xs flex flex-col justify-between min-h-[96px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-emerald-800 uppercase tracking-wider truncate">Laba Bersih</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <TrendingUp size={16} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#16a34a', marginTop: '.35rem' }}>
-                  {formatCurrency(netProf)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#166534', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #dcfce7' }}>
-                  <span>Setelah HPP & Biaya Kas</span>
-                  <span style={{ fontWeight: 900, color: '#15803d', background: '#dcfce7', padding: '.12rem .5rem', borderRadius: '.35rem', border: '1px solid #86efac' }}>
-                    Margin Bersih {netMarginPct}%
-                  </span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-emerald-600 tracking-tight leading-tight truncate">
+                    {formatCurrency(netProf)}
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-emerald-700 font-semibold truncate mt-0.5 flex items-center justify-between">
+                    <span className="truncate">Setelah HPP & Kas</span>
+                    <span className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[9.5px]">Margin {netMarginPct}%</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Card 3: Total HPP Bahan Baku + HPP Ratio % */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #fecdd3', boxShadow: '0 2px 4px rgba(239,68,68,0.04)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Total HPP Bahan Baku</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
-                    <ShoppingBag size={18} />
+              {/* Card 3: Total HPP Bahan Baku */}
+              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-rose-200/80 shadow-xs flex flex-col justify-between min-h-[96px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-rose-800 uppercase tracking-wider truncate">HPP Bahan</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <ShoppingBag size={16} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', marginTop: '.35rem' }}>
-                  {formatCurrency(totalHpp)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#991b1b', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #fee2e2' }}>
-                  <span>Biaya Bahan Terpakai</span>
-                  <span style={{ fontWeight: 800, color: '#b91c1c', background: '#fee2e2', padding: '.12rem .5rem', borderRadius: '.35rem' }}>
-                    Rasio HPP {hppRatioPct}%
-                  </span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-rose-600 tracking-tight leading-tight truncate">
+                    {formatCurrency(totalHpp)}
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-rose-700 font-semibold truncate mt-0.5 flex items-center justify-between">
+                    <span className="truncate">Biaya Bahan</span>
+                    <span className="bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 text-[9.5px]">Rasio {hppRatioPct}%</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Card 4: Laba Kotor & Gross Margin % */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Laba Kotor (Gross Profit)</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
-                    <Percent size={18} />
+              {/* Card 4: Laba Kotor (Gross Profit) */}
+              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[96px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Laba Kotor</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+                    <Percent size={16} />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0284c7', marginTop: '.35rem' }}>
-                  {formatCurrency(grossProf)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#0369a1', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #f1f5f9' }}>
-                  <span>Omzet - HPP Bahan</span>
-                  <span style={{ fontWeight: 900, color: '#0284c7', background: '#e0f2fe', padding: '.12rem .5rem', borderRadius: '.35rem' }}>
-                    Gross Margin {grossMarginPct}%
-                  </span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-sky-600 tracking-tight leading-tight truncate">
+                    {formatCurrency(grossProf)}
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-sky-700 font-semibold truncate mt-0.5 flex items-center justify-between">
+                    <span className="truncate">Omzet - HPP</span>
+                    <span className="bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 text-[9.5px]">Margin {grossMarginPct}%</span>
+                  </div>
                 </div>
               </div>
+
             </div>
 
             {/* ─────────────────────────────────────────────────────────────
@@ -1039,9 +1054,23 @@ export const ReportView: React.FC = () => {
           
           {/* Top 3 Best Sellers Podium Cards */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', marginBottom: '.75rem' }}>
-              <Sparkles size={18} color="#f59e0b" />
-              <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}>Top 3 Menu Terlaris (Best Seller)</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '.75rem', flexWrap: 'wrap', gap: '.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+                <Sparkles size={18} color="#f59e0b" />
+                <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}>Top 3 Menu Terlaris (Best Seller)</h3>
+              </div>
+              <button
+                onClick={() => setShowAiMenuModal(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '.4rem',
+                  padding: '.5rem .9rem', borderRadius: '.75rem',
+                  background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                  color: 'white', border: 'none', fontWeight: 800, fontSize: '.75rem',
+                  cursor: 'pointer', boxShadow: '0 4px 12px rgba(124, 58, 237, 0.25)'
+                }}
+              >
+                <Sparkles size={14} color="#fde047" /> ✨ AI Menu & Profit Advisor
+              </button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
@@ -1583,7 +1612,7 @@ export const ReportView: React.FC = () => {
             {accountingSubTab === 'pl' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'KAFE & RESTORAN'}</h3>
                   <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#7c3aed' }}>LAPORAN LABA RUGI OPERASIONAL</h4>
                   <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
                 </div>
@@ -1654,7 +1683,7 @@ export const ReportView: React.FC = () => {
             {accountingSubTab === 'cashflow' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'KAFE & RESTORAN'}</h3>
                   <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#10b981' }}>LAPORAN ARUS KAS (CASH FLOW)</h4>
                   <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
                 </div>
@@ -1697,7 +1726,7 @@ export const ReportView: React.FC = () => {
             {accountingSubTab === 'ledger' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
+                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'KAFE & RESTORAN'}</h3>
                   <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#0284c7' }}>BUKU JURNAL UMUM (DOUBLE ENTRY)</h4>
                   <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
                 </div>
@@ -1767,7 +1796,7 @@ export const ReportView: React.FC = () => {
                     </span>
                   </div>
                   <h3 className="text-lg font-black text-white mt-1">
-                    Rekapitulasi Pembagian Keuntungan MUKI RAMEN & DRINK
+                    Rekapitulasi Pembagian Keuntungan {posContext?.settings?.storeName || 'Restoran & Bar'}
                   </h3>
                   <p className="text-xs text-slate-300 mt-0.5">
                     Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Formula: Laba Bersih Per Divisi = Omzet - Belanja Bahan
@@ -1854,7 +1883,7 @@ export const ReportView: React.FC = () => {
                 <div className="mt-2">
                   <div className="text-xl font-black text-white">{formatCurrency(ps.totalOwnerShare)}</div>
                   <div className="text-[11px] text-indigo-100/90 mt-1">
-                    Dari Ramen: {formatCurrency(ps.food.ownerShare)} + Drink: {formatCurrency(ps.drink.ownerShare)}
+                    Dari Makanan: {formatCurrency(ps.food.ownerShare)} + Drink: {formatCurrency(ps.drink.ownerShare)}
                   </div>
                 </div>
               </div>
@@ -1876,7 +1905,7 @@ export const ReportView: React.FC = () => {
 
             {/* Division Comparison Breakdown Cards */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Divisi 1: Muki Ramen */}
+              {/* Divisi 1: Makanan */}
               <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -1885,7 +1914,7 @@ export const ReportView: React.FC = () => {
                         🍜
                       </div>
                       <div>
-                        <h4 className="font-black text-slate-900 text-base">Divisi MUKI RAMEN (Makanan)</h4>
+                        <h4 className="font-black text-slate-900 text-base">Divisi Makanan (Kitchen)</h4>
                         <span className="text-xs text-slate-400">Penanggung Jawab: Bagi Hasil {ps.food.profitSharingPct}%</span>
                       </div>
                     </div>
@@ -1906,7 +1935,7 @@ export const ReportView: React.FC = () => {
                   </div>
 
                   <div className="p-3.5 bg-slate-100/70 rounded-2xl flex justify-between items-center mb-4">
-                    <span className="text-xs font-bold text-slate-700">Laba Bersih Divisi Ramen</span>
+                    <span className="text-xs font-bold text-slate-700">Laba Bersih Divisi Makanan</span>
                     <span className="text-base font-black text-indigo-900">{formatCurrency(ps.food.finalNet)}</span>
                   </div>
                 </div>
@@ -1921,7 +1950,7 @@ export const ReportView: React.FC = () => {
                   </div>
                   <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
                     <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-bold text-emerald-700">PJ Ramen ({ps.food.profitSharingPct}%)</span>
+                      <span className="text-[11px] font-bold text-emerald-700">PJ Makanan ({ps.food.profitSharingPct}%)</span>
                       <span className="text-[10px] bg-emerald-200/60 text-emerald-800 px-1.5 py-0.5 rounded font-bold">PJ Tim</span>
                     </div>
                     <div className="text-base font-black text-emerald-900 mt-1">{formatCurrency(ps.food.pjShare)}</div>
@@ -1929,7 +1958,7 @@ export const ReportView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Divisi 2: Muki Drink */}
+              {/* Divisi 2: Minuman */}
               <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -1938,7 +1967,7 @@ export const ReportView: React.FC = () => {
                         🍹
                       </div>
                       <div>
-                        <h4 className="font-black text-slate-900 text-base">Divisi MUKI DRINK (Minuman)</h4>
+                        <h4 className="font-black text-slate-900 text-base">Divisi Minuman (Bar)</h4>
                         <span className="text-xs text-slate-400">Penanggung Jawab: Bagi Hasil {ps.drink.profitSharingPct}%</span>
                       </div>
                     </div>
@@ -2382,7 +2411,7 @@ export const ReportView: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '.6rem' }}>
               {[
-                { type: 'profit_sharing', title: '💰 Laporan Rekapitulasi Bagi Hasil (80:20)', desc: 'Pembagian laba bersih Owner vs PJ Ramen & PJ Drink setelah beban operasional' },
+                ...(enableProfitSharing ? [{ type: 'profit_sharing', title: '💰 Laporan Rekapitulasi Bagi Hasil (80:20)', desc: 'Pembagian laba bersih Owner vs PJ Ramen & PJ Drink setelah beban operasional' }] : []),
                 { type: 'daily_bonus', title: '🏆 Matriks Bonus Omzet Harian & Rekap Staf', desc: 'Matriks kehadiran karyawan Full-Time vs Daily Worker & pencapaian bonus tier omzet harian' },
                 { type: 'products', title: '🍜 Laporan Penjualan Menu & Margin (Best Seller)', desc: 'Ranking menu terlaris, kuantitas terjual, total omzet, HPP, laba dan margin' },
                 { type: 'pl', title: '📊 Laporan Laba Rugi (Profit & Loss)', desc: 'Format standar akuntansi: Pendapatan, HPP, OPEX, dan Laba Bersih' },
@@ -2426,6 +2455,13 @@ export const ReportView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* AI MENU & PROFIT ADVISOR MODAL */}
+      <AiMenuOptimizerModal
+        isOpen={showAiMenuModal}
+        onClose={() => setShowAiMenuModal(false)}
+        token={token}
+      />
     </div>
   );
 };

@@ -1,39 +1,52 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
-import { io } from '../index';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { io, emitToTenant } from '../index';
+import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Get table detail (Public - for Dine-In customers to verify table number)
 router.get('/public/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    let tenantId = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string);
+    const tenantSlug = req.query.tenant as string;
+
+    if (!tenantId && tenantSlug) {
+      const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+      if (tenant) tenantId = tenant.id;
+    }
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context wajib disertakan.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
     const numId = Number(id);
     let table = null;
 
     if (!isNaN(numId)) {
-      table = await prisma.table.findUnique({
-        where: { id: numId }
+      table = await prisma.table.findFirst({
+        where: { id: numId, tenantId }
       });
     }
 
     const paramId = String(id);
     if (!table) {
       table = await prisma.table.findFirst({
-        where: { tableNo: paramId }
+        where: { tableNo: paramId, tenantId }
       });
     }
 
     if (!table) {
-      const allTables = await prisma.table.findMany();
+      const allTables = await prisma.table.findMany({
+        where: { tenantId }
+      });
       table = allTables.find(t => t.tableNo.toLowerCase() === paramId.toLowerCase()) || null;
     }
 
-    // Fallback: If still not found, check if there's any table at all
     if (!table) {
-      return res.status(404).json({ error: 'Meja tidak ditemukan' });
+      return res.status(404).json({ error: 'Meja tidak ditemukan di restoran ini' });
     }
     res.json(table);
   } catch (error) {
@@ -42,10 +55,19 @@ router.get('/public/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Get all tables
+// Get all tables (Scoped to active tenant)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const tables = await prisma.table.findMany({
+      where: {
+        deletedAt: null,
+        tenantId
+      },
       orderBy: { tableNo: 'asc' }
     });
     res.json(tables);
@@ -54,15 +76,21 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// Create new table
+// Create new table (Scoped to active tenant)
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { tableNo, name, capacity, status, qrUrl } = req.body;
     
     if (!tableNo) return res.status(400).json({ error: 'Table Number is required' });
     
     const table = await prisma.table.create({
       data: {
+        tenantId,
         tableNo,
         name,
         capacity: Number(capacity) || 2,
@@ -80,9 +108,14 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// Batch update table layouts (positions)
+// Batch update table layouts (positions) - Scoped to tenant
 router.put('/layout', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { layouts } = req.body;
     if (!Array.isArray(layouts)) {
       return res.status(400).json({ error: 'Format layouts tidak valid' });
@@ -90,8 +123,11 @@ router.put('/layout', authenticateToken, async (req: Request, res: Response) => 
 
     const updates = await prisma.$transaction(
       layouts.map((lay: any) => 
-        prisma.table.update({
-          where: { id: Number(lay.id) },
+        prisma.table.updateMany({
+          where: { 
+            id: Number(lay.id),
+            tenantId
+          },
           data: {
             posX: lay.posX !== undefined ? Number(lay.posX) : undefined,
             posY: lay.posY !== undefined ? Number(lay.posY) : undefined
@@ -107,14 +143,32 @@ router.put('/layout', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
-// Update table
+// Update table (Scoped to active tenant)
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const tableId = Number(id);
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { tableNo, name, capacity, status, qrUrl } = req.body;
     
-    const table = await prisma.table.update({
-      where: { id: Number(id) },
+    const existing = await prisma.table.findFirst({
+      where: {
+        id: tableId,
+        tenantId
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Meja tidak ditemukan atau Anda tidak memiliki akses.' });
+    }
+
+    // Anti-IDOR: gunakan updateMany dengan { id, tenantId } bukan update dengan { id } saja
+    const updateResult = await prisma.table.updateMany({
+      where: { id: tableId, tenantId },
       data: {
         tableNo,
         name,
@@ -126,6 +180,12 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
         shape: req.body.shape
       }
     });
+
+    if (updateResult.count === 0) {
+      return res.status(404).json({ error: 'Meja tidak ditemukan atau akses ditolak.' });
+    }
+
+    const table = await prisma.table.findFirst({ where: { id: tableId, tenantId } });
     res.json(table);
   } catch (error) {
     console.error(error);
@@ -133,15 +193,34 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// Delete table
+// Delete table (Scoped to active tenant)
 router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const tableId = Number(id);
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     
+    const existing = await prisma.table.findFirst({
+      where: {
+        id: tableId,
+        tenantId
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Meja tidak ditemukan atau Anda tidak memiliki akses.' });
+    }
+
     // Optional check if table has active orders
     const allPendingOrders = await prisma.order.findMany({
-      where: { status: 'Pending' },
+      where: { 
+        status: 'Pending',
+        tenantId
+      },
       select: { id: true, tableId: true, joinedTableIds: true }
     });
     
@@ -160,23 +239,35 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Tidak dapat menghapus meja yang sedang memiliki pesanan aktif.' });
     }
     
-    await prisma.table.delete({
-      where: { id: tableId }
+    // Anti-IDOR: gunakan updateMany dengan { id, tenantId } untuk soft-delete
+    const softDeleteResult = await prisma.table.updateMany({
+      where: { id: tableId, tenantId },
+      data: { deletedAt: new Date() }
     });
-    res.json({ message: 'Table deleted successfully' });
+
+    if (softDeleteResult.count === 0) {
+      return res.status(404).json({ error: 'Meja tidak ditemukan atau akses ditolak.' });
+    }
+    res.json({ success: true, message: 'Meja berhasil dipindahkan ke Keranjang Sampah.' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete table' });
   }
 });
 
-// Clear / Release Table (Kosongkan Meja Langsung)
+// Clear / Release Table (Kosongkan Meja Langsung) - Scoped to tenant
 router.post('/:id/clear', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
     const tableId = Number(id);
 
     const candidateOrders = await prisma.order.findMany({
       where: {
+        tenantId,
         OR: [
           { status: 'Pending' },
           {
@@ -205,7 +296,8 @@ router.post('/:id/clear', authenticateToken, async (req: Request, res: Response)
     const now = new Date();
     await prisma.order.updateMany({
       where: {
-        id: { in: activeOrders.map(o => o.id) }
+        id: { in: activeOrders.map(o => o.id) },
+        tenantId
       },
       data: {
         kdsStatus: 'Served',
@@ -213,9 +305,11 @@ router.post('/:id/clear', authenticateToken, async (req: Request, res: Response)
       }
     });
 
-    io.emit('order:paid', { tableId });
-    io.emit('order:new', { tableId });
-    io.emit('kds:statusChanged', { tableId, kdsStatus: 'Served' });
+    if (tenantId) {
+      emitToTenant(tenantId, 'order:paid', { tableId });
+      emitToTenant(tenantId, 'order:new', { tableId });
+      emitToTenant(tenantId, 'kds:statusChanged', { tableId, kdsStatus: 'Served' });
+    }
 
     res.json({ message: 'Meja berhasil dibersihkan & dikosongkan', clearedCount: activeOrders.length });
   } catch (error: any) {

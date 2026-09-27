@@ -8,19 +8,22 @@ async function testPhase1Isolation() {
   console.log('🧪 TEST FASE 1: ISOLASI PORTAL DEVELOPER & SECURITY GUARDS');
   console.log('===========================================================\n');
 
-  // 1. Buat Token Palsu Kasir Biasa (Non-Platform Admin)
+  // 1. Ambil Akun Kasir Biasa (Non-Platform Admin) & Akun Developer Riil
+  const cashierDb = await prisma.user.findFirst({ where: { role: { notIn: ['OWNER', 'SUPERADMIN'] }, status: 'Aktif' } }) || { id: 99991 };
+  const ownerDb = await prisma.user.findFirst({ where: { role: 'OWNER', status: 'Aktif' } }) || { id: 1 };
+
   const cashierToken = jwt.sign({
-    id: 99991,
-    username: 'kasir_test_fase1',
-    role: 'Kasir',
+    id: cashierDb.id,
+    username: cashierDb.username || 'kasir_test_fase1',
+    role: cashierDb.role || 'Kasir',
     isPlatformAdmin: false,
     permissions: ['pos.view', 'pos.create']
   }, JWT_SECRET, { expiresIn: '1h' });
 
-  // 2. Buat Token SuperAdmin Developer
+  // 2. Buat Token SuperAdmin Developer Riil
   const adminToken = jwt.sign({
-    id: 99992,
-    username: 'developer_platform_master',
+    id: ownerDb.id,
+    username: ownerDb.username || 'developer_platform_master',
     role: 'OWNER',
     isPlatformAdmin: true,
     permissions: ['*']

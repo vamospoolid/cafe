@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { 
   X, Printer, Zap, XCircle, ShoppingBag, User, Calendar, 
-  Clock, Hash, CreditCard, Tag, DollarSign, Utensils, MessageSquare, CheckCircle2, AlertCircle
+  Clock, Hash, CreditCard, Tag, DollarSign, Utensils, MessageSquare, CheckCircle2, AlertCircle,
+  MessageCircle, RotateCcw
 } from 'lucide-react';
+import { POSContext } from '../context/POSContext';
+import { generateWhatsAppReceiptUrl } from '../utils/receiptFormatter';
+import { toast } from '../utils/alert';
 
 interface OrderDetailModalProps {
   order: any;
@@ -11,6 +15,7 @@ interface OrderDetailModalProps {
   onDirectPrint?: (orderId: number) => void;
   onPreviewReceipt?: (order: any) => void;
   onVoid?: (orderId: number, orderNumber: string) => void;
+  onReturn?: (order: any) => void;
   canVoid?: boolean;
   printLoading?: boolean;
 }
@@ -22,9 +27,12 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onDirectPrint,
   onPreviewReceipt,
   onVoid,
+  onReturn,
   canVoid = false,
   printLoading = false
 }) => {
+  const posContext = useContext(POSContext);
+
   if (!isOpen || !order) return null;
 
   const formatCurrency = (val: any) => {
@@ -252,7 +260,21 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
         {/* Modal Footer Actions */}
         <div className="p-3.5 sm:p-4 border-t border-slate-100 bg-white flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div>
+          <div className="flex items-center gap-2">
+            {!isVoid && onReturn && (
+              <button 
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onReturn(order);
+                }}
+                className="py-2 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 border border-purple-200"
+              >
+                <RotateCcw size={15} />
+                <span>Retur Barang</span>
+              </button>
+            )}
+
             {!isVoid && canVoid && onVoid && (
               <button 
                 type="button"
@@ -266,6 +288,46 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const phone = order.customerPhone || order.customer?.phone || '';
+                const targetPhone = phone || prompt('Masukkan nomor WhatsApp pelanggan (contoh: 08123456789):') || '';
+                if (!targetPhone.trim()) return;
+                
+                const receiptData = {
+                  orderNumber: order.orderNumber,
+                  createdAt: order.createdAt,
+                  paidAt: order.paidAt,
+                  customerName: order.customerName || order.customer?.name,
+                  customerPhone: targetPhone,
+                  table: order.table,
+                  cashierName: order.user?.name || order.user?.username,
+                  items: (order.items || []).map((i: any) => ({
+                    name: i.product?.name || i.name,
+                    qty: i.qty,
+                    price: Number(i.price || 0),
+                    notes: i.notes
+                  })),
+                  subtotal: order.subtotal || order.total,
+                  discount: order.discount || 0,
+                  tax: order.tax || 0,
+                  serviceCharge: order.serviceCharge || 0,
+                  total: order.total,
+                  paymentMethod: order.paymentMethod,
+                  isPaid: order.status === 'Paid'
+                };
+                const url = generateWhatsAppReceiptUrl(targetPhone, receiptData, posContext?.settings);
+                window.open(url, '_blank');
+                toast('Tautan WhatsApp struk digital dibuka!', 'success');
+              }}
+              className="py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center gap-1.5 border border-emerald-200 shadow-sm transition-all active:scale-95"
+              title="Kirim struk nota ke WhatsApp pelanggan"
+            >
+              <MessageCircle size={15} className="text-emerald-600" />
+              <span>Kirim WA</span>
+            </button>
+
             {onPreviewReceipt && (
               <button 
                 type="button"

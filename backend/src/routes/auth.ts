@@ -1,12 +1,11 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
 
 // Helper: Generate structured JWT token and user profile with multi-tenant context
@@ -45,9 +44,9 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
     m => requestedTenantId ? m.tenantId === requestedTenantId && m.status === 'ACTIVE' : m.status === 'ACTIVE'
   );
 
-  // Jika belum ada membership terdaftar, fallback ke default tenant
-  let activeTenantId = activeMembership?.tenantId || 'tenant-default-muki';
-  let activeOutletId = activeMembership?.tenant.outlets[0]?.id || 'outlet-default-muki-01';
+  // Jika belum ada membership aktif spesifik, ambil membership pertama user
+  let activeTenantId = activeMembership?.tenantId || (user.isPlatformAdmin ? undefined : user.memberships[0]?.tenantId);
+  let activeOutletId = activeMembership?.tenant?.outlets[0]?.id || user.memberships[0]?.tenant?.outlets[0]?.id;
   let activeRoleName = activeMembership?.role?.name || user.role;
   let activeRoleId = activeMembership?.roleId || undefined;
 
@@ -111,7 +110,8 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
     tenantName: m.tenant.name,
     tenantSlug: m.tenant.slug,
     roleName: m.role?.name || user.role,
-    status: m.status
+    status: m.status,
+    businessType: m.tenant.businessType || 'CAFE'
   }));
 
   return {
@@ -120,6 +120,7 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
       ...safeUser,
       tenantId: activeTenantId,
       outletId: activeOutletId,
+      businessType: activeMembership?.tenant?.businessType || 'CAFE',
       role: activeRoleName,
       roleId: activeRoleId,
       permissionKeys,
@@ -197,31 +198,44 @@ router.post('/login', async (req: Request, res: Response) => {
 router.post('/switch-pin', async (req: Request, res: Response) => {
   try {
     const { pin, userId, username, tenantId } = req.body;
+    const targetTenantId = tenantId || (req.headers['x-tenant-id'] as string);
     
     if (!pin) {
       return res.status(400).json({ error: 'PIN wajib diisi.' });
     }
 
+    // USR-004: Fail-closed tenant scoping — hanya user dengan membership aktif di tenant ini
+    const tenantFilter = targetTenantId ? {
+      memberships: { some: { tenantId: targetTenantId, status: 'ACTIVE' } }
+    } : {};
+
+    const pinCondition = targetTenantId ? {
+      OR: [
+        { pin },
+        { memberships: { some: { tenantId: targetTenantId, pin, status: 'ACTIVE' } } }
+      ]
+    } : { pin };
+
     let user;
     if (userId) {
       user = await prisma.user.findFirst({
-        where: { id: Number(userId), pin, status: 'Aktif' }
+        where: { id: Number(userId), status: 'Aktif', ...tenantFilter, ...pinCondition }
       });
     } else if (username) {
       user = await prisma.user.findFirst({
-        where: { username, pin, status: 'Aktif' }
+        where: { username, status: 'Aktif', ...tenantFilter, ...pinCondition }
       });
     } else {
       user = await prisma.user.findFirst({
-        where: { pin, status: 'Aktif' }
+        where: { status: 'Aktif', ...tenantFilter, ...pinCondition }
       });
     }
 
     if (!user) {
-      return res.status(401).json({ error: 'PIN salah atau pengguna tidak aktif.' });
+      return res.status(401).json({ error: 'PIN salah atau pengguna tidak terdaftar di outlet ini.' });
     }
 
-    const authData = await generateAuthResponse(user.id, tenantId);
+    const authData = await generateAuthResponse(user.id, targetTenantId);
 
     res.status(200).json({
       message: 'Berhasil beralih kasir',
@@ -237,15 +251,16 @@ router.post('/switch-pin', async (req: Request, res: Response) => {
 // GET /api/auth/staff-list
 router.get('/staff-list', async (req: Request, res: Response) => {
   try {
-    const tenantId = (req.query.tenantId as string) || 'tenant-default-muki';
+    const tenantId = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context diperlukan untuk melihat daftar staf', code: 'MISSING_TENANT_CONTEXT' });
+    }
     
+    // USR-004: Fail-closed tenant scoping — hapus memberships: { none: {} }
     const staff = await prisma.user.findMany({
       where: {
         status: 'Aktif',
-        OR: [
-          { memberships: { some: { tenantId, status: 'ACTIVE' } } },
-          { memberships: { none: {} } }
-        ]
+        memberships: { some: { tenantId, status: 'ACTIVE' } }
       },
       select: {
         id: true,
@@ -266,45 +281,52 @@ router.get('/staff-list', async (req: Request, res: Response) => {
 router.post('/qr-login', async (req: Request, res: Response) => {
   try {
     const { code, tenantId } = req.body;
+    const targetTenantId = tenantId || (req.headers['x-tenant-id'] as string);
+    if (!targetTenantId) {
+      return res.status(400).json({ error: 'Tenant context diperlukan untuk login QR.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
     if (!code) {
-      return res.status(400).json({ error: 'Kode QR / Barcode ID diperlukan.' });
+      return res.status(400).json({ error: 'Kode PIN / Barcode ID diperlukan.' });
     }
 
     const cleanCode = String(code).trim();
-    
-    let user = null;
-    if (cleanCode.startsWith('STAFF-') || cleanCode.startsWith('ID-') || cleanCode.startsWith('ID:')) {
-      const parsedId = Number(cleanCode.replace(/^(STAFF-|ID-|ID:)/i, ''));
-      if (!isNaN(parsedId)) {
-        user = await prisma.user.findFirst({
-          where: { id: parsedId, status: 'Aktif' }
-        });
-      }
-    } else if (cleanCode.startsWith('PIN-') || cleanCode.startsWith('PIN:')) {
-      const parsedPin = cleanCode.replace(/^(PIN-|PIN:)/i, '');
-      user = await prisma.user.findFirst({
-        where: { pin: parsedPin, status: 'Aktif' }
-      });
-    } else {
-      user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { pin: cleanCode },
-            { username: cleanCode },
-            { name: cleanCode }
-          ],
-          status: 'Aktif'
-        }
+    let extractedPin: string | null = null;
+
+    // Hanya ekstrak jika berupa format PIN explisit atau angka PIN murni
+    if (cleanCode.startsWith('PIN-') || cleanCode.startsWith('PIN:')) {
+      extractedPin = cleanCode.replace(/^(PIN-|PIN:)/i, '').trim();
+    } else if (/^\d{4,8}$/.test(cleanCode)) {
+      // Kode numerik PIN 4-8 digit
+      extractedPin = cleanCode;
+    }
+
+    if (!extractedPin) {
+      return res.status(401).json({ 
+        error: 'Format QR/Barcode tidak valid. QR Login kasir wajib memuat PIN atau token keamanan terverifikasi.' 
       });
     }
+
+    // Strict tenant scoping — hanya user dengan membership aktif di tenant target
+    const tenantFilter = targetTenantId ? {
+      memberships: { some: { tenantId: targetTenantId, status: 'ACTIVE' } }
+    } : {};
+
+    const user = await prisma.user.findFirst({
+      where: {
+        status: 'Aktif',
+        pin: extractedPin,
+        ...tenantFilter
+      }
+    });
 
     if (!user) {
-      return res.status(401).json({ error: 'Kartu QR ID / Barcode tidak dikenali.' });
+      return res.status(401).json({ error: 'PIN tidak valid atau staf tidak terdaftar pada kafe/outlet ini.' });
     }
 
-    const authData = await generateAuthResponse(user.id, tenantId);
+    const authData = await generateAuthResponse(user.id, targetTenantId);
 
-    // Audit Log: Quick PIN Switch
+    // Audit Log: Quick PIN Switch via QR / Barcode
     await AuditLogger.log({
       tenantId: authData.user.tenantId,
       outletId: authData.user.outletId,
@@ -314,7 +336,7 @@ router.post('/qr-login', async (req: Request, res: Response) => {
       action: 'SWITCH_PIN',
       resource: 'AUTH',
       resourceId: String(user.id),
-      description: `User ${user.name} beralih sesi menggunakan Quick PIN.`,
+      description: `User ${user.name} berhasil login cepat via PIN / Barcode.`,
       severity: 'INFO'
     }, req);
 
@@ -465,13 +487,76 @@ router.post('/switch-outlet', authenticateToken, async (req: AuthRequest, res: R
   }
 });
 
+// GET /api/auth/check-slug - Cek ketersediaan subdomain / slug realtime
+router.get('/check-slug', async (req: Request, res: Response) => {
+  try {
+    const rawSlug = (req.query.slug as string) || '';
+    if (!rawSlug.trim()) {
+      return res.status(400).json({ available: false, error: 'Slug tidak boleh kosong' });
+    }
+
+    const cleanSlug = rawSlug.toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
+    const reservedSlugs = ['app', 'api', 'admin', 'www', 'platform', 'platform-admin', 'system', 'root', 'login', 'pos', 'staff'];
+
+    if (reservedSlugs.includes(cleanSlug)) {
+      return res.json({
+        available: false,
+        slug: cleanSlug,
+        error: `Subdomain '${cleanSlug}' adalah kata terpesan sistem.`,
+        suggestions: [`${cleanSlug}-cafe`, `${cleanSlug}-pos`, `${cleanSlug}-01`]
+      });
+    }
+
+    const existingTenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [
+          { slug: cleanSlug },
+          { name: { equals: rawSlug.trim(), mode: 'insensitive' } }
+        ]
+      }
+    });
+
+    if (existingTenant) {
+      // Cari alternatif slug yang belum dipakai
+      const alt1 = `${cleanSlug}-cafe`;
+      const alt2 = `${cleanSlug}-01`;
+      const alt3 = `${cleanSlug}-${Math.floor(100 + Math.random() * 900)}`;
+
+      const checkAlts = await prisma.tenant.findMany({
+        where: { slug: { in: [alt1, alt2, alt3] } },
+        select: { slug: true }
+      });
+      const takenAlts = new Set(checkAlts.map(t => t.slug));
+      const suggestions = [alt1, alt2, alt3].filter(s => !takenAlts.has(s));
+
+      return res.json({
+        available: false,
+        slug: cleanSlug,
+        error: `Subdomain '${cleanSlug}' sudah digunakan oleh kafe lain.`,
+        suggestions
+      });
+    }
+
+    return res.json({
+      available: true,
+      slug: cleanSlug,
+      message: `Subdomain '${cleanSlug}.codenusa.id' tersedia!`
+    });
+  } catch (err) {
+    console.error('Check Slug Error:', err);
+    return res.status(500).json({ available: false, error: 'Gagal mengecek subdomain' });
+  }
+});
+
 // POST /api/auth/register-tenant - Pendaftaran mandiri tenant baru (Onboarding Wizard)
+
 router.post('/register-tenant', async (req: Request, res: Response) => {
   try {
     const {
       businessName,
       slug,
       planCode,
+      businessType: rawBusinessType,
       outletName,
       outletCode,
       ownerName,
@@ -479,6 +564,9 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       ownerPassword,
       ownerPin
     } = req.body;
+
+    const rawUpper = String(rawBusinessType || '').toUpperCase();
+    const businessType = ['BENGKEL', 'RETAIL', 'LAUNDRY'].includes(rawUpper) ? rawUpper : 'CAFE';
 
     if (!businessName || !slug || !ownerName || !ownerUsername || !ownerPassword) {
       return res.status(400).json({
@@ -517,6 +605,8 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
         data: {
           name: businessName,
           slug: cleanSlug,
+          businessType,
+          logoUrl: '/logo.png',
           planId: targetPlan?.id,
           status: 'ACTIVE',
           trialEndsAt
@@ -569,22 +659,123 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
         }
       });
 
-      // e. Inisialisasi Kategori Bawaan
-      const catFood = await tx.category.create({
-        data: { tenantId: tenant.id, name: 'Makanan', printerTarget: 'KITCHEN' }
-      });
-      const catDrink = await tx.category.create({
-        data: { tenantId: tenant.id, name: 'Minuman', printerTarget: 'BAR' }
-      });
+      // e. Inisialisasi Kategori Bawaan & Layanan Sesuai Vertikal
+      if (businessType === 'BENGKEL') {
+        await tx.category.createMany({
+          data: [
+            { tenantId: tenant.id, name: 'Oli & Pelumas Mesin', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Suku Cadang Fast Moving', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Ban & Kaki-Kaki', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Aki & Kelistrikan', printerTarget: 'NONE' }
+          ]
+        });
 
-      // f. Inisialisasi Meja Bawaan
-      await tx.table.createMany({
-        data: [
-          { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '01', name: 'Area Utama', capacity: 4, posX: 20, posY: 30 },
-          { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '02', name: 'Area Utama', capacity: 4, posX: 50, posY: 30 },
-          { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '03', name: 'Area VIP', capacity: 6, posX: 80, posY: 30 }
-        ]
-      });
+        // Seed default Bengkel Service Types
+        await tx.serviceType.createMany({
+          data: [
+            { tenantId: tenant.id, name: 'Ganti Oli Mesin', priceRetail: 20000, priceMitra: 15000, priceGrosir: 15000, vehicleType: 'ALL' },
+            { tenantId: tenant.id, name: 'Tune Up Injeksi / Karburator', priceRetail: 65000, priceMitra: 50000, priceGrosir: 45000, vehicleType: 'MOTOR' },
+            { tenantId: tenant.id, name: 'Servis CVT Lengkap', priceRetail: 65000, priceMitra: 50000, priceGrosir: 50000, vehicleType: 'MOTOR' },
+            { tenantId: tenant.id, name: 'Ganti Kampas Rem Depan / Belakang', priceRetail: 25000, priceMitra: 20000, priceGrosir: 20000, vehicleType: 'ALL' },
+            { tenantId: tenant.id, name: 'Servis Ringan + Pengecekan 12 Titik', priceRetail: 50000, priceMitra: 40000, priceGrosir: 35000, vehicleType: 'ALL' }
+          ]
+        });
+      } else if (businessType === 'RETAIL') {
+        await tx.category.createMany({
+          data: [
+            { tenantId: tenant.id, name: 'Sembako & Minyak', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Mie & Makanan Instan', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Minuman Karton & Dus', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Sabun & Kebersihan', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Bumbu Dapur & Sambal', printerTarget: 'NONE' },
+            { tenantId: tenant.id, name: 'Rokok & Tembakau', printerTarget: 'NONE' }
+          ]
+        });
+
+        // Inisialisasi Rak/Gudang Bawaan Retail
+        await tx.table.createMany({
+          data: [
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'RAK-01', name: 'Rak Depan (Sembako)', capacity: 1, posX: 20, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'RAK-02', name: 'Rak Tengah (Makanan & Snack)', capacity: 1, posX: 50, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'GDG-01', name: 'Gudang Belakang (Karton & Bal)', capacity: 1, posX: 80, posY: 30 }
+          ]
+        });
+      } else if (businessType === 'LAUNDRY') {
+        const catKiloan = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Cuci Kiloan Reguler', printerTarget: 'NONE' }
+        });
+        const catKilat = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Cuci Kilat & Express', printerTarget: 'NONE' }
+        });
+        const catSatuan = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Cuci Satuan & Bedcover', printerTarget: 'NONE' }
+        });
+        const catDryClean = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Dry Clean & Perawatan Sepatu', printerTarget: 'NONE' }
+        });
+
+        // Inisialisasi Auto-Seed Produk Bawaan Laundry Lengkap
+        await tx.product.createMany({
+          data: [
+            // Cuci Kiloan Reguler
+            { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Cuci Kering Setrika (Reguler)', sellPrice: 7000, buyPrice: 2000, baseUom: 'Kg', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Cuci Lipat Kering (Non Setrika)', sellPrice: 5000, buyPrice: 1500, baseUom: 'Kg', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Setrika Rapi Saja', sellPrice: 4500, buyPrice: 1200, baseUom: 'Kg', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Cuci Basah Bersih', sellPrice: 3500, buyPrice: 1000, baseUom: 'Kg', stock: 999, minStock: 5, status: 'Aktif' },
+            // Cuci Kilat & Express
+            { tenantId: tenant.id, categoryId: catKilat.id, name: 'Cuci Kering Setrika (Kilat 24 Jam)', sellPrice: 10000, buyPrice: 2500, baseUom: 'Kg', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catKilat.id, name: 'Cuci Express 6 Jam', sellPrice: 15000, buyPrice: 3500, baseUom: 'Kg', stock: 999, minStock: 5, status: 'Aktif' },
+            // Cuci Satuan & Bedcover
+            { tenantId: tenant.id, categoryId: catSatuan.id, name: 'Bedcover King / Jumbo', sellPrice: 25000, buyPrice: 6000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSatuan.id, name: 'Bedcover Single / Sedang', sellPrice: 20000, buyPrice: 5000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSatuan.id, name: 'Selimut Tebal / Fleece', sellPrice: 15000, buyPrice: 4000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSatuan.id, name: 'Sprei Set + Sarung Bantal', sellPrice: 12000, buyPrice: 3000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' },
+            // Dry Clean & Sepatu
+            { tenantId: tenant.id, categoryId: catDryClean.id, name: 'Jas Pria / Blazer Kerja', sellPrice: 30000, buyPrice: 7000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catDryClean.id, name: 'Gamis / Gaun Panjang', sellPrice: 25000, buyPrice: 6000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catDryClean.id, name: 'Sepatu Sneakers / Canvas', sellPrice: 35000, buyPrice: 8000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catDryClean.id, name: 'Tas Ransel / Backpack', sellPrice: 25000, buyPrice: 6000, baseUom: 'Pcs', stock: 999, minStock: 5, status: 'Aktif' }
+          ]
+        });
+
+        // Inisialisasi Rak Penyimpanan Cucian
+        await tx.table.createMany({
+          data: [
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'RAK-A1', name: 'Rak A1 (Cucian Siap Ambil)', capacity: 1, posX: 20, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'RAK-A2', name: 'Rak A2 (Cucian Siap Ambil)', capacity: 1, posX: 50, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'RAK-B1', name: 'Rak B1 (Cucian Siap Ambil)', capacity: 1, posX: 80, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'RAK-B2', name: 'Rak B2 (Cucian Siap Ambil)', capacity: 1, posX: 20, posY: 60 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: 'HANGER-01', name: 'Gantungan Jas & Bedcover', capacity: 1, posX: 50, posY: 60 }
+          ]
+        });
+
+        // Inisialisasi Bahan Kimia & Operasional Awal
+        await tx.ingredient.createMany({
+          data: [
+            { tenantId: tenant.id, name: 'Deterjen Cair Konsentrat Super', unit: 'liter', stock: 50, minStock: 10, buyPrice: 12000 },
+            { tenantId: tenant.id, name: 'Pewangi Parfum Sakura', unit: 'liter', stock: 20, minStock: 5, buyPrice: 28000 },
+            { tenantId: tenant.id, name: 'Pewangi Parfum Akasia', unit: 'liter', stock: 20, minStock: 5, buyPrice: 28000 },
+            { tenantId: tenant.id, name: 'Softener / Pelembut Blue Fresh', unit: 'liter', stock: 30, minStock: 5, buyPrice: 15000 },
+            { tenantId: tenant.id, name: 'Plastik Jinjing HD Size L', unit: 'pack', stock: 50, minStock: 10, buyPrice: 18000 }
+          ]
+        });
+      } else {
+        await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Makanan', printerTarget: 'KITCHEN' }
+        });
+        await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Minuman', printerTarget: 'BAR' }
+        });
+
+        // Inisialisasi Meja Bawaan Cafe
+        await tx.table.createMany({
+          data: [
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '01', name: 'Area Utama', capacity: 4, posX: 20, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '02', name: 'Area Utama', capacity: 4, posX: 50, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '03', name: 'Area VIP', capacity: 6, posX: 80, posY: 30 }
+          ]
+        });
+      }
 
       // g. Inisialisasi TenantPaymentConfig
       await tx.tenantPaymentConfig.create({
@@ -603,8 +794,21 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
           tenantId: tenant.id,
           outletId: primaryOutlet.id,
           storeName: businessName,
-          receiptHeader: `Selamat Datang di ${businessName}`,
-          receiptFooter: 'Terima kasih atas kunjungan Anda!'
+          logoUrl: '/logo.png',
+          receiptHeader: businessType === 'BENGKEL'
+            ? `Selamat Datang di ${businessName} (Workshop & Servis)`
+            : (businessType === 'RETAIL' 
+                ? `Selamat Datang di ${businessName} (Grosir & Retail)` 
+                : (businessType === 'LAUNDRY' 
+                    ? `Selamat Datang di ${businessName} (Laundry Kiloan & Satuan)` 
+                    : `Selamat Datang di ${businessName}`)),
+          receiptFooter: businessType === 'BENGKEL'
+            ? 'Garansi servis berlaku 7 hari kerja. Terima kasih!'
+            : (businessType === 'RETAIL' 
+                ? 'Barang yang sudah dibeli dapat ditukar maksimal 2x24 jam dengan nota resmi. Terima kasih!' 
+                : (businessType === 'LAUNDRY' 
+                    ? 'Nota laundry wajib dibawa saat pengambilan cucian. Klaim maksimal 1x24 jam. Terima kasih!' 
+                    : 'Terima kasih atas kunjungan Anda!'))
         }
       });
 

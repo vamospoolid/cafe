@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { TenantContext } from './tenantContext';
+import prisma from '../db';
 
 const TENANT_SCOPED_MODELS = new Set([
   'category',
@@ -43,7 +44,7 @@ const TENANT_SCOPED_MODELS = new Set([
   'tenantFeature'
 ]);
 
-export function createTenantPrismaClient(basePrisma: PrismaClient = new PrismaClient()) {
+export function createTenantPrismaClient(basePrisma: PrismaClient = prisma) {
   return basePrisma.$extends({
     query: {
       $allModels: {
@@ -110,7 +111,7 @@ export function createTenantPrismaClient(basePrisma: PrismaClient = new PrismaCl
 export async function withTenantRLS<T>(
   tenantId: string | null | undefined,
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
-  prismaClient: PrismaClient = new PrismaClient()
+  prismaClient: PrismaClient = prisma
 ): Promise<T> {
   const effectiveTenantId = tenantId || TenantContext.getTenantId() || 'PLATFORM_SUPERADMIN';
   const cleanTenantId = effectiveTenantId.replace(/'/g, "''");

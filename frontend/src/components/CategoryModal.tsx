@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { 
   X, Plus, Edit2, Trash2, FolderPlus, Printer, Layers, 
-  Check, AlertCircle, RefreshCw, ChevronRight, CornerDownRight 
+  Check, AlertCircle, RefreshCw, ChevronRight, CornerDownRight,
+  Sparkles, Coffee, Utensils, Wheat, ArrowUp, ArrowDown
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { POSContext } from '../context/POSContext';
@@ -9,7 +10,12 @@ import { POSContext } from '../context/POSContext';
 export interface CategoryItem {
   id: number;
   name: string;
+  icon?: string | null;
+  color?: string | null;
+  sortOrder?: number;
+  stationTarget?: string;
   printerTarget: string;
+  isActive?: boolean;
   parentId?: number | null;
   parent?: CategoryItem | null;
   subCategories?: CategoryItem[];
@@ -25,6 +31,17 @@ interface CategoryModalProps {
   onCategoriesUpdated?: () => void;
 }
 
+const FOOD_EMOJIS = [
+  '☕', '🍵', '🧋', '🥤', '🧊', '🍹', '🍺', '🍽️', '🍜', '🍚',
+  '🍗', '🥩', '🐟', '🦐', '🍔', '🍕', '🥪', '🍟', '🥐', '🍞',
+  '🥖', '🍰', '🎂', '🍨', '🍪', '🥗', '🥣', '🥟', '🥦', '🌶️', '✨', '🏷️'
+];
+
+const PRESET_COLORS = [
+  '#4f46e5', '#854d0e', '#065f46', '#b91c1c', '#0284c7', 
+  '#d97706', '#be185d', '#7c3aed', '#0f766e', '#334155'
+];
+
 export const CategoryModal: React.FC<CategoryModalProps> = ({
   isOpen,
   onClose,
@@ -39,9 +56,18 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
   const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
   const [formData, setFormData] = useState({
     name: '',
+    icon: '🍽️',
+    color: '#4f46e5',
+    sortOrder: 0,
+    stationTarget: 'KITCHEN',
     printerTarget: 'KITCHEN',
     parentId: ''
   });
+
+  // Preset Template Modal State
+  const [isPresetModalOpen, setIsPresetModalOpen] = useState(false);
+  const [presetReplaceExisting, setPresetReplaceExisting] = useState(false);
+  const [presetLoading, setPresetLoading] = useState(false);
 
   const posContext = useContext(POSContext);
   const token = posContext?.token || localStorage.getItem('pos_token');
@@ -75,6 +101,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     setEditingCategory(null);
     setFormData({
       name: '',
+      icon: '🍽️',
+      color: '#4f46e5',
+      sortOrder: categories.length,
+      stationTarget: 'KITCHEN',
       printerTarget: 'KITCHEN',
       parentId: ''
     });
@@ -84,6 +114,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     setEditingCategory(null);
     setFormData({
       name: '',
+      icon: '🍽️',
+      color: '#4f46e5',
+      sortOrder: categories.length,
+      stationTarget: 'KITCHEN',
       printerTarget: 'KITCHEN',
       parentId: ''
     });
@@ -94,6 +128,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     setEditingCategory(null);
     setFormData({
       name: '',
+      icon: parentCat.icon || '🏷️',
+      color: parentCat.color || '#4f46e5',
+      sortOrder: parentCat.subCategories?.length || 0,
+      stationTarget: parentCat.stationTarget || 'KITCHEN',
       printerTarget: parentCat.printerTarget || 'KITCHEN',
       parentId: parentCat.id.toString()
     });
@@ -104,6 +142,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     setEditingCategory(category);
     setFormData({
       name: category.name,
+      icon: category.icon || '🍽️',
+      color: category.color || '#4f46e5',
+      sortOrder: category.sortOrder || 0,
+      stationTarget: category.stationTarget || category.printerTarget || 'KITCHEN',
       printerTarget: category.printerTarget || 'KITCHEN',
       parentId: category.parentId ? category.parentId.toString() : ''
     });
@@ -126,7 +168,11 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
     try {
       const payload = {
         name: formData.name.trim(),
-        printerTarget: formData.printerTarget,
+        icon: formData.icon,
+        color: formData.color,
+        sortOrder: Number(formData.sortOrder) || 0,
+        stationTarget: formData.stationTarget,
+        printerTarget: formData.stationTarget === 'BAR' ? 'BAR' : formData.stationTarget === 'NONE' ? 'NONE' : 'KITCHEN',
         parentId: formData.parentId ? Number(formData.parentId) : null
       };
 
@@ -172,12 +218,98 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
       console.error(err);
       Swal.fire({
         icon: 'error',
-        title: 'Error Jaringan',
-        text: 'Tidak dapat menghubungi server.',
+        title: 'Gagal',
+        text: 'Terjadi kesalahan koneksi server.',
         confirmButtonColor: '#4f46e5'
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleApplyPreset = async (presetId: string) => {
+    setPresetLoading(true);
+    try {
+      const res = await fetch('/api/categories/apply-preset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          presetId,
+          replaceExisting: presetReplaceExisting
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Template Diterapkan!',
+          text: data.message || `Template kategori ${presetId} berhasil diterapkan.`,
+          confirmButtonColor: '#4f46e5'
+        });
+        setIsPresetModalOpen(false);
+        await fetchCategories();
+        if (onCategoriesUpdated) onCategoriesUpdated();
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Gagal Menerapkan Template',
+          text: data.error || 'Gagal menerapkan template kategori.',
+          confirmButtonColor: '#4f46e5'
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Gagal menghubungi server.',
+        confirmButtonColor: '#4f46e5'
+      });
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
+  const handleMoveOrder = async (category: CategoryItem, direction: 'up' | 'down') => {
+    const isSub = Boolean(category.parentId);
+    const list = isSub
+      ? categories.find(c => c.id === category.parentId)?.subCategories || []
+      : categories;
+
+    const currentIndex = list.findIndex(c => c.id === category.id);
+    if (currentIndex === -1) return;
+    if (direction === 'up' && currentIndex === 0) return;
+    if (direction === 'down' && currentIndex === list.length - 1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    const reordered = [...list];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    const itemsPayload = reordered.map((cat, idx) => ({
+      id: cat.id,
+      sortOrder: idx
+    }));
+
+    try {
+      const res = await fetch('/api/categories/reorder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ items: itemsPayload })
+      });
+      if (res.ok) {
+        await fetchCategories();
+        if (onCategoriesUpdated) onCategoriesUpdated();
+      }
+    } catch (e) {
+      console.error('Failed to reorder categories:', e);
     }
   };
 
@@ -269,12 +401,21 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                 {categories.reduce((acc, cat) => acc + (cat.subCategories?.length || 0), 0)}
               </span> Sub-Kategori
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setIsPresetModalOpen(true)}
+                className="btn bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs py-2 px-3.5 flex items-center gap-1.5 rounded-lg shadow-sm font-bold transition-all active:scale-95"
+                title="Pilih template kategori siap pakai (Kafe, Restoran, Bakery)"
+              >
+                <Sparkles size={14} />
+                Template Industri
+              </button>
               <button
                 type="button"
                 onClick={fetchCategories}
                 disabled={loading}
-                className="btn bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs py-2 px-3 flex items-center gap-1.5 rounded-lg border border-slate-300"
+                className="btn bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs py-2 px-3 flex items-center gap-1.5 rounded-lg border border-slate-300 font-medium"
                 title="Refresh Daftar"
               >
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -283,10 +424,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
               <button
                 type="button"
                 onClick={handleOpenAddMain}
-                className="btn btn-primary text-xs py-2 px-3 flex items-center gap-1.5 rounded-lg shadow-sm font-semibold"
+                className="btn btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 rounded-lg shadow-sm font-bold"
               >
                 <Plus size={15} />
-                Tambah Kategori Utama
+                Tambah Kategori
               </button>
             </div>
           </div>
@@ -311,16 +452,16 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                 {/* Nama Kategori */}
-                <div className="md:col-span-1">
+                <div className="md:col-span-5">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Nama Kategori <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Contoh: Ramen, Minuman, Snack"
+                    placeholder="Contoh: Espresso Based, Main Course, Bakery"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="form-control text-sm bg-white"
@@ -328,8 +469,54 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                   />
                 </div>
 
+                {/* Ikon Emoji */}
+                <div className="md:col-span-4">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Ikon Visual (Emoji Kasir)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl p-1 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-center w-10 h-10">
+                      {formData.icon || '🍽️'}
+                    </span>
+                    <div className="flex-1 flex flex-wrap gap-1 max-h-16 overflow-y-auto p-1 bg-white border border-slate-200 rounded-lg">
+                      {FOOD_EMOJIS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, icon: emoji })}
+                          className={`text-base p-1 rounded hover:bg-indigo-50 transition-transform active:scale-95 ${
+                            formData.icon === emoji ? 'bg-indigo-100 scale-110 ring-1 ring-indigo-500' : ''
+                          }`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Warna Aksen */}
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Warna Aksen POS
+                  </label>
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    {PRESET_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, color: c })}
+                        className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                          formData.color === c ? 'scale-125 border-slate-900 ring-2 ring-indigo-300' : 'border-white hover:scale-110'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
                 {/* Induk Kategori (Parent) */}
-                <div className="md:col-span-1">
+                <div className="md:col-span-5">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Induk Kategori (Parent)
                   </label>
@@ -338,32 +525,48 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                     onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
                     className="form-control text-sm bg-white"
                   >
-                    <option value="">-- Kategori Utama (Tanpa Induk) --</option>
+                    <option value="">-- Kategori Utama (Level Teratas) --</option>
                     {categories
                       .filter(c => !editingCategory || c.id !== editingCategory.id)
                       .map(cat => (
                         <option key={cat.id} value={cat.id}>
-                          {cat.name} (Kategori Utama)
+                          {cat.icon || '🏷️'} {cat.name} (Kategori Utama)
                         </option>
                       ))
                     }
                   </select>
                 </div>
 
-                {/* Routing Printer */}
-                <div className="md:col-span-1">
+                {/* Routing Stasiun Dapur / Printer */}
+                <div className="md:col-span-4">
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Routing Printer Otomatis
+                    Stasiun Cetak / KDS Dapur
                   </label>
                   <select
-                    value={formData.printerTarget}
-                    onChange={(e) => setFormData({ ...formData, printerTarget: e.target.value })}
+                    value={formData.stationTarget}
+                    onChange={(e) => setFormData({ ...formData, stationTarget: e.target.value })}
                     className="form-control text-sm bg-white"
                   >
-                    <option value="KITCHEN">🍳 Dapur (Kitchen Printer)</option>
-                    <option value="BAR">🍹 Bar (Barista / Minuman)</option>
-                    <option value="NONE">🥤 Kasir / Showcase Saja</option>
+                    <option value="KITCHEN">🍳 Dapur Utama (Hot Kitchen)</option>
+                    <option value="BAR">🍹 Bar / Barista Minuman</option>
+                    <option value="GRILL">🔥 Stasiun Panggang / Grill</option>
+                    <option value="DESSERT">🍰 Pantry / Dessert Station</option>
+                    <option value="NONE">🥤 Kasir / Showcase Saja (Tanpa Cetak Dapur)</option>
                   </select>
+                </div>
+
+                {/* Urutan Tampil (Sort Order) */}
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Urutan di POS (Sort Order)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.sortOrder}
+                    onChange={(e) => setFormData({ ...formData, sortOrder: Number(e.target.value) || 0 })}
+                    className="form-control text-sm bg-white"
+                  />
                 </div>
               </div>
 
@@ -399,17 +602,25 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                 <Layers size={36} className="mx-auto text-slate-300" />
                 <div className="text-sm font-bold">Belum Ada Kategori Menu</div>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Tambahkan kategori utama seperti Makanan, Minuman, atau Camilan untuk mengelompokkan menu Anda.
+                  Gunakan tombol "Template Industri" di atas untuk langsung menerapkan struktur kategori Kafe, Restoran, atau Bakery secara otomatis.
                 </p>
-                <button
-                  onClick={handleOpenAddMain}
-                  className="btn btn-primary text-xs py-2 px-4 rounded-lg font-semibold"
-                >
-                  <Plus size={14} /> Tambah Kategori Pertama
-                </button>
+                <div className="flex justify-center gap-2 pt-2">
+                  <button
+                    onClick={() => setIsPresetModalOpen(true)}
+                    className="btn bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 px-4 rounded-lg font-bold flex items-center gap-1.5"
+                  >
+                    <Sparkles size={14} /> Terapkan Template Siap Pakai
+                  </button>
+                  <button
+                    onClick={handleOpenAddMain}
+                    className="btn btn-primary text-xs py-2 px-4 rounded-lg font-semibold flex items-center gap-1.5"
+                  >
+                    <Plus size={14} /> Buat Manual dari Nol
+                  </button>
+                </div>
               </div>
             ) : (
-              categories.map((mainCat) => {
+              categories.map((mainCat, index) => {
                 const subCats = mainCat.subCategories || [];
                 const mainProductCount = mainCat._count?.products || 0;
 
@@ -421,9 +632,36 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                     {/* MAIN CATEGORY ROW */}
                     <div className="p-4 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
-                          {mainCat.name.substring(0, 2).toUpperCase()}
+                        {/* Sort Controls */}
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveOrder(mainCat, 'up')}
+                            disabled={index === 0}
+                            className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                            title="Geser ke Atas"
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveOrder(mainCat, 'down')}
+                            disabled={index === categories.length - 1}
+                            className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent"
+                            title="Geser ke Bawah"
+                          >
+                            <ArrowDown size={12} />
+                          </button>
                         </div>
+
+                        {/* Icon & Color Badge */}
+                        <div 
+                          className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm border border-black/10"
+                          style={{ backgroundColor: mainCat.color || '#4f46e5' }}
+                        >
+                          <span>{mainCat.icon || '🍽️'}</span>
+                        </div>
+
                         <div>
                           <div className="font-bold text-sm text-slate-800 flex items-center gap-2">
                             {mainCat.name}
@@ -433,11 +671,16 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                           </div>
                           <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
                             <Printer size={12} className="text-slate-400" />
-                            Target: <span className="font-semibold text-slate-700">
-                              {mainCat.printerTarget === 'KITCHEN' ? '🍳 Dapur' : mainCat.printerTarget === 'BAR' ? '🍹 Bar' : '🥤 Showcase / Kasir'}
+                            Stasiun: <span className="font-semibold text-slate-700">
+                              {mainCat.stationTarget === 'BAR' ? '🍹 Bar Minuman' :
+                               mainCat.stationTarget === 'GRILL' ? '🔥 Stasiun Grill' :
+                               mainCat.stationTarget === 'DESSERT' ? '🍰 Pantry / Dessert' :
+                               mainCat.stationTarget === 'NONE' ? '🥤 Kasir Saja' : '🍳 Dapur Utama'}
                             </span>
                             <span className="text-slate-300">•</span>
                             <span>{subCats.length} Sub-kategori</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-[10px] text-slate-400 font-mono">Urutan #{mainCat.sortOrder ?? index}</span>
                           </div>
                         </div>
                       </div>
@@ -475,7 +718,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                     {/* SUB CATEGORIES LIST */}
                     {subCats.length > 0 ? (
                       <div className="p-3 divide-y divide-slate-100 bg-white">
-                        {subCats.map((subCat) => {
+                        {subCats.map((subCat, subIdx) => {
                           const subProductCount = subCat._count?.subProducts || subCat._count?.products || 0;
                           return (
                             <div 
@@ -483,7 +726,30 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                               className="py-2.5 px-3 flex items-center justify-between gap-3 hover:bg-slate-50 rounded-lg transition-colors"
                             >
                               <div className="flex items-center gap-2.5 pl-3">
-                                <CornerDownRight size={15} className="text-slate-400" />
+                                {/* Sub Category Move Controls */}
+                                <div className="flex flex-col gap-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveOrder(subCat, 'up')}
+                                    disabled={subIdx === 0}
+                                    className="p-0.5 rounded text-slate-400 hover:text-slate-700 disabled:opacity-20"
+                                    title="Geser ke Atas"
+                                  >
+                                    <ArrowUp size={10} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMoveOrder(subCat, 'down')}
+                                    disabled={subIdx === subCats.length - 1}
+                                    className="p-0.5 rounded text-slate-400 hover:text-slate-700 disabled:opacity-20"
+                                    title="Geser ke Bawah"
+                                  >
+                                    <ArrowDown size={10} />
+                                  </button>
+                                </div>
+
+                                <span className="text-base">{subCat.icon || '🏷️'}</span>
+
                                 <div>
                                   <div className="font-semibold text-xs text-slate-700 flex items-center gap-2">
                                     {subCat.name}
@@ -492,7 +758,10 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                                     </span>
                                   </div>
                                   <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                                    Printer: {subCat.printerTarget === 'KITCHEN' ? '🍳 Dapur' : subCat.printerTarget === 'BAR' ? '🍹 Bar' : '🥤 Showcase / Kasir'}
+                                    Stasiun: {subCat.stationTarget === 'BAR' ? '🍹 Bar' :
+                                              subCat.stationTarget === 'GRILL' ? '🔥 Grill' :
+                                              subCat.stationTarget === 'DESSERT' ? '🍰 Dessert' :
+                                              subCat.stationTarget === 'NONE' ? '🥤 Kasir' : '🍳 Dapur'}
                                   </div>
                                 </div>
                               </div>
@@ -532,11 +801,125 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
           </div>
         </div>
 
+        {/* PRESET INDUSTRY MODAL POPUP */}
+        {isPresetModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-scale-up space-y-4">
+              <div className="flex items-center justify-between border-b pb-3">
+                <div className="flex items-center gap-2 font-bold text-base text-slate-800">
+                  <Sparkles size={18} className="text-amber-500" />
+                  Pilih Template Kategori Industri
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPresetModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Pilih jenis usaha Anda untuk membuat struktur kategori dan routing dapur standar secara otomatis:
+              </p>
+
+              <div className="space-y-3">
+                {/* Opsi 1: Coffee Shop & Kafe */}
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('CAFE')}
+                  disabled={presetLoading}
+                  className="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 transition-all flex items-start gap-3 group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl shrink-0 group-hover:scale-110 transition-transform">
+                    ☕
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                      Coffee Shop &amp; Kafe
+                      <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">5 Kategori Utama</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Espresso Based, Manual Brew (V60/Cold Drip), Tea &amp; Non-Coffee, Pastry/Croissant, dan Light Snacks.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Opsi 2: Restoran & Rumah Makan */}
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('RESTAURANT')}
+                  disabled={presetLoading}
+                  className="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition-all flex items-start gap-3 group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl shrink-0 group-hover:scale-110 transition-transform">
+                    🍽️
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                      Restoran &amp; Rumah Makan
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">7 Kategori Utama</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Appetizer (Pembuka), Olahan Daging &amp; Ayam, Seafood Grill, Nasi/Mie/Pasta, Sayuran/Sup, Dessert, dan Aneka Minuman.
+                    </p>
+                  </div>
+                </button>
+
+                {/* Opsi 3: Bakery & Toko Roti */}
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('BAKERY')}
+                  disabled={presetLoading}
+                  className="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-orange-500 hover:bg-orange-50/50 transition-all flex items-start gap-3 group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-800 flex items-center justify-center text-xl shrink-0 group-hover:scale-110 transition-transform">
+                    🍞
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                      Bakery &amp; Toko Roti
+                      <span className="text-[10px] bg-orange-100 text-orange-800 font-semibold px-2 py-0.5 rounded-full">5 Kategori Utama</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Roti Manis &amp; Savory, Artisan Sourdough/Baguette, Cakes/Tart Ulang Tahun, Dry Cookies Hampers, dan Minuman Pendamping.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Opsi Replace / Tambah */}
+              <div className="pt-2 border-t flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="presetReplace"
+                  checked={presetReplaceExisting}
+                  onChange={(e) => setPresetReplaceExisting(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="presetReplace" className="text-xs text-slate-600 cursor-pointer select-none">
+                  Ganti semua kategori lama (khusus outlet baru tanpa produk aktif)
+                </label>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPresetModalOpen(false)}
+                  className="btn bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs py-2 px-4 rounded-xl font-semibold"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* MODAL FOOTER */}
         <div className="px-6 py-3.5 bg-white border-t border-slate-200 flex items-center justify-between">
           <span className="text-xs text-slate-400 flex items-center gap-1">
             <AlertCircle size={14} />
-            Perubahan kategori otomatis tersinkronisasi ke katalog produk & POS
+            Perubahan urutan & ikon kategori otomatis tersinkronisasi ke katalog kasir
           </span>
           <button
             type="button"

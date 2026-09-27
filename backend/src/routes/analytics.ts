@@ -1,10 +1,54 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import fs from 'fs';
+import path from 'path';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { getLocalDateRange, getCustomDateRange, getTodayDateStr } from '../utils/dateHelper';
+import { TenantContext } from '../utils/tenantContext';
+import { aiMenuOptimizerService } from '../services/AiMenuOptimizerService';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Helper untuk multi-tenant scoping
+function getTenantId(req: Request): string | undefined {
+  const user = (req as AuthRequest).user;
+  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+}
+
+/**
+ * Fail-CLOSED: selalu membutuhkan tenantId. Jika undefined → throw error.
+ * Mencegah full table scan lintas tenant saat context hilang.
+ */
+function tenantWhere(tenantId: string | undefined): { tenantId: string } {
+  if (!tenantId) throw new Error('MISSING_TENANT_ID: Analytics query requires tenant context');
+  return { tenantId };
+}
+
+/**
+ * Guard helper — return 400 jika tenantId tidak ada.
+ * Gunakan di awal setiap route handler sebelum query DB.
+ */
+function requireTenantId(req: Request, res: Response): string | null {
+  const tenantId = getTenantId(req);
+  if (!tenantId) {
+    res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    return null;
+  }
+  return tenantId;
+}
+
+// Router-level fail-closed guard: all analytics endpoints require authentication & tenant context
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const tenantId = getTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ 
+      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
+      code: 'MISSING_TENANT_CONTEXT' 
+    });
+  }
+  next();
+});
 
 // Helper to group by date in local timezone (default WIB UTC+7)
 function getPastDays(days: number, tzOffsetMinutes: number | string = -420) {
@@ -70,30 +114,44 @@ export function getCategoryGroup(prod: any): 'makanan' | 'minuman' | 'lainnya' {
 
 // Helper to classify petty cash / expenses for profit sharing division
 export function getExpenseDivision(cf: { category?: string; description?: string }): 'food' | 'drink' | 'shared_opex' {
-  const text = `${cf.category || ''} ${cf.description || ''}`.toLowerCase();
-  if (
-    text.includes('ramen') || text.includes('mie') || text.includes('dapur') ||
-    text.includes('food') || text.includes('chashu') || text.includes('kuah') ||
-    text.includes('nori') || text.includes('bumbu') || text.includes('ayam') ||
-    text.includes('daging') || text.includes('bawang') || text.includes('shoyu') ||
-    text.includes('naruto') || text.includes('makanan')
-  ) {
-    return 'food';
-  }
+  const cat = (cf.category || '').toLowerCase();
+  const desc = (cf.description || '').toLowerCase();
+  const text = `${cat} ${desc}`;
+
+  // Kategori eksplisit
+  if (cat.includes('makanan') || cat.includes('dapur') || cat.includes('kitchen') || cat.includes('food')) return 'food';
+  if (cat.includes('minuman') || cat.includes('bar') || cat.includes('drink') || cat.includes('beverage')) return 'drink';
+
   if (
     text.includes('minum') || text.includes('drink') || text.includes('bar') ||
     text.includes('kopi') || text.includes('coffee') || text.includes('susu') ||
     text.includes('syrup') || text.includes('sirup') || text.includes('teh') ||
     text.includes('tea') || text.includes('es batu') || text.includes('boba') ||
-    text.includes('yakult') || text.includes('matcha')
+    text.includes('yakult') || text.includes('matcha') || text.includes('jus') ||
+    text.includes('juice') || text.includes('beverage')
   ) {
     return 'drink';
   }
+
+  if (
+    text.includes('makan') || text.includes('food') || text.includes('dapur') ||
+    text.includes('kitchen') || text.includes('bumbu') || text.includes('ayam') ||
+    text.includes('daging') || text.includes('beef') || text.includes('ikan') ||
+    text.includes('seafood') || text.includes('bawang') || text.includes('sayur') ||
+    text.includes('mie') || text.includes('nasi') || text.includes('roti') ||
+    text.includes('tepung') || text.includes('minyak') || text.includes('snack') ||
+    text.includes('ramen') || text.includes('chashu') || text.includes('nori') ||
+    text.includes('burger') || text.includes('pizza') || text.includes('pasta')
+  ) {
+    return 'food';
+  }
+
   return 'shared_opex';
 }
 
 router.get('/sales-chart', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const days = Number(req.query.days) || 7;
     const tzOffset = (req.query.tzOffset as string) || -420;
     const pastDays = getPastDays(days, tzOffset);
@@ -102,7 +160,8 @@ router.get('/sales-chart', authenticateToken, async (req: Request, res: Response
     const orders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: startDate }
+        createdAt: { gte: startDate },
+        ...tenantWhere(tenantId)
       },
       select: { total: true, createdAt: true }
     });
@@ -130,8 +189,10 @@ router.get('/sales-chart', authenticateToken, async (req: Request, res: Response
 
 router.get('/best-sellers', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const orderItems = await prisma.orderItem.groupBy({
       by: ['productId'],
+      where: tenantWhere(tenantId),
       _sum: {
         qty: true
       },
@@ -145,7 +206,10 @@ router.get('/best-sellers', authenticateToken, async (req: Request, res: Respons
 
     const productIds = orderItems.map(item => item.productId);
     const products = await prisma.product.findMany({
-      where: { id: { in: productIds } }
+      where: { 
+        id: { in: productIds },
+        ...tenantWhere(tenantId)
+      }
     });
 
     const bestSellers = orderItems.map(item => {
@@ -166,6 +230,7 @@ router.get('/best-sellers', authenticateToken, async (req: Request, res: Respons
 
 router.get('/summary', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const tzOffset = (req.query.tzOffset as string) || -420;
     const todayStr = getTodayDateStr(tzOffset);
     const { startUtc: todayStart, endUtc: todayEnd } = getLocalDateRange(todayStr, tzOffset);
@@ -174,7 +239,8 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     const todayOrders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: todayStart, lte: todayEnd }
+        createdAt: { gte: todayStart, lte: todayEnd },
+        ...tenantWhere(tenantId)
       },
       include: {
         items: {
@@ -256,11 +322,14 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     })).sort((a, b) => a.hour.localeCompare(b.hour));
 
     // 2. Fetch Table Occupancy
-    const totalTables = await prisma.table.count();
+    const totalTables = await prisma.table.count({
+      where: tenantWhere(tenantId)
+    });
     const activeUnpaidOrders = await prisma.order.findMany({
       where: {
         status: 'Pending',
-        tableId: { not: null }
+        tableId: { not: null },
+        ...tenantWhere(tenantId)
       },
       select: {
         tableId: true
@@ -275,7 +344,8 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     const lowStockProducts = await prisma.product.findMany({
       where: {
         stock: { lte: 10 },
-        status: 'Aktif'
+        status: 'Aktif',
+        ...tenantWhere(tenantId)
       },
       select: {
         id: true,
@@ -291,6 +361,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 4. Fetch 5 Recent Transactions
     const recentTransactions = await prisma.order.findMany({
+      where: tenantWhere(tenantId),
       take: 5,
       orderBy: { createdAt: 'desc' },
       select: {
@@ -306,6 +377,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 5. Fetch 5 Recent Stock Mutations
     const recentStockLogs = await prisma.ingredientLog.findMany({
+      where: tenantWhere(tenantId),
       take: 5,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -320,7 +392,10 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 6. Fetch Active Cashier Shift
     const activeShift = await prisma.shift.findFirst({
-      where: { status: { in: ['Open', 'OPEN'] } },
+      where: { 
+        status: { in: ['Open', 'OPEN'] },
+        ...tenantWhere(tenantId)
+      },
       include: {
         user: { select: { id: true, name: true, username: true, role: true } }
       }
@@ -328,7 +403,10 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 7. Fetch Today's Crew on Duty (Live Attendances)
     const todayAttendances = await prisma.attendance.findMany({
-      where: { date: todayStr },
+      where: { 
+        date: todayStr,
+        ...tenantWhere(tenantId)
+      },
       include: {
         user: { select: { id: true, name: true, username: true, role: true } }
       },
@@ -340,7 +418,8 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       where: {
         status: { not: 'Void' },
         kdsStatus: { in: ['Pending', 'Cooking'] },
-        createdAt: { gte: todayStart, lte: todayEnd }
+        createdAt: { gte: todayStart, lte: todayEnd },
+        ...tenantWhere(tenantId)
       }
     });
 
@@ -355,7 +434,9 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     ];
 
     let activeTiers: any[] = defaultTiers;
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({
+      where: tenantWhere(tenantId)
+    });
     if (settings?.dailyOmzetTiers) {
       try {
         const parsed = JSON.parse(settings.dailyOmzetTiers);
@@ -441,6 +522,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 // GET Laporan Lengkap (Custom Date Range)
 router.get('/reports', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { startDate, endDate, tzOffset } = req.query;
     
     const todayStr = getTodayDateStr(tzOffset as string || -420);
@@ -455,7 +537,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
         createdAt: {
           gte: start,
           lte: end
-        }
+        },
+        ...tenantWhere(tenantId)
       },
       include: {
         items: {
@@ -471,7 +554,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     // 2. Fetch CashFlows in range
     const cashFlows = await prisma.cashFlow.findMany({
       where: {
-        date: { gte: start, lte: end }
+        date: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       }
     });
 
@@ -633,7 +717,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
         waktuTutup: {
           gte: start,
           lte: end
-        }
+        },
+        ...tenantWhere(tenantId)
       },
       include: {
         user: { select: { name: true } }
@@ -682,7 +767,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     const todayOrders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: todayStart, lte: todayEnd }
+        createdAt: { gte: todayStart, lte: todayEnd },
+        ...tenantWhere(tenantId)
       },
       include: {
         items: { include: { product: true } }
@@ -705,21 +791,30 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
 
     // Pending unpaid orders
     const pendingOrders = await prisma.order.findMany({
-      where: { status: 'Pending' }
+      where: { 
+        status: 'Pending',
+        ...tenantWhere(tenantId)
+      }
     });
     const pendingBillsAmount = pendingOrders.reduce((sum, o) => sum + o.total, 0);
     const pendingBillsCount = pendingOrders.length;
 
     // Today's Petty cash
     const todayCashflows = await prisma.cashFlow.findMany({
-      where: { date: { gte: todayStart, lte: todayEnd } }
+      where: { 
+        date: { gte: todayStart, lte: todayEnd },
+        ...tenantWhere(tenantId)
+      }
     });
     const todayExpenses = todayCashflows.filter(cf => cf.type === 'Pengeluaran').reduce((sum, cf) => sum + cf.amount, 0);
     const todayOtherIncomes = todayCashflows.filter(cf => cf.type === 'Pemasukan').reduce((sum, cf) => sum + cf.amount, 0);
 
     // Opening Cash of active shift
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'Open' }
+      where: { 
+        status: 'Open',
+        ...tenantWhere(tenantId)
+      }
     });
     const openingCash = activeShift?.saldoAwal || 0;
     const cashInDrawerEst = todayCashSales + openingCash - todayExpenses;
@@ -755,7 +850,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     const prevOrders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: prevStart, lte: prevEnd }
+        createdAt: { gte: prevStart, lte: prevEnd },
+        ...tenantWhere(tenantId)
       },
       select: { total: true }
     });
@@ -913,6 +1009,7 @@ const getPettyCashAccount = (category: string, type: 'Pemasukan' | 'Pengeluaran'
 // GET Laporan Akuntansi General (Laba Rugi, Arus Kas, Jurnal Ledger)
 router.get('/accounting', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { startDate, endDate, tzOffset } = req.query;
 
     const todayStr = getTodayDateStr(tzOffset as string || -420);
@@ -924,7 +1021,8 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
     const orders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: start, lte: end }
+        createdAt: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       },
       include: {
         items: {
@@ -939,7 +1037,8 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
     // 2. Fetch CashFlows in range
     const cashFlows = await prisma.cashFlow.findMany({
       where: {
-        date: { gte: start, lte: end }
+        date: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       },
       orderBy: { date: 'desc' }
     });
@@ -948,7 +1047,8 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
     const shifts = await prisma.shift.findMany({
       where: {
         status: 'Closed',
-        waktuTutup: { gte: start, lte: end }
+        waktuTutup: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       },
       include: {
         user: { select: { name: true } }
@@ -1141,6 +1241,7 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
 // GET Laporan Mutasi & Valuasi Stok Bahan Baku
 router.get('/inventory', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { startDate, endDate, tzOffset } = req.query;
 
     const todayStr = getTodayDateStr(tzOffset as string || -420);
@@ -1150,6 +1251,7 @@ router.get('/inventory', authenticateToken, async (req: Request, res: Response) 
 
     // 1. Fetch all ingredients
     const ingredients = await prisma.ingredient.findMany({
+      where: tenantWhere(tenantId),
       include: {
         supplier: { select: { name: true } }
       },
@@ -1159,14 +1261,16 @@ router.get('/inventory', authenticateToken, async (req: Request, res: Response) 
     // 2. Fetch all logs in the period
     const logs = await prisma.ingredientLog.findMany({
       where: {
-        createdAt: { gte: start, lte: end }
+        createdAt: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       }
     });
 
     // 3. Fetch all logs after end date to calculate starting/ending stocks relative to current stock
     const postPeriodLogs = await prisma.ingredientLog.findMany({
       where: {
-        createdAt: { gt: end }
+        createdAt: { gt: end },
+        ...tenantWhere(tenantId)
       }
     });
 
@@ -1251,7 +1355,9 @@ router.get('/inventory', authenticateToken, async (req: Request, res: Response) 
 // GET Laporan Detail Menu & Valuasi Persediaan Barang Jadi
 router.get('/product-details', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const products = await prisma.product.findMany({
+      where: tenantWhere(tenantId),
       include: {
         category: true
       },
@@ -1305,6 +1411,7 @@ router.get('/product-details', authenticateToken, async (req: Request, res: Resp
 // GET Laporan Bagi Hasil (Profit Sharing 80:20 / Custom)
 router.get('/profit-sharing', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { startDate, endDate, tzOffset } = req.query;
 
     const todayStr = getTodayDateStr(tzOffset as string || -420);
@@ -1313,7 +1420,9 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
 
     // 1. Fetch settings
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({
+      where: tenantWhere(tenantId)
+    });
     const ownerPct = settings?.profitSharingOwnerPercent ?? 80;
     const ramenPct = settings?.profitSharingRamenPercent ?? 20;
     const drinkPct = settings?.profitSharingDrinkPercent ?? 20;
@@ -1323,7 +1432,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     const orders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: start, lte: end }
+        createdAt: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       },
       include: {
         items: {
@@ -1339,7 +1449,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     // 3. Fetch CashFlows (Expenses) in range
     const cashFlows = await prisma.cashFlow.findMany({
       where: {
-        date: { gte: start, lte: end }
+        date: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       }
     });
 
@@ -1408,8 +1519,9 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     });
 
     // Calculate Division Net Profits based on opexMode
-    const foodTotalExpense = foodDirectExpense > 0 ? foodDirectExpense : foodHpp;
-    const drinkTotalExpense = drinkDirectExpense > 0 ? drinkDirectExpense : drinkHpp;
+    // HPP riil bahan resep + pengeluaran belanja langsung kasir/dapur
+    const foodTotalExpense = foodHpp + foodDirectExpense;
+    const drinkTotalExpense = drinkHpp + drinkDirectExpense;
 
     const foodGrossProfit = foodRevenue - foodTotalExpense;
     const drinkGrossProfit = drinkRevenue - drinkTotalExpense;
@@ -1519,8 +1631,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         else dSharedOpex += cf.amount;
       });
 
-      const dFoodCost = dFoodExp > 0 ? dFoodExp : dFoodHpp;
-      const dDrinkCost = dDrinkExp > 0 ? dDrinkExp : dDrinkHpp;
+      const dFoodCost = dFoodHpp + dFoodExp;
+      const dDrinkCost = dDrinkHpp + dDrinkExp;
       const dFoodNet = dFoodRev - dFoodCost;
       const dDrinkNet = dDrinkRev - dDrinkCost;
 
@@ -1544,6 +1656,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       iterDate.setUTCDate(iterDate.getUTCDate() + 1);
     }
 
+    const storeLabel = settings?.storeName || 'Resto';
+
     res.json({
       period: { startDate: sStr, endDate: eStr },
       config: {
@@ -1553,7 +1667,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         opexMode
       },
       foodDivision: {
-        name: 'MUKI RAMEN (Food & Kitchen)',
+        name: `${storeLabel} (Food & Kitchen)`,
         revenue: foodRevenue,
         hpp: foodHpp,
         directExpense: foodDirectExpense,
@@ -1567,7 +1681,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         percentage: totalGrossRevenue > 0 ? Math.round((foodRevenue / totalGrossRevenue) * 100) : 0
       },
       drinkDivision: {
-        name: 'MUKI DRINK (Beverage & Bar)',
+        name: `${storeLabel} (Beverage & Bar)`,
         revenue: drinkRevenue,
         hpp: drinkHpp,
         directExpense: drinkDirectExpense,
@@ -1638,6 +1752,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
 // GET Matrix Bonus Harian Omzet Karyawan & Rekap Absensi
 router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { startDate, endDate, tzOffset } = req.query;
 
     const todayStr = getTodayDateStr(tzOffset as string || -420);
@@ -1646,7 +1761,9 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
     const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
 
     // 1. Fetch settings & bonus tiers
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({
+      where: tenantWhere(tenantId)
+    });
     const enableDailyOmzetBonus = settings?.enableDailyOmzetBonus ?? true;
     
     let tiers: Array<{ minOmzet: number; bonus: number; label?: string }> = [
@@ -1672,14 +1789,18 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
     tiers.sort((a, b) => Number(b.minOmzet) - Number(a.minOmzet));
 
     // 2. Fetch all active employees (excluding Admin, Super Admin, and Owner for staff rewards document)
+    const userFilter: any = {
+      status: { not: 'Nonaktif' },
+      NOT: [
+        { role: { in: ['Admin', 'admin', 'Super Admin', 'superadmin', 'Owner', 'owner'] } },
+        { username: { in: ['admin', 'superadmin', 'owner'] } }
+      ]
+    };
+    if (tenantId) {
+      userFilter.memberships = { some: { tenantId, status: 'ACTIVE' } };
+    }
     const users = await prisma.user.findMany({
-      where: {
-        status: { not: 'Nonaktif' },
-        NOT: [
-          { role: { in: ['Admin', 'admin', 'Super Admin', 'superadmin', 'Owner', 'owner'] } },
-          { username: { in: ['admin', 'superadmin', 'owner'] } }
-        ]
-      },
+      where: userFilter,
       select: {
         id: true,
         name: true,
@@ -1699,7 +1820,8 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
     const orders = await prisma.order.findMany({
       where: {
         status: { not: 'Void' },
-        createdAt: { gte: start, lte: end }
+        createdAt: { gte: start, lte: end },
+        ...tenantWhere(tenantId)
       },
       select: {
         id: true,
@@ -1710,7 +1832,8 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
 
     const attendances = await prisma.attendance.findMany({
       where: {
-        date: { gte: sStr, lte: eStr }
+        date: { gte: sStr, lte: eStr },
+        ...tenantWhere(tenantId)
       }
     });
 
@@ -1882,7 +2005,8 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
     // 5. Fetch active employee loans
     const activeLoans = await prisma.employeeLoan.findMany({
       where: {
-        status: 'Belum Lunas'
+        status: 'Belum Lunas',
+        ...tenantWhere(tenantId)
       },
       include: {
         payments: true
@@ -1931,5 +2055,82 @@ router.get('/daily-omzet-bonus', authenticateToken, async (req: Request, res: Re
   }
 });
 
+// ─── POST /api/analytics/queue-export: Background Heavy Report Generation ───
+router.post('/queue-export', async (req: Request, res: Response) => {
+  try {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const { reportType, format, startDate, endDate, outletId } = req.body;
+    const user = (req as AuthRequest).user;
+
+    const { enqueueReportGeneration } = await import('../queues/reportQueue');
+    const job = await enqueueReportGeneration({
+      tenantId,
+      reportType: reportType || 'SALES_SUMMARY',
+      format: format || 'JSON',
+      startDate,
+      endDate,
+      outletId,
+      requestedByUserId: user?.id
+    });
+
+    res.status(202).json({
+      success: true,
+      status: 'QUEUED',
+      jobId: job.id,
+      message: `Laporan ${reportType || 'SALES_SUMMARY'} sedang diproses di background queue. Anda akan diberitahu saat file siap.`
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Gagal mendaftarkan antrean laporan' });
+  }
+});
+
+// ─── GET /api/analytics/download-report/:tenantId/:filename: Download Generated Report ───
+router.get('/download-report/:tenantId/:filename', async (req: Request, res: Response) => {
+  try {
+    const activeTenantId = requireTenantId(req, res);
+    if (!activeTenantId) return;
+
+    const { tenantId, filename } = req.params;
+
+    // Strict multi-tenant security check: ensure user only downloads reports belonging to their tenant
+    if (activeTenantId !== tenantId) {
+      return res.status(403).json({ error: 'Akses ditolak: Anda tidak memiliki izin mengunduh file tenant lain', code: 'CROSS_TENANT_FORBIDDEN' });
+    }
+
+    const safeFilename = path.basename(String(filename));
+    const filePath = path.resolve(process.cwd(), 'uploads', 'reports', 'temp', String(tenantId), safeFilename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File laporan tidak ditemukan atau sudah kedaluwarsa' });
+    }
+
+    res.download(filePath, safeFilename);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Gagal mengunduh file laporan' });
+  }
+});
+
+// ─── GET /api/analytics/ai-menu-advisor: AI Menu Engineering & Profit Protection Advisor ───
+router.get('/ai-menu-advisor', async (req: Request, res: Response) => {
+  try {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const forceRefresh = req.query.refresh === 'true';
+    const result = await aiMenuOptimizerService.analyzeMenu(tenantId, forceRefresh);
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('[AI Menu Advisor] Error:', error);
+    res.status(500).json({
+      error: error.message || 'Gagal memproses analisis AI Menu Advisor',
+      code: 'AI_MENU_ADVISOR_ERROR'
+    });
+  }
+});
+
 export default router;
+
 

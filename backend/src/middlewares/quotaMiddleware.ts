@@ -16,7 +16,8 @@ export function requireQuota(resourceType: 'outlet' | 'user' | 'product') {
         return next();
       }
 
-      const tenantId = TenantContext.getTenantId() || user?.tenantId || (req.headers['x-tenant-id'] as string) || 'tenant-default-muki';
+      const tenantId = TenantContext.getTenantId() || user?.tenantId || (req.headers['x-tenant-id'] as string);
+      if (!tenantId) return res.status(400).json({ error: 'Tenant context required', code: 'MISSING_TENANT_CONTEXT' });
 
       let checkResult;
       if (resourceType === 'outlet') {
