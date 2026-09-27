@@ -167,19 +167,26 @@ async function runGitPush() {
   try {
     const status = execSync('git status --porcelain', { cwd: ROOT_DIR, encoding: 'utf8' }).trim();
     if (!status) {
-      logWarn('Tidak ada perubahan lokal baru yang belum di-commit.');
-      console.log('   -> Memastikan remote origin/main sudah sinkron...');
-    } else {
-      console.log('   -> Menambahkan perubahan ke Git staging (git add .)...');
-      execSync('git add .', { cwd: ROOT_DIR, stdio: 'inherit' });
-
-      console.log(`   -> Commit perubahan dengan pesan: "${commitMsg}"...`);
-      execSync(`git commit -m "${commitMsg}"`, { cwd: ROOT_DIR, stdio: 'inherit' });
-      logSuccess('Git Commit berhasil dibuat.');
+      logWarn('Tidak ada perubahan lokal baru yang perlu di-commit.');
+      logSuccess('Repositori lokal bersih dan siap di-deploy ke VPS.');
+      return;
     }
 
+    console.log('   -> Menambahkan perubahan ke Git staging (git add .)...');
+    execSync('git add .', { cwd: ROOT_DIR, stdio: 'inherit' });
+
+    console.log(`   -> Commit perubahan dengan pesan: "${commitMsg}"...`);
+    execSync(`git commit -m "${commitMsg}"`, { cwd: ROOT_DIR, stdio: 'inherit' });
+    logSuccess('Git Commit berhasil dibuat.');
+
     console.log('   -> Mengunggah (git push origin main) ke GitHub...');
-    execSync('git push origin main', { cwd: ROOT_DIR, stdio: 'inherit' });
+    try {
+      execSync('git push origin main', { cwd: ROOT_DIR, stdio: 'inherit' });
+    } catch (pushErr) {
+      logWarn('Push gagal, mencoba flush DNS dan mengulang push...');
+      execSync('ipconfig /flushdns', { stdio: 'ignore' });
+      execSync('git push origin main', { cwd: ROOT_DIR, stdio: 'inherit' });
+    }
     logSuccess('Git Push ke origin/main BERHASIL!');
   } catch (err) {
     logError(`Gagal melakukan operasi Git: ${err.message}`);
