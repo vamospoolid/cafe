@@ -258,7 +258,7 @@ async function runRemoteVpsDeploy() {
         npx prisma generate
 
         echo "   -> Menyelaraskan skema database (Safe DB Push)..."
-        npx prisma db push --skip-generate
+        npx prisma db push --skip-generate --accept-data-loss
 
         echo "   -> Menjalankan seed foundation & vertikal..."
         npx ts-node prisma/seed_foundation.ts || true
