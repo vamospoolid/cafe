@@ -714,172 +714,349 @@ export default function WarehouseView() {
   return (
     <div className="p-3 sm:p-6 pb-28 sm:pb-16 w-full flex flex-col gap-4">
       {/* Top Header & Title */}
-      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row justify-between sm:items-center gap-3.5">
+      <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <div>
-          <h2 className="text-lg sm:text-2xl font-black flex items-center gap-2 text-slate-900 leading-tight">
+          <h2 className="text-base sm:text-2xl font-black flex items-center gap-2 text-slate-900 leading-tight">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Boxes size={20} />
+              <Boxes size={18} />
             </div>
             <span>{vConfig.title}</span>
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
             {vConfig.subtitle}
           </p>
         </div>
 
-        {/* Action Buttons Toolbar (Mobile 2-Column Grid / Desktop Row) */}
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Tombol 1: Input Belanja Masuk */}
+        {/* Action Buttons Toolbar: matched with IngredientView styling */}
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+          {/* Tombol 1: Input Belanja Masuk (Primary Gradient) */}
           <button
             type="button"
             onClick={() => setShowInboundModal(true)}
-            className="flex-1 sm:flex-initial py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            className="flex-1 sm:flex-none py-2 px-2.5 sm:py-2.5 sm:px-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl text-[11px] sm:text-xs font-bold shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center"
             title={vConfig.inboundBtnTooltip}
           >
-            <Plus size={15} />
-            <span>{vConfig.inboundBtnText}</span>
+            <Plus size={15} className="shrink-0" />
+            <span className="truncate">{vConfig.inboundBtnText}</span>
           </button>
 
           {/* Tombol 2: Transfer / Distribusi */}
           <button
             type="button"
             onClick={() => setShowTransferModal(true)}
-            className="flex-1 sm:flex-initial py-2.5 px-3.5 bg-indigo-50 hover:bg-indigo-100 active:scale-[0.98] text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            className="flex-1 sm:flex-none py-2 px-2 sm:py-2.5 sm:px-3 bg-white hover:bg-indigo-50 text-indigo-700 border border-slate-200 hover:border-indigo-200 rounded-xl text-[11px] sm:text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center"
             title={vConfig.transferBtnTooltip}
           >
-            <ArrowRightLeft size={15} />
-            <span>{vConfig.transferBtnText}</span>
+            <ArrowRightLeft size={13} className="shrink-0 text-indigo-600" />
+            <span className="truncate">{vConfig.transferBtnText}</span>
           </button>
 
           {/* Tombol 3: Jual Grosir (B2B) */}
           <button
             type="button"
             onClick={() => setShowSaleModal(true)}
-            className="col-span-2 sm:col-span-1 py-2 sm:py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 active:scale-[0.98] text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            className="flex-1 sm:flex-none py-2 px-2 sm:py-2.5 sm:px-3 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 hover:border-emerald-300 rounded-xl text-[11px] sm:text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center"
             title="Penjualan grosir ke luar / partai besar"
           >
-            <TrendingUp size={14} />
-            <span>{vConfig.salesBtnText}</span>
+            <TrendingUp size={13} className="shrink-0 text-emerald-600" />
+            <span className="truncate">{vConfig.salesBtnText}</span>
+          </button>
+
+          {/* Tombol 4: Refresh Data */}
+          <button
+            type="button"
+            onClick={() => fetchData()}
+            title="Perbarui Data Gudang"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
       {/* KPI Cards Header */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         {/* Total Nilai Aset Gudang */}
-        <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Package size={22} />
+        <div className="bg-white p-3 sm:p-4 shadow-2xs sm:shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Package size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{vConfig.kpi1Title}</div>
-            <div className="text-base sm:text-xl font-black text-slate-900">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">{vConfig.kpi1Title}</div>
+            <div className="text-xs sm:text-lg font-black text-slate-900 truncate mt-0.5">
               {formatCurrency(dashboardData?.totalAssetValue || 0)}
             </div>
           </div>
         </div>
 
         {/* Investasi Pengadaan Pusat */}
-        <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <ArrowDownLeft size={22} />
+        <div className="bg-white p-3 sm:p-4 shadow-2xs sm:shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <ArrowDownLeft size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{vConfig.kpi2Title}</div>
-            <div className="text-base sm:text-xl font-black text-slate-900">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">{vConfig.kpi2Title}</div>
+            <div className="text-xs sm:text-lg font-black text-slate-900 truncate mt-0.5">
               {formatCurrency(dashboardData?.totalCapitalIn || 0)}
             </div>
           </div>
         </div>
 
         {/* Realisasi Distribusi Outlet / Transfer */}
-        <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-            <ArrowUpRight size={22} />
+        <div className="bg-white p-3 sm:p-4 shadow-2xs sm:shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <ArrowUpRight size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{vConfig.kpi3Title}</div>
-            <div className="text-base sm:text-xl font-black text-slate-900">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">{vConfig.kpi3Title}</div>
+            <div className="text-xs sm:text-lg font-black text-slate-900 truncate mt-0.5">
               {formatCurrency(dashboardData?.totalTransferredToResto || 0)}
             </div>
           </div>
         </div>
 
         {/* Kewajiban Settlement / B2B */}
-        <div className="card p-4 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-md shadow-amber-200 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
-            <Wallet size={22} />
+        <div className="bg-amber-50/70 p-3 sm:p-4 border border-amber-200/80 shadow-2xs sm:shadow-sm rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500/15 text-amber-700 flex items-center justify-center shrink-0">
+            <Wallet size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-amber-100 font-bold uppercase tracking-wider">{vConfig.kpi4Title}</div>
-            <div className="text-base sm:text-xl font-black text-white">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-amber-800 font-bold uppercase tracking-wider truncate">{vConfig.kpi4Title}</div>
+            <div className="text-xs sm:text-lg font-black text-amber-950 truncate mt-0.5">
               {formatCurrency(dashboardData?.currentOwnerPayable || 0)}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('stock')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'stock'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Layers size={16} /> {vConfig.tabStockTitle} ({filteredStock.length})
-        </button>
+      {/* ── MOBILE 5-TAB SUPER APP ICON HUB (sm:!hidden, matched with IngredientView) ── */}
+      <div className="bento-nav-mobile sm:!hidden bg-white rounded-2xl border border-slate-200/90 p-2 shadow-xs shrink-0">
+        <div className="grid grid-cols-6 gap-1.5">
+          {[
+            {
+              id: 'stock',
+              title: 'Stok Gudang',
+              icon: Layers,
+              badge: filteredStock.length > 0 ? `${filteredStock.length}` : null,
+              pulseBadge: null,
+              color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+              activeColor: 'from-indigo-600 to-blue-600 text-white shadow-indigo-500/30',
+              colSpan: 'col-span-2'
+            },
+            {
+              id: 'inbound',
+              title: 'Pasokan Masuk',
+              icon: Truck,
+              badge: inbounds.length > 0 ? `${inbounds.length}` : null,
+              pulseBadge: null,
+              color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+              activeColor: 'from-emerald-600 to-teal-600 text-white shadow-emerald-500/30',
+              colSpan: 'col-span-2'
+            },
+            {
+              id: 'sales',
+              title: 'Jual Grosir',
+              icon: TrendingUp,
+              badge: sales.length > 0 ? `${sales.length}` : null,
+              pulseBadge: null,
+              color: 'text-teal-600 bg-teal-50 border-teal-100',
+              activeColor: 'from-teal-600 to-cyan-600 text-white shadow-teal-500/30',
+              colSpan: 'col-span-2'
+            },
+            {
+              id: 'transfers',
+              title: vConfig.tabTransferTitle || 'Distribusi Cabang',
+              icon: ArrowRightLeft,
+              badge: transfers.length > 0 ? `${transfers.length}` : null,
+              pulseBadge: transfers.filter(t => t.status === 'PENDING').length > 0 ? `${transfers.filter(t => t.status === 'PENDING').length} Baru` : null,
+              color: 'text-purple-600 bg-purple-50 border-purple-100',
+              activeColor: 'from-purple-600 to-indigo-600 text-white shadow-purple-500/30',
+              colSpan: 'col-span-3'
+            },
+            {
+              id: 'finance',
+              title: vConfig.tabFinanceTitle || 'Rekonsiliasi Modal',
+              icon: Coins,
+              badge: 'Audit',
+              pulseBadge: null,
+              color: 'text-amber-600 bg-amber-50 border-amber-100',
+              activeColor: 'from-amber-500 to-orange-600 text-white shadow-amber-500/30',
+              colSpan: 'col-span-3'
+            }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`relative flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all active:scale-95 cursor-pointer ${tab.colSpan} ${
+                  isSelected
+                    ? `bg-gradient-to-br ${tab.activeColor} shadow-md`
+                    : 'bg-slate-50/70 hover:bg-slate-100/90 border border-slate-100 text-slate-700'
+                }`}
+              >
+                {/* Micro Badge */}
+                {tab.pulseBadge ? (
+                  <span className="absolute top-1 right-1 text-[8px] px-1.5 py-0.2 rounded-full font-black tracking-tight bg-rose-500 text-white animate-pulse">
+                    {tab.pulseBadge}
+                  </span>
+                ) : tab.badge ? (
+                  <span className={`absolute top-1 right-1 text-[8px] px-1.5 py-0.2 rounded-full font-black tracking-tight ${
+                    isSelected ? 'bg-white/25 text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                ) : null}
 
-        <button
-          onClick={() => setActiveTab('inbound')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'inbound'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Truck size={16} /> Penerimaan Pasokan ({inbounds.length})
-        </button>
+                {/* Squircle Icon Box */}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1 transition-all ${
+                  isSelected ? 'bg-white/20 text-white' : `${tab.color} border`
+                }`}>
+                  <Icon size={16} />
+                </div>
 
-        <button
-          onClick={() => setActiveTab('sales')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'sales'
-              ? 'border-emerald-600 text-emerald-700'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <TrendingUp size={16} /> Penjualan Keluar (B2B) ({sales.length})
-        </button>
+                {/* Micro Label */}
+                <span className={`text-[10px] font-black leading-tight line-clamp-1 ${
+                  isSelected ? 'text-white font-extrabold' : 'text-slate-800'
+                }`}>
+                  {tab.title}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-        <button
-          onClick={() => setActiveTab('transfers')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'transfers'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <ArrowRightLeft size={16} /> {vConfig.tabTransferTitle} ({transfers.length})
-          {transfers.filter(t => t.status === 'PENDING').length > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black">
-              {transfers.filter(t => t.status === 'PENDING').length}
-            </span>
-          )}
-        </button>
+      {/* ── DESKTOP & TABLET BENTO GRID (bento-nav-desktop, matched with IngredientView) ── */}
+      <div className="bento-nav-desktop hidden sm:!grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0 bg-white rounded-3xl p-3 sm:p-4 border border-slate-200/90 shadow-sm">
+        {[
+          {
+            id: 'stock',
+            title: vConfig.tabStockTitle || 'Stok Gudang',
+            subtitle: 'Katalog & Valuasi Fisik',
+            icon: Layers,
+            badge: filteredStock.length > 0 ? `${filteredStock.length} Item` : null,
+            pulseBadge: null
+          },
+          {
+            id: 'inbound',
+            title: 'Pasokan Masuk',
+            subtitle: 'Belanja Masuk Supplier',
+            icon: Truck,
+            badge: inbounds.length > 0 ? `${inbounds.length} Masuk` : null,
+            pulseBadge: null
+          },
+          {
+            id: 'sales',
+            title: 'Jual Grosir (B2B)',
+            subtitle: 'Penjualan Pihak Luar',
+            icon: TrendingUp,
+            badge: sales.length > 0 ? `${sales.length} Faktur` : null,
+            pulseBadge: null
+          },
+          {
+            id: 'transfers',
+            title: vConfig.tabTransferTitle || 'Distribusi Cabang',
+            subtitle: 'Pengeluaran ke Unit Dapur',
+            icon: ArrowRightLeft,
+            badge: transfers.length > 0 ? `${transfers.length} Mutasi` : null,
+            pulseBadge: transfers.filter(t => t.status === 'PENDING').length > 0 ? `${transfers.filter(t => t.status === 'PENDING').length} Baru` : null
+          },
+          {
+            id: 'finance',
+            title: vConfig.tabFinanceTitle || 'Rekonsiliasi Modal',
+            subtitle: 'Audit Settlement Owner',
+            icon: Coins,
+            badge: 'Audit',
+            pulseBadge: null
+          }
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isSelected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as any)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.75rem',
+                padding: '.75rem 1rem',
+                background: isSelected
+                  ? 'linear-gradient(135deg, #4f46e5 0%, #2563eb 100%)'
+                  : '#f8fafc',
+                color: isSelected ? '#ffffff' : '#334155',
+                border: isSelected ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+                borderRadius: '.85rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                textAlign: 'left',
+                boxShadow: isSelected ? '0 4px 12px rgba(79, 70, 229, 0.25)' : 'none',
+                width: '100%'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '.65rem',
+                  background: isSelected ? 'rgba(255,255,255,0.2)' : '#e0e7ff',
+                  color: isSelected ? '#ffffff' : '#4f46e5',
+                  flexShrink: 0
+                }}
+              >
+                <Icon size={18} />
+              </div>
 
-        <button
-          onClick={() => setActiveTab('finance')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'finance'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Coins size={16} /> {vConfig.tabFinanceTitle}
-        </button>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.25rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '.85rem', color: isSelected ? '#ffffff' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {tab.title}
+                  </span>
+                  {tab.pulseBadge ? (
+                    <span
+                      style={{
+                        fontSize: '.62rem',
+                        padding: '.12rem .4rem',
+                        background: '#ef4444',
+                        color: '#ffffff',
+                        borderRadius: '9999px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}
+                      className="animate-pulse"
+                    >
+                      {tab.pulseBadge}
+                    </span>
+                  ) : tab.badge ? (
+                    <span
+                      style={{
+                        fontSize: '.62rem',
+                        padding: '.12rem .4rem',
+                        background: isSelected ? 'rgba(255,255,255,0.25)' : '#e0e7ff',
+                        color: isSelected ? '#ffffff' : '#4338ca',
+                        borderRadius: '9999px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {tab.badge}
+                    </span>
+                  ) : null}
+                </div>
+                <span style={{ fontSize: '.72rem', color: isSelected ? 'rgba(255,255,255,0.8)' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tab.subtitle}
+                </span>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* ─── TAB 1: STOK BARANG / RAK GUDANG ─────────────────────────────────── */}
@@ -887,38 +1064,37 @@ export default function WarehouseView() {
         <div className="flex flex-col gap-3">
           {/* Search & Filter Toolbar */}
           <div className="card p-3 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex flex-col sm:flex-row gap-2.5 items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-2.5 items-center flex-1 w-full">
-              <div className="relative flex-1 w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                <input
-                  type="text"
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  placeholder={vConfig.searchPlaceholder}
-                  value={searchStock}
-                  onChange={e => setSearchStock(e.target.value)}
-                />
-              </div>
-              <div className="w-full sm:w-48 shrink-0">
-                <select
-                  className="w-full px-3 py-2 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  value={filterCategory}
-                  onChange={e => setFilterCategory(e.target.value)}
-                >
-                  <option value="">Semua Kategori</option>
-                  {Array.from(new Set(stockList.map(s => s.category).filter(Boolean))).map((cat: any) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+              <input
+                type="text"
+                className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                placeholder={vConfig.searchPlaceholder}
+                value={searchStock}
+                onChange={e => setSearchStock(e.target.value)}
+              />
             </div>
 
-            <button
-              onClick={handleExportStockPDF}
-              className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95"
-              title="Download Laporan Rekap Stok & Valuasi Aset Gudang (PDF)"
-            >
-              <FileText size={14} className="text-rose-500" /> Export PDF
-            </button>
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto shrink-0">
+              <select
+                className="w-full sm:w-48 px-3 py-2 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                value={filterCategory}
+                onChange={e => setFilterCategory(e.target.value)}
+              >
+                <option value="">Semua Kategori</option>
+                {Array.from(new Set(stockList.map(s => s.category).filter(Boolean))).map((cat: any) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+
+              <button
+                onClick={handleExportStockPDF}
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95 cursor-pointer"
+                title="Download Laporan Rekap Stok & Valuasi Aset Gudang (PDF)"
+              >
+                <FileText size={14} className="text-rose-500" /> Export PDF
+              </button>
+            </div>
           </div>
 
           {/* Table Container (Desktop) & Card List (Mobile) */}
@@ -1132,24 +1308,24 @@ export default function WarehouseView() {
       {/* ─── TAB 2: INBOUND (BARANG MASUK DARI SUPPLIER) ──────────────────── */}
       {activeTab === 'inbound' && (
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-3">
             <div>
               <h3 className="text-sm font-black text-slate-800">Riwayat Penerimaan Pasokan Masuk Gudang</h3>
               <p className="text-[11px] text-slate-500">Pencatatan pasokan partai besar / grosir (Kasir POS tidak berkurang)</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={handleExportInboundPDF}
-                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-1.5 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all"
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 title="Download Laporan Rekap Pasokan Masuk (PDF)"
               >
                 <FileText size={14} className="text-rose-500" /> Export PDF
               </button>
               <button
                 onClick={() => setShowInboundModal(true)}
-                className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                className="btn btn-primary py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
               >
-                <Plus size={14} /> + Penerimaan Pasokan Masuk
+                <Plus size={14} /> Penerimaan Pasokan
               </button>
             </div>
           </div>
@@ -1301,8 +1477,8 @@ export default function WarehouseView() {
 
       {/* ─── TAB PENJUALAN KELUAR B2B / PIHAK LUAR ─────────────────────────── */}
       {activeTab === 'sales' && (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-3">
             <div>
               <h3 className="text-sm font-black text-slate-800">
                 Riwayat Penjualan Grosir B2B &bull; Pihak Luar &amp; Mitra
@@ -1313,52 +1489,55 @@ export default function WarehouseView() {
             </div>
             <button
               onClick={() => setShowSaleModal(true)}
-              className="btn bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              className="btn bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
             >
-              <TrendingUp size={14} /> + Transaksi Penjualan B2B
+              <TrendingUp size={14} /> Transaksi Penjualan B2B
             </button>
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <Coins size={20} />
+          {/* Quick Metrics Bar: 3-column compact on mobile, 3 cards on desktop */}
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+              <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <Coins size={15} className="sm:hidden" />
+                <Coins size={20} className="hidden sm:block" />
               </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Omzet Penjualan B2B</div>
-                <div className="text-base font-black text-slate-900">
+              <div className="min-w-0">
+                <div className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase truncate">Total Omzet B2B</div>
+                <div className="text-xs sm:text-base font-black text-slate-900 truncate mt-0.5">
                   {formatCurrency(sales.filter(s => !s.isVoided).reduce((sum, s) => sum + s.totalAmount, 0))}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-                <TrendingUp size={20} />
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+              <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <TrendingUp size={15} className="sm:hidden" />
+                <TrendingUp size={20} className="hidden sm:block" />
               </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase">Akumulasi Laba Kotor Grosir</div>
-                <div className="text-base font-black text-emerald-600">
+              <div className="min-w-0">
+                <div className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase truncate">Laba Kotor</div>
+                <div className="text-xs sm:text-base font-black text-emerald-600 truncate mt-0.5">
                   +{formatCurrency(sales.filter(s => !s.isVoided).reduce((sum, s) => sum + s.grossProfit, 0))}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <Package size={20} />
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+              <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Package size={15} className="sm:hidden" />
+                <Package size={20} className="hidden sm:block" />
               </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Faktur Diterbitkan</div>
-                <div className="text-base font-black text-slate-900">
-                  {sales.filter(s => !s.isVoided).length} Faktur Aktif
+              <div className="min-w-0">
+                <div className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase truncate">Faktur Terbit</div>
+                <div className="text-xs sm:text-base font-black text-slate-900 truncate mt-0.5">
+                  {sales.filter(s => !s.isVoided).length} <span className="text-[10px] font-normal text-slate-400 hidden sm:inline">Aktif</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Sales Table */}
+          {/* Sales Table (Desktop) & Card List (Mobile) */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             {sales.length === 0 ? (
               <div className="p-12 text-center text-slate-400 text-xs font-medium flex flex-col items-center gap-2">
@@ -1368,117 +1547,208 @@ export default function WarehouseView() {
                   onClick={() => setShowSaleModal(true)}
                   className="mt-2 text-emerald-600 font-bold hover:underline"
                 >
-                  + Buat Penjualan Grosir Pertama
+                  Buat Penjualan Grosir Pertama
                 </button>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase">
-                      <th className="p-3.5">No. Faktur B2B</th>
-                      <th className="p-3.5">Tanggal</th>
-                      <th className="p-3.5">Pembeli / Kafe Mitra</th>
-                      <th className="p-3.5">Bahan Yang Dijual</th>
-                      <th className="p-3.5 text-right">Nilai Transaksi</th>
-                      <th className="p-3.5 text-right">Laba Grosir</th>
-                      <th className="p-3.5 text-center">Status</th>
-                      <th className="p-3.5 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {sales.map(s => (
-                      <tr key={s.id} className={`hover:bg-slate-50 transition-colors ${s.isVoided ? 'opacity-50' : ''}`}>
-                        <td className="p-3.5">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-mono font-bold text-indigo-700">{s.invoiceNumber}</span>
-                            {s.isVoided && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
-                                <Ban size={9} /> DIBATALKAN
-                              </span>
+              <>
+                {/* ── DESKTOP TABLE (hidden md:block) ── */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase">
+                        <th className="p-3.5">No. Faktur B2B</th>
+                        <th className="p-3.5">Tanggal</th>
+                        <th className="p-3.5">Pembeli / Kafe Mitra</th>
+                        <th className="p-3.5">Bahan Yang Dijual</th>
+                        <th className="p-3.5 text-right">Nilai Transaksi</th>
+                        <th className="p-3.5 text-right">Laba Grosir</th>
+                        <th className="p-3.5 text-center">Status</th>
+                        <th className="p-3.5 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sales.map(s => (
+                        <tr key={s.id} className={`hover:bg-slate-50 transition-colors ${s.isVoided ? 'opacity-50' : ''}`}>
+                          <td className="p-3.5">
+                            <div className="flex flex-col gap-1">
+                              <span className="font-mono font-bold text-indigo-700">{s.invoiceNumber}</span>
+                              {s.isVoided && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
+                                  <Ban size={9} /> DIBATALKAN
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-slate-500 whitespace-nowrap">
+                            {new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="font-bold text-slate-800">{s.customerName}</div>
+                            {s.customerPhone && (
+                              <div className="text-[10px] text-slate-400">{s.customerPhone}</div>
                             )}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="flex flex-col gap-0.5 max-w-xs">
+                              {(s.items || []).map((it: any) => (
+                                <span key={it.id} className="text-[11px] text-slate-700">
+                                  &bull; {it.itemName}: <strong>{it.saleQty} {it.saleUnit}</strong> ({it.baseQty} {it.ingredient?.unit || 'dasar'})
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-right font-black text-slate-900 text-sm whitespace-nowrap">
+                            <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                              {formatCurrency(s.totalAmount)}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right font-black text-emerald-600 text-xs whitespace-nowrap">
+                            <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                              +{formatCurrency(s.grossProfit)}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                              s.isVoided
+                                ? 'bg-red-50 text-red-700 border-red-200'
+                                : s.paymentStatus === 'PAID'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {s.isVoided ? 'Batal (Void)' : s.paymentStatus === 'PAID' ? 'Lunas' : 'Pending'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedSaleForPrint(s);
+                                  setShowSaleInvoiceModal(true);
+                                }}
+                                title="Lihat & Cetak Faktur / Surat Jalan"
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Printer size={12} /> Cetak
+                              </button>
+                              {!s.isVoided && (
+                                <button
+                                  onClick={() => {
+                                    setVoidSaleTarget(s);
+                                    setVoidSaleReason('');
+                                    setShowVoidSaleModal(true);
+                                  }}
+                                  title="Batalkan / Koreksi Penjualan"
+                                  className="p-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors cursor-pointer"
+                                >
+                                  <Ban size={13} />
+                                </button>
+                              )}
+                            </div>
+                            {s.isVoided && s.voidReason && (
+                              <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[160px] ml-auto">
+                                Alasan: {s.voidReason}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (block md:hidden) ── */}
+                <div className="block md:hidden divide-y divide-slate-100">
+                  {sales.map(s => (
+                    <div key={s.id} className={`p-3.5 flex flex-col gap-2.5 bg-white hover:bg-slate-50/80 transition-colors ${s.isVoided ? 'opacity-50' : ''}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-mono font-black text-indigo-700 text-xs">{s.invoiceNumber}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </div>
-                        </td>
-                        <td className="p-3.5 text-slate-500 whitespace-nowrap">
-                          {new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
-                        </td>
-                        <td className="p-3.5">
-                          <div className="font-bold text-slate-800">{s.customerName}</div>
-                          {s.customerPhone && (
-                            <div className="text-[10px] text-slate-400">{s.customerPhone}</div>
-                          )}
-                        </td>
-                        <td className="p-3.5">
-                          <div className="flex flex-col gap-0.5 max-w-xs">
-                            {(s.items || []).map((it: any) => (
-                              <span key={it.id} className="text-[11px] text-slate-700">
-                                &bull; {it.itemName}: <strong>{it.saleQty} {it.saleUnit}</strong> ({it.baseQty} {it.ingredient?.unit || 'dasar'})
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3.5 text-right font-black text-slate-900 text-sm whitespace-nowrap">
-                          <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
-                            {formatCurrency(s.totalAmount)}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right font-black text-emerald-600 text-xs whitespace-nowrap">
-                          <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
-                            +{formatCurrency(s.grossProfit)}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-center whitespace-nowrap">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${
                             s.isVoided
                               ? 'bg-red-50 text-red-700 border-red-200'
                               : s.paymentStatus === 'PAID'
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                               : 'bg-amber-50 text-amber-700 border-amber-200'
                           }`}>
-                            {s.isVoided ? 'Batal (Void)' : s.paymentStatus === 'PAID' ? 'Lunas' : 'Pending'}
+                            {s.isVoided ? 'Batal' : s.paymentStatus === 'PAID' ? 'Lunas' : 'Pending'}
                           </span>
-                        </td>
-                        <td className="p-3.5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
+                        </div>
+                      </div>
+
+                      <div className="text-xs">
+                        <div className="font-bold text-slate-800">{s.customerName}</div>
+                        {s.customerPhone && (
+                          <div className="text-[10px] text-slate-400">{s.customerPhone}</div>
+                        )}
+                      </div>
+
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex flex-col gap-1">
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">Item Penjualan:</div>
+                        {(s.items || []).map((it: any) => (
+                          <div key={it.id} className="text-xs text-slate-700 flex justify-between">
+                            <span>{it.itemName}</span>
+                            <span className="font-bold">{it.saleQty} {it.saleUnit} <span className="font-normal text-slate-400">({it.baseQty} {it.ingredient?.unit || 'dasar'})</span></span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          <div className="text-xs font-black text-slate-900">
+                            <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                              {formatCurrency(s.totalAmount)}
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-bold text-emerald-600">
+                            Laba: +{formatCurrency(s.grossProfit)}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setSelectedSaleForPrint(s);
+                              setShowSaleInvoiceModal(true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all"
+                          >
+                            <Printer size={12} /> Cetak
+                          </button>
+                          {!s.isVoided && (
                             <button
                               onClick={() => {
-                                setSelectedSaleForPrint(s);
-                                setShowSaleInvoiceModal(true);
+                                setVoidSaleTarget(s);
+                                setVoidSaleReason('');
+                                setShowVoidSaleModal(true);
                               }}
-                              title="Lihat & Cetak Faktur / Surat Jalan"
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all"
+                              title="Batalkan Penjualan"
                             >
-                              <Printer size={12} /> Cetak
+                              <Ban size={13} />
                             </button>
-                            {!s.isVoided && (
-                              <button
-                                onClick={() => {
-                                  setVoidSaleTarget(s);
-                                  setVoidSaleReason('');
-                                  setShowVoidSaleModal(true);
-                                }}
-                                title="Batalkan / Koreksi Penjualan"
-                                className="p-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                              >
-                                <Ban size={13} />
-                              </button>
-                            )}
-                          </div>
-                          {s.isVoided && s.voidReason && (
-                            <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[160px] ml-auto">
-                              Alasan: {s.voidReason}
-                            </div>
                           )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                      </div>
+
+                      {s.isVoided && s.voidReason && (
+                        <div className="text-[10px] text-red-500 italic bg-red-50 p-1.5 rounded-lg border border-red-100">
+                          Alasan batal: {s.voidReason}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1487,16 +1757,16 @@ export default function WarehouseView() {
       {/* ─── TAB 3: PERMINTAAN & DISTRIBUSI KE DAPUR CABANG ────────────────── */}
       {activeTab === 'transfers' && (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-3">
             <div>
               <h3 className="text-sm font-black text-slate-800">Riwayat Pengajuan &amp; Distribusi Bahan ke Dapur Cabang</h3>
               <p className="text-[11px] text-slate-500">Stok berpindah saat dapur mengonfirmasi penerimaan bahan</p>
             </div>
             <button
               onClick={() => setShowTransferModal(true)}
-              className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+              className="btn btn-primary py-2 px-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 w-full sm:w-auto"
             >
-              <Plus size={14} /> + Permintaan Bahan Baru
+              <Plus size={14} /> Permintaan Bahan Baru
             </button>
           </div>
 
@@ -1723,10 +1993,10 @@ export default function WarehouseView() {
                 Akumulasi nilai bahan baku yang telah didistribusikan ke unit operasional dapur cabang yang belum diselesaikan (settled) kembali ke entitas modal pusat.
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={handleExportSettlementPDF}
-                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                 title="Download Laporan Rekonsiliasi & Settlement Owner (PDF)"
               >
                 <FileText size={16} className="text-rose-400" /> Export PDF
@@ -1739,9 +2009,9 @@ export default function WarehouseView() {
                   }));
                   setShowReimburseModal(true);
                 }}
-                className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Coins size={16} /> Proses Settlement / Pelunasan
+                <Coins size={16} /> Proses Settlement
               </button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, Trash2, Headphones, MessageSquare, Send, ExternalLink, HelpCircle, CheckCircle2, AlertCircle, FileText, Wrench } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, Trash2, Headphones, MessageSquare, Send, ExternalLink, HelpCircle, CheckCircle2, AlertCircle, FileText, Wrench, ChevronRight, ChevronDown } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { useVertical } from '../context/VerticalContext';
 
@@ -22,7 +22,10 @@ import TenantResetModal from './TenantResetModal';
 import RecycleBinModal from './RecycleBinModal';
 
 const SettingsView = () => {
-  const { isBengkel, isRetail } = useVertical();
+  const { isBengkel, isRetail, isCafe, isLaundry, businessType, profile } = useVertical();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [mobileNavMode, setMobileNavMode] = useState<'grid' | 'slider'>('grid');
   const [activeTab, setActiveTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('tab') || 'profil';
@@ -461,72 +464,372 @@ const SettingsView = () => {
     }
   };
 
+  // Universal business vertical details
+  const getVerticalBadge = () => {
+    if (isBengkel) return { label: 'BENGKEL', color: 'bg-amber-500/10 text-amber-700 border-amber-200/80' };
+    if (isRetail) return { label: 'RETAIL / TOKO', color: 'bg-emerald-500/10 text-emerald-700 border-emerald-200/80' };
+    if (isLaundry) return { label: 'LAUNDRY', color: 'bg-cyan-500/10 text-cyan-700 border-cyan-200/80' };
+    return { label: 'KAFE & RESTO', color: 'bg-indigo-500/10 text-indigo-700 border-indigo-200/80' };
+  };
+
+  const getVerticalStoreLabel = () => {
+    if (isBengkel) return 'Bengkel';
+    if (isRetail) return 'Toko / Retail';
+    if (isLaundry) return 'Laundry';
+    return 'Kafe & Resto';
+  };
+
+  const getVerticalPrinterLabel = () => {
+    if (isBengkel) return 'Printer Struk & SPK';
+    if (isRetail) return 'Printer Kasir & Barcode';
+    if (isLaundry) return 'Printer Nota & Label Cuci';
+    return 'Printer Struk & KDS';
+  };
+
+  const verticalBadge = getVerticalBadge();
+  const verticalStore = getVerticalStoreLabel();
+  const verticalPrinter = getVerticalPrinterLabel();
+
+  // Settings Clusters for mobile & desktop navigation
+  const SETTINGS_CATEGORIES = [
+    { id: 'all', label: 'Semua', icon: Sliders },
+    { id: 'store', label: 'Toko & Brand', icon: Store },
+    { id: 'pos', label: 'Hardware Kasir', icon: Printer },
+    { id: 'finance', label: 'Transaksi & Kas', icon: CreditCard },
+    { id: 'team', label: 'Staf & CRM', icon: Award },
+    { id: 'system', label: 'Sistem Cloud', icon: Database },
+  ];
+
+  const allTabs = [
+    { 
+      id: 'profil', 
+      label: `Profil ${verticalStore}`, 
+      desc: `Identitas, alamat, kontak, & logo resmi ${verticalStore.toLowerCase()}`, 
+      icon: Store, 
+      category: 'store', 
+      show: true 
+    },
+    { 
+      id: 'branding', 
+      label: 'Branding & Tampilan', 
+      desc: 'Warna tema brand, cover login, & tata letak aplikasi', 
+      icon: Sparkles, 
+      category: 'store', 
+      show: true 
+    },
+    { 
+      id: 'jam_operasional', 
+      label: 'Jam Operasional & Shift', 
+      desc: 'Jadwal buka-tutup outlet & toleransi shift kerja', 
+      icon: Clock, 
+      category: 'store', 
+      show: true 
+    },
+    { 
+      id: 'struk', 
+      label: verticalPrinter, 
+      desc: isBengkel ? 'Format SPK, estimasi biaya & struk thermal' : (isRetail ? 'Format struk belanja & barcode thermal' : (isLaundry ? 'Format nota timbangan & label rak cuci' : 'Format nota thermal, target dapur/bar & KDS')), 
+      icon: Receipt, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'printer_bt', 
+      label: 'Printer Bluetooth', 
+      desc: 'Koneksi printer thermal mobile Android & Web Bluetooth', 
+      icon: Printer, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'koneksi_server', 
+      label: 'Koneksi Terminal', 
+      desc: 'IP backend server & sinkronisasi kasir multi-device', 
+      icon: Smartphone, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'bayar', 
+      label: 'Metode Pembayaran', 
+      desc: 'QRIS statis/dinamis, transfer rekening bank, & kas tunai', 
+      icon: CreditCard, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'pajak', 
+      label: 'Pajak & Service', 
+      desc: 'Pengaturan persentase PB1/PPN & service charge toko', 
+      icon: Percent, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'fitur', 
+      label: 'Mode Operasional POS', 
+      desc: 'Aturan transaksi kasir, tier harga, & opsi pesanan', 
+      icon: Settings, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'bagi_hasil', 
+      label: 'Bagi Hasil & Bonus', 
+      desc: 'Skema bonus target omzet harian & pembagian profit', 
+      icon: Sliders, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'crm', 
+      label: 'CRM & Member', 
+      desc: 'Tingkatan tier loyalitas member & perolehan poin belanja', 
+      icon: Award, 
+      category: 'team', 
+      show: true 
+    },
+    { 
+      id: 'absensi_gps', 
+      label: 'Absensi & GPS Toko', 
+      desc: 'Titik koordinat outlet & radius geofencing presensi karyawan', 
+      icon: MapPin, 
+      category: 'team', 
+      show: true 
+    },
+    { 
+      id: 'saas_plan', 
+      label: 'Paket & Add-on SaaS', 
+      desc: 'Status paket langganan aktif, kuota outlet, & upgrade', 
+      icon: Sparkles, 
+      category: 'system', 
+      show: true 
+    },
+    { 
+      id: 'inventaris', 
+      label: 'Mode Inventaris', 
+      desc: isBengkel ? 'Pelacakan stok sparepart & audit fisik' : (isRetail ? 'Pelacakan stok barang dagangan & multi-gudang' : (isLaundry ? 'Pelacakan deterjen, pewangi & konsumabel' : 'Pelacakan bahan baku, resep BOM & transfer gudang')), 
+      icon: PackageSearch, 
+      category: 'system', 
+      show: true 
+    },
+    { 
+      id: 'database', 
+      label: 'Database & Backup', 
+      desc: 'Cadangkan data snapshot JSON, restore, atau reset toko', 
+      icon: Database, 
+      category: 'system', 
+      show: true 
+    },
+    { 
+      id: 'bantuan_cs', 
+      label: 'Bantuan & CS 24/7', 
+      desc: 'Kontak support WhatsApp teknisi resmi & pusat bantuan', 
+      icon: Headphones, 
+      category: 'system', 
+      show: true 
+    },
+  ];
+
+  const filteredTabs = selectedCategory === 'all' 
+    ? allTabs 
+    : allTabs.filter(t => t.category === selectedCategory);
+  
+  const currentTab = allTabs.find(t => t.id === activeTab) || allTabs[0];
+  const CurrentIcon = currentTab.icon;
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 w-full flex flex-col pb-52 sm:pb-20">
-      {/* Header Action Bar */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 mb-4 sm:mb-6 shrink-0">
-        <div className="hidden sm:block">
-          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800 tracking-tight">
-            <Settings className="text-indigo-600" size={26} /> Pengaturan Sistem
-          </h2>
+      {/* Desktop Header Action Bar (Hidden on Mobile) */}
+      <div className="hidden sm:flex justify-between items-center gap-4 mb-6 shrink-0">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800 tracking-tight">
+              <Settings className="text-indigo-600" size={26} /> Pengaturan Sistem
+            </h2>
+            <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${verticalBadge.color}`}>
+              {verticalBadge.label}
+            </span>
+          </div>
           <p className="text-xs font-semibold text-slate-400 mt-0.5 uppercase tracking-wider">
             Konfigurasi profil toko, mode POS, format struk printer, & metode pembayaran.
           </p>
         </div>
         <button 
-          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl transition-all font-bold text-xs sm:text-sm active:scale-95 shrink-0 w-full sm:w-auto" 
+          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-6 py-3 rounded-xl transition-all font-bold text-sm active:scale-95 shrink-0" 
           onClick={handleSave}
           disabled={loading}
         >
-          <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+          {loading ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+          <span>{loading ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
         </button>
       </div>
 
+      {/* Mobile Top App Bar (Sleek Super App Header) */}
+      <div className="sm:hidden mb-3">
+        <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
+              <Settings size={20} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-base font-black text-slate-800 leading-tight">Pengaturan</h1>
+                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${verticalBadge.color}`}>
+                  {verticalBadge.label}
+                </span>
+              </div>
+              <p className="text-[11px] font-medium text-slate-400 truncate mt-0.5">
+                {currentTab.label}
+              </p>
+            </div>
+          </div>
+          
+          {/* Navigation View Switcher (16 Menu Grid vs 16 Menu Slider) */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 gap-1 border border-slate-200/60">
+            <button
+              type="button"
+              onClick={() => setMobileNavMode('grid')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                mobileNavMode === 'grid' 
+                  ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/60 font-black' 
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Tampilkan semua 16 menu dalam grid"
+            >
+              <Boxes size={13} />
+              <span>Grid (16)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileNavMode('slider')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                mobileNavMode === 'slider' 
+                  ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/60 font-black' 
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Tampilkan baris geser horizontal"
+            >
+              <Sliders size={13} />
+              <span>Geser</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Navigation Hub: ALL 16 SETTINGS BUTTONS */}
+      {mobileNavMode === 'grid' ? (
+        <div className="lg:hidden mb-4 bg-white p-3 rounded-2xl border border-slate-200/90 shadow-sm animate-fade-in">
+          <div className="flex items-center justify-between mb-2.5 px-0.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+              <Boxes size={12} className="text-indigo-600" />
+              <span>Semua Modul Pengaturan (16 Menu)</span>
+            </span>
+            <span className="text-[10px] font-bold text-indigo-600">
+              {allTabs.length} Menu Lengkap
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+            {allTabs.map(tab => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all active:scale-95 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20 border-indigo-600'
+                      : 'bg-slate-50/70 hover:bg-slate-100/90 border-slate-200/70 text-slate-700'
+                  }`}
+                >
+                  {/* Squircle Icon Box */}
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1 transition-all ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-white text-indigo-600 border border-slate-200/60 shadow-xs'
+                  }`}>
+                    <Icon size={16} />
+                  </div>
+
+                  {/* Micro Label */}
+                  <span className={`text-[10px] font-bold leading-tight line-clamp-1 ${
+                    isSelected ? 'text-white font-black' : 'text-slate-800'
+                  }`}>
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="lg:hidden mb-4 animate-fade-in">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            {allTabs.map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`shrink-0 flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all border whitespace-nowrap active:scale-95 ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]'
+                      : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-slate-300 shadow-sm'
+                  }`}
+                >
+                  <Icon size={16} className={isActive ? 'text-white' : 'text-slate-400'} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main Layout Container */}
       <div className="flex flex-col lg:flex-row gap-6 w-full items-start mb-6">
         
-        {/* Navigation Tabs (Scrollable pills on mobile, sidebar on desktop) */}
-        <div className="w-full lg:w-72 shrink-0 flex lg:flex-col overflow-x-auto lg:overflow-visible gap-2 pb-2 lg:pb-0 no-scrollbar">
-          <div className="hidden lg:block text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Kelompok Menu</div>
-          
-          {[
-            { id: 'profil', label: isBengkel ? 'Profil Bengkel' : 'Profil Kafe', icon: Store, show: true },
-            { id: 'branding', label: 'Branding & Tampilan', icon: Sparkles, show: true },
-            { id: 'jam_operasional', label: 'Jam Operasional & Shift', icon: Clock, show: true },
-            { id: 'saas_plan', label: 'Paket & Add-on SaaS', icon: Sparkles, show: true },
-            { id: 'struk', label: isBengkel ? 'Printer Struk SPK' : 'Printer & KDS', icon: Receipt, show: true },
-            { id: 'pajak', label: 'Pajak & Service', icon: Percent, show: true },
-            { id: 'bayar', label: 'Metode Pembayaran', icon: CreditCard, show: true },
-            { id: 'fitur', label: 'Mode Operasional POS', icon: Settings, show: true },
-            { id: 'bagi_hasil', label: 'Bagi Hasil & Bonus', icon: Sliders, show: true },
-            { id: 'crm', label: 'CRM & Member', icon: Award, show: true },
-            { id: 'inventaris', label: 'Mode Inventaris', icon: PackageSearch, show: true },
-            { id: 'printer_bt', label: 'Printer Bluetooth', icon: Printer, show: true },
-            { id: 'database', label: 'Database & Backup', icon: Database, show: true },
-            { id: 'absensi_gps', label: 'Absensi & GPS Toko', icon: MapPin, show: true },
-            { id: 'koneksi_server', label: 'Koneksi Terminal', icon: Smartphone, show: true },
-            { id: 'bantuan_cs', label: 'Bantuan & CS 24/7', icon: Headphones, show: true },
-          ].filter(tab => tab.show).map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+        {/* Desktop Sidebar Navigation Tabs (Organized Categorized Sections) */}
+        <div className="hidden lg:flex w-72 shrink-0 flex-col gap-4">
+          {SETTINGS_CATEGORIES.filter(c => c.id !== 'all').map(cat => {
+            const tabsInCat = allTabs.filter(t => t.category === cat.id);
+            const CatIcon = cat.icon;
             return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`shrink-0 flex items-center gap-2 sm:gap-3 px-3.5 py-2.5 lg:px-4 lg:py-3 rounded-2xl text-left font-bold transition-all text-xs sm:text-sm border whitespace-nowrap lg:whitespace-normal ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]'
-                    : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 shadow-sm'
-                }`}
-              >
-                <Icon size={16} className={isActive ? 'text-white' : 'text-slate-400'} />
-                <span>{tab.label}</span>
-              </button>
+              <div key={cat.id} className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest px-3">
+                  <CatIcon size={12} className="text-slate-400" />
+                  <span>{cat.label}</span>
+                </div>
+                <div className="space-y-1">
+                  {tabsInCat.map(tab => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-left font-bold transition-all text-xs border ${
+                          isActive
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.01]'
+                            : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 shadow-sm'
+                        }`}
+                      >
+                        <Icon size={16} className={isActive ? 'text-white' : 'text-slate-400'} />
+                        <span className="truncate">{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-3xl min-h-[500px] mb-8 sm:mb-0">
+        <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-2xl sm:rounded-3xl min-h-[500px] mb-8 sm:mb-0">
           
           {activeTab === 'saas_plan' && (
             <SaaSPlanManager />
@@ -539,8 +842,8 @@ const SettingsView = () => {
                   <Store size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">{isBengkel ? 'Informasi Profil Bengkel' : 'Informasi Profil Kafe'}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{isBengkel ? 'Atur nama, nomor kontak, alamat bengkel, dan logo resmi usaha.' : 'Atur nama, nomor kontak, alamat kafe, dan logo resmi usaha.'}</p>
+                  <h3 className="text-base font-bold text-slate-800">Informasi Profil {verticalStore}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Atur nama, nomor kontak, alamat {verticalStore.toLowerCase()}, dan logo resmi usaha.</p>
                 </div>
               </div>
               
@@ -557,7 +860,7 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.storeName} 
                         onChange={handleChange} 
-                        placeholder={isBengkel ? "Nama Bengkel Anda" : "Nama Kafe Anda"}
+                        placeholder={`Nama ${verticalStore} Anda`}
                       />
                     </div>
                   </div>
@@ -587,12 +890,12 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }}
                         value={formData.address} 
                         onChange={handleChange}
-                        placeholder={isBengkel ? "Alamat lengkap bengkel / workshop" : "Alamat lengkap outlet kafe"}
+                        placeholder={`Alamat lengkap ${verticalStore.toLowerCase()}`}
                       ></textarea>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">URL Logo {isBengkel ? 'Bengkel' : 'Restoran / Kedai'} (Path / Link)</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">URL Logo {verticalStore} (Path / Link)</label>
                     <div className="relative">
                       <ImageIcon size={16} className="absolute left-3 top-3.5 text-slate-400" />
                       <input 
@@ -607,7 +910,7 @@ const SettingsView = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Base URL {isBengkel ? 'Katalog / Reservasi' : 'QR Code / Dine-In'}</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Base URL {isBengkel ? 'Katalog / Reservasi' : (isRetail ? 'Katalog Toko Online' : (isLaundry ? 'Cek Status Cucian' : 'QR Code / Dine-In'))}</label>
                     <div className="relative">
                       <Sparkles size={16} className="absolute left-3 top-3.5 text-slate-400" />
                       <input 
@@ -617,7 +920,7 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.qrCodeBaseUrl || ''} 
                         onChange={handleChange} 
-                        placeholder={isBengkel ? "Contoh: https://bengkel-anda.com" : "Contoh: https://kafe-anda.com"}
+                        placeholder={isBengkel ? "Contoh: https://bengkel-anda.com" : (isRetail ? "Contoh: https://toko-anda.com" : (isLaundry ? "Contoh: https://laundry-anda.com" : "Contoh: https://kafe-anda.com"))}
                       />
                     </div>
                   </div>
@@ -3439,12 +3742,14 @@ const SettingsView = () => {
       </div>
 
       {/* Mobile Floating Sticky Save Action Bar (Always visible on mobile above bottom navigation bar) */}
-      <div className="fixed bottom-20 left-3 right-3 sm:hidden z-30 animate-in slide-in-from-bottom-5 duration-200">
+      <div className="fixed bottom-[84px] left-3 right-3 sm:hidden z-30 animate-in slide-in-from-bottom-5 duration-200">
         <div className="bg-slate-900/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-white leading-tight">Pengaturan</span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/30">
+              <CurrentIcon size={16} />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-bold text-white leading-tight truncate">{currentTab.label}</span>
               <span className="text-[10px] text-slate-400 leading-tight">Tekan untuk simpan</span>
             </div>
           </div>
@@ -3452,13 +3757,113 @@ const SettingsView = () => {
             type="button"
             onClick={handleSave}
             disabled={loading}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-500/30 flex items-center gap-1.5 disabled:opacity-50"
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-500/30 flex items-center gap-1.5 disabled:opacity-50 shrink-0"
           >
             {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-            <span>{loading ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+            <span>{loading ? 'Menyimpan...' : 'Simpan'}</span>
           </button>
         </div>
       </div>
+
+      {/* Mobile Category Menu Bottom Sheet Modal */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          <div 
+            className="w-full sm:max-w-xl max-h-[85vh] sm:max-h-[80vh] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                  <Sliders size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-base font-black text-slate-800">Daftar Menu Pengaturan</h3>
+                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${verticalBadge.color}`}>
+                      {verticalBadge.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400">Pilih modul pengaturan yang ingin dikonfigurasi</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {SETTINGS_CATEGORIES.filter(c => c.id !== 'all').map(cat => {
+                const tabsInCat = allTabs.filter(t => t.category === cat.id);
+                const CatIcon = cat.icon;
+                return (
+                  <div key={cat.id} className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-black text-slate-400 uppercase tracking-wider px-1">
+                      <CatIcon size={13} className="text-slate-500" />
+                      <span>{cat.label}</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {tabsInCat.map(tab => {
+                        const TabIcon = tab.icon;
+                        const isActive = activeTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveTab(tab.id);
+                              setSelectedCategory(tab.category);
+                              setMobileMenuOpen(false);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all ${
+                              isActive
+                                ? 'bg-indigo-50/80 border-indigo-300 ring-2 ring-indigo-500/20'
+                                : 'bg-white hover:bg-slate-50 border-slate-200/80 shadow-sm'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                                isActive ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                <TabIcon size={18} />
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className={`text-xs font-black truncate ${isActive ? 'text-indigo-900' : 'text-slate-800'}`}>
+                                  {tab.label}
+                                </h4>
+                                <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                                  {tab.desc}
+                                </p>
+                              </div>
+                            </div>
+                            {isActive ? (
+                              <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                                <Check size={12} />
+                              </div>
+                            ) : (
+                              <ChevronRight size={16} className="text-slate-300 shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

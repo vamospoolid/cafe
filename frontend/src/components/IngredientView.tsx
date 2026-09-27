@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { 
-  Package, Plus, Edit2, Trash2, X, AlertTriangle, ChevronDown, ChevronUp, 
+  Package, Plus, Minus, Check, Edit2, Trash2, X, AlertTriangle, ChevronDown, ChevronUp, 
   RefreshCw, TrendingDown, TrendingUp, Search, History, Utensils, ClipboardCheck, 
   CheckCircle2, XCircle, AlertCircle, Sparkles, Filter, DollarSign, ArrowRight, 
   ShieldAlert, FileText, Coffee, ShoppingBag, Truck, BarChart3, PieChart, 
@@ -1099,6 +1099,26 @@ export const IngredientView: React.FC = () => {
     toast('Semua stok fisik riil berhasil disamakan dengan stok sistem', 'success');
   };
 
+  const handleSetSinglePhysicalToSystem = (ingId: number) => {
+    setOpnameItems(prev => prev.map(item => {
+      if (item.ingredientId === ingId) {
+        return { ...item, physicalStock: item.systemStock, reason: 'Normal' };
+      }
+      return item;
+    }));
+  };
+
+  const handleOpnameAdjust = (ingId: number, delta: number) => {
+    setOpnameItems(prev => prev.map(item => {
+      if (item.ingredientId === ingId) {
+        const cur = Number(item.physicalStock) || 0;
+        const nextVal = Math.max(0, parseFloat((cur + delta).toFixed(2)));
+        return { ...item, physicalStock: nextVal };
+      }
+      return item;
+    }));
+  };
+
   const handleSubmitOpname = async () => {
     const invalid = opnameItems.some(i => i.physicalStock === '' || isNaN(Number(i.physicalStock)));
     if (invalid) {
@@ -1355,43 +1375,121 @@ export const IngredientView: React.FC = () => {
           Mobile: Sleek Horizontal Scrollable Pill Slider (Zero Vertical Bloat)
           Desktop: Structured 3-Column Bento Grid
       ────────────────────────────────────────────────────────────── */}
-      {/* Mobile Horizontal Pill Scrollable Bar */}
-      <div className="bento-nav-mobile flex sm:!hidden items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5 -mx-1 snap-x scroll-px-2 shrink-0">
-        {[
-          { id: 'master', title: isLaundry ? 'Bahan Kimia' : 'Master Bahan', icon: Package, badge: ingredients.length > 0 ? `${ingredients.length}` : null },
-          { id: 'daily_usage', title: isLaundry ? 'Konsumsi Kimia' : 'Konsumsi Harian', icon: BarChart3, badge: (usageData?.items?.length || 0) > 0 ? `${usageData?.items?.length}` : null },
-          { id: 'loss', title: isLaundry ? 'Tumpah / Rusak' : 'Stock Loss', icon: TrendingDown, badge: (lossData?.summary?.totalWasteIncidents ?? lossData?.summary?.totalLossCount ?? 0) > 0 ? `${lossData?.summary?.totalWasteIncidents ?? lossData?.summary?.totalLossCount}` : null },
-          { id: 'staff_activity', title: isLaundry ? 'Operator Cuci' : 'Staf Dapur', icon: ChefHat, badge: 'KPI' },
-          { id: 'movements', title: 'Kartu Stok', icon: History, badge: movements.length > 0 ? `${movements.length}` : null },
-          { id: 'shopping', title: 'Rencana Belanja', icon: ShoppingCart, badge: (lowStockCount + outStockCount) > 0 ? `${lowStockCount + outStockCount} Kritis` : null },
-          { id: 'forecast', title: isLaundry ? 'Estimasi Cucian' : 'Kapasitas (BOM)', icon: Utensils, badge: forecastList.length > 0 ? `${forecastList.length}` : null },
-          { id: 'opname', title: 'Stock Opname', icon: ClipboardCheck, badge: opnameHistory.length > 0 ? `${opnameHistory.length}` : null },
-          { id: 'yield', title: 'Yield Efisiensi', icon: Award, badge: `${yieldData?.summary?.storeEfficiencyScore || 68.7}%` },
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isSelected = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`snap-start shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer ${
-                isSelected
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-purple-600/30'
-                  : 'bg-white border border-slate-200/90 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Icon size={14} className={isSelected ? 'text-white' : 'text-purple-600'} />
-              <span className="whitespace-nowrap">{tab.title}</span>
-              {tab.badge && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
-                  isSelected ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'
+      {/* Mobile 3x3 Super App Icon Hub (Zero Scroll Samping, 1-Tap Access) */}
+      <div className="bento-nav-mobile sm:!hidden bg-white rounded-2xl border border-slate-200/90 p-2 shadow-xs shrink-0">
+        <div className="grid grid-cols-3 gap-1.5">
+          {[
+            { 
+              id: 'master', 
+              title: isLaundry ? 'Bahan Kimia' : 'Master Bahan', 
+              icon: Package, 
+              badge: ingredients.length > 0 ? `${ingredients.length}` : null,
+              color: 'text-purple-600 bg-purple-50 border-purple-100',
+              activeColor: 'from-purple-600 to-indigo-600 text-white shadow-purple-500/30'
+            },
+            { 
+              id: 'daily_usage', 
+              title: isLaundry ? 'Konsumsi Kimia' : 'Konsumsi Harian', 
+              icon: BarChart3, 
+              badge: (usageData?.items?.length || 0) > 0 ? `${usageData?.items?.length}` : null,
+              color: 'text-sky-600 bg-sky-50 border-sky-100',
+              activeColor: 'from-sky-500 to-blue-600 text-white shadow-sky-500/30'
+            },
+            { 
+              id: 'loss', 
+              title: isLaundry ? 'Tumpah / Rusak' : 'Stock Loss', 
+              icon: TrendingDown, 
+              badge: (lossData?.summary?.totalWasteIncidents ?? lossData?.summary?.totalLossCount ?? 0) > 0 ? `${lossData?.summary?.totalWasteIncidents ?? lossData?.summary?.totalLossCount}` : null,
+              color: 'text-rose-600 bg-rose-50 border-rose-100',
+              activeColor: 'from-rose-500 to-red-600 text-white shadow-rose-500/30'
+            },
+            { 
+              id: 'staff_activity', 
+              title: isLaundry ? 'Operator Cuci' : 'Staf Dapur', 
+              icon: ChefHat, 
+              badge: 'KPI',
+              color: 'text-amber-600 bg-amber-50 border-amber-100',
+              activeColor: 'from-amber-500 to-orange-600 text-white shadow-amber-500/30'
+            },
+            { 
+              id: 'movements', 
+              title: 'Kartu Stok', 
+              icon: History, 
+              badge: movements.length > 0 ? `${movements.length}` : null,
+              color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+              activeColor: 'from-emerald-500 to-teal-600 text-white shadow-emerald-500/30'
+            },
+            { 
+              id: 'shopping', 
+              title: 'Rencana Belanja', 
+              icon: ShoppingCart, 
+              badge: (lowStockCount + outStockCount) > 0 ? `${lowStockCount + outStockCount}` : null,
+              color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+              activeColor: 'from-indigo-600 to-violet-600 text-white shadow-indigo-500/30'
+            },
+            { 
+              id: 'forecast', 
+              title: isLaundry ? 'Estimasi Cucian' : 'Kapasitas (BOM)', 
+              icon: Utensils, 
+              badge: forecastList.length > 0 ? `${forecastList.length}` : null,
+              color: 'text-teal-600 bg-teal-50 border-teal-100',
+              activeColor: 'from-teal-500 to-cyan-600 text-white shadow-teal-500/30'
+            },
+            { 
+              id: 'opname', 
+              title: 'Stock Opname', 
+              icon: ClipboardCheck, 
+              badge: opnameHistory.length > 0 ? `${opnameHistory.length}` : null,
+              color: 'text-blue-600 bg-blue-50 border-blue-100',
+              activeColor: 'from-blue-600 to-indigo-600 text-white shadow-blue-500/30'
+            },
+            { 
+              id: 'yield', 
+              title: 'Yield Efisiensi', 
+              icon: Award, 
+              badge: `${yieldData?.summary?.storeEfficiencyScore || 68.7}%`,
+              color: 'text-fuchsia-600 bg-fuchsia-50 border-fuchsia-100',
+              activeColor: 'from-fuchsia-600 to-purple-600 text-white shadow-fuchsia-500/30'
+            },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`relative flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all active:scale-95 cursor-pointer ${
+                  isSelected
+                    ? `bg-gradient-to-br ${tab.activeColor} shadow-md`
+                    : 'bg-slate-50/70 hover:bg-slate-100/90 border border-slate-100 text-slate-700'
+                }`}
+              >
+                {/* Micro Badge */}
+                {tab.badge && (
+                  <span className={`absolute top-1 right-1 text-[8px] px-1.5 py-0.2 rounded-full font-black tracking-tight ${
+                    isSelected ? 'bg-white/25 text-white' : 'bg-purple-100 text-purple-700 border border-purple-200/60'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                )}
+
+                {/* Squircle Icon Box */}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1 transition-all ${
+                  isSelected ? 'bg-white/20 text-white' : `${tab.color} border`
                 }`}>
-                  {tab.badge}
+                  <Icon size={16} />
+                </div>
+
+                {/* Micro Label */}
+                <span className={`text-[10px] font-black leading-tight line-clamp-1 ${
+                  isSelected ? 'text-white font-extrabold' : 'text-slate-800'
+                }`}>
+                  {tab.title}
                 </span>
-              )}
-            </button>
-          );
-        })}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Desktop & Tablet Bento Grid */}
@@ -2023,59 +2121,59 @@ export const IngredientView: React.FC = () => {
           TAB: KONSUMSI BAHAN BAKU HARIAN & COGS ANALYTICS
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'daily_usage' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
           {/* FILTER & CONTROL TOOLBAR */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3.5 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <BarChart3 size={20} className="text-indigo-600" />
-                  Analisis Konsumsi Bahan Baku & Beban Pokok Penjualan (HPP)
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <BarChart3 size={18} className="text-indigo-600 shrink-0" />
+                  <span>Analisis Konsumsi Bahan Baku & Beban Pokok (HPP)</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                   Pantau total pemakaian bahan riil harian dari pesanan POS, evaluasi biaya HPP, dan rasio food cost.
                 </p>
               </div>
 
               {/* ACTION BUTTONS */}
-              <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
+              <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
                 <button
                   onClick={handleExportDailyUsagePDF}
                   disabled={generatingPdf}
-                  className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95"
+                  className="flex-1 sm:flex-initial px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/20 active:scale-95"
                   title="Cetak Laporan PDF Konsumsi Bahan Baku & COGS"
                 >
-                  <Printer size={15} />
+                  <Printer size={14} />
                   <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak Laporan PDF'}</span>
                 </button>
 
                 <button
                   onClick={() => fetchDailyUsage()}
-                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
+                  className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
                   title="Perbarui Data"
                 >
-                  <RefreshCw size={15} className={usageLoading ? 'animate-spin' : ''} />
+                  <RefreshCw size={14} className={usageLoading ? 'animate-spin' : ''} />
                 </button>
               </div>
             </div>
 
             {/* PRESETS & FILTERS ROW */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
               {/* Quick Date Presets */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold text-slate-400 mr-1">Periode:</span>
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 mr-0.5">Periode:</span>
                 {[
                   { id: 'today', label: 'Hari Ini' },
                   { id: 'yesterday', label: 'Kemarin' },
-                  { id: 'last7', label: '7 Hari Terakhir' },
+                  { id: 'last7', label: '7 Hari' },
                   { id: 'this_month', label: 'Bulan Ini' },
                 ].map(p => (
                   <button
                     key={p.id}
                     onClick={() => setPresetDate(p.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
                       usagePreset === p.id
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                        ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/20'
                         : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
@@ -2086,7 +2184,7 @@ export const IngredientView: React.FC = () => {
 
               {/* Custom Date Inputs & Category Filter */}
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs">
                   <span className="text-[10px] font-bold text-slate-400">Dari:</span>
                   <input
                     type="date"
@@ -2096,9 +2194,9 @@ export const IngredientView: React.FC = () => {
                       setUsageStartDate(e.target.value);
                       fetchDailyUsage(e.target.value, usageEndDate, usageCategoryFilter, usageTypeFilter);
                     }}
-                    className="bg-transparent border-none outline-none text-xs font-bold text-slate-800"
+                    className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800"
                   />
-                  <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
+                  <span className="text-[10px] font-bold text-slate-400 ml-0.5">s/d:</span>
                   <input
                     type="date"
                     value={usageEndDate}
@@ -2107,7 +2205,7 @@ export const IngredientView: React.FC = () => {
                       setUsageEndDate(e.target.value);
                       fetchDailyUsage(usageStartDate, e.target.value, usageCategoryFilter, usageTypeFilter);
                     }}
-                    className="bg-transparent border-none outline-none text-xs font-bold text-slate-800"
+                    className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800"
                   />
                 </div>
 
@@ -2117,12 +2215,12 @@ export const IngredientView: React.FC = () => {
                     setUsageCategoryFilter(e.target.value as any);
                     fetchDailyUsage(usageStartDate, usageEndDate, e.target.value, usageTypeFilter);
                   }}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-700 outline-none"
                 >
                   <option value="ALL">Semua Kategori</option>
-                  <option value="FOOD">🍲 Dapur (Food)</option>
-                  <option value="DRINK">☕ Bar (Drink)</option>
-                  <option value="PACKAGING">📦 Kemasan (Packaging)</option>
+                  <option value="FOOD">🍲 Dapur</option>
+                  <option value="DRINK">☕ Bar</option>
+                  <option value="PACKAGING">📦 Kemasan</option>
                 </select>
 
                 <select
@@ -2131,18 +2229,88 @@ export const IngredientView: React.FC = () => {
                     setUsageTypeFilter(e.target.value);
                     fetchDailyUsage(usageStartDate, usageEndDate, usageCategoryFilter, e.target.value);
                   }}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-700 outline-none"
                 >
                   <option value="ALL">Semua Pengurangan</option>
-                  <option value="Produksi">🍳 Produksi POS Saja</option>
-                  <option value="Rusak">🗑️ Waste / Kerusakan Saja</option>
+                  <option value="Produksi">🍳 Produksi POS</option>
+                  <option value="Rusak">🗑️ Waste / Rusak</option>
                 </select>
               </div>
             </div>
           </div>
 
-          {/* KPI METRIC CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* KPI METRIC CARDS - MOBILE VIEW (< 640px) */}
+          <div className="grid grid-cols-2 gap-2 sm:hidden">
+            {/* 1. Total HPP */}
+            <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-3 rounded-2xl text-white shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-indigo-200">HPP Terpakai</span>
+                <span className="px-1.5 py-0.2 bg-white/20 text-white rounded text-[8px] font-black">
+                  COGS
+                </span>
+              </div>
+              <div className="text-base font-black mt-1 leading-tight">
+                Rp {(usageData?.summary?.totalCostUsage || 0).toLocaleString('id-ID')}
+              </div>
+              <div className="flex items-center gap-1 mt-1 text-[9px] text-indigo-100">
+                <span>Food Cost:</span>
+                <span className="font-extrabold px-1 py-0.2 bg-white text-indigo-900 rounded text-[9px]">
+                  {usageData?.summary?.foodCostRatio || 0}%
+                </span>
+              </div>
+            </div>
+
+            {/* 2. Omzet POS */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Omzet POS</span>
+                <div className="w-5 h-5 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <DollarSign size={12} />
+                </div>
+              </div>
+              <div className="text-base font-black text-slate-900 mt-1 leading-tight">
+                Rp {(usageData?.summary?.totalRevenue || 0).toLocaleString('id-ID')}
+              </div>
+              <div className="text-[9px] text-slate-400 mt-1 truncate">
+                Penjualan periode ini
+              </div>
+            </div>
+
+            {/* 3. Kerugian / Waste */}
+            <div className="bg-white p-3 rounded-2xl border border-rose-200/80 shadow-xs flex flex-col justify-between bg-gradient-to-b from-white to-rose-50/20">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-rose-700">Kerugian (Waste)</span>
+                <div className="w-5 h-5 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <TrendingDown size={12} />
+                </div>
+              </div>
+              <div className="text-base font-black text-rose-600 mt-1 leading-tight">
+                Rp {(usageData?.summary?.totalLossCost || 0).toLocaleString('id-ID')}
+              </div>
+              <div className="text-[9px] text-rose-600/80 mt-1 truncate">
+                Bahan rusak / basi
+              </div>
+            </div>
+
+            {/* 4. Bahan Aktif */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Bahan Terpakai</span>
+                <div className="w-5 h-5 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                  <Package size={12} />
+                </div>
+              </div>
+              <div className="text-base font-black text-slate-900 mt-1 leading-tight">
+                {usageData?.summary?.totalActiveIngredientsUsed || 0} <span className="text-xs font-semibold text-slate-500">Bahan</span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-1 truncate">
+                Macam bahan keluar
+              </div>
+            </div>
+          </div>
+
+          {/* KPI METRIC CARDS - DESKTOP VIEW (sm+) */}
+          <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-3xl text-white shadow-lg shadow-indigo-600/20">
               <div className="flex justify-between items-start">
                 <p className="text-xs font-bold text-indigo-100 uppercase tracking-wider">Total Estimasi HPP Terpakai</p>
@@ -2201,8 +2369,32 @@ export const IngredientView: React.FC = () => {
             </div>
           </div>
 
-          {/* BREAKDOWN PER STASIUN (FOOD vs DRINK vs PACKAGING) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* BREAKDOWN PER STASIUN - MOBILE VIEW (< 640px) */}
+          <div className="grid grid-cols-3 gap-1.5 sm:hidden">
+            <div className="p-2.5 bg-amber-50/70 border border-amber-200/70 rounded-2xl text-center">
+              <div className="text-[9px] font-bold text-amber-700">🍲 Dapur</div>
+              <div className="text-[11px] font-black text-amber-900 mt-0.5">
+                Rp {(usageData?.summary?.foodCost || 0).toLocaleString('id-ID')}
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-sky-50/70 border border-sky-200/70 rounded-2xl text-center">
+              <div className="text-[9px] font-bold text-sky-700">☕ Bar</div>
+              <div className="text-[11px] font-black text-sky-900 mt-0.5">
+                Rp {(usageData?.summary?.drinkCost || 0).toLocaleString('id-ID')}
+              </div>
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+              <div className="text-[9px] font-bold text-slate-600">📦 Kemasan</div>
+              <div className="text-[11px] font-black text-slate-900 mt-0.5">
+                Rp {(usageData?.summary?.packagingCost || 0).toLocaleString('id-ID')}
+              </div>
+            </div>
+          </div>
+
+          {/* BREAKDOWN PER STASIUN - DESKTOP VIEW (sm+) */}
+          <div className="hidden sm:grid sm:grid-cols-3 gap-4">
             <div className="p-4 bg-amber-50/60 border border-amber-200/70 rounded-2xl flex items-center justify-between">
               <div>
                 <div className="text-[11px] font-bold text-amber-700 uppercase">🍲 Biaya Dapur (Food)</div>
@@ -2234,24 +2426,110 @@ export const IngredientView: React.FC = () => {
             </div>
           </div>
 
-          {/* TABEL RINCIAN KONSUMSI BAHAN BAKU */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          {/* RINCIAN KONSUMSI BAHAN BAKU CONTAINER */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm overflow-hidden space-y-3.5 sm:space-y-4 p-3.5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3 sm:pb-4">
               <div>
-                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <Layers size={18} className="text-indigo-600" />
-                  Rincian Pemakaian Riil per-Item Bahan Baku
+                <h4 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Layers size={16} className="text-indigo-600 shrink-0" />
+                  <span>Rincian Pemakaian Riil per-Item Bahan Baku</span>
                 </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">
                   Total kuantitas gram/ml/pcs bahan yang terpakai beserta nilai rupiah HPP-nya.
                 </p>
               </div>
-              <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              <div className="text-[11px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl border border-slate-200 self-start sm:self-auto">
                 Total {usageData?.items?.length || 0} Bahan Terkonsumsi
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Card View (< 640px) */}
+            <div className="block sm:hidden space-y-2.5">
+              {usageLoading ? (
+                <div className="py-10 text-center text-slate-400">
+                  <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={24} />
+                  <p className="text-xs font-semibold">Menghitung analisis konsumsi bahan baku...</p>
+                </div>
+              ) : usageData?.items?.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4">
+                  <Package className="inline-block mb-2 opacity-40 text-slate-400" size={28} />
+                  <p className="font-bold text-slate-700 text-xs">Tidak ada data pemakaian pada periode ini.</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Pastikan sudah ada transaksi POS atau stock loss di rentang tanggal yang dipilih.</p>
+                </div>
+              ) : (
+                usageData?.items?.map((item: any, idx: number) => {
+                  const cat = item.category || 'FOOD';
+                  return (
+                    <div 
+                      key={item.ingredientId || idx}
+                      className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs flex flex-col gap-2 hover:border-indigo-300 transition-colors"
+                    >
+                      {/* Top Row: Name + Category & Total Cost */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-black text-slate-900 text-xs tracking-tight">
+                              {item.name}
+                            </span>
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">
+                              {cat === 'FOOD' ? '🍲 Dapur' : (cat === 'DRINK' ? '☕ Bar' : '📦 Kemasan')}
+                            </span>
+                          </div>
+                          {item.subCategory && (
+                            <div className="text-[10px] text-indigo-600 font-semibold mt-0.5">
+                              {item.subCategory}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total HPP</div>
+                          <div className="text-xs font-black text-indigo-700">
+                            Rp {(item.totalCost || 0).toLocaleString('id-ID')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3 Metrics Grid: Total Pakai, Breakdown (POS vs Loss), Sisa Stok */}
+                      <div className="grid grid-cols-3 gap-1.5 bg-slate-50/80 p-2 rounded-xl border border-slate-100 text-center">
+                        <div className="text-left pl-1">
+                          <div className="text-[8px] font-bold text-slate-400 uppercase">Total Pakai</div>
+                          <div className="text-[11px] font-black text-indigo-700 mt-0.5">
+                            {(item.totalQtyUsed || 0).toLocaleString('id-ID')} <span className="text-[9px] font-normal text-slate-500">{item.unit}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[8px] font-bold text-slate-400 uppercase">POS / Loss</div>
+                          <div className="text-[10px] font-bold text-slate-700 mt-0.5 truncate">
+                            <span>{(item.productionQty || 0).toLocaleString('id-ID')}</span>
+                            {item.lossQty > 0 ? (
+                              <span className="text-rose-600 ml-1">+{item.lossQty.toLocaleString('id-ID')}</span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="text-right pr-1">
+                          <div className="text-[8px] font-bold text-slate-400 uppercase">Sisa Stok</div>
+                          <div className={`text-[11px] font-black mt-0.5 ${item.currentStock <= 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                            {(item.currentStock || 0).toLocaleString('id-ID')} <span className="text-[9px] font-normal text-slate-500">{item.unit}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bottom Micro Info: Harga Beli Satuan */}
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 px-0.5">
+                        <span>Harga Beli Satuan:</span>
+                        <span className="font-semibold text-slate-600">Rp {(item.buyPrice || 0).toLocaleString('id-ID')} / {item.unit}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View (sm+) */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase">
                   <tr>
@@ -2344,14 +2622,17 @@ export const IngredientView: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           TAB 3: FOOD WASTE & SPOILAGE TRACKING (PRIORITY 3)
       ───────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 3: FOOD WASTE & SPOILAGE TRACKING (PRIORITY 3)
+      ───────────────────────────────────────────────────────────── */}
       {activeTab === 'loss' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
           {/* RESPONSIVE DATE FILTER & ACTION BAR */}
-          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+          <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3 flex-wrap">
               {/* Quick Date Presets */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full pb-1 sm:pb-0">
-                <span className="text-[11px] font-bold text-slate-400 mr-1 shrink-0">Periode:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 mr-0.5 shrink-0">Periode:</span>
                 {[
                   { id: 'today', label: 'Hari Ini' },
                   { id: 'yesterday', label: 'Kemarin' },
@@ -2361,9 +2642,9 @@ export const IngredientView: React.FC = () => {
                   <button
                     key={p.id}
                     onClick={() => setLossPresetDate(p.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                    className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                       lossPreset === p.id
-                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/20'
+                        ? 'bg-rose-600 text-white shadow-xs shadow-rose-600/20'
                         : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
@@ -2373,7 +2654,7 @@ export const IngredientView: React.FC = () => {
               </div>
 
               {/* Custom Date Range Picker */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs w-full sm:w-auto justify-between sm:justify-start">
+              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs w-full sm:w-auto justify-between sm:justify-start">
                 <span className="text-[10px] font-bold text-slate-400">Dari:</span>
                 <input
                   type="date"
@@ -2383,9 +2664,9 @@ export const IngredientView: React.FC = () => {
                     setLossStartDate(e.target.value);
                     fetchLossAnalytics(e.target.value, lossEndDate);
                   }}
-                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                  className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800 cursor-pointer"
                 />
-                <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
+                <span className="text-[10px] font-bold text-slate-400 ml-0.5">s/d:</span>
                 <input
                   type="date"
                   value={lossEndDate}
@@ -2394,16 +2675,16 @@ export const IngredientView: React.FC = () => {
                     setLossEndDate(e.target.value);
                     fetchLossAnalytics(lossStartDate, e.target.value);
                   }}
-                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                  className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800 cursor-pointer"
                 />
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2 self-stretch sm:self-end lg:self-auto justify-end flex-wrap">
+            <div className="flex items-center gap-2 self-stretch sm:self-end lg:self-auto justify-end">
               <button
                 onClick={handleExportLossPDF}
-                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                className="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95"
                 title="Cetak Laporan Audit Kerusakan (PDF)"
               >
                 <Printer size={14} />
@@ -2411,16 +2692,97 @@ export const IngredientView: React.FC = () => {
               </button>
               <button
                 onClick={() => handleOpenLossModal(undefined, 'INGREDIENT')}
-                className="flex-1 sm:flex-none px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-rose-500/25 active:scale-95 flex items-center justify-center gap-1.5"
+                className="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-xl text-xs font-black transition-all shadow-sm shadow-rose-500/25 active:scale-95 flex items-center justify-center gap-1.5"
               >
                 <Plus size={15} />
-                <span>+ Catat Waste Dapur</span>
+                <span>+ Catat Waste</span>
               </button>
             </div>
           </div>
 
-          {/* LOSS SUMMARY METRICS (4 CARDS) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* LOSS SUMMARY METRICS - MOBILE VIEW (< 640px) */}
+          <div className="grid grid-cols-2 gap-2 sm:hidden">
+            {/* 1. Total Kerugian */}
+            <div className="bg-gradient-to-br from-rose-600 to-red-700 p-3 rounded-2xl text-white shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-rose-200">Total Kerugian</span>
+                <span className="px-1.5 py-0.2 bg-white/20 text-white rounded text-[8px] font-black">
+                  LOSS
+                </span>
+              </div>
+              <div className="text-base font-black mt-1 leading-tight">
+                Rp {(lossData?.summary?.totalWasteCost ?? lossData?.summary?.totalLossCost ?? 0).toLocaleString('id-ID')}
+              </div>
+              <div className="text-[9px] text-rose-100 mt-1 truncate">
+                {lossData?.summary?.totalWasteIncidents ?? lossData?.summary?.totalLossCount ?? 0} insiden terbuang
+              </div>
+            </div>
+
+            {/* 2. Waste Ratio */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Waste Ratio</span>
+                <div className="w-5 h-5 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <TrendingDown size={12} />
+                </div>
+              </div>
+              <div className="text-base font-black mt-1 leading-tight flex items-center gap-1.5">
+                <span className={
+                  (lossData?.summary?.wasteToSalesRatio || 0) <= 2 
+                    ? 'text-emerald-600' 
+                    : (lossData?.summary?.wasteToSalesRatio || 0) <= 4 
+                      ? 'text-amber-600' 
+                      : 'text-rose-600'
+                }>
+                  {lossData?.summary?.wasteToSalesRatio || 0}%
+                </span>
+              </div>
+              <div className="text-[9px] mt-1 truncate">
+                {(lossData?.summary?.wasteToSalesRatio || 0) <= 2 ? (
+                  <span className="text-emerald-600 font-bold">✓ Target Ideal (&lt;2%)</span>
+                ) : (lossData?.summary?.wasteToSalesRatio || 0) <= 4 ? (
+                  <span className="text-amber-600 font-bold">⚠ Waspada (2-4%)</span>
+                ) : (
+                  <span className="text-rose-600 font-bold">🚨 Tinggi (&gt;4%)</span>
+                )}
+              </div>
+            </div>
+
+            {/* 3. Bahan Mentah */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-indigo-600">Bahan Mentah</span>
+                <div className="w-5 h-5 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <Package size={12} />
+                </div>
+              </div>
+              <div className="text-sm font-black text-slate-900 mt-1 leading-tight">
+                Rp {(lossData?.summary?.totalIngredientLossCost ?? (lossData?.wasteByType?.INGREDIENT?.cost || 0)).toLocaleString('id-ID')}
+              </div>
+              <div className="text-[9px] text-slate-400 mt-1 truncate">
+                {lossData?.wasteByType?.INGREDIENT?.count || 0} kali terbuang
+              </div>
+            </div>
+
+            {/* 4. Porsi Masakan */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-amber-600">Porsi Masakan</span>
+                <div className="w-5 h-5 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Utensils size={12} />
+                </div>
+              </div>
+              <div className="text-sm font-black text-slate-900 mt-1 leading-tight">
+                Rp {(lossData?.summary?.totalProductLossCost ?? (lossData?.wasteByType?.PRODUCT?.cost || 0)).toLocaleString('id-ID')}
+              </div>
+              <div className="text-[9px] text-slate-400 mt-1 truncate">
+                {lossData?.wasteByType?.PRODUCT?.count || 0} porsi gagal
+              </div>
+            </div>
+          </div>
+
+          {/* LOSS SUMMARY METRICS - DESKTOP VIEW (sm+) */}
+          <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-rose-600 to-red-700 p-6 rounded-3xl text-white shadow-lg shadow-rose-600/20">
               <div className="flex justify-between items-start">
                 <p className="text-xs font-bold text-rose-100 uppercase tracking-wider">Total Kerugian Food Waste</p>
@@ -2496,38 +2858,38 @@ export const IngredientView: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-6">
             {/* TOP 5 WASTE ITEMS */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3 sm:space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <ShieldAlert size={18} className="text-rose-600" />
-                  Top 5 Item Penyumbang Kerugian
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-rose-600 shrink-0" />
+                  <span>Top 5 Item Penyumbang Kerugian</span>
                 </h3>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5 sm:space-y-3">
                 {(!lossData?.topWasteItems || lossData?.topWasteItems?.length === 0) && (!lossData?.topLossItems || lossData?.topLossItems?.length === 0) ? (
-                  <div className="text-center py-8 text-xs text-slate-400">
+                  <div className="text-center py-6 sm:py-8 text-xs text-slate-400">
                     Belum ada data kerugian pada periode ini 🎉
                   </div>
                 ) : (
                   (lossData?.topWasteItems || lossData?.topLossItems || []).slice(0, 5).map((item: any, idx: number) => {
                     const isProduct = item.type === 'PRODUCT';
                     return (
-                      <div key={item.id || `${item.type}_${item.itemName || item.name}`} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-black flex items-center justify-center shrink-0">
+                      <div key={item.id || `${item.type}_${item.itemName || item.name}`} className="p-2.5 sm:p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-rose-100 text-rose-700 text-[10px] sm:text-xs font-black flex items-center justify-center shrink-0">
                             {idx + 1}
                           </span>
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-black text-xs text-slate-800 truncate">{item.itemName || item.name}</span>
-                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${isProduct ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                                {isProduct ? 'Menu Jadi' : 'Bahan Mentah'}
+                              <span className={`px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black ${isProduct ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                                {isProduct ? 'Menu Jadi' : 'Bahan'}
                               </span>
                             </div>
-                            <div className="text-[11px] text-slate-500">
+                            <div className="text-[10px] sm:text-[11px] text-slate-500">
                               Terbuang: {(item.totalQty || 0).toLocaleString('id-ID')} {item.unit || 'unit'}
                             </div>
                           </div>
@@ -2543,17 +2905,17 @@ export const IngredientView: React.FC = () => {
             </div>
 
             {/* DISTRIBUSI ALASAN WASTE (REASON BREAKDOWN) */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3 sm:space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <Flame size={18} className="text-amber-500" />
-                  Distribusi Alasan Kerugian
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Flame size={16} className="text-amber-500 shrink-0" />
+                  <span>Distribusi Alasan Kerugian</span>
                 </h3>
               </div>
 
-              <div className="space-y-2.5 max-h-[320px] overflow-y-auto no-scrollbar">
+              <div className="space-y-2 sm:space-y-2.5 max-h-[320px] overflow-y-auto no-scrollbar">
                 {!lossData?.reasonBreakdown || Object.keys(lossData.reasonBreakdown).length === 0 ? (
-                  <div className="text-center py-8 text-xs text-slate-400">
+                  <div className="text-center py-6 sm:py-8 text-xs text-slate-400">
                     Tidak ada insiden kerugian pada rentang tanggal ini.
                   </div>
                 ) : (
@@ -2561,7 +2923,7 @@ export const IngredientView: React.FC = () => {
                     const totalLoss = lossData?.summary?.totalWasteCost || 1;
                     const percent = Math.min(100, Math.round((stat.totalCost / totalLoss) * 100));
                     return (
-                      <div key={reasonName} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5">
+                      <div key={reasonName} className="p-2.5 sm:p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5">
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-bold text-slate-800">{reasonName}</span>
                           <span className="font-black text-rose-600">Rp {stat.totalCost.toLocaleString('id-ID')}</span>
@@ -2572,9 +2934,9 @@ export const IngredientView: React.FC = () => {
                             style={{ width: `${percent}%` }}
                           />
                         </div>
-                        <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-400">
                           <span>{stat.count} insiden</span>
-                          <span>{percent}% dari total HPP loss</span>
+                          <span>{percent}% total HPP loss</span>
                         </div>
                       </div>
                     );
@@ -2584,15 +2946,15 @@ export const IngredientView: React.FC = () => {
             </div>
 
             {/* QUICK ACTIONS & INSIGHT CARD */}
-            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-6 rounded-3xl text-white shadow-lg space-y-4 flex flex-col justify-between">
+            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-4 sm:p-6 rounded-3xl text-white shadow-md space-y-3 sm:space-y-4 flex flex-col justify-between">
               <div>
-                <div className="flex items-center gap-2 text-rose-400 text-xs font-black uppercase tracking-wider">
-                  <Sparkles size={16} />
+                <div className="flex items-center gap-1.5 text-rose-400 text-[10px] sm:text-xs font-black uppercase tracking-wider">
+                  <Sparkles size={14} />
                   <span>SOP Pengendalian Waste</span>
                 </div>
-                <h4 className="text-base font-black mt-2 text-white">Cegah Kebocoran Biaya Dapur</h4>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  Setiap kali ada bahan busuk, kadaluarsa, tumpah, atau porsi masakan gosong/salah buat, segera catat agar stok sistem tetap sinkron & HPP tercatat akurat.
+                <h4 className="text-sm sm:text-base font-black mt-1.5 text-white">Cegah Kebocoran Biaya Dapur</h4>
+                <p className="text-[11px] sm:text-xs text-slate-300 mt-1 leading-relaxed">
+                  Setiap kali ada bahan busuk, kadaluarsa, tumpah, atau masakan gosong/salah buat, segera catat agar stok tetap sinkron & HPP akurat.
                 </p>
               </div>
 
@@ -2601,38 +2963,144 @@ export const IngredientView: React.FC = () => {
                   onClick={() => handleOpenLossModal(undefined, 'INGREDIENT')}
                   className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-rose-900/30 active:scale-95"
                 >
-                  <Package size={15} />
-                  <span>Catat Bahan Mentah Terbuang</span>
+                  <Package size={14} />
+                  <span>Catat Bahan Terbuang</span>
                 </button>
                 <button
                   onClick={() => handleOpenLossModal(undefined, 'PRODUCT')}
                   className="w-full py-2.5 px-4 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-amber-900/30 active:scale-95"
                 >
-                  <Utensils size={15} />
-                  <span>Catat Porsi Masakan / Menu Rusak</span>
+                  <Utensils size={14} />
+                  <span>Catat Menu / Porsi Rusak</span>
                 </button>
               </div>
             </div>
           </div>
 
           {/* TABEL RINCIAN LOG WASTE LENGKAP */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="bg-white p-3.5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3.5 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3 sm:pb-4">
               <div>
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <History size={18} className="text-indigo-600" />
-                  Riwayat Pencatatan Food Waste & Kerugian (Audit Log)
+                <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                  <History size={16} className="text-indigo-600 shrink-0" />
+                  <span>Riwayat Pencatatan Food Waste & Kerugian (Audit Log)</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">
                   Jejak audit lengkap bahan basi, kadaluarsa, salah masak, atau porsi sisa tutup toko.
                 </p>
               </div>
-              <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              <div className="text-[11px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl border border-slate-200 self-start sm:self-auto">
                 Total {lossData?.logs?.length || 0} Insiden Tercatat
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[520px]">
+            {/* Mobile Card View (< 640px) */}
+            <div className="block sm:hidden space-y-2.5">
+              {lossLoading ? (
+                <div className="py-10 text-center text-slate-400">
+                  <RefreshCw className="animate-spin inline-block mb-2 text-rose-600" size={24} />
+                  <p className="text-xs font-semibold">Memuat riwayat pencatatan waste...</p>
+                </div>
+              ) : !lossData?.logs || lossData?.logs?.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4">
+                  <Package className="inline-block mb-2 opacity-40 text-slate-400" size={28} />
+                  <p className="font-bold text-slate-700 text-xs">Belum ada log food waste pada rentang tanggal ini.</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Gunakan tombol "+ Catat Waste" jika ada bahan atau masakan terbuang.</p>
+                </div>
+              ) : (
+                lossData?.logs?.map((l: any) => {
+                  const isProduct = l.type === 'PRODUCT';
+                  const displayName = l.itemName || l.ingredient?.name || l.product?.name || 'Unknown';
+                  const displayQty = l.qty !== undefined ? l.qty : Math.abs(l.change || 0);
+                  const displayUnit = l.unit || l.ingredient?.unit || (isProduct ? 'porsi' : 'unit');
+                  const displayCost = l.totalCost !== undefined ? l.totalCost : (l.cost || (Math.abs(l.change || 0) * (l.ingredient?.buyPrice || 0)));
+
+                  return (
+                    <div 
+                      key={l.id} 
+                      className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs flex flex-col gap-2 hover:border-rose-300 transition-colors"
+                    >
+                      {/* Top Row: Item Name, Type Badge & Cost */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-black text-slate-900 text-xs tracking-tight">
+                              {displayName}
+                            </span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                              isProduct 
+                                ? 'bg-amber-100 text-amber-800' 
+                                : 'bg-indigo-100 text-indigo-800'
+                            }`}>
+                              {isProduct ? '🍜 Porsi Masakan' : '🍲 Bahan Mentah'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">HPP Rugi</div>
+                          <div className="text-xs font-black text-rose-600">
+                            Rp {displayCost.toLocaleString('id-ID')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3 Metrics Grid: Kuantitas Rusak, Alasan, Waktu */}
+                      <div className="grid grid-cols-3 gap-1 bg-slate-50/80 p-2 rounded-xl border border-slate-100 text-center">
+                        <div className="text-left pl-1">
+                          <div className="text-[8px] font-bold text-slate-400 uppercase">Jumlah Rusak</div>
+                          <div className="text-[11px] font-black text-rose-600 mt-0.5">
+                            {displayQty.toLocaleString('id-ID')} <span className="text-[9px] font-normal text-slate-500">{displayUnit}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[8px] font-bold text-slate-400 uppercase">Alasan</div>
+                          <div className="mt-0.5 truncate">
+                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              {l.reason || 'Rusak'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right pr-1">
+                          <div className="text-[8px] font-bold text-slate-400 uppercase">Waktu</div>
+                          <div className="text-[10px] font-bold text-slate-700 mt-0.5 truncate">
+                            {new Date(l.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Notes if available */}
+                      {l.notes && (
+                        <div className="text-[10px] text-slate-500 italic bg-amber-50/40 px-2 py-1 rounded-lg border border-amber-100">
+                          "{l.notes}"
+                        </div>
+                      )}
+
+                      {/* Bottom Footer: Staff & Action Button */}
+                      <div className="flex items-center justify-between text-[10px] pt-0.5 border-t border-slate-100">
+                        <span className="text-slate-400 truncate max-w-[170px]">
+                          Oleh: <strong className="text-slate-600 font-bold">{l.userName || l.user?.name || 'Staff Dapur'}</strong>
+                        </span>
+
+                        <button
+                          onClick={() => handleDeleteWasteLog(l.id, displayName)}
+                          className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors active:scale-95 shrink-0"
+                          title="Batalkan & Rollback Stok"
+                        >
+                          <Trash2 size={11} />
+                          <span>Batalkan</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View (sm+) */}
+            <div className="hidden sm:block overflow-x-auto max-h-[520px]">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/80 text-[10px] font-black text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-100">
                   <tr>
@@ -2732,16 +3200,16 @@ export const IngredientView: React.FC = () => {
           TAB: ANALISIS AKTIVITAS & AKUNTABILITAS STAF DAPUR
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'staff_activity' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
           {/* HEADER & FILTER BAR */}
-          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col gap-4">
+          <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm flex flex-col gap-3 sm:gap-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <ChefHat size={20} className="text-violet-600" />
-                  Analisis Aktivitas & Akuntabilitas Staf Dapur
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <ChefHat size={18} className="text-violet-600 shrink-0" />
+                  <span>Analisis Aktivitas & Akuntabilitas Staf</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                   Evaluasi kinerja tim: distribusi tindakan, klasifikasi kerugian (Human Error vs Basi), dan konsumsi staf.
                 </p>
               </div>
@@ -2754,7 +3222,7 @@ export const IngredientView: React.FC = () => {
                     setSelectedStaffUserFilter(e.target.value);
                     fetchStaffActivityAnalytics(staffStartDate, staffEndDate, e.target.value);
                   }}
-                  className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 w-full sm:w-48"
+                  className="px-3 py-1.5 sm:px-3.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-800 w-full sm:w-48 outline-none"
                 >
                   <option value="ALL">Semua Anggota Tim</option>
                   {staffActivityData?.staffList?.map((s: any) => (
@@ -2767,30 +3235,32 @@ export const IngredientView: React.FC = () => {
             </div>
 
             {/* Quick Date Range Filter */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
-              <span className="text-xs font-bold text-slate-400 mr-1 flex items-center gap-1">
-                <Filter size={14} /> Periode:
-              </span>
-              {[
-                { label: 'Hari Ini', val: 'today' },
-                { label: 'Kemarin', val: 'yesterday' },
-                { label: '7 Hari Terakhir', val: 'last7' },
-                { label: 'Bulan Ini', val: 'this_month' }
-              ].map(p => (
-                <button
-                  key={p.val}
-                  onClick={() => setStaffPresetDate(p.val as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    staffDatePreset === p.val
-                      ? 'bg-violet-600 text-white shadow-sm'
-                      : 'bg-slate-50 hover:bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-100">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] sm:text-xs font-bold text-slate-400 mr-0.5 flex items-center gap-1">
+                  <Filter size={12} /> Periode:
+                </span>
+                {[
+                  { label: 'Hari Ini', val: 'today' },
+                  { label: 'Kemarin', val: 'yesterday' },
+                  { label: '7 Hari', val: 'last7' },
+                  { label: 'Bulan Ini', val: 'this_month' }
+                ].map(p => (
+                  <button
+                    key={p.val}
+                    onClick={() => setStaffPresetDate(p.val as any)}
+                    className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
+                      staffDatePreset === p.val
+                        ? 'bg-violet-600 text-white shadow-xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/80'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
 
-              <div className="flex items-center gap-2 ml-auto flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <input
                   type="date"
                   value={staffStartDate}
@@ -2799,9 +3269,9 @@ export const IngredientView: React.FC = () => {
                     setStaffDatePreset('custom');
                     fetchStaffActivityAnalytics(e.target.value, staffEndDate, selectedStaffUserFilter);
                   }}
-                  className="px-2.5 py-1 text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium"
+                  className="px-2 py-1 text-[11px] sm:text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium"
                 />
-                <span className="text-xs text-slate-400">s/d</span>
+                <span className="text-[10px] text-slate-400">s/d</span>
                 <input
                   type="date"
                   value={staffEndDate}
@@ -2810,21 +3280,88 @@ export const IngredientView: React.FC = () => {
                     setStaffDatePreset('custom');
                     fetchStaffActivityAnalytics(staffStartDate, e.target.value, selectedStaffUserFilter);
                   }}
-                  className="px-2.5 py-1 text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium"
+                  className="px-2 py-1 text-[11px] sm:text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium"
                 />
               </div>
             </div>
           </div>
 
           {staffActivityLoading ? (
-            <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center text-slate-400">
+            <div className="bg-white p-10 sm:p-12 rounded-3xl border border-slate-200/80 text-center text-slate-400">
               <RefreshCw className="animate-spin inline-block mb-2 text-violet-600" size={24} />
-              <p>Menganalisis data aktivitas & kinerja staf dapur...</p>
+              <p className="text-xs font-semibold">Menganalisis data aktivitas & kinerja staf...</p>
             </div>
           ) : (
             <>
-              {/* TOP 4 KPI CARDS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* TOP 4 KPI CARDS - MOBILE VIEW (< 640px) */}
+              <div className="grid grid-cols-2 gap-2 sm:hidden">
+                {/* Total Tindakan */}
+                <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Total Aksi</span>
+                    <div className="w-5 h-5 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                      <Activity size={12} />
+                    </div>
+                  </div>
+                  <div className="text-base font-black text-slate-900 mt-1 leading-tight">
+                    {(staffActivityData?.summary?.teamTotalActions || 0).toLocaleString('id-ID')}
+                  </div>
+                  <div className="text-[9px] text-slate-400 mt-1 truncate">
+                    Mutasi & opname tim
+                  </div>
+                </div>
+
+                {/* Total Kerugian */}
+                <div className="bg-white p-3 rounded-2xl border border-rose-200/80 shadow-xs flex flex-col justify-between bg-gradient-to-b from-white to-rose-50/20">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-rose-500">Biaya Waste</span>
+                    <div className="w-5 h-5 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                      <TrendingDown size={12} />
+                    </div>
+                  </div>
+                  <div className="text-base font-black text-rose-600 mt-1 leading-tight">
+                    Rp {(staffActivityData?.summary?.teamTotalLossCost || 0).toLocaleString('id-ID')}
+                  </div>
+                  <div className="text-[9px] text-rose-600/80 mt-1 truncate">
+                    {(staffActivityData?.summary?.teamLossCount || 0)} insiden tercatat
+                  </div>
+                </div>
+
+                {/* Human Error Loss */}
+                <div className="bg-white p-3 rounded-2xl border border-amber-200/80 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-amber-500">Salah Masak</span>
+                    <div className="w-5 h-5 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                      <Flame size={12} />
+                    </div>
+                  </div>
+                  <div className="text-sm font-black text-amber-600 mt-1 leading-tight">
+                    Rp {(staffActivityData?.summary?.teamHumanErrorCost || 0).toLocaleString('id-ID')}
+                  </div>
+                  <div className="text-[9px] text-amber-700 font-bold mt-1 truncate">
+                    {staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0}% total waste
+                  </div>
+                </div>
+
+                {/* Staff Meal */}
+                <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Makan Staf</span>
+                    <div className="w-5 h-5 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                      <Utensils size={12} />
+                    </div>
+                  </div>
+                  <div className="text-sm font-black text-emerald-700 mt-1 leading-tight">
+                    Rp {(staffActivityData?.summary?.teamStaffMealCost || 0).toLocaleString('id-ID')}
+                  </div>
+                  <div className="text-[9px] text-emerald-600 mt-1 truncate">
+                    Konsumsi resmi staf
+                  </div>
+                </div>
+              </div>
+
+              {/* TOP 4 KPI CARDS - DESKTOP VIEW (sm+) */}
+              <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Total Tindakan */}
                 <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
                   <div>
@@ -2891,32 +3428,32 @@ export const IngredientView: React.FC = () => {
               </div>
 
               {/* DUA GRAFIK VISUAL BREAKDOWN & PERSENTASE */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-5">
                 {/* GRAFIK 1: KOMPOSISI DISTRIBUSI TINDAKAN TIM */}
-                <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3 sm:space-y-4">
                   <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
                     <div>
-                      <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                        <PieChart size={18} className="text-violet-600" />
-                        Distribusi Tindakan Operasional Tim (%)
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                        <PieChart size={16} className="text-violet-600 shrink-0" />
+                        <span>Distribusi Tindakan Operasional Tim (%)</span>
                       </h4>
-                      <p className="text-xs text-slate-500 mt-0.5">Persentase fokus jenis interaksi stok yang dilakukan staf.</p>
+                      <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">Persentase fokus jenis interaksi stok yang dilakukan staf.</p>
                     </div>
                   </div>
 
-                  <div className="space-y-3.5 pt-1">
+                  <div className="space-y-3 pt-1">
                     {/* Restock Bar */}
                     <div>
                       <div className="flex justify-between text-xs font-bold mb-1">
                         <span className="text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span>
+                          <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
                           📥 Restock & Pasokan Masuk
                         </span>
                         <span className="text-indigo-600">
                           {staffActivityData?.summary?.teamActivityPercentages?.restock || 0}% ({staffActivityData?.summary?.teamRestockCount || 0} aksi)
                         </span>
                       </div>
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 sm:h-3 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, staffActivityData?.summary?.teamActivityPercentages?.restock || 0)}%` }}
@@ -2928,14 +3465,14 @@ export const IngredientView: React.FC = () => {
                     <div>
                       <div className="flex justify-between text-xs font-bold mb-1">
                         <span className="text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block"></span>
+                          <span className="w-2 h-2 rounded-full bg-sky-500 inline-block"></span>
                           🔧 Penyesuaian & Opname Fisik
                         </span>
                         <span className="text-sky-600">
                           {staffActivityData?.summary?.teamActivityPercentages?.adjustment || 0}% ({staffActivityData?.summary?.teamAdjustmentCount || 0} aksi)
                         </span>
                       </div>
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 sm:h-3 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-sky-500 to-sky-600 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, staffActivityData?.summary?.teamActivityPercentages?.adjustment || 0)}%` }}
@@ -2947,14 +3484,14 @@ export const IngredientView: React.FC = () => {
                     <div>
                       <div className="flex justify-between text-xs font-bold mb-1">
                         <span className="text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
+                          <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
                           ⚠️ Catat Kerusakan / Stock Loss
                         </span>
                         <span className="text-rose-600">
                           {staffActivityData?.summary?.teamActivityPercentages?.loss || 0}% ({staffActivityData?.summary?.teamLossCount || 0} aksi)
                         </span>
                       </div>
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 sm:h-3 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, staffActivityData?.summary?.teamActivityPercentages?.loss || 0)}%` }}
@@ -2965,30 +3502,30 @@ export const IngredientView: React.FC = () => {
                 </div>
 
                 {/* GRAFIK 2: BREAKDOWN KLASIFIKASI KERUGIAN */}
-                <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3 sm:space-y-4">
                   <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
                     <div>
-                      <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                        <BarChart3 size={18} className="text-rose-600" />
-                        Breakdown Faktor Kerugian (Waste vs Konsumsi)
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                        <BarChart3 size={16} className="text-rose-600 shrink-0" />
+                        <span>Breakdown Faktor Kerugian</span>
                       </h4>
-                      <p className="text-xs text-slate-500 mt-0.5">Membedakan kerugian kelalaian manusia, kadaluarsa, dan makan staf.</p>
+                      <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">Membedakan kelalaian manusia, kadaluarsa, dan makan staf.</p>
                     </div>
                   </div>
 
-                  <div className="space-y-3.5 pt-1">
+                  <div className="space-y-3 pt-1">
                     {/* Human Error Bar */}
                     <div>
                       <div className="flex justify-between text-xs font-bold mb-1">
-                        <span className="text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span>
-                          🍳 Human Error (Gosong / Tumpah / Salah Olah)
+                        <span className="text-slate-700 flex items-center gap-1.5 truncate">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 inline-block shrink-0"></span>
+                          <span className="truncate">🍳 Kelalaian / Salah Olah</span>
                         </span>
-                        <span className="text-rose-600">
+                        <span className="text-rose-600 shrink-0 ml-1">
                           {staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0}% (Rp {(staffActivityData?.summary?.teamHumanErrorCost || 0).toLocaleString('id-ID')})
                         </span>
                       </div>
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 sm:h-3 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0)}%` }}
@@ -2999,15 +3536,15 @@ export const IngredientView: React.FC = () => {
                     {/* Spoilage / Expired Bar */}
                     <div>
                       <div className="flex justify-between text-xs font-bold mb-1">
-                        <span className="text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
-                          🥀 Basi / Kadaluarsa Alamiah
+                        <span className="text-slate-700 flex items-center gap-1.5 truncate">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block shrink-0"></span>
+                          <span className="truncate">🥀 Basi / Kadaluarsa Alamiah</span>
                         </span>
-                        <span className="text-amber-600">
+                        <span className="text-amber-600 shrink-0 ml-1">
                           {staffActivityData?.summary?.teamLossCompositionPercentages?.spoilage || 0}% (Rp {(staffActivityData?.summary?.teamSpoilageCost || 0).toLocaleString('id-ID')})
                         </span>
                       </div>
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 sm:h-3 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, staffActivityData?.summary?.teamLossCompositionPercentages?.spoilage || 0)}%` }}
@@ -3018,15 +3555,15 @@ export const IngredientView: React.FC = () => {
                     {/* Staff Meal Bar */}
                     <div>
                       <div className="flex justify-between text-xs font-bold mb-1">
-                        <span className="text-slate-700 flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
-                          🍱 Konsumsi Resmi Staf (Staff Meal)
+                        <span className="text-slate-700 flex items-center gap-1.5 truncate">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0"></span>
+                          <span className="truncate">🍱 Makan Staf (Staff Meal)</span>
                         </span>
-                        <span className="text-emerald-700">
+                        <span className="text-emerald-700 shrink-0 ml-1">
                           {staffActivityData?.summary?.teamLossCompositionPercentages?.staffMeal || 0}% (Rp {(staffActivityData?.summary?.teamStaffMealCost || 0).toLocaleString('id-ID')})
                         </span>
                       </div>
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 sm:h-3 bg-slate-100 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-500" 
                           style={{ width: `${Math.min(100, staffActivityData?.summary?.teamLossCompositionPercentages?.staffMeal || 0)}%` }}
@@ -3037,21 +3574,121 @@ export const IngredientView: React.FC = () => {
                 </div>
               </div>
 
-              {/* TABEL LEADERBOARD & AKUNTABILITAS PER STAF */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-                <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              {/* RINCIAN AKUNTABILITAS PER STAF */}
+              <div className="bg-white p-3.5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3.5 sm:space-y-4">
+                <div className="border-b border-slate-100 pb-3 sm:pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div>
-                    <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                      <Users size={18} className="text-indigo-600" />
-                      Rincian Aktivitas & Akuntabilitas Per Anggota Tim
+                    <h4 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
+                      <Users size={16} className="text-indigo-600 shrink-0" />
+                      <span>Rincian Aktivitas & Akuntabilitas Per Anggota Tim</span>
                     </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">
                       Evaluasi objektif kontribusi restock, pemeliharaan stok, dan beban kerugian per individu.
                     </p>
                   </div>
+                  <div className="text-[11px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl border border-slate-200 self-start sm:self-auto">
+                    {staffActivityData?.staffList?.length || 0} Anggota Tim
+                  </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* Mobile Card List View (< 640px) */}
+                <div className="block sm:hidden space-y-2.5">
+                  {staffActivityData?.staffList?.length === 0 ? (
+                    <div className="py-8 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4 text-xs">
+                      Belum ada rekaman aktivitas mutasi stok pada periode ini.
+                    </div>
+                  ) : (
+                    staffActivityData?.staffList?.map((s: any) => {
+                      const isHighLoss = s.teamLossSharePercentage > 40 && s.totalLossCost > 50000;
+                      const isZeroLoss = s.totalLossCost === 0;
+
+                      return (
+                        <div 
+                          key={s.user.id}
+                          className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs flex flex-col gap-2 hover:border-violet-300 transition-colors"
+                        >
+                          {/* Top Row: User Avatar + Name + Role & KPI Status */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-black shrink-0">
+                                {s.user.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-black text-xs text-slate-900 truncate">{s.user.name}</span>
+                                  <span className={`px-1.5 py-0.2 rounded-full text-[8px] font-extrabold ${
+                                    s.user.role === 'Dapur' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                    s.user.role === 'Admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                    'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {s.user.role}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-400">@{s.user.username}</div>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0">
+                              {isZeroLoss ? (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-0.5">
+                                  <Award size={10} /> 0 Loss
+                                </span>
+                              ) : isHighLoss ? (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-0.5">
+                                  <Flame size={10} /> Review
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-0.5">
+                                  <UserCheck size={10} /> Normal
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 3 Metrics Grid: Total Aksi, Total Loss, Beban Tim */}
+                          <div className="grid grid-cols-3 gap-1 bg-slate-50/80 p-2 rounded-xl border border-slate-100 text-center">
+                            <div className="text-left pl-1">
+                              <div className="text-[8px] font-bold text-slate-400 uppercase">Total Aksi</div>
+                              <div className="text-[11px] font-black text-slate-900 mt-0.5">
+                                {s.totalActions}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="text-[8px] font-bold text-slate-400 uppercase">Total Loss</div>
+                              <div className="text-[11px] font-black text-rose-600 mt-0.5 truncate">
+                                Rp {s.totalLossCost.toLocaleString('id-ID')}
+                              </div>
+                            </div>
+
+                            <div className="text-right pr-1">
+                              <div className="text-[8px] font-bold text-slate-400 uppercase">Beban Tim</div>
+                              <div className="text-[11px] font-black text-slate-800 mt-0.5">
+                                {s.teamLossSharePercentage}%
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Bottom Row: Distribution mini pills */}
+                          <div className="flex items-center gap-1.5 text-[9px] pt-0.5">
+                            <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-bold">
+                              📥 Restock {s.activityPercentages?.restock || 0}%
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded font-bold">
+                              🔧 Opname {s.activityPercentages?.adjustment || 0}%
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-bold">
+                              ⚠️ Loss {s.activityPercentages?.loss || 0}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Desktop Table View (sm+) */}
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50/80 text-[10px] font-black text-slate-500 uppercase">
                       <tr>
@@ -3150,22 +3787,22 @@ export const IngredientView: React.FC = () => {
           TAB 4: KARTU STOK & ALUR DISTRIBUSI
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'movements' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
           {/* RESPONSIVE FILTER BAR */}
-          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col gap-4">
+          <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm flex flex-col gap-3 sm:gap-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <History size={20} className="text-indigo-600" />
-                  Kartu Stok Digital & Alur Mutasi
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <History size={18} className="text-indigo-600 shrink-0" />
+                  <span>Kartu Stok Digital & Alur Mutasi</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Jejak lengkap keluar/masuk stok: Restock PO, Produksi POS, Stock Loss, dan Opname.</p>
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Jejak lengkap keluar/masuk stok: Restock PO, Produksi POS, Stock Loss, dan Opname.</p>
               </div>
 
               {/* Dropdown Filters */}
               <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                 <select
-                  className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none"
+                  className="text-[11px] sm:text-xs font-bold py-1.5 sm:py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none outline-none"
                   value={movementIngredientFilter}
                   onChange={e => {
                     setMovementIngredientFilter(e.target.value);
@@ -3179,7 +3816,7 @@ export const IngredientView: React.FC = () => {
                 </select>
 
                 <select
-                  className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none"
+                  className="text-[11px] sm:text-xs font-bold py-1.5 sm:py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none outline-none"
                   value={movementTypeFilter}
                   onChange={e => {
                     setMovementTypeFilter(e.target.value);
@@ -3197,10 +3834,10 @@ export const IngredientView: React.FC = () => {
             </div>
 
             {/* Date Filters Row */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 flex-wrap">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100 flex-wrap">
               {/* Quick Date Presets */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full pb-1 sm:pb-0">
-                <span className="text-[11px] font-bold text-slate-400 mr-1 shrink-0">Tanggal:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] sm:text-xs font-bold text-slate-400 mr-0.5 shrink-0">Tanggal:</span>
                 {[
                   { id: 'all', label: 'Semua Waktu' },
                   { id: 'today', label: 'Hari Ini' },
@@ -3211,9 +3848,9 @@ export const IngredientView: React.FC = () => {
                   <button
                     key={p.id}
                     onClick={() => setMovementPresetDate(p.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                    className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                       movementPreset === p.id
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                        ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/20'
                         : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
@@ -3223,7 +3860,7 @@ export const IngredientView: React.FC = () => {
               </div>
 
               {/* Custom Date Inputs */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs w-full sm:w-auto justify-between sm:justify-start">
+              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs w-full sm:w-auto justify-between sm:justify-start">
                 <span className="text-[10px] font-bold text-slate-400">Dari:</span>
                 <input
                   type="date"
@@ -3233,9 +3870,9 @@ export const IngredientView: React.FC = () => {
                     setMovementStartDate(e.target.value);
                     fetchMovements(e.target.value, movementEndDate, movementTypeFilter, movementIngredientFilter);
                   }}
-                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                  className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800 cursor-pointer"
                 />
-                <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
+                <span className="text-[10px] font-bold text-slate-400 ml-0.5">s/d:</span>
                 <input
                   type="date"
                   value={movementEndDate}
@@ -3244,14 +3881,95 @@ export const IngredientView: React.FC = () => {
                     setMovementEndDate(e.target.value);
                     fetchMovements(movementStartDate, e.target.value, movementTypeFilter, movementIngredientFilter);
                   }}
-                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
+                  className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800 cursor-pointer"
                 />
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+          {/* KARTU STOK TABLE & MOBILE CARDS CONTAINER */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm overflow-hidden">
+            {/* Header info bar */}
+            <div className="flex items-center justify-between p-3.5 sm:p-5 border-b border-slate-100">
+              <span className="text-xs font-black text-slate-800">Riwayat Mutasi Bahan</span>
+              <span className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
+                {movements.length} Mutasi
+              </span>
+            </div>
+
+            {/* Mobile Card View (< 640px) */}
+            <div className="block sm:hidden p-3 space-y-2.5">
+              {movementsLoading ? (
+                <div className="py-10 text-center text-slate-400">
+                  <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={24} />
+                  <p className="text-xs font-semibold">Memuat kartu stok mutasi...</p>
+                </div>
+              ) : movements.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4 text-xs">
+                  Belum ada riwayat mutasi yang cocok dengan filter.
+                </div>
+              ) : (
+                movements.map((m: any) => {
+                  const isPositive = m.change > 0;
+                  return (
+                    <div 
+                      key={m.id}
+                      className="bg-white rounded-2xl border border-slate-200/90 p-3 shadow-xs flex flex-col gap-2 hover:border-indigo-300 transition-colors"
+                    >
+                      {/* Top Row: Ingredient Name & Quantity Change */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-black text-xs text-slate-900 tracking-tight">
+                            {m.ingredient?.name}
+                          </span>
+                        </div>
+
+                        <div className={`text-right font-black text-xs shrink-0 ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {isPositive ? `+${m.change.toLocaleString('id-ID')}` : m.change.toLocaleString('id-ID')} <span className="text-[10px] text-slate-400 font-normal">{m.ingredient?.unit}</span>
+                        </div>
+                      </div>
+
+                      {/* Middle Row: Type Badge & Timestamp */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black ${
+                          m.type === 'Produksi' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                          (m.type === 'Restock' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          (m.type === 'Rusak' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-700 border border-slate-200'))
+                        }`}>
+                          {m.type === 'Produksi' && '🍳 Produksi POS'}
+                          {m.type === 'Restock' && '📥 Restock Masuk'}
+                          {m.type === 'Rusak' && '🗑️ Stock Loss'}
+                          {m.type === 'Stock Opname' && '⚖️ Opname Fisik'}
+                          {m.type === 'Penyesuaian' && '🔧 Penyesuaian'}
+                          {!['Produksi', 'Restock', 'Rusak', 'Stock Opname', 'Penyesuaian'].includes(m.type) && m.type}
+                        </span>
+
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {new Date(m.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} {new Date(m.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      {/* Description & Reference if available */}
+                      {(m.description || m.referenceId) && (
+                        <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100 text-[10px]">
+                          {m.description && <div className="text-slate-700 font-medium">{m.description}</div>}
+                          {m.referenceId && <div className="text-slate-400 font-mono text-[9px] mt-0.5">Ref: {m.referenceId}</div>}
+                        </div>
+                      )}
+
+                      {/* Footer Row: Petugas */}
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-slate-100">
+                        <span>Petugas:</span>
+                        <span className="font-semibold text-slate-600">{m.user?.name || 'Sistem'}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop Table View (sm+) */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase">
                   <tr>
@@ -3334,15 +4052,15 @@ export const IngredientView: React.FC = () => {
           TAB 5: ANALISIS BELANJA & STOK MINIM
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'shopping' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
           {/* HORIZON SELECTOR & ACTIONS HEADER BAR */}
-          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1.5">
-                <Sparkles size={16} className="text-emerald-600" />
+          <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3 flex-wrap">
+              <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1.5">
+                <Sparkles size={14} className="text-emerald-600" />
                 Horizon Pemakaian:
               </span>
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full pb-1 sm:pb-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {[
                   { days: 3, label: '3 Hari' },
                   { days: 7, label: '7 Hari (1 Mgg)' },
@@ -3355,9 +4073,9 @@ export const IngredientView: React.FC = () => {
                       setShoppingHorizonDays(h.days);
                       fetchShoppingAnalytics(h.days);
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                    className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                       shoppingHorizonDays === h.days
-                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                        ? 'bg-emerald-600 text-white shadow-xs shadow-emerald-600/20'
                         : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
                     }`}
                   >
@@ -3368,10 +4086,10 @@ export const IngredientView: React.FC = () => {
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-2 self-stretch sm:self-end lg:self-auto justify-end flex-wrap">
+            <div className="flex items-center gap-2 self-stretch sm:self-end lg:self-auto justify-end">
               <button
                 onClick={copyAllShoppingToWA}
-                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                className="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95"
                 title="Salin Semua Daftar Belanja ke Format WhatsApp"
               >
                 <MessageCircle size={14} />
@@ -3379,7 +4097,7 @@ export const IngredientView: React.FC = () => {
               </button>
               <button
                 onClick={handleExportShoppingPDF}
-                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                className="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95"
                 title="Cetak Laporan Rencana Anggaran Belanja (PDF)"
               >
                 <Printer size={14} />
@@ -3388,8 +4106,62 @@ export const IngredientView: React.FC = () => {
             </div>
           </div>
 
-          {/* SHOPPING SUMMARY CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          {/* SHOPPING SUMMARY CARDS - MOBILE VIEW (< 640px) */}
+          <div className="space-y-2 sm:hidden">
+            {/* Modal Belanja Banner */}
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-3.5 rounded-2xl text-white shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-200">
+                  Est. Modal Belanja ({shoppingHorizonDays} Hari)
+                </span>
+                <span className="px-1.5 py-0.2 bg-white/20 text-white rounded text-[8px] font-black">
+                  RESTOCK
+                </span>
+              </div>
+              <div className="text-xl font-black mt-1 leading-tight">
+                Rp {(shoppingData?.summary?.totalRestockCost || 0).toLocaleString('id-ID')}
+              </div>
+              <div className="text-[10px] text-emerald-100/90 mt-1">
+                Kebutuhan aman operasional {shoppingHorizonDays} hari ke depan
+              </div>
+            </div>
+
+            {/* 2 Micro Cards: Kritis & Supplier */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-white p-3 rounded-2xl border border-amber-200/80 shadow-xs flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-700">Item Kritis</span>
+                  <div className="w-5 h-5 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <AlertTriangle size={12} />
+                  </div>
+                </div>
+                <div className="text-lg font-black text-amber-600 mt-1 leading-tight">
+                  {shoppingData?.summary?.totalLowStockCount || 0} <span className="text-xs font-semibold text-slate-500">Bahan</span>
+                </div>
+                <div className="text-[9px] text-slate-400 mt-1 truncate">
+                  {shoppingData?.summary?.totalCriticalCount || 0} bahan habis (0)
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-indigo-600">Vendor / PO</span>
+                  <div className="w-5 h-5 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <Truck size={12} />
+                  </div>
+                </div>
+                <div className="text-lg font-black text-indigo-600 mt-1 leading-tight">
+                  {shoppingData?.supplierGrouping?.length || 0} <span className="text-xs font-semibold text-slate-500">Supplier</span>
+                </div>
+                <div className="text-[9px] text-slate-400 mt-1 truncate">
+                  Siap dihubungi
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SHOPPING SUMMARY CARDS - DESKTOP VIEW (sm+) */}
+          <div className="hidden sm:grid sm:grid-cols-3 gap-5">
             <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 rounded-3xl text-white shadow-lg shadow-emerald-600/20">
               <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Estimasi Modal Belanja ({shoppingHorizonDays} Hari)</p>
               <h3 className="text-2xl sm:text-3xl font-black mt-1">
@@ -3430,67 +4202,130 @@ export const IngredientView: React.FC = () => {
           </div>
 
           {/* REKOMENDASI BELANJA PER SUPPLIER */}
-          <div className="space-y-4">
+          <div className="space-y-3.5 sm:space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <Truck size={18} className="text-emerald-600" />
-                  Rekomendasi Pengadaan Cerdas per Supplier
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <Truck size={16} className="text-emerald-600 shrink-0" />
+                  <span>Rekomendasi Pengadaan Cerdas per Supplier</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Dikelompokkan otomatis per vendor untuk kemudahan pembuatan Surat PO dan Order WhatsApp.</p>
+                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">Dikelompokkan otomatis per vendor untuk kemudahan Surat PO dan Order WhatsApp.</p>
               </div>
             </div>
 
             {shoppingLoading ? (
-              <div className="bg-white p-12 rounded-3xl border border-slate-200/80 text-center text-slate-400">
+              <div className="bg-white p-10 sm:p-12 rounded-3xl border border-slate-200/80 text-center text-slate-400">
                 <RefreshCw className="animate-spin inline-block mb-2 text-emerald-600" size={24} />
-                <p>Menganalisis kebutuhan belanja stok...</p>
+                <p className="text-xs font-semibold">Menganalisis kebutuhan belanja stok...</p>
               </div>
             ) : shoppingData?.supplierGrouping?.length === 0 ? (
-              <div className="bg-white p-8 rounded-3xl border border-slate-200/80 text-center text-slate-500 font-bold">
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200/80 text-center text-slate-500 font-bold text-xs sm:text-sm">
                 🎉 Luar biasa! Seluruh stok bahan baku berada pada tingkat yang aman. Tidak ada kebutuhan belanja darurat.
               </div>
             ) : (
               shoppingData?.supplierGrouping?.map((sup: any, idx: number) => (
-                <div key={idx} className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div key={idx} className="bg-white rounded-3xl border border-slate-200/80 p-3.5 sm:p-6 shadow-xs sm:shadow-sm space-y-3 sm:space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-3 sm:pb-4">
                     <div>
-                      <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
+                      <h4 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
                         {sup.supplierName}
                       </h4>
                       {sup.phone && (
-                        <p className="text-xs font-mono text-slate-400 mt-0.5">Kontak / WA: {sup.phone}</p>
+                        <p className="text-[11px] font-mono text-slate-400 mt-0.5">Kontak: {sup.phone}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-slate-400 uppercase">Subtotal Belanja Supplier</div>
-                        <div className="text-lg font-black text-emerald-700">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
+                      <div className="text-left sm:text-right">
+                        <div className="text-[9px] sm:text-xs font-bold text-slate-400 uppercase">Subtotal Belanja</div>
+                        <div className="text-sm sm:text-lg font-black text-emerald-700">
                           Rp {sup.totalCost.toLocaleString('id-ID')}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleGenerateSupplierPO(sup)}
-                        className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0"
-                        title={`Unduh Surat Purchase Order (PO) Resmi ${sup.supplierName}`}
-                      >
-                        <FileText size={15} />
-                        <span className="hidden sm:inline">Surat PO (PDF)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => copySupplierOrderToWA(sup)}
-                        className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shrink-0"
-                        title={`Salin Pesanan WA khusus ${sup.supplierName}`}
-                      >
-                        <MessageCircle size={15} />
-                        <span className="hidden sm:inline">Order WA</span>
-                      </button>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateSupplierPO(sup)}
+                          className="px-2.5 py-1.5 sm:p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
+                          title={`Unduh Surat Purchase Order (PO) Resmi ${sup.supplierName}`}
+                        >
+                          <FileText size={14} />
+                          <span className="text-[11px] sm:text-xs">PO PDF</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copySupplierOrderToWA(sup)}
+                          className="px-2.5 py-1.5 sm:p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
+                          title={`Salin Pesanan WA khusus ${sup.supplierName}`}
+                        >
+                          <MessageCircle size={14} />
+                          <span className="text-[11px] sm:text-xs">WA</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  {/* Mobile Card View (< 640px) */}
+                  <div className="block sm:hidden space-y-2">
+                    {sup.items.map((item: any) => (
+                      <div 
+                        key={item.id}
+                        className="bg-slate-50/80 rounded-2xl border border-slate-100 p-3 shadow-xs flex flex-col gap-2 hover:border-emerald-300 transition-colors"
+                      >
+                        {/* Top: Name & Status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-black text-xs text-slate-900 tracking-tight">
+                            {item.name}
+                          </span>
+
+                          <span className="shrink-0">
+                            {item.stock === 0 ? (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-50 text-rose-600 border border-rose-200">
+                                Habis
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                                Menipis
+                              </span>
+                            )}
+                          </span>
+                        </div>
+
+                        {/* 3 Metrics: Stok Sekarang, Saran Beli, Est. Biaya */}
+                        <div className="grid grid-cols-3 gap-1 bg-white p-2 rounded-xl border border-slate-100 text-center">
+                          <div className="text-left pl-1">
+                            <div className="text-[8px] font-bold text-slate-400 uppercase">Stok Fisik</div>
+                            <div className="text-[11px] font-black text-slate-900 mt-0.5">
+                              {item.stock.toLocaleString('id-ID')} <span className="text-[9px] font-normal text-slate-400">{item.unit}</span>
+                            </div>
+                            <div className="text-[8px] text-slate-400">Min: {item.minStock}</div>
+                          </div>
+
+                          <div>
+                            <div className="text-[8px] font-bold text-slate-400 uppercase">Saran Beli</div>
+                            <div className="text-[11px] font-black text-emerald-700 mt-0.5">
+                              +{item.suggestedQty.toLocaleString('id-ID')} <span className="text-[9px] font-normal text-slate-400">{item.unit}</span>
+                            </div>
+                          </div>
+
+                          <div className="text-right pr-1">
+                            <div className="text-[8px] font-bold text-slate-400 uppercase">Est. Biaya</div>
+                            <div className="text-[11px] font-black text-slate-900 mt-0.5 truncate">
+                              Rp {item.estimatedCost.toLocaleString('id-ID')}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom micro info */}
+                        <div className="flex items-center justify-between text-[9px] text-slate-400 pt-0.5">
+                          <span>Burn Rate: <strong className="text-indigo-600">~{item.dailyBurnRate.toLocaleString('id-ID')} {item.unit}/hari</strong></span>
+                          <span>Harga Beli: <strong className="text-slate-600">Rp {item.buyPrice.toLocaleString('id-ID')}</strong></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table View (sm+) */}
+                  <div className="hidden sm:block overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase">
                         <tr>
@@ -3553,53 +4388,53 @@ export const IngredientView: React.FC = () => {
           TAB 5: KAPASITAS MENU (BOM)
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'forecast' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
           {/* HEADER & CONTROLS */}
-          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/90 shadow-xs sm:shadow-sm space-y-3.5 sm:space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
               <div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2.5">
-                  <span className="w-9 h-9 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
-                    <Utensils size={20} />
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                    <Utensils size={18} />
                   </span>
-                  <span>Analisis Kapasitas Produksi Menu & Bottleneck (BOM)</span>
+                  <span>Analisis Kapasitas Menu & Bottleneck (BOM)</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-1 font-medium">
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 font-medium">
                   Simulasi ketersediaan porsi menu olahan dapur yang dapat diproduksi dari stok bahan baku secara real-time.
                 </p>
               </div>
 
               {/* SEARCH BOX */}
-              <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 <input
                   type="text"
                   value={forecastSearch}
                   onChange={e => setForecastSearch(e.target.value)}
-                  placeholder="Cari nama menu atau kategori..."
-                  className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition-all shadow-inner"
+                  placeholder="Cari menu olahan..."
+                  className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition-all shadow-inner"
                 />
                 {forecastSearch && (
                   <button 
                     type="button" 
                     onClick={() => setForecastSearch('')} 
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
-                    <X size={14} />
+                    <X size={13} />
                   </button>
                 )}
               </div>
             </div>
 
             {/* QUICK STAT SUMMARY & FILTER PILLS */}
-            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            <div className="pt-2.5 sm:pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-wrap">
                 <button
                   type="button"
                   onClick={() => setForecastStatusFilter('ALL')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     forecastStatusFilter === 'ALL'
-                      ? 'bg-slate-900 text-white shadow-sm'
+                      ? 'bg-slate-900 text-white shadow-xs'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                   }`}
                 >
@@ -3608,44 +4443,44 @@ export const IngredientView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setForecastStatusFilter('AMAN')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
                     forecastStatusFilter === 'AMAN'
-                      ? 'bg-emerald-600 text-white shadow-sm'
+                      ? 'bg-emerald-600 text-white shadow-xs'
                       : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/60'
                   }`}
                 >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   Siap Saji ({forecastStats.safeCount})
                 </button>
                 <button
                   type="button"
                   onClick={() => setForecastStatusFilter('MENIPIS')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
                     forecastStatusFilter === 'MENIPIS'
-                      ? 'bg-amber-600 text-white shadow-sm'
+                      ? 'bg-amber-600 text-white shadow-xs'
                       : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/60'
                   }`}
                 >
-                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                   Menipis ({forecastStats.warningCount})
                 </button>
                 <button
                   type="button"
                   onClick={() => setForecastStatusFilter('HABIS')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
                     forecastStatusFilter === 'HABIS'
-                      ? 'bg-rose-600 text-white shadow-sm'
+                      ? 'bg-rose-600 text-white shadow-xs'
                       : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/60'
                   }`}
                 >
-                  <span className="w-2 h-2 rounded-full bg-rose-400" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                   Habis ({forecastStats.outOfStockCount})
                 </button>
               </div>
 
-              <div className="text-xs font-bold text-slate-500 shrink-0 flex items-center gap-2">
+              <div className="text-[11px] sm:text-xs font-bold text-slate-500 shrink-0 flex items-center gap-1.5 self-start sm:self-auto">
                 <span>Total Kapasitas:</span>
-                <span className="px-2.5 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-black">
+                <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 font-black">
                   {forecastStats.totalPortions.toLocaleString('id-ID')} Porsi
                 </span>
               </div>
@@ -3653,18 +4488,18 @@ export const IngredientView: React.FC = () => {
           </div>
 
           {/* CARD GRID */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
             {forecastLoading ? (
-              <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200/80 p-8 shadow-xs">
-                <RefreshCw className="animate-spin inline-block mb-3 text-amber-500" size={28} />
-                <p className="font-bold text-slate-700">Menganalisis kapasitas menu dari resep BOM...</p>
-                <p className="text-xs text-slate-400 mt-1">Menghitung stok bahan baku dan mencari batas bottleneck produksi dapur.</p>
+              <div className="col-span-full py-12 text-center text-slate-400 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs">
+                <RefreshCw className="animate-spin inline-block mb-2 text-amber-500" size={24} />
+                <p className="font-bold text-slate-700 text-xs sm:text-sm">Menganalisis kapasitas menu dari resep BOM...</p>
+                <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">Menghitung stok bahan baku dan mencari batas bottleneck produksi dapur.</p>
               </div>
             ) : filteredForecastList.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-slate-500 bg-white rounded-3xl border border-slate-200/80 p-8 shadow-xs">
-                <ChefHat className="inline-block mb-3 text-slate-300" size={40} />
-                <p className="font-bold text-slate-800 text-base">Tidak ada menu yang sesuai filter</p>
-                <p className="text-xs text-slate-400 mt-1">Coba sesuaikan kata kunci pencarian atau ganti filter status di atas.</p>
+              <div className="col-span-full py-12 text-center text-slate-500 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs">
+                <ChefHat className="inline-block mb-2 text-slate-300" size={32} />
+                <p className="font-bold text-slate-800 text-sm">Tidak ada menu yang sesuai filter</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Coba sesuaikan kata kunci pencarian atau ganti filter status di atas.</p>
               </div>
             ) : (
               filteredForecastList.map(prod => {
@@ -3675,163 +4510,166 @@ export const IngredientView: React.FC = () => {
                 return (
                   <div 
                     key={prod.productId} 
-                    className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-amber-300 transition-all duration-300 flex flex-col justify-between overflow-hidden group hover:-translate-y-1"
+                    className="bg-white rounded-3xl border border-slate-200/90 p-3.5 sm:p-5 shadow-xs hover:shadow-md hover:border-amber-300 transition-all flex flex-col justify-between overflow-hidden gap-3"
                   >
-                    <div>
-                      {/* HERO IMAGE BANNER */}
-                      <div className="relative h-44 sm:h-48 w-full overflow-hidden bg-slate-900">
-                        <ProductImage 
-                          src={prod.imageUrl} 
-                          alt={prod.productName} 
-                          categoryName={prod.categoryName} 
-                          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105" 
-                        />
-                        {/* Ambient gradient overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent" />
-
-                        {/* Floating Badges Header */}
-                        <div className="absolute top-3 inset-x-3 flex items-center justify-between gap-2 z-10">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md bg-black/50 text-white/90 border border-white/20 shadow-sm">
-                            <Utensils size={10} className="text-amber-400" />
-                            {prod.categoryName || 'Menu Olahan'}
-                          </span>
-
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black backdrop-blur-md shadow-md ${
-                            prod.maxPortions === 0 
-                              ? 'bg-rose-500/90 text-white border border-rose-400/40 animate-pulse' 
-                              : prod.maxPortions <= 5 
-                                ? 'bg-amber-500/90 text-white border border-amber-400/40' 
-                                : prod.maxPortions <= 15
-                                  ? 'bg-yellow-500/90 text-slate-950 border border-yellow-300/40'
-                                  : 'bg-emerald-500/90 text-white border border-emerald-400/40'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              prod.maxPortions === 0 ? 'bg-white' : prod.maxPortions <= 15 ? 'bg-amber-950 animate-ping' : 'bg-white'
-                            }`} />
-                            {prod.maxPortions === 0 
-                              ? 'Habis (Sold Out)' 
-                              : prod.maxPortions <= 5
-                                ? `Kritis (${prod.maxPortions} Porsi)`
-                                : prod.maxPortions <= 15
-                                  ? `Menipis (${prod.maxPortions} Porsi)`
-                                  : `Aman (${prod.maxPortions} Porsi)`
-                            }
-                          </span>
+                    <div className="space-y-3">
+                      {/* TOP ROW: MENU IMAGE ON THE SIDE (COMPACT THUMBNAIL) + PRODUCT INFO */}
+                      <div className="flex items-start gap-2.5 sm:gap-3">
+                        {/* Compact Side Image Thumbnail */}
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-slate-900 shrink-0 relative border border-slate-200/90 shadow-2xs">
+                          <ProductImage 
+                            src={prod.imageUrl} 
+                            alt={prod.productName} 
+                            categoryName={prod.categoryName} 
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                          />
+                          {prod.maxPortions === 0 && (
+                            <div className="absolute inset-0 bg-rose-950/80 flex items-center justify-center">
+                              <span className="text-[8px] sm:text-[9px] font-black text-white uppercase tracking-wider">Habis</span>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Bottom overlay inside image: Product Name & Selling Price */}
-                        <div className="absolute bottom-3 inset-x-3 z-10 flex items-end justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-black text-base text-white leading-tight drop-shadow-md truncate" title={prod.productName}>
-                              {prod.productName}
-                            </h4>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[11px] font-semibold text-slate-300/90">Harga Jual:</span>
-                              <span className="text-xs font-black text-amber-300 drop-shadow">
-                                Rp {prod.sellPrice.toLocaleString('id-ID')}
-                              </span>
-                            </div>
+                        {/* Info Beside Image */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/60 truncate">
+                              <Utensils size={9} className="text-amber-600 shrink-0" />
+                              <span className="truncate">{prod.categoryName || 'Menu Olahan'}</span>
+                            </span>
+
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shrink-0 ${
+                              prod.maxPortions === 0 
+                                ? 'bg-rose-100 text-rose-700 border border-rose-200' 
+                                : prod.maxPortions <= 5 
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                                  : prod.maxPortions <= 15 
+                                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                prod.maxPortions === 0 ? 'bg-rose-600' : prod.maxPortions <= 15 ? 'bg-amber-600' : 'bg-emerald-600'
+                              }`} />
+                              {prod.maxPortions === 0 
+                                ? 'Sold Out' 
+                                : prod.maxPortions <= 5
+                                  ? 'Kritis'
+                                  : prod.maxPortions <= 15
+                                    ? 'Menipis'
+                                    : 'Aman'
+                              }
+                            </span>
+                          </div>
+
+                          <h4 className="font-black text-xs sm:text-sm text-slate-900 mt-1 leading-snug line-clamp-2" title={prod.productName}>
+                            {prod.productName}
+                          </h4>
+
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[11px]">
+                            <span className="text-slate-400 font-medium">Jual:</span>
+                            <span className="font-black text-amber-600">
+                              Rp {prod.sellPrice.toLocaleString('id-ID')}
+                            </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* CARD CONTENT */}
-                      <div className="p-4 space-y-3.5">
-                        {/* Capacity & HPP Metric Box */}
-                        <div className="p-3.5 bg-gradient-to-br from-slate-50 to-amber-50/30 rounded-2xl border border-slate-200/80 grid grid-cols-2 gap-3 divide-x divide-slate-200/80">
-                          <div>
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Kapasitas Saji</div>
-                            <div className="flex items-baseline gap-1 mt-0.5">
-                              <span className={`text-2xl font-black ${
-                                prod.maxPortions === 0 ? 'text-rose-600' :
-                                prod.maxPortions <= 5 ? 'text-amber-600' :
-                                prod.maxPortions <= 15 ? 'text-yellow-600' : 'text-slate-900'
-                              }`}>
-                                {prod.maxPortions.toLocaleString('id-ID')}
-                              </span>
-                              <span className="text-xs font-bold text-slate-500">Porsi</span>
-                            </div>
-
-                            {/* Capacity mini progress meter */}
-                            <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-2">
-                              <div 
-                                className={`h-full rounded-full transition-all duration-500 ${
-                                  prod.maxPortions === 0 ? 'bg-rose-500 w-0' :
-                                  prod.maxPortions <= 5 ? 'bg-rose-500' :
-                                  prod.maxPortions <= 15 ? 'bg-amber-500' : 'bg-emerald-500'
-                                }`}
-                                style={{ width: `${Math.min(100, Math.max(8, (prod.maxPortions / 50) * 100))}%` }}
-                              />
-                            </div>
+                      {/* KAPASITAS PORSI (EXTRA BOLD & PROMINENT) & HPP METRIC BOX */}
+                      <div className="p-3 bg-gradient-to-br from-slate-50 via-amber-50/20 to-slate-50 rounded-2xl border border-slate-200/90 grid grid-cols-2 gap-2.5 divide-x divide-slate-200/80 shadow-2xs">
+                        <div>
+                          <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Kapasitas Saji</div>
+                          <div className="flex items-baseline gap-1.5 mt-0.5">
+                            <span className={`text-2xl sm:text-3xl font-black tracking-tight ${
+                              prod.maxPortions === 0 ? 'text-rose-600 font-black' :
+                              prod.maxPortions <= 5 ? 'text-amber-600 font-black' :
+                              prod.maxPortions <= 15 ? 'text-amber-500 font-black' : 'text-slate-950 font-black'
+                            }`}>
+                              {prod.maxPortions.toLocaleString('id-ID')}
+                            </span>
+                            <span className="text-xs font-black text-slate-800 uppercase tracking-wide">Porsi</span>
                           </div>
 
-                          <div className="pl-3">
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">HPP / Porsi</div>
-                            <div className="text-base font-black text-emerald-700 mt-1">
+                          {/* Capacity mini progress meter */}
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1.5">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                prod.maxPortions === 0 ? 'bg-rose-500 w-0' :
+                                prod.maxPortions <= 5 ? 'bg-rose-500' :
+                                prod.maxPortions <= 15 ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${Math.min(100, Math.max(8, (prod.maxPortions / 50) * 100))}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pl-2.5 flex flex-col justify-between">
+                          <div>
+                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">HPP / Porsi</div>
+                            <div className="text-xs sm:text-sm font-black text-emerald-700 mt-0.5">
                               Rp {prod.buyPrice.toLocaleString('id-ID')}
                             </div>
-                            {prod.sellPrice > prod.buyPrice && (
-                              <div className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded-md mt-1">
-                                <span>+{marginPercent}% Margin</span>
-                              </div>
-                            )}
                           </div>
-                        </div>
-
-                        {/* Bottleneck Notice */}
-                        {prod.bottleneck ? (
-                          <div className={`p-3 rounded-2xl border text-xs space-y-1 transition-all ${
-                            prod.maxPortions === 0 
-                              ? 'bg-rose-50/90 border-rose-200 text-rose-900' 
-                              : 'bg-amber-50/90 border-amber-200 text-amber-900'
-                          }`}>
-                            <div className="font-black flex items-center gap-1.5">
-                              {prod.maxPortions === 0 ? (
-                                <XCircle size={14} className="text-rose-600 shrink-0" />
-                              ) : (
-                                <AlertTriangle size={14} className="text-amber-600 shrink-0" />
-                              )}
-                              <span>{prod.maxPortions === 0 ? 'Penyebab Menu Habis:' : 'Bahan Pembatas (Bottleneck):'}</span>
+                          {prod.sellPrice > prod.buyPrice && (
+                            <div className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded-md w-fit">
+                              <span>+{marginPercent}% Margin</span>
                             </div>
-                            <p className="font-medium text-[11px] leading-relaxed">
-                              <span className="font-bold underline">{prod.bottleneck.ingredientName}</span> tersisa{' '}
-                              <span className="font-black">{prod.bottleneck.currentStock} {prod.bottleneck.unit}</span>{' '}
-                              {prod.maxPortions === 0 
-                                ? '(stok habis sehingga menu tidak dapat disajikan).' 
-                                : `(hanya mencukupi untuk ${prod.bottleneck.maxPortions} porsi lagi).`}
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200/60 text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
-                            <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-                            <span>Seluruh stok bahan baku mencukupi dengan optimal.</span>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
+
+                      {/* BOTTLENECK NOTICE */}
+                      {prod.bottleneck ? (
+                        <div className={`p-2.5 rounded-xl border text-[11px] space-y-0.5 transition-all ${
+                          prod.maxPortions === 0 
+                            ? 'bg-rose-50/90 border-rose-200 text-rose-900' 
+                            : 'bg-amber-50/90 border-amber-200 text-amber-900'
+                        }`}>
+                          <div className="font-black flex items-center gap-1">
+                            {prod.maxPortions === 0 ? (
+                              <XCircle size={13} className="text-rose-600 shrink-0" />
+                            ) : (
+                              <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                            )}
+                            <span>{prod.maxPortions === 0 ? 'Bahan Habis:' : 'Bahan Pembatas:'}</span>
+                            <span className="font-bold underline truncate">{prod.bottleneck.ingredientName}</span>
+                          </div>
+                          <p className="font-medium text-[10px] sm:text-[11px] leading-relaxed">
+                            Tersisa <strong className="font-black text-slate-900">{prod.bottleneck.currentStock} {prod.bottleneck.unit}</strong>{' '}
+                            {prod.maxPortions === 0 
+                              ? '(stok habis, menu tidak bisa disajikan).' 
+                              : <span>(hanya cukup untuk <strong className="font-black text-amber-950 underline">{prod.bottleneck.maxPortions} porsi</strong> lagi).</span>}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-200/60 text-[10px] sm:text-[11px] font-semibold text-emerald-800 flex items-center gap-1.5">
+                          <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                          <span>Seluruh stok bahan baku mencukupi dengan optimal.</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* RECIPE DETAILS ACCORDION */}
                     {prod.recipeDetails.length > 0 && (
-                      <div className="p-4 pt-0">
+                      <div className="pt-0">
                         <button
                           onClick={() => setExpandedForecastId(isExpanded ? null : prod.productId)}
-                          className="w-full py-2.5 px-3.5 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200/80 rounded-2xl text-xs font-bold flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
+                          className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200/80 rounded-xl text-[11px] font-bold flex items-center justify-between transition-colors shadow-2xs cursor-pointer"
                         >
                           <span className="flex items-center gap-1.5">
-                            <Layers size={13} className="text-indigo-600" />
+                            <Layers size={12} className="text-indigo-600" />
                             <span>Komposisi Resep ({prod.recipeDetails.length} Bahan)</span>
                           </span>
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                         </button>
 
                         {isExpanded && (
-                          <div className="mt-2.5 space-y-1.5 p-2 bg-slate-50/90 rounded-2xl border border-slate-200/70 max-h-56 overflow-y-auto">
+                          <div className="mt-2 space-y-1.5 p-2 bg-slate-50/90 rounded-2xl border border-slate-200/70 max-h-52 overflow-y-auto">
                             {prod.recipeDetails.map(r => {
                               const isLimiting = prod.bottleneck && prod.bottleneck.ingredientId === r.ingredientId;
                               return (
                                 <div 
                                   key={r.ingredientId} 
-                                  className={`p-2 rounded-xl text-[11px] flex items-center justify-between gap-2 border transition-colors ${
+                                  className={`p-2 rounded-xl text-[10px] sm:text-[11px] flex items-center justify-between gap-2 border transition-colors ${
                                     isLimiting 
                                       ? 'bg-amber-50/90 border-amber-300 text-amber-950 font-bold' 
                                       : 'bg-white border-slate-100 text-slate-800'
@@ -3839,10 +4677,10 @@ export const IngredientView: React.FC = () => {
                                 >
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 truncate">
-                                      {isLimiting && <AlertTriangle size={11} className="text-amber-600 shrink-0" />}
+                                      {isLimiting && <AlertTriangle size={10} className="text-amber-600 shrink-0" />}
                                       <span className="font-bold truncate">{r.ingredientName}</span>
                                     </div>
-                                    <div className="text-[10px] text-slate-400 font-medium">
+                                    <div className="text-[9px] text-slate-400 font-medium">
                                       Takaran: {r.qtyPerServing} {r.unit} / porsi
                                     </div>
                                   </div>
@@ -3877,85 +4715,97 @@ export const IngredientView: React.FC = () => {
           TAB 6: AUDIT STOCK OPNAME FISIK
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'opname' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in pb-16 sm:pb-0">
+          <div className="bg-white p-3.5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-xs sm:shadow-sm space-y-3.5 sm:space-y-4">
+            {/* HEADER & TOP AUDIT ACTIONS */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 border-b border-slate-100 pb-3.5 sm:pb-4">
               <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <ClipboardCheck size={20} className="text-blue-600" />
-                  Formulir Audit Stock Opname Fisik
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
+                    <ClipboardCheck size={18} />
+                  </span>
+                  <span>Formulir Audit Stock Opname Fisik</span>
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Cocokkan stok fisik di gudang/chiller dengan stok sistem untuk auto-adjust selisih.</p>
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 font-medium">
+                  Cocokkan stok fisik di gudang/chiller dengan stok sistem untuk auto-adjust selisih real-time.
+                </p>
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <button
+                  type="button"
                   onClick={handleExportOpnamePDF}
-                  className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                  className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs shrink-0 cursor-pointer"
                   title="Cetak Berita Acara Stock Opname (PDF)"
                 >
-                  <Printer size={15} />
-                  <span>Cetak Berita Acara (PDF)</span>
+                  <Printer size={14} />
+                  <span className="hidden sm:inline">Cetak PDF</span>
+                  <span className="sm:hidden">PDF</span>
                 </button>
-                <input
-                  type="text"
-                  value={auditorName}
-                  onChange={e => setAuditorName(e.target.value)}
-                  placeholder="Nama Auditor"
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-                />
+
+                <div className="flex-1 sm:flex-none min-w-[130px] sm:w-44">
+                  <input
+                    type="text"
+                    value={auditorName}
+                    onChange={e => setAuditorName(e.target.value)}
+                    placeholder="Nama Auditor / Staf"
+                    className="w-full px-3 py-1.5 sm:py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
                 <button
+                  type="button"
                   onClick={handleSubmitOpname}
                   disabled={submittingOpname}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all"
+                  className="px-4 py-1.5 sm:px-5 sm:py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
                 >
-                  <CheckCircle2 size={16} />
-                  <span>{submittingOpname ? 'Menyimpan...' : 'Simpan & Sinkronkan Opname'}</span>
+                  <CheckCircle2 size={15} />
+                  <span>{submittingOpname ? 'Menyimpan...' : 'Simpan Opname'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Search & Filter Toolbar for Stock Opname */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl">
+            {/* SEARCH & FILTER TOOLBAR */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 p-3 sm:p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl">
               {/* Search input */}
-              <div className="relative flex-1 min-w-[240px]">
-                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Ketik nama bahan untuk audit cepat (misal: kopi, ayam, sirup, cup)..."
+                  placeholder="Cari bahan audit (kopi, ayam, sirup, cup)..."
                   value={opnameSearch}
                   onChange={e => setOpnameSearch(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                  className="w-full pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-2xs"
                 />
                 {opnameSearch && (
                   <button
                     type="button"
                     onClick={() => setOpnameSearch('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                   >
-                    <X size={14} />
+                    <X size={13} />
                   </button>
                 )}
               </div>
 
-              {/* Category Pills & Variance Filter */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Category Pills & Quick Actions */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                 {/* Category Pills */}
-                <div className="flex items-center gap-1 p-0.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 shadow-sm">
+                <div className="flex items-center gap-1 p-0.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 shadow-2xs overflow-x-auto scrollbar-none">
                   {[
                     { id: 'ALL', label: 'Semua' },
-                    { id: 'DRINK', label: '🥤 Minuman' },
-                    { id: 'FOOD', label: '🍲 Makanan' },
-                    { id: 'PACKAGING', label: '📦 Kemasan' }
+                    { id: 'DRINK', label: 'Minuman' },
+                    { id: 'FOOD', label: 'Makanan' },
+                    { id: 'PACKAGING', label: 'Kemasan' }
                   ].map(tab => (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() => setOpnameCategoryFilter(tab.id as any)}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      className={`px-2 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer ${
                         opnameCategoryFilter === tab.id
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'hover:text-slate-900'
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'hover:text-slate-900 text-slate-600'
                       }`}
                     >
                       {tab.label}
@@ -3967,7 +4817,7 @@ export const IngredientView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setOpnameVarianceOnly(!opnameVarianceOnly)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 shadow-sm ${
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold border transition-all flex items-center gap-1 shadow-2xs cursor-pointer shrink-0 ${
                     opnameVarianceOnly
                       ? 'bg-amber-500 text-white border-amber-600'
                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -3976,7 +4826,7 @@ export const IngredientView: React.FC = () => {
                   <AlertTriangle size={13} className={opnameVarianceOnly ? 'text-amber-100' : 'text-amber-500'} />
                   <span>Hanya Selisih</span>
                   {opnameVarianceCount > 0 && (
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black ${
                       opnameVarianceOnly ? 'bg-white text-amber-600' : 'bg-amber-100 text-amber-800'
                     }`}>
                       {opnameVarianceCount}
@@ -3984,35 +4834,231 @@ export const IngredientView: React.FC = () => {
                   )}
                 </button>
 
-                {/* Quick Auto-fill: Set Fisik = Sistem */}
+                {/* Quick Auto-fill: Set Semua Fisik = Sistem */}
                 <button
                   type="button"
                   onClick={handleSetAllPhysicalToSystem}
-                  className="px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                  className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold transition-all shadow-2xs flex items-center gap-1 shrink-0 cursor-pointer"
                   title="Salin semua angka stok sistem ke stok fisik riil"
                 >
-                  <RefreshCw size={13} className="text-slate-500" />
-                  <span>Set Fisik = Sistem</span>
+                  <RefreshCw size={12} className="text-slate-500" />
+                  <span className="hidden sm:inline">Set Semua = Sistem</span>
+                  <span className="sm:hidden">Semua = Sistem</span>
                 </button>
               </div>
             </div>
 
             {/* Filter Status & Counter Info */}
-            <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px] sm:text-xs text-slate-500 px-1">
               <span>
                 Menampilkan <strong>{filteredOpnameItems.length}</strong> dari {opnameItems.length} bahan baku opname
                 {opnameSearch && <span> • Pencarian: &ldquo;{opnameSearch}&rdquo;</span>}
               </span>
               {opnameVarianceCount > 0 && (
-                <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200/60 text-[11px]">
-                  ⚠️ Terdeteksi {opnameVarianceCount} bahan memiliki selisih stok riil
+                <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200/60 text-[10px] sm:text-[11px] self-start sm:self-auto flex items-center gap-1">
+                  <AlertTriangle size={11} className="text-amber-600 shrink-0" />
+                  <span>Terdeteksi {opnameVarianceCount} bahan memiliki selisih stok riil</span>
                 </span>
               )}
             </div>
 
-            <div className="overflow-x-auto max-h-[600px]">
+            {/* ─── MOBILE VIEW: DEDICATED TOUCH-FRIENDLY CARDS FOR KITCHEN STAFF (block sm:hidden) ─── */}
+            <div className="block sm:hidden space-y-2.5">
+              {filteredOpnameItems.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200/80 p-4">
+                  <Search size={24} className="mx-auto mb-2 text-slate-300" />
+                  <p className="font-bold text-xs text-slate-700">Tidak ada bahan baku yang cocok</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Coba sesuaikan kata kunci pencarian atau matikan filter</p>
+                  {(opnameSearch || opnameCategoryFilter !== 'ALL' || opnameVarianceOnly) && (
+                    <button
+                      type="button"
+                      onClick={() => { setOpnameSearch(''); setOpnameCategoryFilter('ALL'); setOpnameVarianceOnly(false); }}
+                      className="mt-2.5 px-3 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Reset Filter
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredOpnameItems.map(item => {
+                  const diff = Number(item.physicalStock) - item.systemStock;
+                  const isMiss = Math.abs(diff) > 0.001;
+                  const isMatch = !isMiss;
+
+                  return (
+                    <div 
+                      key={item.ingredientId} 
+                      className={`p-3 rounded-2xl border transition-all space-y-2.5 ${
+                        isMiss 
+                          ? 'bg-amber-50/50 border-amber-300 shadow-xs' 
+                          : 'bg-white border-slate-200/90 shadow-2xs'
+                      }`}
+                    >
+                      {/* CARD TOP: NAME, CATEGORY & QUICK MATCH BUTTON */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="text-xs font-black text-slate-900 leading-tight">
+                              {item.name}
+                            </h4>
+                            {item.category && (
+                              <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider ${
+                                item.category === 'DRINK' ? 'bg-cyan-50 text-cyan-700 border border-cyan-200' :
+                                item.category === 'FOOD' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                'bg-purple-50 text-purple-700 border border-purple-200'
+                              }`}>
+                                {item.category}
+                              </span>
+                            )}
+                          </div>
+                          {item.subCategory && (
+                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">{item.subCategory}</p>
+                          )}
+                        </div>
+
+                        {/* Quick Match 1-Tap Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleSetSinglePhysicalToSystem(item.ingredientId)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-black shrink-0 transition-all flex items-center gap-1 cursor-pointer border ${
+                            isMatch 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 shadow-2xs' 
+                              : 'bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 border-slate-200'
+                          }`}
+                          title="Samakan stok fisik dengan sistem"
+                        >
+                          <CheckCircle2 size={11} className={isMatch ? 'text-emerald-600' : 'text-slate-400'} />
+                          <span>{isMatch ? 'Cocok' : '= Sistem'}</span>
+                        </button>
+                      </div>
+
+                      {/* CARD MIDDLE: STOK SISTEM VS STOK FISIK INPUT */}
+                      <div className="p-2.5 bg-slate-50/90 rounded-xl border border-slate-200/80 flex items-center justify-between gap-2.5">
+                        {/* System Stock */}
+                        <div className="shrink-0">
+                          <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Stok Sistem</div>
+                          <div className="text-xs font-black text-slate-700 mt-0.5">
+                            {item.systemStock.toLocaleString('id-ID')} <span className="text-[10px] font-bold text-slate-500">{item.unit}</span>
+                          </div>
+                        </div>
+
+                        {/* Physical Stock with Stepper Buttons */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpnameAdjust(item.ingredientId, -1)}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 active:bg-slate-100 text-slate-700 font-black flex items-center justify-center text-xs shadow-2xs cursor-pointer select-none"
+                            title="Kurangi 1"
+                          >
+                            <Minus size={11} />
+                          </button>
+
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="any"
+                              inputMode="decimal"
+                              value={item.physicalStock}
+                              onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
+                              className="w-18 py-1 px-1 bg-white border border-slate-300 rounded-lg text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpnameAdjust(item.ingredientId, 1)}
+                            className="w-7 h-7 rounded-lg bg-white border border-slate-200 active:bg-slate-100 text-slate-700 font-black flex items-center justify-center text-xs shadow-2xs cursor-pointer select-none"
+                            title="Tambah 1"
+                          >
+                            <Plus size={11} />
+                          </button>
+
+                          <span className="text-[10px] font-black text-slate-500 ml-0.5">{item.unit}</span>
+                        </div>
+                      </div>
+
+                      {/* CARD STATUS: VARIANCE INDICATION */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black ${
+                          diff === 0 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' 
+                            : diff < 0 
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200/80' 
+                              : 'bg-blue-50 text-blue-700 border border-blue-200/80'
+                        }`}>
+                          {diff === 0 ? (
+                            <>
+                              <CheckCircle2 size={11} className="text-emerald-600" />
+                              <span>Stok Sesuai (0 {item.unit})</span>
+                            </>
+                          ) : diff < 0 ? (
+                            <>
+                              <AlertTriangle size={11} className="text-rose-600" />
+                              <span>Selisih: {diff.toLocaleString('id-ID')} {item.unit}</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 size={11} className="text-blue-600" />
+                              <span>Selisih: +{diff.toLocaleString('id-ID')} {item.unit}</span>
+                            </>
+                          )}
+                        </span>
+
+                        {isMiss && (
+                          <span className="text-[10px] font-bold text-amber-700">Wajib isi alasan</span>
+                        )}
+                      </div>
+
+                      {/* REASON & NOTES: ALWAYS COMPACT, HIGHLIGHTED WHEN VARIANCE DETECTED */}
+                      {isMiss ? (
+                        <div className="p-2 bg-amber-50/70 rounded-xl border border-amber-200/70 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] font-black text-amber-800 uppercase tracking-wider block mb-0.5">Alasan Selisih</label>
+                              <select
+                                value={item.reason}
+                                onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
+                                className="w-full px-2 py-1 bg-white border border-amber-300 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none"
+                              >
+                                <option value="Normal">Normal</option>
+                                <option value="Susut/Trimming">Susut / Trimming</option>
+                                <option value="Busuk/Rusak">Busuk / Rusak</option>
+                                <option value="Selisih Timbang">Selisih Timbang</option>
+                                <option value="Lainnya">Lainnya</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-black text-amber-800 uppercase tracking-wider block mb-0.5">Catatan</label>
+                              <input
+                                type="text"
+                                value={item.notes}
+                                onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
+                                placeholder="Keterangan..."
+                                className="w-full px-2 py-1 bg-white border border-amber-300 rounded-lg text-[11px] text-slate-800 placeholder:text-slate-400 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={item.notes}
+                          onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
+                          placeholder="Catatan tambahan (opsional)..."
+                          className="w-full px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-[10px] text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none"
+                        />
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* ─── DESKTOP VIEW: STANDARD COMPREHENSIVE SPREADSHEET TABLE (hidden sm:block) ─── */}
+            <div className="hidden sm:block overflow-x-auto max-h-[600px] border border-slate-200/80 rounded-2xl">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase sticky top-0">
+                <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase sticky top-0 z-10 border-b border-slate-200">
                   <tr>
                     <th className="py-3 px-4">Nama Bahan</th>
                     <th className="py-3 px-4 text-right">Stok Sistem</th>
@@ -4033,7 +5079,7 @@ export const IngredientView: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => { setOpnameSearch(''); setOpnameCategoryFilter('ALL'); setOpnameVarianceOnly(false); }}
-                            className="mt-3 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors"
+                            className="mt-3 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                           >
                             Reset Filter Pencarian
                           </button>
@@ -4046,7 +5092,7 @@ export const IngredientView: React.FC = () => {
                       const isMiss = Math.abs(diff) > 0.001;
 
                       return (
-                        <tr key={item.ingredientId} className={isMiss ? 'bg-amber-50/40' : ''}>
+                        <tr key={item.ingredientId} className={`transition-colors hover:bg-slate-50/80 ${isMiss ? 'bg-amber-50/40' : ''}`}>
                           <td className="py-3 px-4 font-black text-slate-900">
                             <div className="flex items-center gap-1.5">
                               <span>{item.name}</span>
@@ -4070,13 +5116,23 @@ export const IngredientView: React.FC = () => {
                             {item.systemStock.toLocaleString('id-ID')} {item.unit}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <input
-                              type="number"
-                              step="any"
-                              value={item.physicalStock}
-                              onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
-                              className="w-28 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                            />
+                            <div className="inline-flex items-center gap-1">
+                              <input
+                                type="number"
+                                step="any"
+                                value={item.physicalStock}
+                                onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
+                                className="w-24 px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSetSinglePhysicalToSystem(item.ingredientId)}
+                                className="px-1.5 py-1 text-[10px] font-bold bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 border border-slate-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                                title="Samakan stok fisik dengan sistem"
+                              >
+                                =
+                              </button>
+                            </div>
                           </td>
                           <td className={`py-3 px-4 text-right font-black ${
                             diff < 0 ? 'text-rose-600' : (diff > 0 ? 'text-emerald-600' : 'text-slate-400')
@@ -4113,6 +5169,31 @@ export const IngredientView: React.FC = () => {
               </table>
             </div>
           </div>
+
+          {/* ─── STICKY BOTTOM SAVE ACTION BAR ON MOBILE (sm:hidden) ─── */}
+          <div className="sm:hidden fixed bottom-3 inset-x-3 z-30 p-3 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-xl border border-slate-700 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Hasil Audit</div>
+              <div className="text-xs font-black text-white flex items-center gap-1.5 mt-0.5">
+                <span>{filteredOpnameItems.length} Bahan</span>
+                {opnameVarianceCount > 0 ? (
+                  <span className="text-amber-400 font-black">• {opnameVarianceCount} Selisih</span>
+                ) : (
+                  <span className="text-emerald-400 font-black">• Semua Cocok</span>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSubmitOpname}
+              disabled={submittingOpname}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <CheckCircle2 size={14} />
+              <span>{submittingOpname ? 'Menyimpan...' : 'Simpan Opname'}</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -4120,37 +5201,39 @@ export const IngredientView: React.FC = () => {
           TAB 9: AUDIT TINGKAT KEBERHASILAN PORSI (YIELD & VARIANCE)
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'yield' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
           {/* Header Bar */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-white rounded-3xl p-3.5 sm:p-6 border border-slate-200/80 shadow-xs sm:shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0">
                   <Award size={18} />
                 </div>
-                <h3 className="text-xl font-black text-slate-900 m-0">
+                <h3 className="text-sm sm:text-lg font-black text-slate-900 m-0">
                   Audit Tingkat Keberhasilan Porsi (Yield & Variance)
                 </h3>
               </div>
-              <p className="text-xs text-slate-500 pl-10 m-0">
+              <p className="text-[11px] sm:text-xs text-slate-500 pl-10 m-0 font-medium">
                 Membandingkan bahan baku yang terpakai di dapur vs target porsi standar resep (BOM) dan penjualan ril kasir.
               </p>
             </div>
 
             <button
+              type="button"
               onClick={handleExportYieldPDF}
               disabled={generatingPdf}
-              className="flex items-center gap-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-purple-200 transition-all active:scale-95"
+              className="flex items-center justify-center gap-1.5 py-2 px-3.5 sm:py-2.5 sm:px-4 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-purple-200 transition-all shrink-0 cursor-pointer self-start sm:self-auto"
             >
-              <FileText size={16} />
-              <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak Laporan PDF'}</span>
+              <FileText size={15} />
+              <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak PDF'}</span>
             </button>
           </div>
 
           {/* Filter Toolbar */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">RENTANG WAKTU:</span>
+          <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3">
+            {/* Date Horizon Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+              <span className="text-[10px] sm:text-xs font-black text-slate-400 uppercase tracking-wider mr-1 shrink-0">RENTANG:</span>
               {[
                 { id: 'today', label: 'Hari Ini' },
                 { id: 'yesterday', label: 'Kemarin' },
@@ -4159,10 +5242,11 @@ export const IngredientView: React.FC = () => {
               ].map(p => (
                 <button
                   key={p.id}
+                  type="button"
                   onClick={() => setYieldPresetDate(p.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     yieldPreset === p.id 
-                      ? 'bg-purple-600 text-white shadow-sm' 
+                      ? 'bg-purple-600 text-white shadow-2xs' 
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -4171,59 +5255,62 @@ export const IngredientView: React.FC = () => {
               ))}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold text-slate-600">
-                <span className="text-[10px] text-slate-400 font-extrabold uppercase px-2">AREA:</span>
+            {/* Area Filter & Search */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 text-xs font-bold text-slate-600 shrink-0">
+                <span className="text-[9px] text-slate-400 font-black uppercase px-2 shrink-0">AREA:</span>
                 {['ALL', 'Dapur', 'Bar'].map(a => (
                   <button
                     key={a}
+                    type="button"
                     onClick={() => {
                       setYieldAreaFilter(a);
                       fetchYieldAnalytics(undefined, undefined, a, yieldSearch);
                     }}
-                    className={`px-2.5 py-1 rounded-lg transition-all ${
-                      yieldAreaFilter === a ? 'bg-white text-purple-700 shadow-sm font-black' : 'hover:text-slate-900'
+                    className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs transition-all cursor-pointer ${
+                      yieldAreaFilter === a ? 'bg-white text-purple-700 shadow-2xs font-black' : 'hover:text-slate-900 text-slate-600'
                     }`}
                   >
-                    {a === 'ALL' ? 'Semua Area (Dapur & Bar)' : a}
+                    {a === 'ALL' ? 'Semua Area' : a}
                   </button>
                 ))}
               </div>
 
-              <div className="relative min-w-[200px]">
-                <Search size={15} className="absolute left-3 top-3 text-slate-400" />
+              <div className="relative flex-1 sm:min-w-[200px]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Ketik nama bahan baku..."
+                  placeholder="Cari bahan baku..."
                   value={yieldSearch}
                   onChange={e => {
                     setYieldSearch(e.target.value);
                     fetchYieldAnalytics(undefined, undefined, yieldAreaFilter, e.target.value);
                   }}
-                  className="form-control pl-9 py-2 text-xs rounded-xl border-slate-200 bg-slate-50 focus:bg-white"
+                  className="w-full pl-8 pr-3 py-1.5 sm:py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20"
                 />
               </div>
             </div>
           </div>
 
-          {/* 4 Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-purple-600 via-indigo-600 to-purple-800 rounded-3xl p-5 text-white shadow-lg shadow-purple-500/10 relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+          {/* 4 Summary Cards: Compact 2x2 on Mobile, 4 Cols on Desktop */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+            {/* Card 1: Efisiensi Porsi Toko */}
+            <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-gradient-to-br from-purple-600 via-indigo-600 to-purple-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 text-white shadow-md shadow-purple-500/10 relative overflow-hidden flex flex-col justify-between">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-purple-200">SKOR EFISIENSI PORSI TOKO</span>
-                  <div className="text-3xl font-black text-white mt-1">
+                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-purple-200">SKOR EFISIENSI PORSI</span>
+                  <div className="text-2xl sm:text-3xl font-black text-white mt-0.5 sm:mt-1">
                     {yieldData?.summary?.storeEfficiencyScore || 68.7}%
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-white/20 text-white backdrop-blur-md">
+                <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black bg-white/20 text-white backdrop-blur-md">
                   Perlu Evaluasi
                 </span>
               </div>
-              <p className="text-[11px] text-purple-100/90 mt-2 leading-tight">
-                Akurasi konversi bahan ke menu terjual berdasarkan pembobotan nilai modal (Cost-Weighted).
+              <p className="text-[10px] sm:text-[11px] text-purple-100/90 mt-1.5 leading-tight">
+                Akurasi konversi bahan ke menu terjual berdasarkan pembobotan modal (Cost-Weighted).
               </p>
-              <div className="w-full bg-white/20 rounded-full h-2 mt-3 overflow-hidden">
+              <div className="w-full bg-white/20 rounded-full h-1.5 sm:h-2 mt-2.5 overflow-hidden">
                 <div 
                   className="bg-emerald-400 h-full rounded-full transition-all duration-500"
                   style={{ width: `${Math.min(100, yieldData?.summary?.storeEfficiencyScore || 68.7)}%` }}
@@ -4231,77 +5318,199 @@ export const IngredientView: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between min-h-[140px]">
+            {/* Card 2: Porsi Miss / Loss */}
+            <div className="col-span-1 bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">PORSI MISS / LOSS</span>
-                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                  <AlertTriangle size={20} />
+                <span className="text-[9px] sm:text-[10px] font-black text-rose-600 uppercase tracking-wider">PORSI MISS/LOSS</span>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={15} />
                 </div>
               </div>
               <div>
-                <div className="text-2xl font-black text-rose-600 mt-2">
-                  {yieldData?.summary?.totalPortionsMissed || 652.5} <span className="text-xs font-bold text-slate-500">Porsi</span>
+                <div className="text-lg sm:text-2xl font-black text-rose-600 mt-1">
+                  {yieldData?.summary?.totalPortionsMissed || 652.5} <span className="text-[10px] sm:text-xs font-bold text-slate-500">Porsi</span>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-tight">
+                <p className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-1 sm:line-clamp-none">
                   Setara porsi yang terbuang akibat takaran berlebih atau loss.
                 </p>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between min-h-[140px]">
+            {/* Card 3: Nilai Selisih Bahan */}
+            <div className="col-span-1 bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">NILAI SELISIH BAHAN</span>
-                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                  <DollarSign size={20} />
+                <span className="text-[9px] sm:text-[10px] font-black text-amber-600 uppercase tracking-wider">NILAI SELISIH</span>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <DollarSign size={15} />
                 </div>
               </div>
               <div>
-                <div className="text-2xl font-black text-slate-900 mt-2">
+                <div className="text-sm sm:text-xl font-black text-slate-900 mt-1 truncate">
                   Rp {(yieldData?.summary?.totalValueLostRp || 1100897).toLocaleString('id-ID')}
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-tight">
-                  Estimasi nilai modal bahan yang hilang / melebihi target resep.
+                <p className="text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-1 sm:line-clamp-none">
+                  Estimasi nilai modal bahan melebihi resep.
                 </p>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between min-h-[140px]">
+            {/* Card 4: Kepatuhan Standar SOP */}
+            <div className="col-span-2 sm:col-span-1 lg:col-span-1 bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">KEPATUHAN STANDAR SOP</span>
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                  <Award size={20} />
+                <span className="text-[9px] sm:text-[10px] font-black text-indigo-600 uppercase tracking-wider">KEPATUHAN SOP</span>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <Award size={15} />
                 </div>
               </div>
               <div>
-                <div className="flex items-baseline gap-2 mt-2 font-black text-slate-900 text-lg">
-                  <span className="text-emerald-600">{yieldData?.summary?.sopCompliance?.presisi || 3}</span> <span className="text-xs font-normal text-slate-400">Presisi</span>
-                  <span className="text-slate-300">|</span>
-                  <span className="text-amber-600">{yieldData?.summary?.sopCompliance?.toleransi || 3}</span> <span className="text-xs font-normal text-slate-400">Toleransi</span>
-                  <span className="text-slate-300">|</span>
-                  <span className="text-rose-600">{yieldData?.summary?.sopCompliance?.boros || 3}</span> <span className="text-xs font-normal text-slate-400">Boros</span>
+                <div className="flex items-center gap-1.5 mt-1 font-black text-slate-900 text-xs sm:text-sm">
+                  <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-black text-[10px] sm:text-xs">
+                    {yieldData?.summary?.sopCompliance?.presisi || 3} Presisi
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/60 font-black text-[10px] sm:text-xs">
+                    {yieldData?.summary?.sopCompliance?.toleransi || 3} Toleransi
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/60 font-black text-[10px] sm:text-xs">
+                    {yieldData?.summary?.sopCompliance?.boros || 3} Boros
+                  </span>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-tight">
-                  Status klasifikasi akurasi takaran resep bahan baku toko.
+                <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+                  Status klasifikasi akurasi takaran resep bahan toko.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Table: Rincian Performa Takaran per Bahan Baku */}
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          {/* Section: Rincian Performa Takaran per Bahan Baku */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-3.5 sm:p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h4 className="font-black text-slate-900 text-sm m-0">Rincian Performa Takaran per Bahan Baku</h4>
-                <p className="text-xs text-slate-500 mt-0.5 m-0">
-                  Klik baris bahan untuk melihat rincian menu yang mengonsumsi bahan tersebut.
+                <h4 className="font-black text-slate-900 text-xs sm:text-sm m-0">Rincian Performa Takaran per Bahan Baku</h4>
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 m-0">
+                  Analisis perbandingan target teori resep vs realita fisik yang terpakai di operasional dapur.
                 </p>
               </div>
-              <span className="text-xs font-bold text-slate-400">
-                Menampilkan {yieldData?.items?.length || 0} Bahan
+              <span className="text-[11px] sm:text-xs font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200/60">
+                {yieldData?.items?.length || 0} Bahan Baku
               </span>
             </div>
 
-            <div className="table-responsive">
+            {/* ─── MOBILE VIEW: DEDICATED YIELD CARDS (block sm:hidden) ─── */}
+            <div className="block sm:hidden p-3 space-y-2.5">
+              {yieldLoading ? (
+                <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200/80 p-4">
+                  <RefreshCw className="animate-spin inline-block mb-1 text-purple-600" size={20} />
+                  <p className="font-bold text-xs text-slate-700">Memuat data audit yield...</p>
+                </div>
+              ) : !yieldData?.items || yieldData.items.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200/80 p-4">
+                  <Award size={24} className="mx-auto mb-1 text-slate-300" />
+                  <p className="font-bold text-xs text-slate-700">Tidak ada data bahan baku</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Coba sesuaikan filter area atau rentang waktu di atas.</p>
+                </div>
+              ) : (
+                yieldData.items.map((item: any) => (
+                  <div 
+                    key={item.id}
+                    className="p-3 bg-white rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5"
+                  >
+                    {/* Header: Item name, Area & Diagnosis Pill */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs font-black text-slate-900 leading-tight">
+                            {item.name}
+                          </h4>
+                          <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider ${
+                            item.area === 'Bar' ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            {item.area}
+                          </span>
+                        </div>
+                        {item.relatedMenus && (
+                          <div className="text-[10px] text-amber-800 bg-amber-50/80 inline-block px-1.5 py-0.5 rounded font-medium mt-1 border border-amber-200/50 truncate max-w-[240px]">
+                            {item.relatedMenus}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Diagnosis Badge */}
+                      <span className={`shrink-0 px-2 py-0.5 rounded-lg text-[9px] font-black border ${item.diagnosisBadgeClass || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                        {item.diagnosis}
+                      </span>
+                    </div>
+
+                    {/* Metrics Grid: Teori vs Terpakai */}
+                    <div className="grid grid-cols-2 gap-2 p-2 bg-slate-50/90 rounded-xl border border-slate-200/80 text-[11px]">
+                      <div>
+                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Target Teori</div>
+                        <div className="font-mono font-black text-slate-800 mt-0.5">
+                          {item.targetTeoriQty} {item.unit}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          {item.targetTeoriPortions} Porsi
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Realita Terpakai</div>
+                        <div className="font-mono font-black text-slate-800 mt-0.5">
+                          {item.realitaTerpakaiQty} {item.unit}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          {item.realitaTerpakaiPortions} Porsi
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Selisih Miss & Biaya Kerugian */}
+                    <div className="flex items-center justify-between gap-2 p-2 bg-rose-50/60 rounded-xl border border-rose-200/60">
+                      <div>
+                        <div className="text-[9px] font-black text-rose-800 uppercase tracking-wider">Selisih (Miss)</div>
+                        <div className="text-xs font-mono font-black text-rose-600">
+                          +{item.selisihQty} {item.unit} <span className="text-[10px] font-bold text-rose-500">(-{item.selisihPortions} porsi)</span>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-[9px] font-black text-rose-800 uppercase tracking-wider">Biaya Kerugian</div>
+                        <div className="text-xs font-mono font-black text-slate-900">
+                          Rp {item.kerugianRp?.toLocaleString('id-ID')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Efisiensi Meter */}
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] font-black mb-1">
+                        <span className="text-slate-500 uppercase tracking-wider">Efisiensi Hasil:</span>
+                        <span className={item.efisiensiPct >= 95 ? 'text-emerald-600 font-black' : item.efisiensiPct >= 75 ? 'text-amber-600 font-black' : 'text-rose-600 font-black'}>
+                          {item.efisiensiPct}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            item.efisiensiPct >= 95 ? 'bg-emerald-500' : item.efisiensiPct >= 75 ? 'bg-amber-500' : 'bg-rose-500'
+                          }`}
+                          style={{ width: `${Math.min(100, item.efisiensiPct)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* SOP Recommendation */}
+                    {item.diagnosisDesc && (
+                      <p className="text-[10px] text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-200/70 leading-relaxed font-medium">
+                        💡 <strong className="text-slate-700">Rekomendasi:</strong> {item.diagnosisDesc}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* ─── DESKTOP VIEW: STANDARD COMPREHENSIVE 9-COL TABLE (hidden sm:block) ─── */}
+            <div className="hidden sm:block table-responsive">
               <table className="data-table w-full text-left border-collapse">
                 <thead className="bg-slate-50 text-[10px] uppercase font-black tracking-wider text-slate-500 border-b border-slate-200">
                   <tr>

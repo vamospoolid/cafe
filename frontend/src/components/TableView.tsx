@@ -702,8 +702,11 @@ const TableView = () => {
           </div>
         ) : (
           <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-2.5 p-3 sm:px-4 sm:py-3 border-b border-gray-200 bg-white">
-            {/* Area Classification Tabs (Horizontally scrollable with smooth touch) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full scrollbar-none flex-1 min-w-0 pr-2">
+            {/* Area Classification Tabs (Horizontally scrollable with smooth touch, no scrollbar) */}
+            <div 
+              className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar flex-1 min-w-0 pr-2"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
               {areas.map(area => {
                 const count = tables.filter(t => {
                   const tArea = (t.name && t.name.trim() !== '') ? t.name.trim() : 'Area Umum';
@@ -979,107 +982,302 @@ const TableView = () => {
             )}
           </div>
         ) : viewMode === 'list' ? (
-          <div className="p-0 overflow-x-auto bg-white w-full">
-            <table className="data-table w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-50 sticky top-0 shadow-sm text-[11px]">
-                <tr>
-                  <th className="px-4 py-3">NOMOR MEJA</th>
-                  <th className="px-4 py-3">KAPASITAS</th>
-                  <th className="px-4 py-3">STATUS SISTEM</th>
-                  <th className="px-4 py-3">KONDISI SAAT INI</th>
-                  <th className="px-4 py-3">INFO PESANAN</th>
-                  <th className="px-4 py-3 text-right">AKSI</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredTables.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-12 text-gray-400 font-medium">Belum ada data meja di area ini.</td>
-                  </tr>
-                ) : filteredTables.map(table => {
-                  const activeOrder = getTableActiveOrder(table.id);
-                  return (
-                    <tr key={table.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-black text-xl text-slate-800">{table.tableNo}</div>
-                        <div className="text-xs text-muted font-medium">{table.name || 'Tanpa keterangan'}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5 font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full w-max">
-                          <Users size={14} /> {table.capacity} Kursi
+          <div className="p-0 bg-white w-full">
+            {filteredTables.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 font-medium">Belum ada data meja di area ini.</div>
+            ) : (
+              <>
+                {/* ── DESKTOP TABLE VIEW (hidden md:block) ── */}
+                <div className="hidden md:block overflow-x-auto w-full">
+                  <table className="data-table w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-50 sticky top-0 shadow-xs text-[11px]">
+                      <tr>
+                        <th className="px-4 py-3">NOMOR MEJA</th>
+                        <th className="px-4 py-3">KAPASITAS</th>
+                        <th className="px-4 py-3">STATUS SISTEM</th>
+                        <th className="px-4 py-3">KONDISI SAAT INI</th>
+                        <th className="px-4 py-3">INFO PESANAN</th>
+                        <th className="px-4 py-3 text-right">AKSI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredTables.map(table => {
+                        const activeOrder = getTableActiveOrder(table.id);
+                        return (
+                          <tr key={table.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="font-black text-xl text-slate-800">{table.tableNo}</div>
+                              <div className="text-xs text-muted font-medium">{table.name || 'Tanpa keterangan'}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-1.5 font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full w-max">
+                                <Users size={14} /> {table.capacity} Kursi
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`badge ${table.status === 'Aktif' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                                {table.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {activeOrder ? (
+                                <span className={`badge font-bold animate-pulse ${
+                                  activeOrder.kdsStatus === 'Served'
+                                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                    : 'bg-amber-100 text-amber-700 border border-amber-200'
+                                }`}>
+                                  {activeOrder.kdsStatus === 'Served' ? 'SUDAH DISAJIKAN' : 'DIPROSES'}
+                                </span>
+                              ) : (
+                                <span className="badge bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold">KOSONG</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {activeOrder ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-bold text-sm text-slate-800">{activeOrder.customerName}</span>
+                                  <span className="text-xs font-semibold text-primary">{formatCurrency(activeOrder.total)}</span>
+                                  <span className="text-xs text-muted flex items-center gap-1"><Clock size={12} /> Menunggu: {getWaitTime(activeOrder.createdAt)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-400 italic">-</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex justify-end gap-2">
+                                <button className="p-2 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}><Edit size={16} /></button>
+                                {activeOrder ? (
+                                  <>
+                                    <button
+                                      className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
+                                      onClick={() => {
+                                        setMoveMergeSourceTable(table);
+                                        setIsMoveMergeOpen(true);
+                                      }}
+                                    >
+                                      <RefreshCw size={12} /> Pindah
+                                    </button>
+                                    <button
+                                      className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
+                                      onClick={() => {
+                                        const tableOrders = activeOrders.filter(o => o.tableId === table.id);
+                                        setSplitTableId(table.id);
+                                        setSplitTableName(`Meja ${table.tableNo}`);
+                                        setSplitActiveOrders(tableOrders);
+                                        setIsSplitOpen(true);
+                                      }}
+                                    >
+                                      <Scissors size={12} /> Split
+                                    </button>
+                                    {activeOrder.status === 'Paid' ? (
+                                      <button className="px-3 py-1 rounded-lg text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs" onClick={() => handleClearTable(table.id, table.tableNo)}>Kosongkan</button>
+                                    ) : (
+                                      <button className="px-3 py-1 rounded-lg text-white font-bold bg-primary hover:bg-primary/90 transition-colors text-xs" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <button className="p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" onClick={() => handleDelete(table.id)}><Trash2 size={16} /></button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (< 768px / md:hidden) ── */}
+                <div className="block md:hidden divide-y divide-slate-100 w-full">
+                  {filteredTables.map(table => {
+                    const activeOrder = getTableActiveOrder(table.id);
+                    const tableStatus = getTableStatus(table.id);
+                    const isOccupied = tableStatus !== 'empty';
+                    const isPaid = activeOrder && activeOrder.status === 'Paid';
+                    const isServed = tableStatus === 'served';
+
+                    return (
+                      <div key={table.id} className="p-3.5 bg-white hover:bg-slate-50/80 transition-colors flex flex-col gap-2.5">
+                        {/* Header: Table No, Area, Capacity & Status Badge */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center font-black shadow-xs shrink-0 ${
+                              !isOccupied 
+                                ? 'bg-slate-100 text-slate-800 border border-slate-200/80' 
+                                : isPaid 
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                : isServed 
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              <span className="text-base leading-none font-black">{table.tableNo}</span>
+                              <span className="text-[9px] font-bold opacity-75 mt-0.5">{table.capacity}K</span>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="font-black text-sm text-slate-900">Meja {table.tableNo}</h4>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                  {table.name || 'Area Umum'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1">
+                                <Users size={12} className="text-slate-400" />
+                                <span>Kapasitas {table.capacity} Kursi</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {(offlinePendingTableIds.has(Number(table.id)) || Boolean(table.offlineOccupied)) && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-white shadow-xs animate-pulse">
+                                <RefreshCw size={9} className="animate-spin" /> OFFLINE
+                              </span>
+                            )}
+                            {!isOccupied ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> KOSONG
+                              </span>
+                            ) : isPaid ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <Check size={11} className="text-emerald-600" /> LUNAS
+                              </span>
+                            ) : isServed ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> DISAJIKAN
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> DIPROSES
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`badge ${table.status === 'Aktif' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
-                          {table.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {activeOrder ? (
-                          <span className={`badge font-bold animate-pulse ${
-                            activeOrder.kdsStatus === 'Served'
-                              ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                              : 'bg-amber-100 text-amber-700 border border-amber-200'
-                          }`}>
-                            {activeOrder.kdsStatus === 'Served' ? 'SUDAH DISAJIKAN' : 'DIPROSES'}
-                          </span>
-                        ) : (
-                          <span className="badge bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold">KOSONG</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {activeOrder ? (
-                          <div className="flex flex-col gap-1">
-                            <span className="font-bold text-sm text-slate-800">{activeOrder.customerName}</span>
-                            <span className="text-xs font-semibold text-primary">{formatCurrency(activeOrder.total)}</span>
-                            <span className="text-xs text-muted flex items-center gap-1"><Clock size={12} /> Menunggu: {getWaitTime(activeOrder.createdAt)}</span>
+
+                        {/* Active Order Details or Empty State */}
+                        {isOccupied && activeOrder ? (
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-slate-800 flex items-center gap-1 truncate max-w-[150px]">
+                                <Users size={12} className="text-slate-400 shrink-0" />
+                                {activeOrder.customerName || 'Tamu Dine-In'}
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1 shrink-0">
+                                <Clock size={11} /> {getWaitTime(activeOrder.createdAt)}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                {activeOrder.items?.length || 0} Menu dipesan
+                              </span>
+                              <span className="text-xs font-black text-indigo-700">
+                                {formatCurrency(activeOrder.total)}
+                              </span>
+                            </div>
                           </div>
                         ) : (
-                          <span className="text-sm text-gray-400 italic">-</span>
+                          <div className="py-2 px-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-center text-[11px] text-slate-400">
+                            Meja bersih &amp; siap melayani tamu
+                          </div>
                         )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button className="p-2 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}><Edit size={16} /></button>
-                          {activeOrder ? (
-                            <>
+
+                        {/* Actions Row */}
+                        <div className="flex items-center justify-between pt-1 gap-1.5 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                              title="Edit Meja"
+                            >
+                              <Edit size={13} /> Edit
+                            </button>
+
+                            {!isOccupied && (
                               <button
-                                className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
-                                onClick={() => {
-                                  setMoveMergeSourceTable(table);
-                                  setIsMoveMergeOpen(true);
-                                }}
+                                type="button"
+                                onClick={() => handleDelete(table.id)}
+                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors active:scale-95 cursor-pointer"
+                                title="Hapus Meja"
                               >
-                                <RefreshCw size={12} /> Pindah
+                                <Trash2 size={14} />
                               </button>
+                            )}
+
+                            {isOccupied && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 border border-indigo-100 active:scale-95 transition-all cursor-pointer"
+                                  onClick={() => {
+                                    setMoveMergeSourceTable(table);
+                                    setIsMoveMergeOpen(true);
+                                  }}
+                                >
+                                  <RefreshCw size={12} /> Pindah
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 border border-indigo-100 active:scale-95 transition-all cursor-pointer"
+                                  onClick={() => {
+                                    const tableOrders = activeOrders.filter(o => o.tableId === table.id);
+                                    setSplitTableId(table.id);
+                                    setSplitTableName(`Meja ${table.tableNo}`);
+                                    setSplitActiveOrders(tableOrders);
+                                    setIsSplitOpen(true);
+                                  }}
+                                >
+                                  <Scissors size={12} /> Split
+                                </button>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Primary action right side */}
+                          <div className="flex items-center gap-1.5">
+                            {!isOccupied ? (
                               <button
-                                className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
-                                onClick={() => {
-                                  const tableOrders = activeOrders.filter(o => o.tableId === table.id);
-                                  setSplitTableId(table.id);
-                                  setSplitTableName(`Meja ${table.tableNo}`);
-                                  setSplitActiveOrders(tableOrders);
-                                  setIsSplitOpen(true);
-                                }}
+                                type="button"
+                                onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
                               >
-                                <Scissors size={12} /> Split
+                                <Plus size={13} /> Buka Pesanan
                               </button>
-                              {activeOrder.status === 'Paid' ? (
-                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs" onClick={() => handleClearTable(table.id, table.tableNo)}>Kosongkan</button>
-                              ) : (
-                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-primary hover:bg-primary/90 transition-colors text-xs" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
-                              )}
-                            </>
-                          ) : (
-                            <button className="p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" onClick={() => handleDelete(table.id)}><Trash2 size={16} /></button>
-                          )}
+                            ) : isPaid ? (
+                              <button
+                                type="button"
+                                onClick={() => handleClearTable(table.id, table.tableNo)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
+                              >
+                                <Check size={13} /> Kosongkan
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                                  className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <Plus size={13} /> + Menu
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-md shadow-indigo-200 active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <CreditCard size={13} /> Bayar
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="p-3 sm:p-5 bg-slate-100/70 flex-1 overflow-y-auto min-h-[600px] relative">

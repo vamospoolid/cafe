@@ -17,7 +17,14 @@ import {
   Printer,
   Sparkles,
   Percent,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckCircle2,
+  Clock,
+  Phone,
+  MessageSquare,
+  User,
+  ArrowDownRight,
+  ArrowUpRight
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -944,11 +951,18 @@ export const RetailReports: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-            <div className="p-4 sm:p-5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+            <div className="p-4 sm:p-5 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
               <h3 className="font-black text-sm text-slate-900">Rincian Buku Piutang Pelanggan &amp; Warung Langganan</h3>
-              <span className="text-xs font-bold text-slate-500">Total Piutang: {formatCurrency(arAgeing.totalAR)}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500">Total Piutang:</span>
+                <span className="text-xs font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200/60">
+                  {formatCurrency(arAgeing.totalAR)}
+                </span>
+              </div>
             </div>
-            <div className="overflow-x-auto">
+
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100/70 text-slate-600 font-bold uppercase border-b border-slate-200">
@@ -984,6 +998,99 @@ export const RetailReports: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card List (< 768px) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {(arAgeing.debts || []).length === 0 ? (
+                <div className="p-6 text-center flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2 border border-emerald-100">
+                    <CheckCircle2 size={24} />
+                  </div>
+                  <h4 className="text-xs font-black text-slate-800">Semua Piutang Bersih (Nihil)</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada piutang bon tempo aktif pada periode ini.</p>
+                </div>
+              ) : (
+                (arAgeing.debts || []).map((d: any) => {
+                  const isLancar = d.ageDays <= 30;
+                  const isWaspada = d.ageDays > 30 && d.ageDays <= 60;
+                  const isMacet = d.ageDays > 60;
+                  
+                  return (
+                    <div key={d.id} className="p-4 space-y-3 bg-white hover:bg-slate-50/80 transition-all">
+                      {/* Top Header: Customer Name & Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-black text-slate-900 leading-tight truncate">
+                            {d.customerName}
+                          </h4>
+                          {d.customerPhone ? (
+                            <span className="text-[11px] font-mono text-slate-500 flex items-center gap-1 mt-0.5">
+                              <Phone size={11} className="text-slate-400" />
+                              {d.customerPhone}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Tanpa nomor kontak</span>
+                          )}
+                        </div>
+
+                        {/* Ageing Badge */}
+                        <div className="shrink-0">
+                          {isLancar && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                              <CheckCircle2 size={11} /> Lancar
+                            </span>
+                          )}
+                          {isWaspada && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200/80 flex items-center gap-1">
+                              <AlertCircle size={11} /> Waspada
+                            </span>
+                          )}
+                          {isMacet && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200/80 flex items-center gap-1 animate-pulse">
+                              <AlertCircle size={11} /> MACET
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Financial Detail Grid */}
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-center">
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Bon Awal</span>
+                          <span className="text-xs font-bold text-slate-700 block mt-0.5">{formatCurrency(d.amount)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Sisa Tagihan</span>
+                          <span className="text-xs font-black text-rose-600 block mt-0.5">{formatCurrency(d.remaining)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Umur Bon</span>
+                          <span className="text-xs font-mono font-bold text-slate-800 flex items-center justify-center gap-0.5 mt-0.5">
+                            <Clock size={11} className="text-slate-400" />
+                            {d.ageDays} Hari
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action Bar (WhatsApp Tagih) */}
+                      {d.customerPhone && (
+                        <div className="pt-0.5 flex justify-end">
+                          <a
+                            href={`https://wa.me/${d.customerPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}?text=${encodeURIComponent(`Halo ${d.customerName}, kami menginformasikan catatan sisa piutang bon belanja Anda sebesar ${formatCurrency(d.remaining)} (umur bon: ${d.ageDays} hari). Mohon konfirmasi jadwal pembayarannya. Terima kasih.`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all"
+                          >
+                            <MessageSquare size={12} />
+                            <span>Tagih via WhatsApp</span>
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -1147,53 +1254,143 @@ export const RetailReports: React.FC = () => {
             </div>
           </div>
 
-          {/* Shift Detail Table */}
-          <div className="overflow-x-auto border border-slate-200/80 rounded-2xl sm:rounded-3xl bg-white shadow-xs">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
-                <tr>
-                  <th className="py-3.5 px-4">Kasir / Sesi</th>
-                  <th className="py-3.5 px-4 text-center">Tanggal Shift</th>
-                  <th className="py-3.5 px-4 text-right">Kas Awal</th>
-                  <th className="py-3.5 px-4 text-right">Total Penjualan</th>
-                  <th className="py-3.5 px-4 text-right">Kas Keluar</th>
-                  <th className="py-3.5 px-4 text-right">Saldo Akhir</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {(shiftSummary.shifts || []).length === 0 ? (
+          {/* Shift Detail Container */}
+          <div className="border border-slate-200/80 rounded-2xl sm:rounded-3xl bg-white shadow-xs overflow-hidden">
+            <div className="p-4 sm:p-5 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+              <h4 className="font-black text-xs sm:text-sm text-slate-900">Rincian Riwayat Sesi Shift Kasir</h4>
+              <span className="text-[11px] font-bold text-slate-500">
+                {(shiftSummary.shifts || []).length} Sesi Tercatat
+              </span>
+            </div>
+
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">
-                      Belum ada data shift kasir pada periode ini.
-                    </td>
+                    <th className="py-3.5 px-4">Kasir / Sesi</th>
+                    <th className="py-3.5 px-4 text-center">Tanggal Shift</th>
+                    <th className="py-3.5 px-4 text-right">Kas Awal</th>
+                    <th className="py-3.5 px-4 text-right">Total Penjualan</th>
+                    <th className="py-3.5 px-4 text-right">Kas Keluar</th>
+                    <th className="py-3.5 px-4 text-right">Saldo Akhir</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
                   </tr>
-                ) : (
-                  (shiftSummary.shifts || []).map((s: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-slate-50/70 transition">
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900">{s.staffName || s.cashierName || 'Kasir'}</div>
-                        <div className="text-[10px] text-slate-400">{s.shiftLabel || `Shift #${idx + 1}`}</div>
-                      </td>
-                      <td className="py-3 px-4 text-center text-slate-600">
-                        {s.date ? new Date(s.date).toLocaleDateString('id-ID') : '-'}
-                      </td>
-                      <td className="py-3 px-4 text-right text-slate-600">{formatCurrency(s.openingCash)}</td>
-                      <td className="py-3 px-4 text-right font-black text-slate-900">{formatCurrency(s.totalSales)}</td>
-                      <td className="py-3 px-4 text-right font-bold text-rose-600">{formatCurrency(s.totalExpenses)}</td>
-                      <td className="py-3 px-4 text-right font-black text-indigo-700">{formatCurrency(s.closingCash)}</td>
-                      <td className="py-3 px-4 text-center">
-                        {s.status === 'CLOSED' ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">Ditutup</span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Aktif</span>
-                        )}
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(shiftSummary.shifts || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">
+                        Belum ada data shift kasir pada periode ini.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    (shiftSummary.shifts || []).map((s: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{s.staffName || s.cashierName || 'Kasir'}</div>
+                          <div className="text-[10px] text-slate-400">{s.shiftLabel || `Shift #${idx + 1}`}</div>
+                        </td>
+                        <td className="py-3 px-4 text-center text-slate-600">
+                          {s.date ? new Date(s.date).toLocaleDateString('id-ID') : '-'}
+                        </td>
+                        <td className="py-3 px-4 text-right text-slate-600">{formatCurrency(s.openingCash)}</td>
+                        <td className="py-3 px-4 text-right font-black text-slate-900">{formatCurrency(s.totalSales)}</td>
+                        <td className="py-3 px-4 text-right font-bold text-rose-600">{formatCurrency(s.totalExpenses)}</td>
+                        <td className="py-3 px-4 text-right font-black text-indigo-700">{formatCurrency(s.closingCash)}</td>
+                        <td className="py-3 px-4 text-center">
+                          {s.status === 'CLOSED' ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">Ditutup</span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Aktif</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Shift Cards (< 768px) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {(shiftSummary.shifts || []).length === 0 ? (
+                <div className="p-6 text-center flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2 border border-indigo-100">
+                    <Calendar size={24} />
+                  </div>
+                  <h4 className="text-xs font-black text-slate-800">Belum Ada Riwayat Shift</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada rekonsiliasi kas laci kasir pada periode yang dipilih.</p>
+                </div>
+              ) : (
+                (shiftSummary.shifts || []).map((s: any, idx: number) => {
+                  const isClosed = s.status === 'CLOSED';
+                  return (
+                    <div key={idx} className="p-4 space-y-3 bg-white hover:bg-slate-50/70 transition-all">
+                      {/* Header: Kasir name, Shift label, Date & Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 font-black text-xs">
+                            <User size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-black text-slate-900 truncate leading-tight">
+                              {s.staffName || s.cashierName || 'Kasir'}
+                            </h4>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                              <span className="font-semibold">{s.shiftLabel || `Shift #${idx + 1}`}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-0.5 font-mono">
+                                <Clock size={10} className="text-slate-400" />
+                                {s.date ? new Date(s.date).toLocaleDateString('id-ID') : '-'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="shrink-0">
+                          {isClosed ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                              Ditutup
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              Aktif
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Cash Breakdown Grid */}
+                      <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                        <div className="space-y-0.5">
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Kas Awal Laci</span>
+                          <span className="font-bold text-slate-700">{formatCurrency(s.openingCash)}</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block flex items-center gap-0.5 text-emerald-600">
+                            <ArrowDownRight size={11} /> Total Penjualan
+                          </span>
+                          <span className="font-black text-emerald-700">{formatCurrency(s.totalSales)}</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block flex items-center gap-0.5 text-rose-600">
+                            <ArrowUpRight size={11} /> Kas Keluar (OPEX)
+                          </span>
+                          <span className="font-bold text-rose-600">{formatCurrency(s.totalExpenses)}</span>
+                        </div>
+                        <div className="space-y-0.5 bg-indigo-50/70 p-1.5 rounded-lg border border-indigo-100/60">
+                          <span className="text-[9px] font-black uppercase text-indigo-700 block">Saldo Akhir Laci</span>
+                          <span className="font-black text-indigo-900">{formatCurrency(s.closingCash)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -1254,68 +1254,147 @@ export const ReportView: React.FC = () => {
             </div>
           </div>
 
-          {/* Products Sales Table */}
+          {/* Products Sales Table & Mobile Cards */}
           <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                  {['RANK', 'NAMA MENU', 'KATEGORI', 'TERJUAL (QTY)', 'KONTRIBUSI OMZET', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN (%)'].map((h) => (
-                    <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((prod: any, idx: number) => {
-                  const percentOfTotal = totalMenuRevenue > 0 ? ((prod.revenue || 0) / totalMenuRevenue) * 100 : 0;
-                  return (
-                    <tr key={prod.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#94a3b8', fontSize: '.8rem' }}>
-                        #{idx + 1}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.875rem' }}>
-                        {prod.name}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
-                          {prod.category}
-                        </span>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.9rem' }}>
-                        {prod.qty} <span style={{ fontSize: '.75rem', fontWeight: 500, color: '#64748b' }}>porsi</span>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{formatCurrency(prod.revenue)}</div>
-                        <div style={{ width: 100, height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
-                          <div style={{ width: `${Math.min(percentOfTotal, 100)}%`, height: '100%', background: '#7c3aed' }} />
-                        </div>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', color: '#dc2626', fontWeight: 700, fontSize: '.85rem' }}>
-                        {formatCurrency(prod.cost)}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', color: '#10b981', fontWeight: 800, fontSize: '.85rem' }}>
-                        {formatCurrency(prod.profit)}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{
-                          padding: '.2rem .5rem', borderRadius: '.35rem', fontWeight: 800, fontSize: '.75rem',
-                          background: prod.margin >= 60 ? '#f0fdf4' : (prod.margin >= 40 ? '#f5f3ff' : '#fffbeb'),
-                          color: prod.margin >= 60 ? '#166534' : (prod.margin >= 40 ? '#7c3aed' : '#b45309')
-                        }}>
-                          {prod.margin}%
-                        </span>
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    {['RANK', 'NAMA MENU', 'KATEGORI', 'TERJUAL (QTY)', 'KONTRIBUSI OMZET', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN (%)'].map((h) => (
+                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.map((prod: any, idx: number) => {
+                    const percentOfTotal = totalMenuRevenue > 0 ? ((prod.revenue || 0) / totalMenuRevenue) * 100 : 0;
+                    return (
+                      <tr key={prod.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#94a3b8', fontSize: '.8rem' }}>
+                          #{idx + 1}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.875rem' }}>
+                          {prod.name}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
+                            {prod.category}
+                          </span>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.9rem' }}>
+                          {prod.qty} <span style={{ fontSize: '.75rem', fontWeight: 500, color: '#64748b' }}>porsi</span>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{formatCurrency(prod.revenue)}</div>
+                          <div style={{ width: 100, height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(percentOfTotal, 100)}%`, height: '100%', background: '#7c3aed' }} />
+                          </div>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', color: '#dc2626', fontWeight: 700, fontSize: '.85rem' }}>
+                          {formatCurrency(prod.cost)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', color: '#10b981', fontWeight: 800, fontSize: '.85rem' }}>
+                          {formatCurrency(prod.profit)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{
+                            padding: '.2rem .5rem', borderRadius: '.35rem', fontWeight: 800, fontSize: '.75rem',
+                            background: prod.margin >= 60 ? '#f0fdf4' : (prod.margin >= 40 ? '#f5f3ff' : '#fffbeb'),
+                            color: prod.margin >= 60 ? '#166534' : (prod.margin >= 40 ? '#7c3aed' : '#b45309')
+                          }}>
+                            {prod.margin}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                        Tidak ada data penjualan menu untuk filter yang dipilih.
                       </td>
                     </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View (< 768px) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredProducts.length === 0 ? (
+                <div className="p-8 text-center flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                    <Utensils size={22} />
+                  </div>
+                  <h4 className="text-xs font-black text-slate-800">Belum Ada Data Penjualan Menu</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada penjualan menu untuk filter atau tanggal yang dipilih.</p>
+                </div>
+              ) : (
+                filteredProducts.map((prod: any, idx: number) => {
+                  const percentOfTotal = totalMenuRevenue > 0 ? ((prod.revenue || 0) / totalMenuRevenue) * 100 : 0;
+                  const rankClass = idx === 0 
+                    ? 'bg-amber-500 text-white shadow-xs' 
+                    : (idx === 1 
+                      ? 'bg-slate-500 text-white' 
+                      : (idx === 2 
+                        ? 'bg-amber-700 text-white' 
+                        : 'bg-slate-100 text-slate-600'));
+
+                  return (
+                    <div key={prod.name} className="p-4 space-y-3 bg-white hover:bg-slate-50/70 transition-all">
+                      {/* Top Row: Rank, Menu Name, Category, Margin */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <span className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${rankClass}`}>
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-black text-slate-900 leading-tight">
+                              {prod.name}
+                            </h4>
+                            <span className="inline-block text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100/80 px-2 py-0.2 rounded-md mt-1">
+                              {prod.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Margin Badge */}
+                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                          prod.margin >= 60 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : (prod.margin >= 40 
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+                              : 'bg-amber-50 text-amber-700 border-amber-200')
+                        }`}>
+                          Margin {prod.margin}%
+                        </span>
+                      </div>
+
+                      {/* 3-Col Metric Grid */}
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Terjual</span>
+                          <span className="font-black text-slate-900 block mt-0.5">{prod.qty} <span className="text-[10px] font-normal text-slate-500">porsi</span></span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Omzet</span>
+                          <span className="font-bold text-slate-900 block mt-0.5 truncate">{formatCurrency(prod.revenue)}</span>
+                          <div className="w-full h-1 bg-slate-200 rounded-full mt-1.5 overflow-hidden">
+                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${Math.min(percentOfTotal, 100)}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Keuntungan</span>
+                          <span className="font-black text-emerald-600 block mt-0.5 truncate">{formatCurrency(prod.profit)}</span>
+                          <span className="text-[9px] text-slate-400 block truncate">HPP: {formatCurrency(prod.cost)}</span>
+                        </div>
+                      </div>
+                    </div>
                   );
-                })}
-                {filteredProducts.length === 0 && (
-                  <tr>
-                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                      Tidak ada data penjualan menu untuk filter yang dipilih.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1326,32 +1405,24 @@ export const ReportView: React.FC = () => {
       {activeTab === 'shifts_transactions' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* Sub-toggle: Shifts vs Transactions */}
-          <div style={{ display: 'flex', gap: '.4rem', background: 'white', padding: '.4rem', borderRadius: '1rem', border: '1px solid #e2e8f0', width: 'fit-content', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="flex flex-col sm:flex-row w-full sm:w-fit gap-1.5 p-1.5 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
             <button
               onClick={() => setShiftTxSubTab('shifts')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.45rem',
-                padding: '.55rem 1.15rem', borderRadius: '.65rem', border: 'none',
-                background: shiftTxSubTab === 'shifts' ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
-                color: shiftTxSubTab === 'shifts' ? 'white' : '#475569',
-                fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
-                boxShadow: shiftTxSubTab === 'shifts' ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
-                transition: 'all 0.15s'
-              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all ${
+                shiftTxSubTab === 'shifts'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
             >
               <User size={15} /> Rekapitulasi Shift Kasir ({reportData.shifts?.length || 0})
             </button>
             <button
               onClick={() => setShiftTxSubTab('transactions')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.45rem',
-                padding: '.55rem 1.15rem', borderRadius: '.65rem', border: 'none',
-                background: shiftTxSubTab === 'transactions' ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
-                color: shiftTxSubTab === 'transactions' ? 'white' : '#475569',
-                fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
-                boxShadow: shiftTxSubTab === 'transactions' ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
-                transition: 'all 0.15s'
-              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all ${
+                shiftTxSubTab === 'transactions'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
             >
               <FileText size={15} /> Riwayat Invoice Transaksi ({transactionsData.length})
             </button>
@@ -1359,109 +1430,233 @@ export const ReportView: React.FC = () => {
 
           {shiftTxSubTab === 'shifts' ? (
             <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                    {['WAKTU TUTUP SHIFT', 'NAMA KASIR', 'SALDO AWAL LACI', 'TOTAL OMZET KAS', 'SALDO FISIK LACI', 'SELISIH KAS (AUDIT)', 'STATUS'].map((h) => (
-                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(reportData.shifts || []).map((s: any) => {
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      {['WAKTU TUTUP SHIFT', 'NAMA KASIR', 'SALDO AWAL LACI', 'TOTAL OMZET KAS', 'SALDO FISIK LACI', 'SELISIH KAS (AUDIT)', 'STATUS'].map((h) => (
+                        <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reportData.shifts || []).map((s: any) => {
+                      const isBalanced = (s.selisih || 0) === 0;
+                      const isShort = (s.selisih || 0) < 0;
+                      return (
+                        <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                            {s.waktuTutup ? new Date(s.waktuTutup).toLocaleString('id-ID') : 'Masih Berjalan'}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.85rem' }}>
+                            {s.user?.name || s.user?.username || 'Kasir'}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.82rem' }}>
+                            {formatCurrency(s.saldoAwal)}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                            {formatCurrency(s.saldoSistem || 0)}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>
+                            {formatCurrency(s.saldoFisikLaci || 0)}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 900, fontSize: '.85rem', color: isBalanced ? '#10b981' : (isShort ? '#ef4444' : '#f59e0b') }}>
+                            {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem' }}>
+                            <span style={{
+                              padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
+                              background: isBalanced ? '#f0fdf4' : (isShort ? '#fee2e2' : '#fffbeb'),
+                              color: isBalanced ? '#166534' : (isShort ? '#991b1b' : '#b45309')
+                            }}>
+                              {isBalanced ? '✅ Seimbang' : (isShort ? '❌ Minus (Shortage)' : '⚠️ Lebih (Overage)')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {(reportData.shifts || []).length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                          Belum ada shift kasir yang tercatat pada periode ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View (< 768px) */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {(reportData.shifts || []).length === 0 ? (
+                  <div className="p-8 text-center flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                      <Users size={22} />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-800">Belum Ada Shift Kasir</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada shift kasir yang tercatat pada periode ini.</p>
+                  </div>
+                ) : (
+                  (reportData.shifts || []).map((s: any) => {
                     const isBalanced = (s.selisih || 0) === 0;
                     const isShort = (s.selisih || 0) < 0;
                     return (
-                      <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
-                          {s.waktuTutup ? new Date(s.waktuTutup).toLocaleString('id-ID') : 'Masih Berjalan'}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.85rem' }}>
-                          {s.user?.name || s.user?.username || 'Kasir'}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.82rem' }}>
-                          {formatCurrency(s.saldoAwal)}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
-                          {formatCurrency(s.saldoSistem || 0)}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>
-                          {formatCurrency(s.saldoFisikLaci || 0)}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, fontSize: '.85rem', color: isBalanced ? '#10b981' : (isShort ? '#ef4444' : '#f59e0b') }}>
-                          {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem' }}>
-                          <span style={{
-                            padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
-                            background: isBalanced ? '#f0fdf4' : (isShort ? '#fee2e2' : '#fffbeb'),
-                            color: isBalanced ? '#166534' : (isShort ? '#991b1b' : '#b45309')
-                          }}>
-                            {isBalanced ? '✅ Seimbang' : (isShort ? '❌ Minus (Shortage)' : '⚠️ Lebih (Overage)')}
+                      <div key={s.id} className="p-4 space-y-3 bg-white hover:bg-slate-50/70 transition-all">
+                        {/* Top: Kasir name, time, status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-purple-50 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+                              <User size={16} />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-black text-slate-900 leading-tight">
+                                {s.user?.name || s.user?.username || 'Kasir'}
+                              </h4>
+                              <span className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
+                                <Clock size={11} />
+                                {s.waktuTutup ? new Date(s.waktuTutup).toLocaleString('id-ID') : 'Sedang Berjalan'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            isBalanced 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : (isShort 
+                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                : 'bg-amber-50 text-amber-700 border-amber-200')
+                          }`}>
+                            {isBalanced ? '✅ Pas' : (isShort ? '❌ Minus' : '⚠️ Lebih')}
                           </span>
-                        </td>
-                      </tr>
+                        </div>
+
+                        {/* 4-Grid Financial Audit Box */}
+                        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Saldo Awal</span>
+                            <span className="font-bold text-slate-700 block mt-0.5">{formatCurrency(s.saldoAwal)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Omzet Sistem</span>
+                            <span className="font-bold text-slate-900 block mt-0.5">{formatCurrency(s.saldoSistem || 0)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Fisik Laci</span>
+                            <span className="font-bold text-slate-900 block mt-0.5">{formatCurrency(s.saldoFisikLaci || 0)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Selisih Audit</span>
+                            <span className={`font-black block mt-0.5 ${isBalanced ? 'text-emerald-600' : (isShort ? 'text-rose-600' : 'text-amber-600')}`}>
+                              {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     );
-                  })}
-                  {(reportData.shifts || []).length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                        Belum ada shift kasir yang tercatat pada periode ini.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  })
+                )}
+              </div>
             </div>
           ) : (
             <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                    {['NO. ORDER', 'WAKTU', 'PELANGGAN', 'TIPE ORDER', 'METODE BAYAR', 'TOTAL BAYAR', 'STATUS'].map((h) => (
-                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      {['NO. ORDER', 'WAKTU', 'PELANGGAN', 'TIPE ORDER', 'METODE BAYAR', 'TOTAL BAYAR', 'STATUS'].map((h) => (
+                        <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactionsData.slice(0, 100).map((tx: any) => (
+                      <tr key={tx.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.82rem' }}>
+                          {tx.orderNumber || `#${tx.id}`}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.78rem' }}>
+                          {new Date(tx.createdAt).toLocaleString('id-ID')}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                          {tx.customerName || 'Pelanggan Umum'}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{ fontSize: '.72rem', fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
+                            {tx.orderType || 'Dine In'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0284c7', fontSize: '.82rem' }}>
+                          {tx.paymentMethod || 'Tunai'}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.85rem' }}>
+                          {formatCurrency(tx.total)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{ fontSize: '.7rem', fontWeight: 800, background: '#f0fdf4', color: '#166534', padding: '.2rem .5rem', borderRadius: '.35rem' }}>
+                            Lunas
+                          </span>
+                        </td>
+                      </tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactionsData.slice(0, 100).map((tx: any) => (
-                    <tr key={tx.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.82rem' }}>
-                        {tx.orderNumber || `#${tx.id}`}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.78rem' }}>
-                        {new Date(tx.createdAt).toLocaleString('id-ID')}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
-                        {tx.customerName || 'Pelanggan Umum'}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{ fontSize: '.72rem', fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
-                          {tx.orderType || 'Dine In'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0284c7', fontSize: '.82rem' }}>
-                        {tx.paymentMethod || 'Tunai'}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.85rem' }}>
-                        {formatCurrency(tx.total)}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{ fontSize: '.7rem', fontWeight: 800, background: '#f0fdf4', color: '#166534', padding: '.2rem .5rem', borderRadius: '.35rem' }}>
+                    {transactionsData.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                          Belum ada riwayat transaksi pada rentang tanggal ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View (< 768px) */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {transactionsData.length === 0 ? (
+                  <div className="p-8 text-center flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                      <Receipt size={22} />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-800">Belum Ada Transaksi</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada riwayat transaksi pada rentang tanggal ini.</p>
+                  </div>
+                ) : (
+                  transactionsData.slice(0, 100).map((tx: any) => (
+                    <div key={tx.id} className="p-4 space-y-2.5 bg-white hover:bg-slate-50/70 transition-all">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-mono font-black text-xs text-indigo-700 block">
+                            {tx.orderNumber || `#${tx.id}`}
+                          </span>
+                          <span className="text-[11px] text-slate-400 block mt-0.5">
+                            {new Date(tx.createdAt).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           Lunas
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {transactionsData.length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                        Belum ada riwayat transaksi pada rentang tanggal ini.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-800">{tx.customerName || 'Pelanggan Umum'}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                            {tx.orderType || 'Dine In'}
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded border border-sky-100">
+                            {tx.paymentMethod || 'Tunai'}
+                          </span>
+                        </div>
+                        <span className="font-black text-slate-900 text-sm">
+                          {formatCurrency(tx.total)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1528,55 +1723,140 @@ export const ReportView: React.FC = () => {
             )}
           </div>
 
-          {/* Inventory Table */}
+          {/* Inventory Table & Mobile Cards */}
           <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                  {['NAMA BAHAN BAKU', 'SATUAN', 'STOK AWAL', 'MASUK (RESTOCK/PO)', 'KELUAR (PRODUKSI)', 'STOK AKHIR', 'STATUS', 'NILAI ASET'].map((h) => (
-                    <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(inventoryData.inventory || [])
-                  .filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
-                  .map((item: any) => {
-                    const isCritical = item.stockAkhir <= item.minStock;
-                    return (
-                      <tr key={item.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{item.name}</td>
-                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.8rem' }}>{item.unit}</td>
-                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem' }}>{item.stockAwal?.toLocaleString('id-ID')}</td>
-                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#10b981', fontWeight: 700 }}>+{item.masuk?.toLocaleString('id-ID')}</td>
-                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#ef4444', fontWeight: 700 }}>-{item.keluarProduksi?.toLocaleString('id-ID')}</td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: isCritical ? '#dc2626' : '#0f172a', fontSize: '.85rem' }}>
-                          {item.stockAkhir?.toLocaleString('id-ID')}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem' }}>
-                          <span style={{
-                            padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
-                            background: isCritical ? '#fee2e2' : '#f0fdf4',
-                            color: isCritical ? '#991b1b' : '#166534'
-                          }}>
-                            {isCritical ? '⚠️ Kritis' : '🟢 Aman'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#10b981', fontSize: '.85rem' }}>
-                          {formatCurrency(item.totalValuation)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                {(inventoryData.inventory || []).filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase())).length === 0 && (
-                  <tr>
-                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                      Tidak ada bahan baku yang sesuai pencarian.
-                    </td>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    {['NAMA BAHAN BAKU', 'SATUAN', 'STOK AWAL', 'MASUK (RESTOCK/PO)', 'KELUAR (PRODUKSI)', 'STOK AKHIR', 'STATUS', 'NILAI ASET'].map((h) => (
+                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                    ))}
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(inventoryData.inventory || [])
+                    .filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                    .map((item: any) => {
+                      const isCritical = item.stockAkhir <= item.minStock;
+                      return (
+                        <tr key={item.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{item.name}</td>
+                          <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.8rem' }}>{item.unit}</td>
+                          <td style={{ padding: '.85rem 1rem', fontSize: '.82rem' }}>{item.stockAwal?.toLocaleString('id-ID')}</td>
+                          <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#10b981', fontWeight: 700 }}>+{item.masuk?.toLocaleString('id-ID')}</td>
+                          <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#ef4444', fontWeight: 700 }}>-{item.keluarProduksi?.toLocaleString('id-ID')}</td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: isCritical ? '#dc2626' : '#0f172a', fontSize: '.85rem' }}>
+                            {item.stockAkhir?.toLocaleString('id-ID')}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem' }}>
+                            <span style={{
+                              padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
+                              background: isCritical ? '#fee2e2' : '#f0fdf4',
+                              color: isCritical ? '#991b1b' : '#166534'
+                            }}>
+                              {isCritical ? '⚠️ Kritis' : '🟢 Aman'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#10b981', fontSize: '.85rem' }}>
+                            {formatCurrency(item.totalValuation)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {(inventoryData.inventory || []).filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase())).length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                        Tidak ada bahan baku yang sesuai pencarian.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View (< 768px) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {(() => {
+                const filteredItems = (inventoryData.inventory || []).filter(
+                  (item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase())
+                );
+                if (filteredItems.length === 0) {
+                  return (
+                    <div className="p-8 text-center flex flex-col items-center justify-center">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                        <Boxes size={22} />
+                      </div>
+                      <h4 className="text-xs font-black text-slate-800">Tidak Ada Bahan Baku</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada data stok yang sesuai dengan pencarian.</p>
+                    </div>
+                  );
+                }
+                return filteredItems.map((item: any) => {
+                  const isCritical = item.stockAkhir <= item.minStock;
+                  return (
+                    <div key={item.name} className="p-4 space-y-3 bg-white hover:bg-slate-50/70 transition-all">
+                      {/* Top: Name, Unit, Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-black text-slate-900 leading-tight">
+                            {item.name}
+                          </h4>
+                          <span className="inline-block text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-1">
+                            Satuan: {item.unit}
+                          </span>
+                        </div>
+
+                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                          isCritical
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {isCritical ? '⚠️ Kritis' : '🟢 Aman'}
+                        </span>
+                      </div>
+
+                      {/* 4-Col Stock Movement Grid */}
+                      <div className="grid grid-cols-4 gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-center">
+                        <div className="p-1">
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Awal</span>
+                          <span className="font-bold text-slate-700 text-xs block mt-0.5">
+                            {item.stockAwal?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="p-1">
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Masuk</span>
+                          <span className="font-bold text-emerald-600 text-xs block mt-0.5">
+                            +{item.masuk?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="p-1">
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Keluar</span>
+                          <span className="font-bold text-rose-600 text-xs block mt-0.5">
+                            -{item.keluarProduksi?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="p-1 bg-white rounded-lg border border-slate-200/80 shadow-2xs">
+                          <span className="text-[9px] font-black uppercase text-indigo-700 block">Sisa Akhir</span>
+                          <span className={`font-black text-xs block mt-0.5 ${isCritical ? 'text-rose-600' : 'text-slate-900'}`}>
+                            {item.stockAkhir?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bottom: Asset Valuation */}
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                        <span className="text-[11px] font-semibold text-slate-500">Nilai Aset Persediaan:</span>
+                        <span className="font-black text-emerald-600 text-xs">
+                          {formatCurrency(item.totalValuation)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}
