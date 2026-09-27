@@ -1546,8 +1546,6 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
           foodDirectExpense += cf.amount;
         } else if (division === 'drink') {
           drinkDirectExpense += cf.amount;
-        } else if (division === 'neutral') {
-          otherDirectExpense += cf.amount;
         } else {
           sharedOpex += cf.amount;
         }
@@ -1566,6 +1564,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     // HPP riil bahan resep + pengeluaran belanja langsung kasir/dapur
     const foodTotalExpense = foodHpp + foodDirectExpense;
     const drinkTotalExpense = drinkHpp + drinkDirectExpense;
+    const otherTotalExpense = otherHpp + otherDirectExpense;
 
     const foodGrossProfit = foodRevenue - foodTotalExpense;
     const drinkGrossProfit = drinkRevenue - drinkTotalExpense;
@@ -1682,12 +1681,12 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         const div = getExpenseDivision(cf);
         if (div === 'food') dFoodExp += cf.amount;
         else if (div === 'drink') dDrinkExp += cf.amount;
-        else if (div === 'neutral') dOtherExp += cf.amount;
         else dSharedOpex += cf.amount;
       });
 
       const dFoodCost = dFoodHpp + dFoodExp;
       const dDrinkCost = dDrinkHpp + dDrinkExp;
+      const dOtherCost = dOtherHpp + dOtherExp;
       const dFoodNet = dFoodRev - dFoodCost;
       const dDrinkNet = dDrinkRev - dDrinkCost;
       const dOtherNet = dOtherRev - dOtherCost;

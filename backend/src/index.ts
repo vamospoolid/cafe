@@ -263,6 +263,7 @@ import bengkelRoutes from './routes/bengkel';
 import retailRoutes from './routes/retail';
 import laundryRoutes from './routes/laundry';
 import outletsRoutes from './routes/outlets';
+import tenantsRoutes from './routes/tenants';
 
 app.use('/api/health', healthRoutes);
 app.use('/api/public-branding', publicBrandingRoutes);

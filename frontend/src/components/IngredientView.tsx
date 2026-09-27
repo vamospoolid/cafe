@@ -172,17 +172,6 @@ export const IngredientView: React.FC = () => {
   const [subCategoryFilter, setSubCategoryFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'all' | 'low' | 'out' | 'safe'>('all');
 
-  // Yield & Variance Analytics (Tingkat Keberhasilan Porsi)
-  const [yieldData, setYieldData] = useState<any>(null);
-  const [yieldLoading, setYieldLoading] = useState(false);
-  const [yieldPreset, setYieldPreset] = useState<'today' | 'yesterday' | 'last7' | 'this_month' | 'custom'>('this_month');
-  const [yieldStartDate, setYieldStartDate] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-  const [yieldEndDate, setYieldEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [yieldCategoryFilter, setYieldCategoryFilter] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
-  const [yieldScopeFilter, setYieldScopeFilter] = useState<'ALL' | 'KEY_ONLY'>('ALL');
-  const [yieldSearch, setYieldSearch] = useState<string>('');
-  const [expandedYieldId, setExpandedYieldId] = useState<number | null>(null);
-
   // Staff Activity & Loss Analytics State
   const [staffActivityData, setStaffActivityData] = useState<any>(null);
   const [staffActivityLoading, setStaffActivityLoading] = useState(false);
@@ -454,36 +443,6 @@ export const IngredientView: React.FC = () => {
     } catch (e) {
       console.error(e);
       toast('Gagal mengunduh Laporan Konsumsi Harian', 'error');
-    } finally {
-      setGeneratingPdf(false);
-    }
-  };
-
-  const handleExportYieldPDF = async () => {
-    try {
-      setGeneratingPdf(true);
-      let raw = yieldData;
-      if (!raw) {
-        const url = new URL(`${window.location.origin}${API}/ingredients/yield-analytics`);
-        if (yieldStartDate) url.searchParams.set('startDate', yieldStartDate);
-        if (yieldEndDate) url.searchParams.set('endDate', yieldEndDate);
-        if (yieldCategoryFilter !== 'ALL') url.searchParams.set('category', yieldCategoryFilter);
-        if (yieldScopeFilter !== 'ALL') url.searchParams.set('scope', yieldScopeFilter);
-        const res = await fetch(url.toString(), { headers });
-        if (res.ok) raw = await res.json();
-      }
-      await exportYieldVarianceAuditPDF(
-        posContext?.settings || {},
-        raw,
-        yieldStartDate,
-        yieldEndDate,
-        posContext?.user?.username || 'Auditor / Manager'
-      );
-      toast('Laporan Audit Tingkat Keberhasilan & Yield berhasil diunduh!', 'success');
-      setPdfDropdownOpen(false);
-    } catch (e) {
-      console.error(e);
-      toast('Gagal mengunduh Laporan Audit Yield', 'error');
     } finally {
       setGeneratingPdf(false);
     }
@@ -1512,7 +1471,7 @@ export const IngredientView: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '.75rem',
-                padding: '.85rem 1rem',
+                padding: '.75rem 1rem',
                 background: isSelected 
                   ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' 
                   : '#f8fafc',
@@ -1531,15 +1490,15 @@ export const IngredientView: React.FC = () => {
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center',
-                  width: '38px',
-                  height: '38px',
+                  width: '36px',
+                  height: '36px',
                   borderRadius: '.65rem',
                   background: isSelected ? 'rgba(255,255,255,0.2)' : '#ede9fe',
                   color: isSelected ? '#ffffff' : '#7c3aed',
                   flexShrink: 0
                 }}
               >
-                <Icon size={19} />
+                <Icon size={18} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -1551,7 +1510,7 @@ export const IngredientView: React.FC = () => {
                     <span 
                       style={{ 
                         fontSize: '.62rem', 
-                        padding: '.15rem .45rem', 
+                        padding: '.12rem .4rem', 
                         background: isSelected ? 'rgba(255,255,255,0.25)' : '#ede9fe', 
                         color: isSelected ? '#ffffff' : '#7c3aed', 
                         borderRadius: '9999px', 
@@ -1563,7 +1522,7 @@ export const IngredientView: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <span style={{ fontSize: '.72rem', color: isSelected ? 'rgba(255,255,255,0.8)' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '.1rem' }}>
+                <span style={{ fontSize: '.72rem', color: isSelected ? 'rgba(255,255,255,0.8)' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {tab.subtitle}
                 </span>
               </div>
@@ -4428,439 +4387,6 @@ export const IngredientView: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          TAB 9: AUDIT EFISIENSI & TINGKAT KEBERHASILAN (YIELD & VARIANCE)
-      ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'yield' && (
-        <div className="space-y-6 animate-fade-in">
-          {/* HEADER & COMPREHENSIVE FILTER BAR */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-                  <Target size={22} className="text-violet-600" />
-                  Audit Tingkat Keberhasilan Porsi (Yield & Variance)
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Membandingkan bahan baku yang terpakai di dapur vs target porsi standar resep (BOM) dan penjualan riil kasir.
-                </p>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={handleExportYieldPDF}
-                  disabled={generatingPdf}
-                  className="px-3.5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-violet-500/20 active:scale-95"
-                  title="Cetak Laporan Audit Yield & Variance (PDF)"
-                >
-                  <Printer size={15} />
-                  <span>{generatingPdf ? 'Memproses...' : 'Cetak Laporan PDF'}</span>
-                </button>
-                <button
-                  onClick={() => fetchYieldAnalytics()}
-                  disabled={yieldLoading}
-                  className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl transition-all active:scale-95"
-                  title="Segarkan Data"
-                >
-                  <RefreshCw size={15} className={yieldLoading ? 'animate-spin text-violet-600' : ''} />
-                </button>
-              </div>
-            </div>
-
-            {/* Filter Controls */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-              {/* Filter 1: Horizon Preset */}
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Rentang Waktu</label>
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-                  {[
-                    { id: 'today', label: 'Hari Ini' },
-                    { id: 'yesterday', label: 'Kemarin' },
-                    { id: 'last7', label: '7 Hari' },
-                    { id: 'this_month', label: 'Bulan Ini' },
-                    { id: 'custom', label: 'Kustom' },
-                  ].map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleYieldPresetChange(p.id as any)}
-                      className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                        yieldPreset === p.id 
-                          ? 'bg-violet-600 text-white shadow-sm shadow-violet-600/20' 
-                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Filter 2: Custom Date if active */}
-              {yieldPreset === 'custom' ? (
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Pilih Tanggal</label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="date"
-                      value={yieldStartDate}
-                      onChange={e => {
-                        setYieldStartDate(e.target.value);
-                        fetchYieldAnalytics(e.target.value, yieldEndDate);
-                      }}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700"
-                    />
-                    <span className="text-slate-400 text-xs">-</span>
-                    <input
-                      type="date"
-                      value={yieldEndDate}
-                      onChange={e => {
-                        setYieldEndDate(e.target.value);
-                        fetchYieldAnalytics(yieldStartDate, e.target.value);
-                      }}
-                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700"
-                    />
-                  </div>
-                </div>
-              ) : (
-                /* Filter 2 Alternate: Scope Cakupan */
-                <div>
-                  <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Cakupan Bahan</label>
-                  <select
-                    value={yieldScopeFilter}
-                    onChange={e => {
-                      setYieldScopeFilter(e.target.value as any);
-                      fetchYieldAnalytics(undefined, undefined, undefined, e.target.value);
-                    }}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
-                  >
-                    <option value="ALL">📋 Semua Bahan (Termasuk Pelengkap & Garnish)</option>
-                    <option value="KEY_ONLY">⚡ Bahan Utama Saja (High Cost & Kunci Porsi)</option>
-                  </select>
-                </div>
-              )}
-
-              {/* Filter 3: Category Area */}
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Area / Kategori</label>
-                <select
-                  value={yieldCategoryFilter}
-                  onChange={e => {
-                    setYieldCategoryFilter(e.target.value as any);
-                    fetchYieldAnalytics(undefined, undefined, e.target.value);
-                  }}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-violet-500"
-                >
-                  <option value="ALL">🌐 Semua Area (Dapur & Bar)</option>
-                  <option value="FOOD">🍲 Dapur (Makanan, Daging & Sayur)</option>
-                  <option value="DRINK">☕ Bar (Kopi, Susu, Sirup Minuman)</option>
-                  <option value="PACKAGING">📦 Kemasan & Cup</option>
-                </select>
-              </div>
-
-              {/* Filter 4: Search Input */}
-              <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Cari Bahan</label>
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Ketik nama bahan baku..."
-                    value={yieldSearch}
-                    onChange={e => setYieldSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-violet-500 focus:bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 4 SUMMARY KPI CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* KPI 1: Skor Efisiensi Toko */}
-            <div className="bg-gradient-to-br from-violet-600 via-indigo-600 to-purple-700 p-6 rounded-3xl text-white shadow-lg shadow-indigo-600/20 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-indigo-100 uppercase tracking-wider">Skor Efisiensi Porsi Toko</p>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white/20 text-white backdrop-blur-sm">
-                    {yieldData?.summary?.storeEfficiencyRate >= 95 ? 'Optimal' : (yieldData?.summary?.storeEfficiencyRate >= 90 ? 'Toleransi' : 'Perlu Evaluasi')}
-                  </span>
-                </div>
-                <h3 className="text-3xl font-black mt-2">
-                  {yieldData?.summary?.storeEfficiencyRate || 100}%
-                </h3>
-                <p className="text-[11px] text-indigo-100/80 mt-1">
-                  Akurasi konversi bahan ke menu terjual berdasarkan pembobotan nilai modal (Cost-Weighted).
-                </p>
-              </div>
-
-              {/* Progress Bar Visual */}
-              <div className="mt-4 pt-3 border-t border-white/15">
-                <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-emerald-400 transition-all duration-500" 
-                    style={{ width: `${Math.min(100, yieldData?.summary?.storeEfficiencyRate || 100)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* KPI 2: Total Porsi Miss */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-rose-600 uppercase tracking-wider">Porsi Miss / Loss</p>
-                <h3 className="text-3xl font-black text-rose-600 mt-1">
-                  {(yieldData?.summary?.totalMissPortions || 0).toLocaleString('id-ID')} <span className="text-xs font-bold text-slate-500">Porsi</span>
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Setara porsi yang terbuang akibat takaran berlebih atau loss.
-                </p>
-              </div>
-              <div className="w-13 h-13 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                <AlertTriangle size={24} />
-              </div>
-            </div>
-
-            {/* KPI 3: Estimasi Biaya Kerugian */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Nilai Selisih Bahan</p>
-                <h3 className="text-2xl sm:text-3xl font-black text-amber-600 mt-1">
-                  Rp {(yieldData?.summary?.totalVarianceCost || 0).toLocaleString('id-ID')}
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Estimasi nilai modal bahan yang hilang / melebihi target resep.
-                </p>
-              </div>
-              <div className="w-13 h-13 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                <DollarSign size={24} />
-              </div>
-            </div>
-
-            {/* KPI 4: Kepatuhan Standar SOP */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Kepatuhan Standar SOP</p>
-                <h3 className="text-2xl sm:text-3xl font-black text-indigo-600 mt-1">
-                  {yieldData?.summary?.perfectCount || 0} <span className="text-xs font-bold text-slate-500">Presisi</span>
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {yieldData?.summary?.warningCount || 0} Toleransi | {yieldData?.summary?.criticalCount || 0} Boros
-                </p>
-              </div>
-              <div className="w-13 h-13 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                <Award size={24} />
-              </div>
-            </div>
-          </div>
-
-          {/* TABLE & ACCORDION DETAIL */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h4 className="font-black text-sm text-slate-900">Rincian Performa Takaran per Bahan Baku</h4>
-                <p className="text-xs text-slate-400">Klik baris bahan untuk melihat rincian menu yang mengonsumsi bahan tersebut.</p>
-              </div>
-              <div className="text-xs text-slate-500 font-bold">
-                Menampilkan {((yieldData?.items || []).filter((i: any) => i.name.toLowerCase().includes(yieldSearch.toLowerCase()))).length} Bahan
-              </div>
-            </div>
-
-            {yieldLoading ? (
-              <div className="py-16 text-center text-slate-400">
-                <RefreshCw className="animate-spin inline-block mb-2 text-violet-600" size={26} />
-                <p className="font-bold text-xs">Menganalisis data penjualan resep dan mutasi riil bahan...</p>
-              </div>
-            ) : (yieldData?.items || []).length === 0 ? (
-              <div className="py-16 text-center text-slate-400 space-y-2">
-                <Target size={36} className="mx-auto text-slate-300" />
-                <p className="font-bold text-sm text-slate-600">Belum ada data konsumsi resep pada periode ini.</p>
-                <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  Pastikan menu di kasir telah memiliki resep bahan baku (BOM) yang terkonfigurasi.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-100">
-                    <tr>
-                      <th className="py-3 px-4 text-center w-10">No</th>
-                      <th className="py-3 px-4">Nama Bahan & Menu Terkait</th>
-                      <th className="py-3 px-4 text-center">Area</th>
-                      <th className="py-3 px-4 text-right">Target Teori Resep</th>
-                      <th className="py-3 px-4 text-right">Realita Terpakai</th>
-                      <th className="py-3 px-4 text-right">Selisih (Miss)</th>
-                      <th className="py-3 px-4 text-right">Biaya Kerugian</th>
-                      <th className="py-3 px-4 text-center">Efisiensi Hasil</th>
-                      <th className="py-3 px-4">Diagnosis & Rekomendasi SOP</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {(yieldData?.items || [])
-                      .filter((item: any) => item.name.toLowerCase().includes(yieldSearch.toLowerCase()))
-                      .map((item: any, idx: number) => {
-                        const isExpanded = expandedYieldId === item.id;
-                        const hasRelatedMenu = item.relatedProducts && item.relatedProducts.length > 0;
-
-                        return (
-                          <React.Fragment key={item.id}>
-                            <tr 
-                              onClick={() => hasRelatedMenu && setExpandedYieldId(isExpanded ? null : item.id)}
-                              className={`transition-colors cursor-pointer ${
-                                isExpanded ? 'bg-violet-50/50' : 'hover:bg-slate-50/80'
-                              } ${
-                                item.statusType === 'OVER_PORTION' ? 'bg-rose-50/20' : ''
-                              }`}
-                            >
-                              <td className="py-3.5 px-4 text-center font-bold text-slate-400">{idx + 1}</td>
-                              <td className="py-3.5 px-4">
-                                <div className="flex items-center gap-2">
-                                  <div>
-                                    <div className="font-black text-slate-900 text-xs flex items-center gap-1.5">
-                                      {item.name}
-                                      {item.isKeyIngredient && (
-                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800" title="Bahan Utama (High Impact)">
-                                          Bahan Utama
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">
-                                      Harga Beli: Rp {item.buyPrice.toLocaleString('id-ID')}/{item.unit}
-                                      {item.avgQtyPerServing > 0 && ` • Standar: ${item.avgQtyPerServing} ${item.unit}/porsi`}
-                                    </p>
-                                  </div>
-                                  {hasRelatedMenu && (
-                                    <div className="ml-auto text-slate-400">
-                                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4 text-center">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                  item.category === 'DRINK' ? 'bg-sky-50 text-sky-700 border border-sky-200' :
-                                  item.category === 'FOOD' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                  'bg-slate-100 text-slate-600'
-                                }`}>
-                                  {item.category === 'DRINK' ? 'Bar' : item.category === 'FOOD' ? 'Dapur' : 'Kemasan'}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-right font-bold text-slate-700">
-                                {item.theoreticalQty.toLocaleString('id-ID')} {item.unit}
-                              </td>
-                              <td className="py-3.5 px-4 text-right font-bold text-slate-900">
-                                {item.actualQty.toLocaleString('id-ID')} {item.unit}
-                              </td>
-                              <td className="py-3.5 px-4 text-right">
-                                <span className={`font-black ${
-                                  item.varianceQty > 0 ? 'text-rose-600' : (item.varianceQty < 0 ? 'text-sky-600' : 'text-emerald-600')
-                                }`}>
-                                  {item.varianceQty > 0 ? `+${item.varianceQty.toLocaleString('id-ID')}` : item.varianceQty.toLocaleString('id-ID')} {item.unit}
-                                </span>
-                                {item.missPortions > 0 && (
-                                  <div className="text-[10px] text-rose-500 font-bold mt-0.5">
-                                    ~{item.missPortions} Porsi Hilang
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-3.5 px-4 text-right font-black text-slate-800">
-                                {item.varianceCost > 0 ? (
-                                  <span className="text-amber-700 font-black">
-                                    Rp {item.varianceCost.toLocaleString('id-ID')}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400">Rp 0</span>
-                                )}
-                              </td>
-                              <td className="py-3.5 px-4 text-center">
-                                <div className="inline-flex flex-col items-center">
-                                  <span className={`text-xs font-black ${
-                                    item.statusType === 'PERFECT' ? 'text-emerald-600' :
-                                    item.statusType === 'WARNING' ? 'text-amber-600' :
-                                    item.statusType === 'UNDER_PORTION' ? 'text-blue-600' :
-                                    item.statusType === 'INACTIVE' ? 'text-slate-400' :
-                                    'text-rose-600'
-                                  }`}>
-                                    {item.efficiencyRate}%
-                                  </span>
-                                  <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
-                                    <div 
-                                      className={`h-full ${
-                                        item.statusType === 'PERFECT' ? 'bg-emerald-500' :
-                                        item.statusType === 'WARNING' ? 'bg-amber-500' :
-                                        item.statusType === 'UNDER_PORTION' ? 'bg-blue-500' :
-                                        'bg-rose-500'
-                                      }`}
-                                      style={{ width: `${Math.min(100, item.efficiencyRate)}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <div className="space-y-1">
-                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-black inline-block ${
-                                    item.statusType === 'PERFECT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                    item.statusType === 'WARNING' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                    item.statusType === 'UNDER_PORTION' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                                    item.statusType === 'INACTIVE' ? 'bg-slate-50 text-slate-500 border border-slate-200' :
-                                    'bg-rose-50 text-rose-700 border border-rose-200'
-                                  }`}>
-                                    {item.status}
-                                  </span>
-                                  <p className="text-[10px] text-slate-500 leading-tight">
-                                    {item.recommendation}
-                                  </p>
-                                </div>
-                              </td>
-                            </tr>
-
-                            {/* ACCORDION MENU COMPOSITION BREAKDOWN */}
-                            {isExpanded && hasRelatedMenu && (
-                              <tr className="bg-slate-50/70 border-t border-b border-slate-200/80">
-                                <td colSpan={9} className="p-4 sm:p-5">
-                                  <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                      <div className="font-bold text-xs text-slate-800 flex items-center gap-2">
-                                        <Utensils size={14} className="text-violet-600" />
-                                        <span>Rincian Menu yang Menggunakan {item.name}:</span>
-                                      </div>
-                                      <span className="text-[10px] text-slate-400">Total {item.relatedProducts.length} Menu Terkait</span>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                                      {item.relatedProducts.map((p: any, pIdx: number) => (
-                                        <div key={pIdx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-                                          <div>
-                                            <p className="font-black text-xs text-slate-900">{p.name}</p>
-                                            <p className="text-[10px] text-slate-500">
-                                              Takaran: {p.qtyPerServing} {p.unit}/porsi
-                                            </p>
-                                          </div>
-                                          <div className="text-right">
-                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-violet-50 text-violet-700 border border-violet-200">
-                                              {p.portionsSold || 0} Terjual
-                                            </span>
-                                            <p className="text-[9px] text-slate-400 mt-0.5">
-                                              ={((p.portionsSold || 0) * p.qtyPerServing).toLocaleString('id-ID')} {p.unit}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         </div>
       )}

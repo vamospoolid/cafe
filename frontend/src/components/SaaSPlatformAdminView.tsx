@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { 
   Building2, 
+  DollarSign, 
   Users, 
   CheckCircle2, 
+  Clock, 
+  AlertTriangle, 
+  ShieldCheck, 
   Sparkles, 
   RefreshCw, 
   Search, 
@@ -15,15 +19,7 @@ import {
   Lock, 
   Unlock, 
   Sliders, 
-  Store, 
-  Layers,
-  MessageSquare,
-  Phone,
-  Mail,
-  Edit,
-  Send,
-  HelpCircle,
-  Clock,
+  Database,
   ArrowUpRight,
   Store,
   Layers,
@@ -65,39 +61,6 @@ const tabLabels: Record<PlatformAdminTab, string> = {
 
 const validTabs: PlatformAdminTab[] = ['overview', 'tenants', 'plans', 'invoices', 'database', 'warnings', 'logs'];
 
-interface TenantItem {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  ownerName: string;
-  phone: string;
-  waNumber: string | null;
-  email: string;
-  notes?: string;
-  createdAt: string;
-  trialEndsAt?: string;
-  owner: {
-    id?: number;
-    name: string;
-    username?: string;
-  };
-  subscription?: {
-    id: string | null;
-    status: string;
-    planName: string;
-    planCode: string;
-    maxOutlets?: number;
-    maxUsers?: number;
-    maxProducts?: number;
-    billingCycle?: string;
-    currentPeriodEnd?: string;
-  } | null;
-  outletsCount: number;
-  usersCount: number;
-  ordersCount: number;
-}
-
 export const SaaSPlatformAdminView: React.FC = () => {
   const posContext = useContext(POSContext);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -112,28 +75,13 @@ export const SaaSPlatformAdminView: React.FC = () => {
   const [isQuickProvisionOpen, setIsQuickProvisionOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [overviewData, setOverviewData] = useState<any>(null);
-  const [tenants, setTenants] = useState<TenantItem[]>([]);
+  const [tenants, setTenants] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [broadcastCount, setBroadcastCount] = useState<number>(0);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  // Modals state
-  const [selectedTenantForWA, setSelectedTenantForWA] = useState<TenantItem | null>(null);
-  const [waTemplateType, setWaTemplateType] = useState<'welcome' | 'renewal' | 'support' | 'custom'>('welcome');
-  const [waCustomMessage, setWaCustomMessage] = useState<string>('');
-
-  const [selectedTenantForPlan, setSelectedTenantForPlan] = useState<TenantItem | null>(null);
-  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
-  const [planBillingCycle, setPlanBillingCycle] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
-
-  const [selectedTenantForEdit, setSelectedTenantForEdit] = useState<TenantItem | null>(null);
-  const [editOwnerName, setEditOwnerName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editNotes, setEditNotes] = useState('');
 
   const formatCurrency = (amount: number) => `Rp ${(amount || 0).toLocaleString('id-ID')}`;
 
@@ -222,7 +170,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
     return () => clearInterval(interval);
   }, [posContext?.token]);
 
-  // 1-Click Tenant Impersonation
+  // Handle 1-Click Tenant Impersonation
   const handleImpersonateTenant = async (tenantId: string, tenantName: string) => {
     const result = await confirmAlert(
       `Masuk ke Ruang Kerja ${tenantName}?`,
@@ -284,7 +232,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
     }
   };
 
-  // Toggle Suspend / Activate
+  // Handle Toggle Tenant Status (Suspend / Activate)
   const handleToggleStatus = async (tenantId: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
     const result = await confirmAlert(
@@ -296,7 +244,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
     setActionLoading(tenantId);
     try {
       const res = await fetch(`/api/platform-admin/tenants/${tenantId}/status`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${posContext?.token}` 
@@ -317,122 +265,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
     }
   };
 
-  // Open Edit Contact Modal
-  const openEditContact = (tenant: TenantItem) => {
-    setSelectedTenantForEdit(tenant);
-    setEditOwnerName(tenant.ownerName || tenant.owner?.name || '');
-    setEditPhone(tenant.phone || '');
-    setEditEmail(tenant.email || '');
-    setEditNotes(tenant.notes || '');
-  };
-
-  // Save Contact Details
-  const handleSaveContact = async () => {
-    if (!selectedTenantForEdit) return;
-    setActionLoading('save_contact');
-    try {
-      const res = await fetch(`/api/platform-admin/tenants/${selectedTenantForEdit.id}/contact`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${posContext?.token}`
-        },
-        body: JSON.stringify({
-          ownerName: editOwnerName,
-          phone: editPhone,
-          email: editEmail,
-          notes: editNotes
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast('Data kontak berhasil disimpan', 'success');
-        setSelectedTenantForEdit(null);
-        fetchPlatformData();
-      } else {
-        toast(data.error || 'Gagal menyimpan kontak', 'error');
-      }
-    } catch (e: any) {
-      toast(e.message || 'Terjadi kesalahan', 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // Open Change Plan Modal
-  const openChangePlan = (tenant: TenantItem) => {
-    setSelectedTenantForPlan(tenant);
-    const defaultPlan = plansList.find(p => p.code === tenant.subscription?.planCode) || plansList[0];
-    setSelectedPlanId(defaultPlan?.id || '');
-    setPlanBillingCycle((tenant.subscription?.billingCycle as any) || 'MONTHLY');
-  };
-
-  // Save Plan Change
-  const handleSavePlanChange = async () => {
-    if (!selectedTenantForPlan || !selectedPlanId) return;
-    setActionLoading('save_plan');
-    try {
-      const res = await fetch(`/api/platform-admin/tenants/${selectedTenantForPlan.id}/plan`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${posContext?.token}`
-        },
-        body: JSON.stringify({
-          planId: selectedPlanId,
-          billingCycle: planBillingCycle
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast('Paket langganan berhasil diperbarui', 'success');
-        setSelectedTenantForPlan(null);
-        fetchPlatformData();
-      } else {
-        toast(data.error || 'Gagal mengubah paket', 'error');
-      }
-    } catch (e: any) {
-      toast(e.message || 'Terjadi kesalahan', 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  // Open WhatsApp Modal
-  const openWhatsAppModal = (tenant: TenantItem) => {
-    setSelectedTenantForWA(tenant);
-    setWaTemplateType('welcome');
-    updateWhatsAppMessage(tenant, 'welcome');
-  };
-
-  const updateWhatsAppMessage = (tenant: TenantItem, type: 'welcome' | 'renewal' | 'support' | 'custom') => {
-    const owner = tenant.ownerName || tenant.owner?.name || 'Kak';
-    const biz = tenant.name;
-    const plan = tenant.subscription?.planName || 'Paket CodePOS';
-    const subdomain = `${tenant.slug}.codenusa.id`;
-
-    let msg = '';
-    if (type === 'welcome') {
-      msg = `Halo Kak ${owner}, terima kasih telah mendaftar di CodePOS untuk *${biz}* (${subdomain})! 🚀\n\nAkun Anda telah aktif di *${plan}*. Apakah ada bantuan yang dibutuhkan untuk setup menu, meja, atau printer kasir hari ini?`;
-    } else if (type === 'renewal') {
-      msg = `Halo Kak ${owner} dari *${biz}*,\n\nKami menginfokan bahwa masa aktif paket *${plan}* Anda akan segera berakhir. Silakan lakukan perpanjangan agar operasional kasir dan laporan omzet tetap berjalan lancar tanpa kendala. 🙏`;
-    } else if (type === 'support') {
-      msg = `Halo Kak ${owner} dari *${biz}*,\n\nKami dari tim Support Platform CodePOS ingin menanyakan bagaimana operasional kasir Anda hari ini? Jika ada kendala teknis atau saran fitur baru, kami siap membantu.`;
-    }
-    setWaCustomMessage(msg);
-  };
-
-  const handleSendWhatsApp = () => {
-    if (!selectedTenantForWA || !selectedTenantForWA.waNumber) {
-      toast('Nomor WhatsApp belum terdaftar untuk tenant ini', 'warning');
-      return;
-    }
-    const url = `https://wa.me/${selectedTenantForWA.waNumber}?text=${encodeURIComponent(waCustomMessage)}`;
-    window.open(url, '_blank');
-    setSelectedTenantForWA(null);
-  };
-
-  // Verify Invoice
+  // Handle 1-Click Approve / Verify Manual Payment
   const handleVerifyInvoice = async (invoiceId: string, invNumber: string) => {
     const result = await confirmAlert(
       `Verifikasi Pembayaran Invoice #${invNumber}?`,
@@ -463,8 +296,6 @@ export const SaaSPlatformAdminView: React.FC = () => {
   const filteredTenants = tenants.filter(t => {
     const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           t.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          t.ownerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          t.phone?.includes(searchQuery) ||
                           t.owner?.name?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -1379,281 +1210,6 @@ export const SaaSPlatformAdminView: React.FC = () => {
         onClose={() => setIsQuickProvisionOpen(false)}
         onSuccess={() => fetchPlatformData(false)}
       />
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: 1-CLICK WHATSAPP CHAT ASSISTANT                                 */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {selectedTenantForWA && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4 relative border border-slate-200">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
-                  <MessageSquare size={18} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-slate-900">Direct WhatsApp Assistant</h3>
-                  <p className="text-xs text-slate-500">Kirim pesan cepat ke pemilik {selectedTenantForWA.name}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedTenantForWA(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Target Owner Info */}
-            <div className="p-3.5 rounded-2xl bg-emerald-50/50 border border-emerald-100 flex items-center justify-between">
-              <div>
-                <div className="text-[10px] uppercase font-bold text-emerald-700">Penerima Pesan</div>
-                <div className="font-bold text-sm text-slate-900">{selectedTenantForWA.ownerName || selectedTenantForWA.owner?.name}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] uppercase font-bold text-emerald-700">Nomor WhatsApp</div>
-                <div className="font-mono font-bold text-xs text-slate-800">{selectedTenantForWA.phone || 'Tidak tersedia'}</div>
-              </div>
-            </div>
-
-            {/* Template Buttons */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700">Pilih Template Pesan:</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { type: 'welcome', label: '🚀 Selamat Datang' },
-                  { type: 'renewal', label: '💳 Perpanjangan' },
-                  { type: 'support', label: '🛠️ Support Teknis' }
-                ].map(t => (
-                  <button
-                    key={t.type}
-                    type="button"
-                    onClick={() => {
-                      setWaTemplateType(t.type as any);
-                      updateWhatsAppMessage(selectedTenantForWA, t.type as any);
-                    }}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      waTemplateType === t.type 
-                        ? 'bg-emerald-600 text-white shadow-xs' 
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Message Area */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-700">Isi Pesan:</label>
-              <textarea
-                rows={5}
-                className="form-control text-xs leading-relaxed"
-                value={waCustomMessage}
-                onChange={e => {
-                  setWaCustomMessage(e.target.value);
-                  setWaTemplateType('custom');
-                }}
-              />
-            </div>
-
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setSelectedTenantForWA(null)}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSendWhatsApp}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/20"
-              >
-                <Send size={14} /> Buka WhatsApp Web / App
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: UBAH PAKET & KUOTA TENANT                                       */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {selectedTenantForPlan && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4 relative border border-slate-200">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-indigo-100 text-indigo-700">
-                  <Sliders size={18} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-slate-900">Ubah Paket Langganan</h3>
-                  <p className="text-xs text-slate-500">{selectedTenantForPlan.name}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedTenantForPlan(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Pilih Paket SaaS:</label>
-                <select
-                  value={selectedPlanId}
-                  onChange={e => setSelectedPlanId(e.target.value)}
-                  className="form-control text-xs font-bold"
-                >
-                  {plansList.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code}) — {p.maxOutlets} Cabang, {p.maxUsers} Staf
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Siklus Penagihan:</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPlanBillingCycle('MONTHLY')}
-                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      planBillingCycle === 'MONTHLY' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    Bulanan (Monthly)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlanBillingCycle('YEARLY')}
-                    className={`py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      planBillingCycle === 'YEARLY' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    Tahunan (Yearly)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setSelectedTenantForPlan(null)}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSavePlanChange}
-                disabled={actionLoading === 'save_plan'}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-md shadow-indigo-600/20"
-              >
-                {actionLoading === 'save_plan' ? 'Menyimpan...' : 'Simpan Perubahan'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: EDIT KONTAK & CATATAN CRM TENANT                                */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {selectedTenantForEdit && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4 relative border border-slate-200">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-slate-100 text-slate-700">
-                  <Edit size={18} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-slate-900">Edit Profil &amp; Kontak CRM</h3>
-                  <p className="text-xs text-slate-500">{selectedTenantForEdit.name}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setSelectedTenantForEdit(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Nama Pemilik (Owner):</label>
-                <input
-                  type="text"
-                  className="form-control text-xs font-bold"
-                  value={editOwnerName}
-                  onChange={e => setEditOwnerName(e.target.value)}
-                  placeholder="Contoh: Bpk. Rudi Santoso"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">No. WhatsApp / HP:</label>
-                <input
-                  type="text"
-                  className="form-control text-xs font-mono font-bold"
-                  value={editPhone}
-                  onChange={e => setEditPhone(e.target.value)}
-                  placeholder="Contoh: 081234567890"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Email Pemilik:</label>
-                <input
-                  type="email"
-                  className="form-control text-xs"
-                  value={editEmail}
-                  onChange={e => setEditEmail(e.target.value)}
-                  placeholder="owner@mukiramen.com"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">Catatan Internal CRM:</label>
-                <textarea
-                  rows={3}
-                  className="form-control text-xs"
-                  value={editNotes}
-                  onChange={e => setEditNotes(e.target.value)}
-                  placeholder="Catatan khusus tentang tenant ini..."
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setSelectedTenantForEdit(null)}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveContact}
-                disabled={actionLoading === 'save_contact'}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
-              >
-                {actionLoading === 'save_contact' ? 'Menyimpan...' : 'Simpan Data'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
