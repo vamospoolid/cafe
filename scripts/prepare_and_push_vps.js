@@ -226,21 +226,23 @@ async function runRemoteVpsDeploy() {
         echo "🛠️ [2/6] Mempersiapkan Backend di ${REMOTE_DIR}/backend..."
         cd "${REMOTE_DIR}/backend"
 
-        # Pastikan .env tersedia
-        if [ ! -f ".env" ]; then
+        # Setup .env Codenusa dengan kredensial database VPS yang valid
+        if [ -f "/var/www/poscafe/backend/.env" ]; then
+          echo "   -> Menggunakan konfigurasi database VPS dari /var/www/poscafe/backend/.env..."
+          cp /var/www/poscafe/backend/.env .env
+          sed -i 's/PORT=.*/PORT=5001/g' .env 2>/dev/null || true
+          sed -i 's/COOKIE_DOMAIN=.*/COOKIE_DOMAIN=.codenusa.id/g' .env 2>/dev/null || true
+          sed -i 's/APP_DOMAIN=.*/APP_DOMAIN=codenusa.id/g' .env 2>/dev/null || true
+        elif [ ! -f ".env" ] || grep -q "your_secure_db_password" .env; then
           if [ -f "${REMOTE_DIR}/deployment/env/.env.production.example" ]; then
-            echo "   -> Salin template .env.production.example ke .env..."
+            echo "   -> Menyiapkan .env dari template..."
             cp "${REMOTE_DIR}/deployment/env/.env.production.example" .env
-          else
-            echo "   -> Membuat .env default backend..."
-            echo "PORT=5001" > .env
-            echo "NODE_ENV=production" >> .env
-            echo "TZ=Asia/Jakarta" >> .env
+            sed -i 's/your_secure_db_password/poscafe_secure_pass_2026/g' .env 2>/dev/null || true
           fi
         fi
 
-        # Pastikan PORT=5001
-        sed -i 's/PORT=5000/PORT=5001/g' .env 2>/dev/null || true
+        # Pastikan PORT tetap 5001 (isolasi mutlak dari Vamos di port 5000)
+        sed -i 's/PORT=.*/PORT=5001/g' .env 2>/dev/null || true
 
         echo "   -> Menginstal dependencies backend..."
         npm install --silent
