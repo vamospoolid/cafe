@@ -38,7 +38,8 @@ import {
   ShieldAlert,
   Sparkles,
   Store,
-  LayoutGrid
+  LayoutGrid,
+  LogOut
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -49,6 +50,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isGlobalShiftModalOpen, setIsGlobalShiftModalOpen] = useState(false);
   const [globalShiftModalMode, setGlobalShiftModalMode] = useState<'open' | 'close'>('open');
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const toggleSidebar = () => {
     setIsCollapsed(prev => {
@@ -58,6 +60,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     });
   };
   const location = useLocation();
+
+  useEffect(() => {
+    setIsUserMenuOpen(false);
+  }, [location.pathname]);
   const posContext = useContext(POSContext);
   const [kdsCount, setKdsCount] = useState(0);
   const socket = useSocket();
@@ -405,6 +411,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </>
             )}
           </nav>
+
+          {/* Sidebar Footer: Logout Button */}
+          <div className="p-3 border-t border-slate-800/80 mt-auto shrink-0 bg-[#0d0c22]/90">
+            <button
+              type="button"
+              onClick={() => posContext?.logout()}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-extrabold text-rose-400 hover:bg-rose-500/15 hover:text-rose-300 transition-all active:scale-95 cursor-pointer group"
+              title="Keluar / Log Out dari Sistem"
+            >
+              <LogOut size={18} className="shrink-0 text-rose-500 group-hover:scale-110 transition-transform" />
+              {!isCollapsed && <span className="tracking-wide">Keluar / Log Out</span>}
+            </button>
+          </div>
         </aside>
       )}
 
@@ -487,9 +506,23 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             )}
             
             <NotificationBell />
+
+            {/* Quick Logout Button (Selalu Tampak di Header) */}
+            <button
+              type="button"
+              onClick={() => posContext?.logout()}
+              className="px-2.5 py-1.5 rounded-xl text-rose-600 bg-rose-50/70 hover:bg-rose-100 hover:text-rose-700 border border-rose-200/80 transition-all flex items-center gap-1.5 text-xs font-bold shadow-2xs active:scale-95 cursor-pointer shrink-0"
+              title="Keluar dari akun (Log Out)"
+            >
+              <LogOut size={15} className="text-rose-500" />
+              <span className="hidden sm:inline">Keluar</span>
+            </button>
             
-            <div className="user-profile relative group cursor-pointer hover:bg-gray-50 rounded-lg p-1 transition-colors">
-              <div className="avatar bg-indigo-600 text-white font-black text-xs w-9 h-9 rounded-full flex items-center justify-center shadow-sm">
+            <div 
+              className="user-profile relative cursor-pointer hover:bg-gray-100/80 rounded-xl p-1 sm:px-2 transition-colors select-none"
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+            >
+              <div className="avatar bg-gradient-to-br from-indigo-600 to-indigo-700 text-white font-black text-xs w-9 h-9 rounded-full flex items-center justify-center shadow-xs">
                 {posContext?.user?.username?.substring(0, 2).toUpperCase() || 'AD'}
               </div>
               {!isMobile && (
@@ -498,23 +531,31 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     <span className="user-name">{posContext?.user?.username || 'User'}</span>
                     <span className="user-role capitalize">{posContext?.user?.role || 'Staff'}</span>
                   </div>
-                  <ChevronDown size={16} className="text-muted" />
+                  <ChevronDown size={16} className={`text-muted transition-transform duration-200 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
                 </>
               )}
               
-              {/* Dropdown Menu (Hover) */}
-              <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+              {/* Dropdown Menu (Click & Hover Support) */}
+              <div className={`absolute right-0 top-full mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 transition-all z-50 overflow-hidden ${
+                isUserMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'
+              }`}>
+                <div className="px-4 py-3 bg-slate-50 border-b border-slate-100">
+                  <p className="text-xs font-extrabold text-slate-900 truncate">{posContext?.user?.name || posContext?.user?.username}</p>
+                  <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">{posContext?.user?.role || 'Staff'}</p>
+                </div>
                 <button 
-                  onClick={() => setIsPinModalOpen(true)}
-                  className="w-full text-left px-4 py-3 text-sm text-indigo-600 hover:bg-indigo-50 font-bold transition-colors border-b border-gray-100 flex items-center gap-2"
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); setIsPinModalOpen(true); }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-slate-700 hover:bg-slate-50 font-bold transition-colors border-b border-slate-100 flex items-center gap-2.5 cursor-pointer"
                 >
-                  <Fingerprint size={16} /> Ganti Kasir
+                  <Fingerprint size={16} className="text-indigo-600" /> Ganti Kasir (PIN Cepat)
                 </button>
                 <button 
-                  onClick={() => posContext?.logout()}
-                  className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-bold transition-colors flex items-center gap-2"
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); posContext?.logout(); }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-rose-600 hover:bg-rose-50 font-bold transition-colors flex items-center gap-2.5 cursor-pointer"
                 >
-                  Keluar / Log Out
+                  <LogOut size={16} className="text-rose-600" /> Keluar / Log Out
                 </button>
               </div>
             </div>
