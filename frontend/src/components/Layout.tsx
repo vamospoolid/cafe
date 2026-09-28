@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { POSContext } from '../context/POSContext';
 import NotificationBell from './NotificationBell';
 import TenantOutletSwitcher from './TenantOutletSwitcher';
+import OpenShiftModal from './OpenShiftModal';
 import useSocket from '../hooks/useSocket';
 import { 
   LayoutDashboard, 
@@ -46,6 +47,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   });
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isGlobalShiftModalOpen, setIsGlobalShiftModalOpen] = useState(false);
+  const [globalShiftModalMode, setGlobalShiftModalMode] = useState<'open' | 'close'>('open');
 
   const toggleSidebar = () => {
     setIsCollapsed(prev => {
@@ -436,6 +439,39 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
           
           <div className="topbar-actions flex items-center gap-2 sm:gap-3">
+            {/* Shift Kasir Quick Widget */}
+            {posContext?.activeShift ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setGlobalShiftModalMode('close');
+                  setIsGlobalShiftModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-full shadow-xs transition-all active:scale-95 cursor-pointer"
+                title="Shift Kasir Aktif - Klik untuk Tutup Shift & Rekonsiliasi"
+              >
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span className="hidden sm:inline">Kasir:</span>
+                <strong className="text-indigo-950 font-extrabold max-w-[85px] truncate">
+                  {posContext.activeShift.user?.name || posContext.activeShift.user?.username || 'Aktif'}
+                </strong>
+                <span className="text-[10px] text-indigo-600 bg-indigo-200/60 px-1.5 py-0.5 rounded-md hidden md:inline">Tutup</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setGlobalShiftModalMode('open');
+                  setIsGlobalShiftModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-full shadow-xs transition-all active:scale-95 cursor-pointer"
+                title="Kasir Belum Buka - Klik untuk Buka Shift"
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span>+ Buka Kasir</span>
+              </button>
+            )}
+
             {/* Indikator Status Koneksi */}
             {posContext?.isOnline ? (
               <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full select-none shadow-sm">
@@ -933,6 +969,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </div>
       )}
+
+      {/* Global Open/Close Shift Modal */}
+      <OpenShiftModal
+        isOpen={isGlobalShiftModalOpen}
+        mode={globalShiftModalMode}
+        onClose={() => setIsGlobalShiftModalOpen(false)}
+        onSuccess={() => {
+          setIsGlobalShiftModalOpen(false);
+          posContext?.fetchActiveShift();
+        }}
+      />
     </div>
   );
 };

@@ -28,6 +28,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { POSContext } from '../context/POSContext';
 import OpenShiftModal from './OpenShiftModal';
+import useSocket from '../hooks/useSocket';
 
 const COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6'];
 
@@ -74,8 +75,10 @@ const DashboardView = () => {
   const [loading, setLoading] = useState(true);
   const [chartMode, setChartMode] = useState<'hourly' | 'weekly' | 'monthly'>('hourly');
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [shiftModalMode, setShiftModalMode] = useState<'open' | 'close'>('open');
 
   const posContext = useContext(POSContext);
+  const socket = useSocket();
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
@@ -122,7 +125,27 @@ const DashboardView = () => {
     if (posContext?.token) {
       fetchAnalytics();
     }
-  }, [posContext?.token]);
+
+    const handleRealtimeUpdate = () => {
+      fetchAnalytics();
+    };
+
+    socket.on('order:new', handleRealtimeUpdate);
+    socket.on('order:paid', handleRealtimeUpdate);
+    socket.on('order:void', handleRealtimeUpdate);
+    socket.on('shift:status_change', handleRealtimeUpdate);
+    socket.on('shift:opened', handleRealtimeUpdate);
+    socket.on('shift:closed', handleRealtimeUpdate);
+
+    return () => {
+      socket.off('order:new', handleRealtimeUpdate);
+      socket.off('order:paid', handleRealtimeUpdate);
+      socket.off('order:void', handleRealtimeUpdate);
+      socket.off('shift:status_change', handleRealtimeUpdate);
+      socket.off('shift:opened', handleRealtimeUpdate);
+      socket.off('shift:closed', handleRealtimeUpdate);
+    };
+  }, [socket, posContext?.token]);
 
   useEffect(() => {
     if (posContext?.token && !loading) {
@@ -184,14 +207,26 @@ const DashboardView = () => {
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           {/* Active Shift Indicator Pill */}
           {activeShift ? (
-            <div className="bg-emerald-50 border border-emerald-200/80 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setShiftModalMode('close');
+                setIsShiftModalOpen(true);
+              }}
+              className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 hover:border-emerald-300 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all active:scale-95 cursor-pointer"
+              title="Shift Kasir Aktif - Klik untuk Rekonsiliasi & Tutup Shift"
+            >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Shift: <strong className="text-emerald-950">{activeShift.user?.name || 'Kasir'}</strong></span>
-            </div>
+              <span>Shift: <strong className="text-emerald-950">{activeShift.user?.name || activeShift.user?.username || 'Kasir'}</strong></span>
+              <span className="text-[10px] text-emerald-700 bg-emerald-200/60 px-1.5 py-0.5 rounded-md font-semibold">Tutup Shift</span>
+            </button>
           ) : (
             <button
               type="button"
-              onClick={() => setIsShiftModalOpen(true)}
+              onClick={() => {
+                setShiftModalMode('open');
+                setIsShiftModalOpen(true);
+              }}
               className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 hover:border-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
             >
               <Timer size={13} className="text-amber-600 animate-bounce" />
@@ -237,7 +272,11 @@ const DashboardView = () => {
           {/* 2. Shift Kasir */}
           <button
             type="button"
-            onClick={() => { posContext?.triggerHaptic(15); setIsShiftModalOpen(true); }}
+            onClick={() => {
+              posContext?.triggerHaptic(15);
+              setShiftModalMode(activeShift ? 'close' : 'open');
+              setIsShiftModalOpen(true);
+            }}
             className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-amber-50/60 hover:bg-amber-100/60 border border-amber-100/80 transition-all active:scale-95 cursor-pointer text-center group"
           >
             <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
@@ -780,10 +819,10 @@ const DashboardView = () => {
 
       </div>
 
-      {/* Modal Buka Shift Kasir */}
+      {/* Modal Buka/Tutup Shift Kasir */}
       <OpenShiftModal
         isOpen={isShiftModalOpen}
-        mode="open"
+        mode={shiftModalMode}
         onClose={() => setIsShiftModalOpen(false)}
         onSuccess={() => {
           setIsShiftModalOpen(false);

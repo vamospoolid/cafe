@@ -4595,6 +4595,8 @@ export const exportYieldAuditPDF = async (
   doc.save(`Audit_Yield_Efisiensi_Resep_${Date.now()}.pdf`);
 };
 
+export const exportYieldVarianceAuditPDF = exportYieldAuditPDF;
+
 // ─── 22. FAKTUR INVOICE FORMAL A4 BENGKEL & ARMADA (B2B FLEET) ───
 export const generateWorkOrderInvoicePDF = async (invoice: any, settings: VenueSettings) => {
   if (!invoice) return;

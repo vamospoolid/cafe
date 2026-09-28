@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
-import { io } from '../index';
+import { io, emitToTenant } from '../index';
 import { PrinterService } from '../services/PrinterService';
 import { AuditLogger } from '../services/AuditLogger';
 
@@ -110,7 +110,7 @@ const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRed
 };
 
 // Fungsi untuk generate nomor order (Contoh: ORD-20231025-001)
-const generateOrderNumber = async (tzOffset?: number | string) => {
+export const generateOrderNumber = async (tzOffset?: number | string) => {
   const dateString = getLocalOrderDatePrefix(typeof tzOffset === 'number' ? tzOffset : -420);
   
   // Cari order terakhir di hari yang sama
@@ -138,9 +138,17 @@ const generateOrderNumber = async (tzOffset?: number | string) => {
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { status, date, startDate, endDate, active, tzOffset } = req.query;
+    const tenantId = (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || null;
     
     // Filter conditions
     const whereCondition: any = {};
+
+    if (tenantId) {
+      whereCondition.AND = [
+        ...(whereCondition.AND || []),
+        { OR: [{ tenantId }, { tenantId: null }] }
+      ];
+    }
     
     if (active === 'true') {
       whereCondition.OR = [
@@ -195,8 +203,12 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const order = await prisma.order.findUnique({
-      where: { id: Number(id) },
+    const tenantId = (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+    const order = await prisma.order.findFirst({
+      where: {
+        id: Number(id),
+        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+      },
       include: {
         table: true,
         user: { select: { name: true, username: true } },
@@ -270,6 +282,23 @@ router.post('/dinein', async (req: Request, res: Response) => {
       }
     }
 
+    let tenantId = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || null;
+    let outletId: string | null = null;
+    if (resolvedTableId) {
+      const tableInfo = await prisma.table.findUnique({
+        where: { id: resolvedTableId },
+        select: { tenantId: true, outletId: true }
+      });
+      if (tableInfo) {
+        tenantId = tenantId || tableInfo.tenantId;
+        outletId = tableInfo.outletId;
+      }
+    }
+    if (!tenantId) {
+      const firstTenant = await prisma.tenant.findFirst({ select: { id: true } });
+      tenantId = firstTenant?.id || null;
+    }
+
     const orderNumber = await generateOrderNumber();
 
     const result = await prisma.$transaction(async (tx) => {
@@ -289,6 +318,8 @@ router.post('/dinein', async (req: Request, res: Response) => {
       // Buat Order Induk
       const order = await tx.order.create({
         data: {
+          tenantId: tenantId || null,
+          outletId: outletId || null,
           orderNumber,
           customerName: customerName || `Pelanggan`,
           customerPhone,
@@ -307,6 +338,8 @@ router.post('/dinein', async (req: Request, res: Response) => {
           
           items: {
             create: items.map((item: any) => ({
+              tenantId: tenantId || null,
+              outletId: outletId || null,
               productId: Number(item.productId),
               qty: Number(item.qty),
               price: Number(item.price),
@@ -361,6 +394,14 @@ router.post('/dinein', async (req: Request, res: Response) => {
       tableId: result.tableId,
       tableNo: (result as any).table?.tableNo || null
     });
+    if (result.tenantId) {
+      emitToTenant(result.tenantId, 'order:new', {
+        orderId: result.id,
+        orderNumber: result.orderNumber,
+        tableId: result.tableId,
+        tableNo: (result as any).table?.tableNo || null
+      });
+    }
 
     res.status(201).json({ message: 'Pesanan Dine-In berhasil dibuat', order: result });
   } catch (error) {
@@ -377,7 +418,17 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Data orders tidak valid' });
     }
 
-    const userId = (req as any).user.id;
+    const user = (req as any).user;
+    const userId = user.id;
+    const tenantId = user.tenantId || (req.headers['x-tenant-id'] as string) || null;
+    let outletId = user.outletId || null;
+    if (!outletId && tenantId) {
+      const firstOutlet = await prisma.outlet.findFirst({
+        where: { tenantId, status: 'ACTIVE' },
+        select: { id: true }
+      });
+      outletId = firstOutlet?.id || null;
+    }
     const syncedOrders = [];
 
     for (const orderData of orders) {
@@ -404,7 +455,10 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
       // 1. Cek apakah sudah disinkronisasikan sebelumnya
       const existing = await prisma.order.findFirst({
-        where: { offlineId },
+        where: { 
+          offlineId,
+          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+        },
         include: { items: true }
       });
 
@@ -427,10 +481,16 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
         let finalCustomerId = customerId ? Number(customerId) : null;
         if (!finalCustomerId && customerPhone) {
-          let cust = await tx.customer.findFirst({ where: { phone: customerPhone } });
+          let cust = await tx.customer.findFirst({
+            where: {
+              phone: customerPhone,
+              ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+            }
+          });
           if (!cust && customerName) {
             cust = await tx.customer.create({
               data: {
+                tenantId: tenantId || null,
                 name: customerName,
                 phone: customerPhone,
                 points: 0,
@@ -456,6 +516,8 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         // Buat Order Induk
         const createdOrder = await tx.order.create({
           data: {
+            tenantId: tenantId || null,
+            outletId: outletId || null,
             orderNumber,
             offlineId,
             customerName: customerName || 'Pelanggan',
@@ -477,6 +539,8 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
             
             items: {
               create: items.map((item: any) => ({
+                tenantId: tenantId || null,
+                outletId: outletId || null,
                 productId: Number(item.productId),
                 qty: Number(item.qty),
                 price: Number(item.price),
@@ -510,6 +574,8 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
               });
               await tx.ingredientLog.create({
                 data: {
+                  tenantId: tenantId || null,
+                  outletId: outletId || null,
                   ingredientId: recipe.ingredientId,
                   change: -used,
                   type: 'Produksi',
@@ -698,8 +764,12 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       isPaid
     } = req.body;
     
-    // Ambil userId dari token middleware
-    const userId = (req as any).user.id;
+    // Ambil userId & tenantId dari token middleware
+    const user = (req as any).user;
+    const userId = user.id;
+    const tenant = await prisma.tenant.findFirst();
+    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || (tenant ? tenant.id : null);
+    let outletId = user?.outletId || null;
 
     if (!items || items.length === 0) {
       return res.status(400).json({ error: 'Keranjang belanja kosong' });
@@ -708,7 +778,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     // Proteksi Shift Kasir Wajib Aktif untuk transaksi langsung POS yang berstatus Lunas
     if (isPaid) {
       const activeShift = await prisma.shift.findFirst({
-        where: { status: 'Open' }
+        where: {
+          status: { in: ['Open', 'OPEN'] },
+          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+        }
       });
       if (!activeShift) {
         return res.status(400).json({ 
@@ -731,6 +804,15 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
     // Jalankan Transaction agar konsisten (Atomic)
     const result = await prisma.$transaction(async (tx) => {
+      // Resolve default outlet jika belum ada
+      if (!outletId && tenantId) {
+        const firstOutlet = await tx.outlet.findFirst({
+          where: { tenantId, status: 'ACTIVE' },
+          select: { id: true }
+        });
+        outletId = firstOutlet?.id || null;
+      }
+
       // 0. Ambil buyPrice untuk semua product
       const productIds = items.map((item: any) => Number(item.productId));
       const products = await tx.product.findMany({
@@ -739,8 +821,6 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
 
       // 0.5. Cari/Registrasi Customer jika ada phone
-      const tenant = await prisma.tenant.findFirst();
-      const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (tenant ? tenant.id : null);
       let finalCustomerId = customerId ? Number(customerId) : null;
       if (!finalCustomerId && customerPhone) {
         let cust = await tx.customer.findFirst({
@@ -752,7 +832,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         if (!cust && customerName) {
           cust = await tx.customer.create({
             data: {
-              tenantId,
+              tenantId: tenantId || null,
               name: customerName,
               phone: customerPhone,
               points: 0,
@@ -782,6 +862,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
       const order = await tx.order.create({
         data: {
+          tenantId: tenantId || null,
+          outletId: outletId || null,
           orderNumber,
           customerName: customerName || 'Pelanggan',
           customerPhone,
@@ -802,6 +884,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           
           items: {
             create: items.map((item: any) => ({
+              tenantId: tenantId || null,
+              outletId: outletId || null,
               productId: Number(item.productId),
               qty: Number(item.qty),
               price: Number(item.price),
@@ -841,6 +925,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             });
             await tx.ingredientLog.create({
               data: {
+                tenantId: tenantId || null,
+                outletId: outletId || null,
                 ingredientId: recipe.ingredientId,
                 change: -used,
                 type: 'Produksi',
@@ -871,6 +957,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
         await tx.debt.create({
           data: {
+            tenantId: tenantId || null,
+            outletId: outletId || null,
             customerId: finalCustomerId,
             orderId: order.id,
             amount: Number(total),
@@ -893,6 +981,15 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       joinedTableIds: result.joinedTableIds,
       tableNo: (result as any).table?.tableNo || null
     });
+    if (result.tenantId) {
+      emitToTenant(result.tenantId, 'order:new', {
+        orderId: result.id,
+        orderNumber: result.orderNumber,
+        tableId: result.tableId,
+        joinedTableIds: result.joinedTableIds,
+        tableNo: (result as any).table?.tableNo || null
+      });
+    }
 
     // Auto-print tiket dapur & bar (fire-and-forget)
     const settingsPrint = await prisma.settings.findFirst();
@@ -932,9 +1029,16 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       return res.status(400).json({ error: 'ID order tidak valid' });
     }
 
+    const user = (req as any).user;
+    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+    let outletId = user?.outletId || null;
+
     // Proteksi Shift Kasir Wajib Aktif untuk pelunasan pembayaran tagihan
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'Open' }
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+      }
     });
     if (!activeShift) {
       return res.status(400).json({ 
@@ -948,9 +1052,21 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 
     // Jalankan dalam $transaction agar konsisten (atomic)
     const result = await prisma.$transaction(async (tx) => {
+      // Resolve default outlet jika belum ada
+      if (!outletId && tenantId) {
+        const firstOutlet = await tx.outlet.findFirst({
+          where: { tenantId, status: 'ACTIVE' },
+          select: { id: true }
+        });
+        outletId = firstOutlet?.id || null;
+      }
+
       // Ambil data semua order untuk kalkulasi total awal
       const orders = await tx.order.findMany({
-        where: { id: { in: ids } }
+        where: {
+          id: { in: ids },
+          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+        }
       });
 
       if (orders.length === 0) {
@@ -964,8 +1080,6 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       const shouldAutoServe = !hasAnyTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
       
       // Resolusikan Customer jika customerPhone disediakan
-      const tenant = await prisma.tenant.findFirst();
-      const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (tenant ? tenant.id : null);
       let finalCustomerId = req.body.customerId ? Number(req.body.customerId) : (orders[0]?.customerId || null);
 
       if (!finalCustomerId && req.body.customerPhone) {
@@ -1148,9 +1262,16 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 
     // Emit real-time event pembayaran & update meja
     io.emit('order:paid', { orderIds: result.map((o: any) => o.id) });
+    const targetTenantId = result[0]?.tenantId || tenantId;
+    if (targetTenantId) {
+      emitToTenant(targetTenantId, 'order:paid', { orderIds: result.map((o: any) => o.id) });
+    }
     for (const ord of result) {
       if (ord.tableId) {
         io.emit('table:update', { tableId: ord.tableId });
+        if (targetTenantId) {
+          emitToTenant(targetTenantId, 'table:update', { tableId: ord.tableId });
+        }
       }
     }
 
@@ -1216,6 +1337,8 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
             });
             await tx.ingredientLog.create({
               data: {
+                tenantId: orderData.tenantId || null,
+                outletId: orderData.outletId || null,
                 ingredientId: recipe.ingredientId,
                 change: restored,
                 type: 'Void',
@@ -1330,8 +1453,14 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
 
     // Emit real-time event
     io.emit('order:void', { orderId: Number(id), orderNumber: orderData.orderNumber });
+    if (orderData.tenantId) {
+      emitToTenant(orderData.tenantId, 'order:void', { orderId: Number(id), orderNumber: orderData.orderNumber });
+    }
     if (orderData.tableId) {
       io.emit('table:update', { tableId: orderData.tableId });
+      if (orderData.tenantId) {
+        emitToTenant(orderData.tenantId, 'table:update', { tableId: orderData.tableId });
+      }
     }
 
     // Audit Log: Order Void
@@ -1385,6 +1514,8 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
       // Fix #3: Warisi kdsStatus dari order asal agar KDS dapur tidak kehilangan pesanan yang masih dimasak
       const newOrder = await tx.order.create({
         data: {
+          tenantId: firstActiveOrder.tenantId || null,
+          outletId: firstActiveOrder.outletId || null,
           orderNumber,
           customerName: firstActiveOrder.customerName || 'Pelanggan Split',
           customerPhone: firstActiveOrder.customerPhone,
@@ -1452,6 +1583,8 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
           // Buat item baru di order baru
           await tx.orderItem.create({
             data: {
+              tenantId: firstActiveOrder.tenantId || null,
+              outletId: firstActiveOrder.outletId || null,
               orderId: newOrder.id,
               productId: item.productId,
               qty: qtyToMove,

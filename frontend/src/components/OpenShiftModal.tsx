@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { X, Lock, Unlock, Printer, FileText, EyeOff, Calculator, Banknote, ShieldAlert, CheckCircle2, RotateCcw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Lock, Unlock, Printer, FileText, EyeOff, Calculator, Banknote, ShieldAlert, CheckCircle2, RotateCcw, AlertTriangle, ArrowRight } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
@@ -10,6 +11,7 @@ interface OpenShiftModalProps {
   onClose: () => void;
   onSuccess: () => void;
   mode: 'open' | 'close';
+  isForceClose?: boolean;
 }
 
 const DENOMINATIONS = [
@@ -23,6 +25,11 @@ const DENOMINATIONS = [
 ];
 
 const OpenShiftModal: React.FC<OpenShiftModalProps> = ({ isOpen, onClose, onSuccess, mode }) => {
+  const navigate = useNavigate();
+  const [currentMode, setCurrentMode] = useState<'open' | 'close'>(mode);
+  const [existingShift, setExistingShift] = useState<any>(null);
+  const [checkingShift, setCheckingShift] = useState(false);
+
   const [amount, setAmount] = useState('');
   const [displayAmount, setDisplayAmount] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,6 +55,7 @@ const OpenShiftModal: React.FC<OpenShiftModalProps> = ({ isOpen, onClose, onSucc
 
   useEffect(() => {
     if (isOpen) {
+      setCurrentMode(mode);
       setAmount('');
       setDisplayAmount('');
       setCatatan('');
@@ -63,11 +71,39 @@ const OpenShiftModal: React.FC<OpenShiftModalProps> = ({ isOpen, onClose, onSucc
         'coins': 0
       });
       setSummary(null);
-      if (mode === 'close') {
-        fetchSummary();
-      }
+      setExistingShift(null);
+
+      // Cek shift aktif dari server untuk mencegah deadlock
+      checkActiveShift(mode);
     }
   }, [isOpen, mode]);
+
+  const checkActiveShift = async (targetMode: 'open' | 'close') => {
+    setCheckingShift(true);
+    try {
+      const res = await fetch('/api/shifts/current', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.id) {
+          setExistingShift(data);
+          if (targetMode === 'close') {
+            fetchSummary();
+          }
+        } else {
+          setExistingShift(null);
+          if (targetMode === 'close') {
+            fetchSummary();
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking active shift:', err);
+    } finally {
+      setCheckingShift(false);
+    }
+  };
 
   const fetchSummary = async () => {
     setSummaryLoading(true);
@@ -87,7 +123,7 @@ const OpenShiftModal: React.FC<OpenShiftModalProps> = ({ isOpen, onClose, onSucc
 
   if (!isOpen) return null;
 
-  const isBlindMode = mode === 'close' && summary?.isBlindMode;
+  const isBlindMode = currentMode === 'close' && summary?.isBlindMode;
 
   const calculateTotalFromDenoms = (denoms: { [key: string]: number }) => {
     return Object.entries(denoms).reduce((sum, [k, count]) => {
@@ -287,8 +323,8 @@ TTD Kasir:        TTD Supervisor:
     }
 
     try {
-      const url = mode === 'open' ? '/api/shifts/open' : '/api/shifts/close';
-      let body: any = mode === 'open' 
+      const url = currentMode === 'open' ? '/api/shifts/open' : '/api/shifts/close';
+      let body: any = currentMode === 'open' 
         ? { saldoAwal: amount } 
         : { 
             saldoFisikLaci: amount,
@@ -332,11 +368,12 @@ TTD Kasir:        TTD Supervisor:
       }
 
       if (res.ok) {
-        if (mode === 'open') {
-          toast('Shift berhasil dibuka', 'success');
+        if (currentMode === 'open') {
+          toast('✅ Shift kasir berhasil dibuka! Selamat bertugas.', 'success');
         } else {
-          toast(data.message || 'Shift berhasil ditutup dan data kas fisik telah diverifikasi.', 'success');
+          toast(data.message || '✅ Shift berhasil ditutup dan data kas fisik telah diverifikasi.', 'success');
         }
+        await posContext?.fetchActiveShift();
         onSuccess();
         onClose();
       } else {
@@ -353,11 +390,11 @@ TTD Kasir:        TTD Supervisor:
     }
   };
 
-  const isOpenMode = mode === 'open';
+  const isOpenMode = currentMode === 'open';
 
   return (
     <div className="modal-overlay fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in">
-      <div className={`bg-white w-full h-full sm:h-auto ${mode === 'close' ? 'sm:max-w-lg' : 'sm:max-w-md'} sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-100 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200 sm:max-h-[92vh] flex flex-col justify-between`}>
+      <div className={`bg-white w-full h-full sm:h-auto ${currentMode === 'close' ? 'sm:max-w-lg' : 'sm:max-w-md'} sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-100 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200 sm:max-h-[92vh] flex flex-col justify-between`}>
         
         {/* Header */}
         <div className={`p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 ${isOpenMode ? 'bg-indigo-50/50' : 'bg-rose-50/50'}`}>
@@ -395,12 +432,73 @@ TTD Kasir:        TTD Supervisor:
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col justify-between min-h-0">
           <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto pb-16 sm:pb-4">
             
+            {/* ─── KASUS 1: MODE BUKA SHIFT TAPI ADA SHIFT YANG MASIH AKTIF (SMART RESOLUTION BANNER) ─── */}
+            {isOpenMode && existingShift && (
+              <div className="bg-amber-50/90 border border-amber-200/90 rounded-3xl p-5 flex flex-col gap-4 shadow-sm animate-in fade-in zoom-in-95">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-amber-950">Shift Kasir Sedang Aktif</h4>
+                    <p className="text-xs text-amber-800/90 mt-0.5 leading-relaxed">
+                      Sistem mendeteksi ada sesi kasir yang sedang berjalan. Anda tidak perlu membuka shift baru, atau silakan tutup shift ini terlebih dahulu untuk rekonsiliasi kas.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white/90 p-4 rounded-2xl border border-amber-200/60 text-xs space-y-2.5 shadow-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Kasir Bertugas:</span>
+                    <span className="font-extrabold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                      {existingShift.user?.name || existingShift.user?.username || 'Kasir'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Waktu Dibuka:</span>
+                    <span className="font-bold text-slate-800">
+                      {new Date(existingShift.waktuBuka).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium">Modal Awal Kas:</span>
+                    <span className="font-black text-emerald-600 text-sm">
+                      Rp {Number(existingShift.saldoAwal || 0).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentMode('close');
+                      fetchSummary();
+                    }}
+                    className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-rose-600/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Lock size={15} /> Tutup Shift Kasir Ini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      navigate('/pos');
+                    }}
+                    className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-indigo-600/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Unlock size={15} /> Lanjut ke Kasir (POS)
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Notice / Guidance */}
-            {isOpenMode ? (
+            {isOpenMode && !existingShift ? (
               <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
                 Masukkan jumlah uang tunai fisik yang ada di laci kasir saat ini sebagai saldo modal awal untuk kembalian.
               </p>
-            ) : isBlindMode ? (
+            ) : !isOpenMode && isBlindMode ? (
               <div className="bg-gradient-to-r from-amber-50 to-orange-50/60 p-3.5 rounded-2xl border border-amber-200/80 text-xs text-amber-900 flex items-start gap-3 shadow-xs">
                 <div className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
                   <EyeOff size={16} />
@@ -414,14 +512,14 @@ TTD Kasir:        TTD Supervisor:
                   </p>
                 </div>
               </div>
-            ) : (
+            ) : !isOpenMode ? (
               <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
                 Hitung total uang fisik di laci kasir saat ini secara teliti. Sistem akan mencocokkannya dengan omset tunai.
               </p>
-            )}
+            ) : null}
 
             {/* Non-Blind Financial Summary (Only for Admin/Owner or if blind disabled) */}
-            {mode === 'close' && !isBlindMode && (
+            {currentMode === 'close' && !isBlindMode && (
               <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-4 space-y-2.5">
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Ringkasan Finansial Shift</h4>
@@ -597,34 +695,36 @@ TTD Kasir:        TTD Supervisor:
               </div>
             )}
 
-            {/* Input Nominal Total (Terintegrasi Otomatis dengan Denomination) */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  {isOpenMode ? 'Modal Awal Kasir' : 'Total Fisik Kas Terhitung'}
-                </label>
-                {mode === 'close' && (
-                  <span className="text-[11px] text-emerald-600 font-extrabold flex items-center gap-1">
-                    <CheckCircle2 size={13} /> Terkalkulasi Otomatis
-                  </span>
-                )}
+            {/* Input Nominal Total (Hanya tampil jika tutup shift atau buka shift saat TIDAK ada shift aktif) */}
+            {(!isOpenMode || !existingShift) && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    {isOpenMode ? 'Modal Awal Kasir' : 'Total Fisik Kas Terhitung'}
+                  </label>
+                  {currentMode === 'close' && (
+                    <span className="text-[11px] text-emerald-600 font-extrabold flex items-center gap-1">
+                      <CheckCircle2 size={13} /> Terkalkulasi Otomatis
+                    </span>
+                  )}
+                </div>
+                
+                <div className="relative flex items-center">
+                  <span className="absolute left-4 text-slate-400 font-bold text-lg select-none">Rp</span>
+                  <input 
+                    type="text" 
+                    className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl text-xl font-black text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all shadow-sm" 
+                    placeholder="0"
+                    value={displayAmount}
+                    onChange={handleInputChange}
+                    required={!isOpenMode || !existingShift}
+                  />
+                </div>
               </div>
-              
-              <div className="relative flex items-center">
-                <span className="absolute left-4 text-slate-400 font-bold text-lg select-none">Rp</span>
-                <input 
-                  type="text" 
-                  className="w-full pl-12 pr-4 py-3.5 border border-slate-200 rounded-2xl text-xl font-black text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all shadow-sm" 
-                  placeholder="0"
-                  value={displayAmount}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-            </div>
+            )}
 
             {/* Non-blind Selisih Display (Only shown if NOT blind mode) */}
-            {mode === 'close' && !isBlindMode && summary && amount && (
+            {currentMode === 'close' && !isBlindMode && summary && amount && (
               <div className={`p-3.5 rounded-2xl border text-xs font-bold flex justify-between items-center ${
                 Number(amount) - (summary.expectedCash || 0) === 0 
                   ? 'bg-green-50 border-green-200 text-green-700' 
@@ -642,7 +742,7 @@ TTD Kasir:        TTD Supervisor:
             )}
 
             {/* Optional Cashier Notes during close shift */}
-            {mode === 'close' && (
+            {currentMode === 'close' && (
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                   Catatan Kasir / Kondisi Laci (Opsional)
@@ -658,7 +758,7 @@ TTD Kasir:        TTD Supervisor:
             )}
 
             {/* Thermal Print & PDF Buttons in Close Mode */}
-            {mode === 'close' && summary && (
+            {currentMode === 'close' && summary && (
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
@@ -685,23 +785,25 @@ TTD Kasir:        TTD Supervisor:
           <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex gap-3 shrink-0">
             <button 
               type="button" 
-              className="flex-1 py-3 px-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-sm font-bold transition-all hover:scale-[1.01] active:scale-[0.99] flex justify-center items-center" 
+              className="flex-1 py-3 px-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 text-sm font-bold transition-all hover:scale-[1.01] active:scale-[0.99] flex justify-center items-center cursor-pointer" 
               onClick={onClose} 
               disabled={loading}
             >
-              Batal
+              {isOpenMode && existingShift ? 'Tutup Jendela' : 'Batal'}
             </button>
-            <button 
-              type="submit" 
-              className={`flex-1 py-3 px-4 rounded-2xl text-white text-sm font-bold transition-all hover:scale-[1.01] active:scale-[0.99] flex justify-center items-center shadow-md ${
-                isOpenMode 
-                  ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' 
-                  : 'bg-rose-600 hover:bg-rose-700 shadow-rose-100'
-              }`}
-              disabled={loading || !amount || Number(amount) < 0}
-            >
-              {loading ? 'Memproses...' : (isOpenMode ? 'Mulai Shift' : 'Tutup & Simpan Kas')}
-            </button>
+            {(!isOpenMode || !existingShift) && (
+              <button 
+                type="submit" 
+                className={`flex-1 py-3 px-4 rounded-2xl text-white text-sm font-bold transition-all hover:scale-[1.01] active:scale-[0.99] flex justify-center items-center shadow-md cursor-pointer ${
+                  isOpenMode 
+                    ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' 
+                    : 'bg-rose-600 hover:bg-rose-700 shadow-rose-100'
+                }`}
+                disabled={loading || !amount || Number(amount) < 0}
+              >
+                {loading ? 'Memproses...' : (isOpenMode ? 'Mulai Shift' : 'Tutup & Simpan Kas')}
+              </button>
+            )}
           </div>
         </form>
       </div>

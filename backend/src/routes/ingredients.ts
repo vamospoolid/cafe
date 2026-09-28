@@ -1,16 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
-import { io } from '../index';
+import { io, emitToTenant } from '../index';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // Helper to check and emit sold out status in real-time
-export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma) {
+export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma, tenantId?: string) {
   try {
+    const whereCondition: any = { status: 'Aktif' };
+    if (tenantId) {
+      whereCondition.tenantId = tenantId;
+    }
     const products = await txOrPrisma.product.findMany({
-      where: { status: 'Aktif' },
+      where: whereCondition,
       include: {
         recipes: { include: { ingredient: true } }
       }
@@ -61,11 +65,24 @@ export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma) {
         availableProducts,
         timestamp: new Date().toISOString()
       });
+      if (tenantId) {
+        emitToTenant(tenantId, 'menu:stock_sync', {
+          soldOutProducts,
+          availableProducts,
+          timestamp: new Date().toISOString()
+        });
+      }
       if (soldOutProducts.length > 0) {
         io.emit('product:sold_out', {
           soldOutProducts,
           message: `Stok bahan baku diperbarui: ${soldOutProducts.length} menu sold out!`
         });
+        if (tenantId) {
+          emitToTenant(tenantId, 'product:sold_out', {
+            soldOutProducts,
+            message: `Stok bahan baku diperbarui: ${soldOutProducts.length} menu sold out!`
+          });
+        }
       }
     }
 

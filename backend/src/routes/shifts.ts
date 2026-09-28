@@ -1,10 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db';
 import { authenticateToken } from '../middlewares/authMiddleware';
-import { io } from '../index';
+import { io, emitToTenant } from '../index';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Shared helpers untuk menghitung porsi kas per metode pembayaran
 const getCashPortion = (paymentMethod: string | null, total: number): number => {
@@ -33,12 +32,23 @@ const getNonCashPortion = (paymentMethod: string | null, total: number): number 
   return total;
 };
 
-// Get active shift for logged in user (or any active open shift)
+// Get active shift for logged in user (or any active open shift in tenant)
 const handleGetActiveShift = async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
+
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'Open' },
-      include: { user: { select: { name: true, username: true } } }
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...tenantCondition
+      },
+      include: {
+        user: { select: { id: true, name: true, username: true, role: true } },
+        outlet: { select: { id: true, name: true } }
+      },
+      orderBy: { id: 'desc' }
     });
     res.json(activeShift);
   } catch (error) {
@@ -54,7 +64,12 @@ router.get('/active', authenticateToken, handleGetActiveShift);
 // Get all shifts (for admin / supervisor history) — dengan rekap finansial lengkap
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
+
     const shifts = await prisma.shift.findMany({
+      where: tenantCondition,
       include: { user: { select: { name: true } } },
       orderBy: { id: 'desc' }
     });
@@ -157,19 +172,44 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 // Open a new shift
 router.post('/open', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const user = (req as any).user;
+    const userId = user.id;
+    const tenantId = user.tenantId;
     const { saldoAwal } = req.body;
 
+    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
+
     const existingActive = await prisma.shift.findFirst({
-      where: { status: 'Open' }
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...tenantCondition
+      },
+      include: {
+        user: { select: { id: true, name: true, username: true } }
+      }
     });
 
     if (existingActive) {
-      return res.status(400).json({ error: 'Masih ada shift yang aktif. Harap tutup shift sebelumnya.' });
+      return res.status(400).json({
+        error: `Masih ada shift yang aktif (dibuka oleh ${existingActive.user?.name || existingActive.user?.username || 'Kasir'}). Harap tutup shift sebelumnya.`,
+        activeShift: existingActive
+      });
+    }
+
+    // Resolve default outlet if available
+    let outletId = user.outletId;
+    if (!outletId && tenantId) {
+      const firstOutlet = await prisma.outlet.findFirst({
+        where: { tenantId, status: 'ACTIVE' },
+        select: { id: true }
+      });
+      outletId = firstOutlet?.id || null;
     }
 
     const shift = await prisma.shift.create({
       data: {
+        tenantId: tenantId || null,
+        outletId: outletId || null,
         userId,
         saldoAwal: Number(saldoAwal) || 0,
         status: 'Open'
@@ -181,6 +221,10 @@ router.post('/open', authenticateToken, async (req: Request, res: Response) => {
 
     // Broadcast ke seluruh client real-time
     io.emit('shift:status_change', { status: 'Open', shift });
+    if (tenantId) {
+      emitToTenant(tenantId, 'shift:status_change', { status: 'Open', shift });
+      emitToTenant(tenantId, 'shift:opened', { shift });
+    }
 
     res.status(201).json(shift);
   } catch (error) {
@@ -192,8 +236,15 @@ router.post('/open', authenticateToken, async (req: Request, res: Response) => {
 // GET current shift summary (pre-reconciliation)
 router.get('/current-summary', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
+
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'Open' },
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...tenantCondition
+      },
       include: { user: { select: { name: true, username: true } } }
     });
 
@@ -201,10 +252,15 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       return res.status(404).json({ error: 'Tidak ada shift aktif' });
     }
 
+    const orderWhere = {
+      ...(tenantId ? { tenantId } : {})
+    };
+
     // Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
+        ...orderWhere,
         OR: [
           { paidAt: { gte: activeShift.waktuBuka } },
           { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
@@ -245,10 +301,10 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.pocket === 'DRAWER' || !cf.pocket))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
-      .filter(cf => cf.type === 'Pengeluaran' && (cf.pocket === 'DRAWER' || !cf.pocket) && cf.status === 'APPROVED')
+      .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
       .reduce((sum, cf) => sum + cf.amount, 0);
 
     // Catatan: cashSalesIncome hanya menghitung pesanan berstatus 'Paid'.
@@ -258,7 +314,7 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
 
     // Periksa konfigurasi Blind Cash Drawer Count dari Settings
     const settings = await prisma.settings.findFirst();
-    const enableBlindClose = settings?.enableBlindClose ?? true;
+    const enableBlindClose = (settings as any)?.enableBlindClose ?? false;
     const userRole = ((req as any).user?.role || '').toLowerCase();
     const isBlindMode = enableBlindClose && userRole === 'kasir';
 
@@ -302,10 +358,17 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
 
 router.post('/close', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { saldoFisikLaci, cashDenominations, catatan, forceClose } = req.body;
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    const { saldoFisikLaci, cashDenominations, denominations, catatan, varianceReason, forceClose } = req.body;
+
+    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
 
     const activeShift = await prisma.shift.findFirst({
-      where: { status: 'Open' }
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...tenantCondition
+      }
     });
 
     if (!activeShift) {
@@ -382,15 +445,15 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.pocket === 'DRAWER' || !cf.pocket))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
-      .filter(cf => cf.type === 'Pengeluaran' && (cf.pocket === 'DRAWER' || !cf.pocket) && cf.status === 'APPROVED')
+      .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
       .reduce((sum, cf) => sum + cf.amount, 0);
 
     // Periksa setting Blind Count
     const settings = await prisma.settings.findFirst();
-    const enableBlindClose = settings?.enableBlindClose ?? true;
+    const enableBlindClose = (settings as any)?.enableBlindClose ?? false;
     const userRole = ((req as any).user?.role || '').toLowerCase();
     const isBlindMode = enableBlindClose && userRole === 'kasir';
 
@@ -400,6 +463,9 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const fisikLaci = Number(saldoFisikLaci) || 0;
     const selisih = Math.round((fisikLaci - saldoSistem) * 100) / 100;
 
+    const rawDenom = denominations || cashDenominations;
+    const rawReason = varianceReason || catatan;
+
     const closedShift = await prisma.shift.update({
       where: { id: activeShift.id },
       data: {
@@ -408,9 +474,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         saldoElektronik,
         saldoFisikLaci: fisikLaci,
         selisih,
-        cashDenominations: cashDenominations ? (typeof cashDenominations === 'string' ? cashDenominations : JSON.stringify(cashDenominations)) : null,
-        isBlindCount: isBlindMode,
-        catatan: catatan ? String(catatan).trim() : null,
+        denominations: rawDenom ? (typeof rawDenom === 'string' ? rawDenom : JSON.stringify(rawDenom)) : null,
+        varianceReason: rawReason ? String(rawReason).trim() : null,
         status: 'Closed'
       },
       include: {
@@ -421,12 +486,16 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     // ── AUTO-CATAT ke Arus Kas / Petty Cash ─────────────────────────────
     // Agar halaman Arus Kas menampilkan pemasukan lengkap (bukan selalu minus)
     const userId = (req as any).user.id;
+    const shiftTenantId = activeShift.tenantId || tenantId || null;
+    const shiftOutletId = activeShift.outletId || null;
 
     const cashFlowEntries: any[] = [];
 
     // 1. Saldo awal shift (modal kasir buka)
     if (activeShift.saldoAwal > 0) {
       cashFlowEntries.push({
+        tenantId: shiftTenantId,
+        outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Saldo Awal Shift',
         amount: activeShift.saldoAwal,
@@ -439,6 +508,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     // 2. Omset tunai dari POS
     if (cashSalesIncome > 0) {
       cashFlowEntries.push({
+        tenantId: shiftTenantId,
+        outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Omset POS - Tunai',
         amount: cashSalesIncome,
@@ -451,6 +522,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     // 3. Omset non-tunai (QRIS / Transfer / Debit) — dicatat informatif
     if (nonCashSalesIncome > 0) {
       cashFlowEntries.push({
+        tenantId: shiftTenantId,
+        outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Omset POS - Non Tunai (QRIS/Transfer)',
         amount: nonCashSalesIncome,
@@ -463,6 +536,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     // 4. Pelunasan piutang tunai (jika ada)
     if (cashDebtIncome > 0) {
       cashFlowEntries.push({
+        tenantId: shiftTenantId,
+        outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Pelunasan Piutang - Tunai',
         amount: cashDebtIncome,
@@ -480,10 +555,14 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
 
     // Broadcast ke seluruh client bahwa shift telah ditutup
     io.emit('shift:status_change', { status: 'Closed', shift: closedShift });
+    if (tenantId) {
+      emitToTenant(tenantId, 'shift:status_change', { status: 'Closed', shift: closedShift });
+      emitToTenant(tenantId, 'shift:closed', { shift: closedShift });
+    }
 
     // Jika terjadi selisih kas (baik minus/defisit maupun plus/surplus), broadcast alert ke Owner / Admin
     if (Math.abs(selisih) > 0) {
-      io.emit('shift:discrepancy_alert', {
+      const alertData = {
         shiftId: closedShift.id,
         cashierName: closedShift.user?.name || 'Kasir',
         selisih,
@@ -491,7 +570,11 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         saldoFisikLaci: fisikLaci,
         waktuTutup: closedShift.waktuTutup,
         isBlindCount: isBlindMode
-      });
+      };
+      io.emit('shift:discrepancy_alert', alertData);
+      if (tenantId) {
+        emitToTenant(tenantId, 'shift:discrepancy_alert', alertData);
+      }
     }
 
     // Jika Kasir menutup shift dalam Blind Mode: Jangan bocorkan angka sistem dan selisih
@@ -503,8 +586,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         waktuBuka: closedShift.waktuBuka,
         waktuTutup: closedShift.waktuTutup,
         saldoFisikLaci: closedShift.saldoFisikLaci,
-        cashDenominations: closedShift.cashDenominations,
-        catatan: closedShift.catatan,
+        cashDenominations: closedShift.denominations,
+        catatan: closedShift.varianceReason,
         isBlindCount: true,
         message: 'Shift berhasil ditutup. Rekonsiliasi fisik laci telah tercatat dan diverifikasi ke sistem pusat.'
       });
@@ -562,10 +645,10 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
         where: { date: { gte: shift.waktuBuka, lte: now } }
       });
       const manualCashIn = cashFlows
-        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.pocket === 'DRAWER' || !cf.pocket))
+        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
         .reduce((sum, cf) => sum + cf.amount, 0);
       const manualCashOut = cashFlows
-        .filter(cf => cf.type === 'Pengeluaran' && (cf.pocket === 'DRAWER' || !cf.pocket) && cf.status === 'APPROVED')
+        .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
         .reduce((sum, cf) => sum + cf.amount, 0);
 
       const debtPayments = await prisma.debtPayment.findMany({
@@ -656,10 +739,10 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.pocket === 'DRAWER' || !cf.pocket))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
-      .filter(cf => cf.type === 'Pengeluaran' && (cf.pocket === 'DRAWER' || !cf.pocket) && cf.status === 'APPROVED')
+      .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
       .reduce((sum, cf) => sum + cf.amount, 0);
 
     const expectedCash = shift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
