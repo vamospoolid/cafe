@@ -195,11 +195,29 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
       dateFilter.lte = eDate;
     }
 
-    // 1. Ambil seluruh outlet milik tenant
-    const outlets = await prisma.outlet.findMany({
+    // 1. Ambil seluruh outlet milik tenant (auto-provision jika belum ada)
+    let outlets = await prisma.outlet.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'asc' }
     });
+
+    if (outlets.length === 0) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, slug: true }
+      });
+
+      const defaultOutlet = await prisma.outlet.create({
+        data: {
+          tenantId,
+          name: `${tenant?.name || 'Cabang'} Utama`,
+          code: `${(tenant?.slug || 'CAB').substring(0, 4).toUpperCase()}-01`,
+          status: 'ACTIVE',
+          address: 'Pusat'
+        }
+      });
+      outlets = [defaultOutlet];
+    }
 
     // 2. Ambil data order F&B / Retail yang sudah dibayar
     const orders = await prisma.order.findMany({
@@ -211,63 +229,82 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
       select: {
         id: true,
         outletId: true,
-        totalAmount: true,
+        total: true,
         createdAt: true
       }
     });
 
-    // 3. Ambil data order Laundry
-    const laundryOrders = await prisma.laundryOrder.findMany({
-      where: {
-        tenantId,
-        paymentStatus: { in: ['PAID', 'PARTIAL'] },
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
-      },
-      select: {
-        id: true,
-        outletId: true,
-        paidAmount: true,
-        totalAmount: true,
-        status: true,
-        createdAt: true
+    // 3. Ambil data order Laundry (aman jika model tidak ada)
+    let laundryOrders: any[] = [];
+    try {
+      if ((prisma as any).laundryOrder) {
+        laundryOrders = await (prisma as any).laundryOrder.findMany({
+          where: {
+            tenantId,
+            paymentStatus: { in: ['PAID', 'PARTIAL'] },
+            ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+          },
+          select: {
+            id: true,
+            outletId: true,
+            paidAmount: true,
+            totalAmount: true,
+            status: true,
+            createdAt: true
+          }
+        });
       }
-    });
+    } catch (e) {
+      console.warn('[Outlets API] LaundryOrder query omitted:', (e as any)?.message);
+    }
 
-    // 4. Ambil data WorkOrder Bengkel
-    const workOrders = await prisma.workOrder.findMany({
-      where: {
-        tenantId,
-        paymentStatus: 'PAID',
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
-      },
-      select: {
-        id: true,
-        outletId: true,
-        totalAmount: true,
-        createdAt: true
+    // 4. Ambil data WorkOrder Bengkel (aman jika model tidak ada)
+    let workOrders: any[] = [];
+    try {
+      if ((prisma as any).workOrder) {
+        workOrders = await (prisma as any).workOrder.findMany({
+          where: {
+            tenantId,
+            paymentStatus: 'PAID',
+            ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+          },
+          select: {
+            id: true,
+            outletId: true,
+            totalAmount: true,
+            createdAt: true
+          }
+        });
       }
-    });
+    } catch (e) {
+      console.warn('[Outlets API] WorkOrder query omitted:', (e as any)?.message);
+    }
 
     // 5. Ambil data CashFlow (Pengeluaran Operasional per outlet)
-    const cashFlows = await prisma.cashFlow.findMany({
-      where: {
-        tenantId,
-        type: 'Pengeluaran',
-        status: 'APPROVED',
-        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
-      },
-      select: {
-        id: true,
-        outletId: true,
-        amount: true
-      }
-    });
+    let cashFlows: any[] = [];
+    try {
+      cashFlows = await prisma.cashFlow.findMany({
+        where: {
+          tenantId,
+          type: 'Pengeluaran',
+          status: 'APPROVED',
+          ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+        },
+        select: {
+          id: true,
+          outletId: true,
+          amount: true
+        }
+      });
+    } catch (e) {
+      console.warn('[Outlets API] CashFlow query omitted:', (e as any)?.message);
+    }
 
     // 6. Hitung statistik agregasi per outlet
     const outletStats = outlets.map((out) => {
       // Order umum (F&B / Retail)
       const matchingOrders = orders.filter(o => o.outletId === out.id || (!o.outletId && out.code.endsWith('-01')));
-      const revenueGeneral = matchingOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const revenueGeneral = matchingOrders.reduce((sum, o) => sum + ((o as any).total || 0), 0);
       const countGeneral = matchingOrders.length;
 
       // Laundry
