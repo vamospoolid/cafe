@@ -199,6 +199,124 @@ export const listPairedBluetoothDevices = (): Promise<BluetoothDeviceInfo[]> => 
   });
 };
 
+export const isBluetoothConnected = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const bt = getBluetoothSerial();
+    if (!bt || !bt.isConnected) return resolve(false);
+    bt.isConnected(
+      () => resolve(true),
+      () => resolve(false)
+    );
+  });
+};
+
+export const isBluetoothEnabled = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const win = window as any;
+    if (win.Capacitor?.Plugins?.HardwareBridge) {
+      win.Capacitor.Plugins.HardwareBridge.getHardwareStatus()
+        .then((status: any) => resolve(!!status?.isBluetoothEnabled))
+        .catch(() => resolve(false));
+      return;
+    }
+
+    const bt = getBluetoothSerial();
+    if (!bt || !bt.isEnabled) return resolve(false);
+    bt.isEnabled(
+      () => resolve(true),
+      () => resolve(false)
+    );
+  });
+};
+
+export const requestEnableBluetooth = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const win = window as any;
+    if (win.Capacitor?.Plugins?.HardwareBridge) {
+      win.Capacitor.Plugins.HardwareBridge.requestEnableBluetooth()
+        .then(() => resolve(true))
+        .catch(() => resolve(false));
+      return;
+    }
+
+    const bt = getBluetoothSerial();
+    if (bt && bt.enable) {
+      bt.enable(
+        () => resolve(true),
+        () => resolve(false)
+      );
+    } else {
+      resolve(false);
+    }
+  });
+};
+
+export const isWebUsbSupported = (): boolean => {
+  return typeof navigator !== 'undefined' && !!(navigator as any).usb;
+};
+
+export const pairWebUsbPrinter = async (): Promise<any> => {
+  if (!isWebUsbSupported()) {
+    throw new Error('Browser atau WebView ini tidak mendukung koneksi WebUSB.');
+  }
+  const device = await (navigator as any).usb.requestDevice({
+    filters: [
+      { classCode: 7 } // USB Printer Class Code
+    ]
+  });
+  if (device) {
+    localStorage.setItem('usb_printer_saved', 'true');
+    localStorage.setItem('usb_printer_name', device.productName || 'USB Thermal Printer');
+  }
+  return device;
+};
+
+export const printViaWebUsb = async (bytes: Uint8Array): Promise<void> => {
+  if (!isWebUsbSupported()) return;
+  const usb = (navigator as any).usb;
+  const devices = await usb.getDevices();
+  if (!devices || devices.length === 0) {
+    throw new Error('Perangkat USB Thermal Printer tidak ditemukan. Pastikan kabel OTG terpasang.');
+  }
+  const device = devices[0];
+  await device.open();
+  if (device.configuration === null) {
+    await device.selectConfiguration(1);
+  }
+  await device.claimInterface(0);
+
+  const outEndpoint = device.configuration?.interfaces[0]?.alternate?.endpoints.find(
+    (e: any) => e.direction === 'out'
+  );
+  const endpointNumber = outEndpoint?.endpointNumber || 1;
+  await device.transferOut(endpointNumber, bytes);
+  await device.close();
+};
+
+export const printViaRawBtIntent = (bytes: Uint8Array): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    try {
+      let binary = '';
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Data = window.btoa(binary);
+      const rawbtUrl = `rawbt:data;base64,${base64Data}`;
+      
+      const link = document.createElement('a');
+      link.href = rawbtUrl;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      resolve();
+    } catch (e: any) {
+      reject(new Error('Gagal mencetak via RawBT: ' + e.message));
+    }
+  });
+};
+
 export const connectBluetoothPrinter = (macAddress: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     const bt = getBluetoothSerial();
@@ -231,10 +349,9 @@ export const disconnectBluetoothPrinter = (): Promise<void> => {
 };
 
 export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
-  // If we have an active Web Bluetooth device or saved Web Bluetooth configuration
+  // 1. Web Bluetooth (Chrome Desktop / Android HTTPS)
   if (isWebBluetoothSupported() && (activeWebBluetoothDevice || localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH')) {
     if (!activeWebBluetoothDevice) {
-      // Re-prompt user to select/confirm device if disconnected
       activeWebBluetoothDevice = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: COMMON_PRINTER_SERVICES
@@ -244,19 +361,78 @@ export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
     return;
   }
 
-  // Otherwise Cordova fallback
+  // 2. Cordova / Capacitor Bluetooth Serial (Native Android APK)
   const bt = getBluetoothSerial();
   if (bt) {
+    // A. Pastikan Bluetooth aktif di HP / Tablet
+    const enabled = await isBluetoothEnabled();
+    if (!enabled) {
+      const prompted = await requestEnableBluetooth();
+      if (!prompted) {
+        throw new Error('Bluetooth perangkat dalam keadaan mati. Silakan aktifkan Bluetooth.');
+      }
+      await new Promise(r => setTimeout(r, 1200));
+    }
+
+    // B. Periksa status koneksi socket, lakukan silent auto-reconnect jika perlu
+    const connected = await isBluetoothConnected();
+    if (!connected) {
+      const savedMac = localStorage.getItem('bluetooth_printer_mac') || localStorage.getItem('bluetooth_printer_id');
+      if (savedMac) {
+        try {
+          await connectBluetoothPrinter(savedMac);
+        } catch (connErr) {
+          console.warn('[Printer] Auto-reconnect gagal, mencoba write langsung:', connErr);
+        }
+      }
+    }
+
     return new Promise((resolve, reject) => {
       bt.write(
         bytes.buffer,
         () => resolve(),
-        (err: any) => reject(new Error(err || 'Gagal mengirim data cetak ke printer Bluetooth'))
+        async (err: any) => {
+          console.warn('[Printer] Write pertama gagal, mencoba reconnect:', err);
+          try {
+            const savedMac = localStorage.getItem('bluetooth_printer_mac') || localStorage.getItem('bluetooth_printer_id');
+            if (savedMac) {
+              await connectBluetoothPrinter(savedMac);
+              bt.write(
+                bytes.buffer, 
+                () => resolve(), 
+                (retryErr: any) => reject(new Error(retryErr || 'Gagal mengirim data cetak ke printer Bluetooth'))
+              );
+              return;
+            }
+          } catch (retryErr: any) {
+            reject(new Error(retryErr.message || 'Printer Bluetooth terputus dan gagal tersambung kembali'));
+          }
+        }
       );
     });
   }
 
-  throw new Error('Tidak ada modul Bluetooth yang aktif. Silakan hubungkan printer di menu Pengaturan.');
+  // 3. WebUSB Printer Fallback (USB OTG / Direct Cable)
+  if (isWebUsbSupported() && localStorage.getItem('usb_printer_saved') === 'true') {
+    try {
+      await printViaWebUsb(bytes);
+      return;
+    } catch (usbErr) {
+      console.warn('[Printer] WebUSB print error, trying fallback:', usbErr);
+    }
+  }
+
+  // 4. RawBT Android URL Scheme Fallback (Universal USB / Bluetooth)
+  if (isNativeMobile()) {
+    try {
+      await printViaRawBtIntent(bytes);
+      return;
+    } catch (rawbtErr) {
+      console.warn('[Printer] RawBT intent error:', rawbtErr);
+    }
+  }
+
+  throw new Error('Tidak ada modul printer yang aktif. Silakan hubungkan printer Bluetooth atau USB di menu Pengaturan.');
 };
 
 /**

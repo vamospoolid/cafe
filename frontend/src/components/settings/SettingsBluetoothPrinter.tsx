@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Printer, Check, Info } from 'lucide-react';
+import { Printer, Check, Info, Usb } from 'lucide-react';
 import { toast } from '../../utils/alert';
 import {
   isWebBluetoothSupported,
   isNativeMobile,
+  isWebUsbSupported,
+  pairWebUsbPrinter,
   pairWebBluetoothPrinter,
   getSavedBluetoothPrinter,
   clearSavedBluetoothPrinter,
@@ -19,9 +21,11 @@ export const SettingsBluetoothPrinter: React.FC = () => {
   const [scanning, setScanning] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [connectingUsb, setConnectingUsb] = useState(false);
 
   const isWebBt = isWebBluetoothSupported();
   const isNative = isNativeMobile();
+  const isUsb = isWebUsbSupported();
 
   const handlePairWebBluetooth = async () => {
     setScanning(true);
@@ -90,10 +94,29 @@ export const SettingsBluetoothPrinter: React.FC = () => {
     }
   };
 
+  const handlePairUsb = async () => {
+    setConnectingUsb(true);
+    try {
+      const dev = await pairWebUsbPrinter();
+      setSavedPrinter({
+        id: 'USB-DIRECT',
+        name: dev.productName || 'USB Thermal Printer',
+        type: 'USB_DIRECT'
+      });
+      toast(`Printer USB "${dev.productName || 'Thermal'}" berhasil terhubung!`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal menyambungkan printer USB. Pastikan kabel OTG terpasang.', 'error');
+    } finally {
+      setConnectingUsb(false);
+    }
+  };
+
   const handleDisconnect = () => {
     clearSavedBluetoothPrinter();
+    localStorage.removeItem('usb_printer_saved');
+    localStorage.removeItem('usb_printer_name');
     setSavedPrinter(null);
-    toast('Koneksi printer Bluetooth telah diputus.', 'info');
+    toast('Koneksi printer telah diputus.', 'info');
   };
 
   return (
@@ -194,6 +217,18 @@ export const SettingsBluetoothPrinter: React.FC = () => {
             className="btn btn-outline flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold"
           >
             <span>{scanning ? 'Memindai...' : 'Pindai Perangkat Paired'}</span>
+          </button>
+        )}
+
+        {isUsb && (
+          <button
+            type="button"
+            onClick={handlePairUsb}
+            disabled={connectingUsb}
+            className="btn btn-outline border-slate-300 hover:border-indigo-500 hover:text-indigo-600 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold"
+          >
+            <Usb size={16} />
+            <span>{connectingUsb ? 'Menghubungkan USB...' : 'Hubungkan Printer USB (OTG / Kabel)'}</span>
           </button>
         )}
       </div>

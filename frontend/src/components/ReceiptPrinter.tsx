@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { getSavedBluetoothPrinter, printBluetoothReceipt } from '../utils/printerBluetooth';
 
 export type PrintModeType = 'receipt' | 'kitchen' | 'bar' | 'all';
 
@@ -58,6 +59,27 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
       } else {
         setTimeout(onClose, 500);
       }
+      return;
+    }
+
+    // Check if Bluetooth Printer is configured
+    const savedBt = getSavedBluetoothPrinter();
+    if (savedBt || localStorage.getItem('bluetooth_printer_mac')) {
+      console.log('ReceiptPrinter: executing silent print via Bluetooth Thermal Printer');
+      printBluetoothReceipt(order, {
+        name: storeSettings?.storeName || storeSettings?.name || 'MUKI RAMEN',
+        address: storeSettings?.address || '',
+        phone: storeSettings?.phone || '',
+        footer: storeSettings?.receiptFooter || 'Terima kasih atas kunjungannya!'
+      }, { autoKickDrawer: true })
+        .then(() => {
+          console.log('Bluetooth print success');
+          onClose();
+        })
+        .catch((err) => {
+          console.warn('Bluetooth print failed, falling back to window.print():', err);
+          window.print();
+        });
       return;
     }
 
