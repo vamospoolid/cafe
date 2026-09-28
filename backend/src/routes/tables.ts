@@ -59,14 +59,15 @@ router.get('/public/:id', async (req: Request, res: Response) => {
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user;
-    const tenantId = user?.tenantId || TenantContext.getTenantId();
-    if (!tenantId) {
-      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
-    }
+    const tenantId = user?.tenantId || TenantContext.getTenantId() || 'tenant-vamos-pool';
     const tables = await prisma.table.findMany({
       where: {
         deletedAt: null,
-        tenantId
+        OR: [
+          { tenantId },
+          { tenantId: 'tenant-vamos-pool' },
+          { tenantId: null }
+        ]
       },
       orderBy: { tableNo: 'asc' }
     });
@@ -80,10 +81,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user;
-    const tenantId = user?.tenantId || TenantContext.getTenantId();
-    if (!tenantId) {
-      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
-    }
+    const tenantId = user?.tenantId || TenantContext.getTenantId() || 'tenant-vamos-pool';
     const { tableNo, name, capacity, status, qrUrl } = req.body;
     
     if (!tableNo) return res.status(400).json({ error: 'Table Number is required' });
@@ -92,8 +90,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       data: {
         tenantId,
         tableNo,
-        name,
-        capacity: Number(capacity) || 2,
+        name: name || `Meja ${tableNo}`,
+        capacity: Number(capacity) || 4,
         status: status || 'Aktif',
         qrUrl,
         posX: req.body.posX !== undefined ? Number(req.body.posX) : 10,
