@@ -72,8 +72,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const hasFeature = (featureKey: string): boolean => {
-    // If super admin / platform admin, always true
-    if (user?.role === 'OWNER' && user?.username === 'admin') return true;
+    const roleLower = (user?.role || '').toLowerCase();
+    // If super admin / platform admin / owner, always true
+    if ((roleLower === 'owner' || roleLower === 'admin' || roleLower === 'superadmin') && (user?.username === 'admin' || roleLower === 'owner' || roleLower === 'admin')) return true;
     // Core features always allowed
     if (featureKey === 'pos.cashier' || featureKey === 'inventory.basic' || featureKey === 'finance.cashflow') return true;
     return features.includes(featureKey);
@@ -81,7 +82,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
 
   const hasPermission = (permissionKey: string): boolean => {
     if (!user) return false;
-    if (user.role === 'OWNER' || user.role === 'Admin') return true;
+    const roleLower = (user.role || '').toLowerCase();
+    if (roleLower === 'owner' || roleLower === 'admin' || roleLower === 'superadmin' || roleLower === 'manager') return true;
     if (user.permissionKeys && Array.isArray(user.permissionKeys)) {
       return user.permissionKeys.includes(permissionKey);
     }
@@ -267,16 +269,27 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
+    const handleDiscrepancyAlert = (data: any) => {
+      console.warn('[Socket.IO] Shift discrepancy alert:', data);
+      const isPrivileged = user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'owner' || user?.permissions?.canViewReports;
+      if (isPrivileged) {
+        const diffText = data.selisih > 0 ? `+Rp ${Number(data.selisih).toLocaleString('id-ID')} (Lebih)` : `-Rp ${Math.abs(Number(data.selisih)).toLocaleString('id-ID')} (Kurang)`;
+        toast(`⚠️ [Selisih Kas Terdeteksi]: Kasir ${data.cashierName} menutup shift #${data.shiftId} dengan selisih ${diffText}!`, 'error');
+      }
+    };
+
     socket.on('shift:status_change', handleShiftChange);
     socket.on('shift:opened', handleShiftChange);
     socket.on('shift:closed', handleShiftChange);
+    socket.on('shift:discrepancy_alert', handleDiscrepancyAlert);
 
     return () => {
       socket.off('shift:status_change', handleShiftChange);
       socket.off('shift:opened', handleShiftChange);
       socket.off('shift:closed', handleShiftChange);
+      socket.off('shift:discrepancy_alert', handleDiscrepancyAlert);
     };
-  }, [socket, token]);
+  }, [socket, token, user]);
 
   // Re-fetch shift saat tab kasir mendapatkan fokus browser kembali
   useEffect(() => {

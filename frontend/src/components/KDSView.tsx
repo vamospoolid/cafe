@@ -1,15 +1,43 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { ChefHat, Clock, CheckCircle, Bell, ArrowRight, Flame, CheckCircle2, User, Undo2, RotateCcw, Volume2, X } from 'lucide-react';
+import { 
+  ChefHat, 
+  Clock, 
+  CheckCircle, 
+  Bell, 
+  ArrowRight, 
+  Flame, 
+  CheckCircle2, 
+  User, 
+  Undo2, 
+  RotateCcw, 
+  Volume2, 
+  VolumeX,
+  Maximize2,
+  Minimize2,
+  X, 
+  RefreshCw,
+  UtensilsCrossed,
+  Layers,
+  Check,
+  AlertTriangle
+} from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import useSocket from '../hooks/useSocket';
+import { formatTableTitle } from '../utils/tableUtils';
 
 const KDSView = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
   const [lastServed, setLastServed] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [servedHistory, setServedHistory] = useState<any[]>([]);
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<'all' | 'Pending' | 'Cooking' | 'Ready' | 'summary'>('all');
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem('kds_muted') === 'true');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   const posContext = useContext(POSContext);
   const prevOrderIds = useRef<number[]>([]);
   const socket = useSocket();
@@ -19,7 +47,34 @@ const KDSView = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(() => {
     return localStorage.getItem('kds_selected_category') || 'all';
   });
-  const [isSummaryOpen, setIsSummaryOpen] = useState(true);
+
+  // Track fullscreen state
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(prev => {
+      const next = !prev;
+      localStorage.setItem('kds_muted', String(next));
+      if (!next) {
+        playBeep();
+      }
+      return next;
+    });
+  };
 
   // Screen Wake Lock to prevent screen sleep/lock on KDS tablet
   useEffect(() => {
@@ -29,7 +84,6 @@ const KDSView = () => {
       if ('wakeLock' in navigator) {
         try {
           wakeLock = await (navigator as any).wakeLock.request('screen');
-          console.log('[KDS] Screen Wake Lock is active.');
         } catch (err: any) {
           console.warn('[KDS] Wake Lock failed:', err.message);
         }
@@ -51,7 +105,6 @@ const KDSView = () => {
       if (wakeLock) {
         wakeLock.release().then(() => {
           wakeLock = null;
-          console.log('[KDS] Screen Wake Lock released.');
         });
       }
     };
@@ -82,6 +135,7 @@ const KDSView = () => {
 
   // Sound generator
   const playBeep = () => {
+    if (isMuted) return;
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioCtx.createOscillator();
@@ -92,11 +146,11 @@ const KDSView = () => {
       
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // High pitch notification beep
-      gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
       
       oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.3);
+      oscillator.stop(audioCtx.currentTime + 0.35);
     } catch (e) {
       console.warn("AudioContext blocked or not supported", e);
     }
@@ -104,6 +158,7 @@ const KDSView = () => {
 
   // Urgent Void/Cancellation Alarm (double beep siren)
   const playCancellationAlarm = () => {
+    if (isMuted) return;
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioCtx.createOscillator();
@@ -114,7 +169,7 @@ const KDSView = () => {
       
       oscillator.type = 'sawtooth';
       oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
-      gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(0.25, audioCtx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
       
       oscillator.start();
@@ -192,7 +247,7 @@ const KDSView = () => {
       playBeep();
     }
     prevOrderIds.current = currentIds;
-  }, [orders]);
+  }, [orders, isMuted]);
 
   // Persistent cancellation/void alarm loop
   useEffect(() => {
@@ -204,7 +259,7 @@ const KDSView = () => {
       }, 1500);
       return () => clearInterval(alarmTimer);
     }
-  }, [orders]);
+  }, [orders, isMuted]);
 
   useEffect(() => {
     if (posContext?.token) {
@@ -212,7 +267,7 @@ const KDSView = () => {
     }
   }, [posContext?.token]);
 
-  // Real-time synchronization via Socket.IO instead of polling
+  // Real-time synchronization via Socket.IO
   useEffect(() => {
     setIsSocketConnected(socket.connected);
 
@@ -278,464 +333,769 @@ const KDSView = () => {
     }
   };
 
+  const toggleItemChecked = (itemId: number | string) => {
+    setCheckedItems(prev => ({
+      ...prev,
+      [itemId]: !prev[itemId]
+    }));
+  };
+
   // Helper untuk menentukan warna card berdasarkan status dan waktu tunggu
   const getCardStyle = (status: string, createdAt: string) => {
     if (status === 'Cancelled') {
-      return 'bg-red-50/95 border-red-500 text-slate-800 shadow-lg shadow-red-150/20 animate-pulse border-l-4 border-l-red-600 hover:border-red-400 transition-all duration-200';
+      return 'bg-red-50/95 border-red-500 text-slate-800 shadow-md border-l-4 border-l-red-600 animate-pulse';
     }
 
     const waitMins = (new Date().getTime() - new Date(createdAt).getTime()) / 60000;
     
-    // 1. Overdue warning (red pulse) - highest priority if not ready
+    // 1. Overdue warning (>15m)
     if (status !== 'Ready' && waitMins > 15) {
-      return 'bg-rose-50/50 border-rose-200 text-slate-800 shadow-md shadow-rose-100/10 animate-pulse border-l-4 border-l-rose-500 hover:border-rose-300 transition-all duration-200';
+      return 'bg-rose-50/70 border-rose-300 text-slate-800 shadow-sm border-l-4 border-l-rose-500';
     }
     
-    // 2. SLA Warning (> 10m) - amber warning if not ready
+    // 2. SLA Warning (> 10m)
     if (status !== 'Ready' && waitMins > 10) {
-      return 'bg-amber-50/60 border-amber-200 text-slate-800 shadow-sm border-l-4 border-l-amber-500 hover:border-amber-300 transition-all duration-200';
+      return 'bg-amber-50/60 border-amber-300 text-slate-800 shadow-sm border-l-4 border-l-amber-500';
     }
 
     // 3. Normal status coloring
     if (status === 'Ready') {
-      return 'bg-emerald-50/30 border-emerald-200 text-slate-800 shadow-sm border-l-4 border-l-emerald-500 hover:border-emerald-300 transition-all duration-200';
+      return 'bg-emerald-50/40 border-emerald-300 text-slate-800 shadow-sm border-l-4 border-l-emerald-500';
     }
     if (status === 'Cooking') {
-      return 'bg-amber-50/20 border-amber-200/80 text-slate-800 shadow-sm border-l-4 border-l-amber-500 hover:border-amber-300 transition-all duration-200';
+      return 'bg-amber-50/20 border-amber-300/80 text-slate-800 shadow-sm border-l-4 border-l-amber-500';
     }
     
     // default (Pending / Antrean)
-    return 'bg-indigo-50/20 border-indigo-200/60 text-slate-800 shadow-sm border-l-4 border-l-indigo-500 hover:border-indigo-300 transition-all duration-200';
+    return 'bg-white border-slate-200 text-slate-800 shadow-sm border-l-4 border-l-indigo-600';
   };
 
   const getStatusBadge = (status: string) => {
     switch(status) {
-      case 'Cancelled': return <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-600 text-white border border-red-700 animate-pulse flex items-center gap-1"><Volume2 size={10} /> BATAL</span>;
-      case 'Pending': return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">Antrean</span>;
-      case 'Cooking': return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">Dimasak</span>;
-      case 'Ready': return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Siap Saji</span>;
+      case 'Cancelled': 
+        return (
+          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-600 text-white border border-red-700 animate-pulse flex items-center gap-1">
+            <Volume2 size={10} /> BATAL / VOID
+          </span>
+        );
+      case 'Pending': 
+        return (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+            Antrean Baru
+          </span>
+        );
+      case 'Cooking': 
+        return (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+            <Flame size={10} className="text-amber-600 animate-pulse" /> Dimasak
+          </span>
+        );
+      case 'Ready': 
+        return (
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+            <CheckCircle2 size={10} className="text-emerald-600" /> Siap Saji
+          </span>
+        );
       default: return null;
     }
   };
 
+  const formatTableLabel = (tableNo?: string) => {
+    if (!tableNo) return 'TAKE AWAY';
+    return formatTableTitle(tableNo).toUpperCase();
+  };
+
   const getWaitTime = (createdAt: string) => {
     const diffMs = new Date().getTime() - new Date(createdAt).getTime();
-    const totalSecs = Math.floor(diffMs / 1000);
+    const totalSecs = Math.max(0, Math.floor(diffMs / 1000));
     const mins = Math.floor(totalSecs / 60);
     const secs = totalSecs % 60;
     return `${mins}m ${secs.toString().padStart(2, '0')}s`;
   };
 
-  const getWaitTimeColor = (createdAt: string, status: string) => {
-    if (status === 'Cancelled') return 'text-red-600 font-extrabold';
-    if (status === 'Ready') return 'text-emerald-600 font-bold';
-    const waitMins = (new Date().getTime() - new Date(createdAt).getTime()) / 60000;
-    if (waitMins > 15) return 'text-rose-600 font-black';
-    if (waitMins > 10) return 'text-amber-600 font-bold';
-    return 'text-emerald-600 font-bold';
-  };
-
-  const getSlaBadge = (createdAt: string, status: string) => {
-    if (status === 'Cancelled') return <span className="text-[10px] font-black px-2 py-0.5 rounded bg-red-100 text-red-700 animate-bounce">DI-VOID / BATAL</span>;
-    if (status === 'Ready') return null;
+  const getWaitTimeBadge = (createdAt: string, status: string) => {
+    if (status === 'Cancelled') {
+      return (
+        <span className="text-[11px] font-black text-red-600 flex items-center gap-1">
+          <AlertTriangle size={12} /> Batal
+        </span>
+      );
+    }
+    if (status === 'Ready') {
+      return (
+        <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-100/60 px-2 py-0.5 rounded-lg">
+          <Clock size={11} /> {getWaitTime(createdAt)}
+        </span>
+      );
+    }
     const waitMins = (new Date().getTime() - new Date(createdAt).getTime()) / 60000;
     if (waitMins > 15) {
-      return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700 animate-pulse">OVERDUE (15m+)</span>;
+      return (
+        <span className="text-[11px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-lg flex items-center gap-1 animate-pulse border border-rose-200">
+          <Clock size={11} /> {getWaitTime(createdAt)} (15m+)
+        </span>
+      );
     }
     if (waitMins > 10) {
-      return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700">WARNING (10m+)</span>;
+      return (
+        <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-lg flex items-center gap-1 border border-amber-200">
+          <Clock size={11} /> {getWaitTime(createdAt)}
+        </span>
+      );
     }
-    return <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">AMAN</span>;
+    return (
+      <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-lg flex items-center gap-1">
+        <Clock size={11} /> {getWaitTime(createdAt)}
+      </span>
+    );
   };
 
   if (loading) {
     return (
       <div className="p-8 text-center flex flex-col items-center justify-center bg-slate-50 text-slate-600 h-full min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-        <p className="font-semibold text-slate-500">Sinkronisasi data dapur...</p>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-3"></div>
+        <p className="font-bold text-xs text-slate-500">Menghubungkan ke Dapur (KDS)...</p>
       </div>
     );
   }
 
   // Filter dan olah data order berdasarkan stasiun yang dipilih
   const getFilteredOrders = (rawOrders: any[]) => {
-    if (selectedCategoryId === 'all') return rawOrders;
-    return rawOrders
-      .map(order => {
-        const filteredItems = order.items.filter((item: any) => {
-          return String(item.product?.categoryId) === String(selectedCategoryId);
-        });
-        return {
-          ...order,
-          items: filteredItems
-        };
-      })
-      .filter(order => order.items.length > 0);
+    let result = rawOrders;
+    if (selectedCategoryId !== 'all') {
+      result = result
+        .map(order => {
+          const filteredItems = order.items.filter((item: any) => {
+            return String(item.product?.categoryId) === String(selectedCategoryId);
+          });
+          return {
+            ...order,
+            items: filteredItems
+          };
+        })
+        .filter(order => order.items.length > 0);
+    }
+
+    if (activeTab !== 'all' && activeTab !== 'summary') {
+      result = result.filter(o => o.kdsStatus === activeTab);
+    }
+
+    return result;
   };
 
-  const filteredOrders = getFilteredOrders(orders);
+  // Base raw orders filtered by category alone for counts
+  const categoryOrders = selectedCategoryId === 'all' 
+    ? orders 
+    : orders
+        .map(order => ({
+          ...order,
+          items: order.items.filter((item: any) => String(item.product?.categoryId) === String(selectedCategoryId))
+        }))
+        .filter(order => order.items.length > 0);
 
-  // Akumulasikan menu masakan aktif (Pending / Cooking)
-  const getConsolidatedSummary = (rawFilteredOrders: any[]) => {
-    const activeOrders = rawFilteredOrders.filter(o => o.kdsStatus === 'Pending' || o.kdsStatus === 'Cooking');
-    const summaryMap: Record<string, { name: string, qty: number }> = {};
+  const queueCount = categoryOrders.filter(o => o.kdsStatus === 'Pending').length;
+  const cookingCount = categoryOrders.filter(o => o.kdsStatus === 'Cooking').length;
+  const readyCount = categoryOrders.filter(o => o.kdsStatus === 'Ready').length;
+  const totalActiveCount = queueCount + cookingCount + readyCount;
+
+  const displayOrders = getFilteredOrders(orders);
+
+  // Consolidated summary for active items
+  const getConsolidatedSummary = (rawOrders: any[]) => {
+    const activeOrders = rawOrders.filter(o => o.kdsStatus === 'Pending' || o.kdsStatus === 'Cooking');
+    const summaryMap: Record<string, { name: string, qty: number, pendingQty: number, cookingQty: number }> = {};
+    
     activeOrders.forEach(order => {
       order.items.forEach((item: any) => {
         const key = item.product.name;
-        if (summaryMap[key]) {
-          summaryMap[key].qty += item.qty;
-        } else {
+        if (!summaryMap[key]) {
           summaryMap[key] = {
             name: item.product.name,
-            qty: item.qty
+            qty: 0,
+            pendingQty: 0,
+            cookingQty: 0
           };
         }
+        summaryMap[key].qty += item.qty;
+        if (order.kdsStatus === 'Pending') summaryMap[key].pendingQty += item.qty;
+        if (order.kdsStatus === 'Cooking') summaryMap[key].cookingQty += item.qty;
       });
     });
     return Object.values(summaryMap).sort((a, b) => b.qty - a.qty);
   };
 
-  const consolidatedSummary = getConsolidatedSummary(filteredOrders);
-
-  const queueCount = filteredOrders.filter(o => o.kdsStatus === 'Pending').length;
-  const cookingCount = filteredOrders.filter(o => o.kdsStatus === 'Cooking').length;
-  const readyCount = filteredOrders.filter(o => o.kdsStatus === 'Ready').length;
+  const consolidatedSummary = getConsolidatedSummary(categoryOrders);
 
   return (
-    <div className="p-6 h-full flex flex-col bg-slate-50 text-slate-800 overflow-hidden">
-      {/* Offline Banner */}
+    <div className="p-3 sm:p-4 md:p-6 w-full flex-1 flex flex-col bg-slate-100/70 text-slate-800 min-h-0">
+      {/* Offline Alert Banner */}
       {!isSocketConnected && (
-        <div className="bg-rose-600 text-white px-5 py-3.5 rounded-2xl mb-4 flex items-center justify-between text-xs font-bold shadow-md shadow-rose-100/10 animate-pulse border border-rose-500 flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
-            <span>Koneksi Terputus! Layar KDS berjalan offline. Menghubungkan kembali...</span>
+        <div className="bg-rose-600 text-white px-3.5 py-2.5 rounded-xl mb-3 flex items-center justify-between text-xs font-bold shadow-sm animate-pulse flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+            <span>Koneksi Offline. Menghubungkan ulang...</span>
           </div>
           <button 
             onClick={() => {
               socket.connect();
               setIsSocketConnected(socket.connected);
             }} 
-            className="bg-white/20 hover:bg-white/30 text-white px-3.5 py-1.5 rounded-xl text-[10px] font-black transition-all active:scale-95"
+            className="bg-white/20 hover:bg-white/30 text-white px-2.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95"
           >
-            Hubungkan Ulang
+            Hubungkan
           </button>
         </div>
       )}
 
-      {/* KDS Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 flex-shrink-0">
-        <div>
-          <h2 className="text-2xl font-black flex items-center gap-2 text-slate-900">
-            <ChefHat className="text-indigo-600" /> Kitchen Display System
-          </h2>
-          <p className="text-slate-500 mt-1 text-xs">Layar khusus area dapur untuk memantau pesanan masuk secara real-time</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Station/Category Filter Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stasiun:</span>
-            <select
-              value={selectedCategoryId}
-              onChange={(e) => setSelectedCategoryId(e.target.value)}
-              className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 shadow-sm rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="all">Semua Stasiun (All)</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={String(cat.id)}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+      {/* Top Operational Bar: Station Selector & Quick Action Buttons */}
+      <div className="flex items-center justify-between gap-1.5 mb-2 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs flex-shrink-0">
+        {/* Left: Station Dropdown with Chef Icon */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+            <ChefHat size={15} />
           </div>
-
-          <button 
-            className={`btn border shadow-sm rounded-xl px-4 py-2 flex items-center gap-2 transition-all active:scale-95 text-xs font-bold ${isSummaryOpen ? 'bg-indigo-600 border-indigo-750 text-white hover:bg-indigo-700' : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700'}`}
-            onClick={() => setIsSummaryOpen(prev => !prev)}
+          <select
+            value={selectedCategoryId}
+            onChange={(e) => setSelectedCategoryId(e.target.value)}
+            className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none cursor-pointer max-w-[145px] sm:max-w-[200px] truncate"
           >
-            <ChefHat size={14} /> {isSummaryOpen ? 'Sembunyikan Ringkasan' : 'Tampilkan Ringkasan'}
+            <option value="all">Semua Stasiun</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={String(cat.id)}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+          <span className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500' : 'bg-rose-500'} flex-shrink-0`} title={isSocketConnected ? 'Live' : 'Offline'} />
+        </div>
+
+        {/* Right: Quick Action Buttons */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {/* Sound Toggle */}
+          <button
+            onClick={toggleMute}
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${
+              isMuted 
+                ? 'bg-rose-50 border-rose-200 text-rose-600' 
+                : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
+            }`}
+            title={isMuted ? 'Suara Senyap' : 'Suara Aktif'}
+          >
+            {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
           </button>
 
-          <button 
-            className="btn bg-indigo-50 hover:bg-indigo-100 border border-indigo-250 text-indigo-750 shadow-sm rounded-xl px-4 py-2 flex items-center gap-2 transition-all active:scale-95 text-xs font-bold"
+          {/* Fullscreen Toggle */}
+          <button
+            onClick={toggleFullscreen}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center transition-all active:scale-95"
+            title="Layar Penuh"
+          >
+            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+
+          {/* History / Recall Modal */}
+          <button
             onClick={() => setIsHistoryOpen(true)}
+            className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center transition-all active:scale-95"
+            title="Riwayat Saji"
           >
-            <Clock size={14} /> Riwayat Saji ({servedHistory.length})
+            <Clock size={14} />
+            {servedHistory.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">
+                {servedHistory.length > 9 ? '9+' : servedHistory.length}
+              </span>
+            )}
           </button>
-          
-          {lastServed && (
-            <button 
-              className="btn bg-amber-50 hover:bg-amber-100 border border-amber-250 text-amber-800 shadow-sm rounded-xl px-4 py-2 flex items-center gap-2 transition-all active:scale-95 text-xs font-bold"
-              onClick={() => handleUndoStatus(lastServed.id)}
-              title={`Recall ${lastServed.orderNumber}`}
-            >
-              <RotateCcw size={14} /> Recall Meja {lastServed.table?.tableNo || 'TA'}
-            </button>
-          )}
-          
-          <button 
-            className="btn bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 shadow-sm rounded-xl px-4 py-2 flex items-center gap-2 transition-transform active:scale-95 text-xs font-bold" 
+
+          {/* Refresh */}
+          <button
             onClick={fetchKDSOrders}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center transition-all active:scale-95"
+            title="Refresh Pesanan"
           >
-            Refresh
+            <RefreshCw size={14} />
           </button>
         </div>
       </div>
 
-      {/* KPI Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 flex-shrink-0">
-        <div className="bg-indigo-50/40 p-4 rounded-2xl border border-indigo-100/80 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-700 flex-shrink-0">
-            <Bell size={22} className={queueCount > 0 ? 'animate-bounce' : ''} />
+      {/* Recall Notification Chip if lastServed exists */}
+      {lastServed && (
+        <div className="mb-2 bg-amber-50 border border-amber-200/80 rounded-xl px-2.5 py-1 flex items-center justify-between text-[11px] text-amber-900 shadow-2xs">
+          <div className="flex items-center gap-1.5 truncate">
+            <span className="font-bold">Selesai:</span>
+            <span className="truncate">{formatTableLabel(lastServed.table?.tableNo)} (#{lastServed.orderNumber})</span>
           </div>
-          <div>
-            <div className="text-xs text-indigo-600 font-bold tracking-wider uppercase">Antrean Baru</div>
-            <div className="text-2xl font-black text-slate-800 mt-0.5">{queueCount} <span className="text-xs font-normal text-slate-400">pesanan</span></div>
-          </div>
+          <button
+            onClick={() => handleUndoStatus(lastServed.id)}
+            className="ml-2 px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded-lg shadow-2xs flex items-center gap-1 active:scale-95 flex-shrink-0"
+          >
+            <RotateCcw size={10} /> Recall
+          </button>
         </div>
+      )}
 
-        <div className="bg-amber-50/45 p-4 rounded-2xl border border-amber-100/80 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 flex-shrink-0">
-            <Flame size={22} className={cookingCount > 0 ? 'animate-pulse' : ''} />
-          </div>
-          <div>
-            <div className="text-xs text-amber-700 font-bold tracking-wider uppercase">Sedang Dimasak</div>
-            <div className="text-2xl font-black text-slate-800 mt-0.5">{cookingCount} <span className="text-xs font-normal text-slate-400">pesanan</span></div>
-          </div>
-        </div>
+      {/* Zero-Scroll 5-Button Filter Grid (100% Screen Width) */}
+      <div className="grid grid-cols-5 gap-1 sm:gap-1.5 w-full mb-2.5 flex-shrink-0">
+        {/* Button 1: Semua */}
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`py-1.5 px-0.5 sm:px-2 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all active:scale-95 ${
+            activeTab === 'all'
+              ? 'bg-slate-900 text-white shadow-xs font-black'
+              : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50 font-bold'
+          }`}
+        >
+          <span className="text-[11px] sm:text-xs">Semua</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black ${
+            activeTab === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+          }`}>
+            {totalActiveCount}
+          </span>
+        </button>
 
-        <div className="bg-emerald-50/40 p-4 rounded-2xl border border-emerald-100/80 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-705 flex-shrink-0">
-            <CheckCircle2 size={22} />
+        {/* Button 2: Antrean */}
+        <button
+          onClick={() => setActiveTab('Pending')}
+          className={`py-1.5 px-0.5 sm:px-2 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all active:scale-95 ${
+            activeTab === 'Pending'
+              ? 'bg-indigo-600 text-white shadow-xs font-black'
+              : 'bg-white text-indigo-700 border border-indigo-150 hover:bg-indigo-50/50 font-bold'
+          }`}
+        >
+          <div className="flex items-center gap-0.5">
+            <Bell size={11} className={queueCount > 0 ? 'animate-bounce' : ''} />
+            <span className="text-[11px] sm:text-xs">Antre</span>
           </div>
-          <div>
-            <div className="text-xs text-emerald-700 font-bold tracking-wider uppercase">Siap Disajikan</div>
-            <div className="text-2xl font-black text-slate-800 mt-0.5">{readyCount} <span className="text-xs font-normal text-slate-400">pesanan</span></div>
+          <span className={`px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black ${
+            activeTab === 'Pending' ? 'bg-white/25 text-white' : 'bg-indigo-100 text-indigo-800'
+          }`}>
+            {queueCount}
+          </span>
+        </button>
+
+        {/* Button 3: Dimasak */}
+        <button
+          onClick={() => setActiveTab('Cooking')}
+          className={`py-1.5 px-0.5 sm:px-2 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all active:scale-95 ${
+            activeTab === 'Cooking'
+              ? 'bg-amber-600 text-white shadow-xs font-black'
+              : 'bg-white text-amber-800 border border-amber-200 hover:bg-amber-50/50 font-bold'
+          }`}
+        >
+          <div className="flex items-center gap-0.5">
+            <Flame size={11} className={cookingCount > 0 ? 'animate-pulse' : ''} />
+            <span className="text-[11px] sm:text-xs">Masak</span>
           </div>
-        </div>
+          <span className={`px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black ${
+            activeTab === 'Cooking' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-900'
+          }`}>
+            {cookingCount}
+          </span>
+        </button>
+
+        {/* Button 4: Siap */}
+        <button
+          onClick={() => setActiveTab('Ready')}
+          className={`py-1.5 px-0.5 sm:px-2 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 transition-all active:scale-95 ${
+            activeTab === 'Ready'
+              ? 'bg-emerald-600 text-white shadow-xs font-black'
+              : 'bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50/50 font-bold'
+          }`}
+        >
+          <div className="flex items-center gap-0.5">
+            <CheckCircle2 size={11} />
+            <span className="text-[11px] sm:text-xs">Siap</span>
+          </div>
+          <span className={`px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black ${
+            activeTab === 'Ready' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-900'
+          }`}>
+            {readyCount}
+          </span>
+        </button>
+
+        {/* Button 5: Ringkasan Menu */}
+        <button
+          onClick={() => setIsSummaryModalOpen(true)}
+          className="py-1.5 px-0.5 sm:px-2 rounded-xl text-center flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 bg-white text-slate-700 border border-slate-200/80 hover:bg-indigo-50/50 hover:text-indigo-700 transition-all active:scale-95 font-bold"
+          title="Buka Ringkasan Porsi Menu"
+        >
+          <div className="flex items-center gap-0.5">
+            <Layers size={11} className="text-indigo-600" />
+            <span className="text-[11px] sm:text-xs">Menu</span>
+          </div>
+          <span className="px-1.5 py-0.2 rounded-full text-[9px] sm:text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100">
+            {consolidatedSummary.length}
+          </span>
+        </button>
       </div>
 
-      {/* Main Content Area: Grid + Summary Sidebar */}
-      <div className="flex-1 flex gap-6 min-h-0 items-start overflow-hidden">
-        {/* Orders Grid Wrapper */}
-        <div className="flex-1 h-full overflow-y-auto pr-1">
-          {filteredOrders.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-slate-200/60 py-16 flex flex-col items-center justify-center text-slate-400 w-full min-h-[350px] shadow-sm">
-              <ChefHat size={72} className="mb-4 opacity-30 text-slate-300" />
-              <p className="text-xl font-bold text-slate-700">Dapur Bersih!</p>
-              <p className="text-sm text-slate-400 mt-1">Tidak ada pesanan aktif untuk filter stasiun ini.</p>
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
+        {/* Ticket List View (Grid) */}
+        <div className="flex-1 h-full overflow-y-auto pr-0.5">
+          {displayOrders.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-8 flex flex-col items-center justify-center text-center text-slate-400 my-auto min-h-[300px] shadow-xs">
+              <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mb-3">
+                <UtensilsCrossed size={32} className="text-slate-300" />
+              </div>
+              <h3 className="text-base font-bold text-slate-700">Dapur Bersih!</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                Tidak ada pesanan aktif pada stasiun dan filter ini. Siap menerima pesanan baru!
+              </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 items-start pb-8">
-              {filteredOrders.map(order => (
-                <div 
-                  key={order.id} 
-                  className={`flex flex-col rounded-2xl border-2 overflow-hidden bg-white transition-all duration-200 ${getCardStyle(order.kdsStatus, order.createdAt)}`}
-                >
-                  {/* Card Header */}
-                  <div className="p-4 border-b border-inherit bg-black/5 bg-opacity-[0.02]">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="font-extrabold text-slate-800 tracking-tight text-base">{order.orderNumber}</div>
-                      <div className="flex flex-col items-end gap-1">
-                        {getStatusBadge(order.kdsStatus)}
-                        {getSlaBadge(order.createdAt, order.kdsStatus)}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 pb-32 sm:pb-12 items-start">
+              {displayOrders.map(order => {
+                const isAllChecked = order.items.length > 0 && order.items.every((it: any) => checkedItems[`${order.id}-${it.id}`]);
+
+                return (
+                  <div
+                    key={order.id}
+                    className={`rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col ${getCardStyle(order.kdsStatus, order.createdAt)}`}
+                  >
+                    {/* Ticket Header */}
+                    <div className="p-3 sm:p-3.5 border-b border-inherit bg-black/[0.02]">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        {/* Table Indicator Badge */}
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2.5 py-1 text-white font-black text-xs sm:text-sm rounded-lg shadow-2xs tracking-wide ${
+                            order.table?.tableNo ? 'bg-slate-900' : 'bg-amber-600'
+                          }`}>
+                            {formatTableLabel(order.table?.tableNo)}
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-500 font-mono">
+                            #{order.orderNumber}
+                          </span>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div>
+                          {getStatusBadge(order.kdsStatus)}
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="flex justify-between items-center text-xs mt-3">
-                      <div className="font-bold text-indigo-700 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
-                        {order.table?.tableNo ? `Meja ${order.table.tableNo}` : 'Take Away'}
-                      </div>
-                      <div className={`flex items-center gap-1 font-bold ${getWaitTimeColor(order.createdAt, order.kdsStatus)}`}>
-                        <Clock size={12} /> {getWaitTime(order.createdAt)}
+
+                      {/* Customer Name & Timer */}
+                      <div className="flex items-center justify-between text-xs mt-2">
+                        <div className="flex items-center gap-1 text-slate-600 truncate max-w-[140px] sm:max-w-[170px]">
+                          <User size={12} className="text-slate-400 flex-shrink-0" />
+                          <span className="font-semibold truncate">{order.customerName || 'Pelanggan'}</span>
+                        </div>
+                        <div>
+                          {getWaitTimeBadge(order.createdAt, order.kdsStatus)}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="text-[11px] text-slate-500 mt-2 font-medium flex items-center gap-1 border-t border-slate-200/40 pt-2">
-                      <User size={11} className="text-slate-400" />
-                      <span>Pemesan: <strong className="text-slate-700">{order.customerName}</strong></span>
-                    </div>
-                  </div>
+                    {/* Ticket Items List */}
+                    <div className="p-3 sm:p-3.5 flex-1 bg-white/70 space-y-2.5">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                        <span>Item Masakan ({order.items.length})</span>
+                        <span className="text-[9px] text-slate-400 font-normal">Ketuk untuk centang</span>
+                      </div>
 
-                  {/* Card Items List */}
-                  <div className="flex-1 p-4 bg-transparent text-slate-700">
-                    <ul className="space-y-3">
-                      {order.items.map((item: any) => (
-                        <li key={item.id} className="flex gap-3 items-start border-b border-slate-200/40 pb-3 last:border-0 last:pb-0">
-                          <div className="w-7 h-7 rounded-lg bg-black/5 flex items-center justify-center font-extrabold text-slate-700 text-xs flex-shrink-0">
-                            {item.qty}x
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-semibold text-slate-800 text-[13px] leading-tight">{item.product.name}</div>
-                            {item.notes && (
-                              <div className="flex flex-wrap gap-1 mt-1.5">
-                                {item.notes.split(' • ').map((tag: string, i: number) => (
-                                  <span 
-                                    key={i} 
-                                    className="inline-block bg-amber-100 text-amber-900 font-bold text-[9px] px-2 py-0.5 rounded border border-amber-200/70"
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
+                      <div className="space-y-2">
+                        {order.items.map((item: any) => {
+                          const itemKey = `${order.id}-${item.id}`;
+                          const isChecked = !!checkedItems[itemKey];
+
+                          return (
+                            <div 
+                              key={item.id}
+                              onClick={() => toggleItemChecked(itemKey)}
+                              className={`p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start gap-2.5 ${
+                                isChecked 
+                                  ? 'bg-slate-50/80 border-slate-200/60 opacity-60' 
+                                  : 'bg-white border-slate-200 hover:border-indigo-200 shadow-2xs'
+                              }`}
+                            >
+                              {/* Quantity Badge */}
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-black text-xs flex-shrink-0 transition-colors ${
+                                isChecked
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-900 text-white shadow-2xs'
+                              }`}>
+                                {isChecked ? <Check size={14} /> : `${item.qty}x`}
                               </div>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
 
-                  {/* Card Footer Actions */}
-                  <div className="p-4 bg-transparent border-t border-slate-200/40 space-y-2">
-                    {order.kdsStatus === 'Cancelled' && (
-                      <button 
-                        className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-md shadow-rose-100 flex items-center justify-center gap-2 transition-all text-xs"
-                        onClick={() => handleUpdateStatus(order.id, 'Cancelled')}
-                      >
-                        Hapus Alert (Acknowledge)
-                      </button>
-                    )}
-                    {order.kdsStatus === 'Pending' && (
-                      <button 
-                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-sm shadow-indigo-100 flex items-center justify-center gap-2 transition-all text-xs"
-                        onClick={() => handleUpdateStatus(order.id, order.kdsStatus)}
-                      >
-                        Mulai Masak <ArrowRight size={14} />
-                      </button>
-                    )}
-                    {order.kdsStatus === 'Cooking' && (
-                      <div className="flex gap-2">
+                              {/* Item Details */}
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-xs sm:text-sm font-bold leading-snug ${
+                                  isChecked ? 'line-through text-slate-400' : 'text-slate-800'
+                                }`}>
+                                  {item.product?.name}
+                                </div>
+
+                                {/* Custom notes / modifiers */}
+                                {item.notes && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {item.notes.split(' • ').map((tag: string, idx: number) => (
+                                      <span 
+                                        key={idx}
+                                        className="inline-block bg-amber-100/90 text-amber-900 font-bold text-[9px] px-1.5 py-0.5 rounded border border-amber-200/80"
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Ticket Action Buttons (Thumb-friendly for Kitchen) */}
+                    <div className="p-2.5 sm:p-3 bg-white border-t border-slate-100">
+                      {order.kdsStatus === 'Cancelled' && (
                         <button 
-                          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-650 rounded-xl transition-all active:scale-[0.98]"
-                          onClick={() => handleUndoStatus(order.id)}
-                          title="Batal Mulai Masak"
+                          className="w-full h-12 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all text-xs sm:text-sm"
+                          onClick={() => handleUpdateStatus(order.id, 'Cancelled')}
                         >
-                          <Undo2 size={14} />
+                          <AlertTriangle size={16} /> Hapus Alert Void (Acknowledge)
                         </button>
+                      )}
+
+                      {order.kdsStatus === 'Pending' && (
                         <button 
-                          className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-sm shadow-emerald-100 flex items-center justify-center gap-2 transition-all text-xs"
+                          className="w-full h-12 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 active:scale-[0.98] text-white font-black rounded-xl shadow-sm shadow-indigo-200 flex items-center justify-center gap-2 transition-all text-xs sm:text-sm tracking-wide"
                           onClick={() => handleUpdateStatus(order.id, order.kdsStatus)}
                         >
-                          Pesanan Siap <CheckCircle2 size={14} />
+                          <Flame size={16} /> Mulai Masak <ArrowRight size={15} />
                         </button>
-                      </div>
-                    )}
-                    {order.kdsStatus === 'Ready' && (
-                      <div className="flex gap-2">
-                        <button 
-                          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-650 rounded-xl transition-all active:scale-[0.98]"
-                          onClick={() => handleUndoStatus(order.id)}
-                          title="Kembali ke Memasak"
-                        >
-                          <Undo2 size={14} />
-                        </button>
-                        <button 
-                          className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-[0.98] text-white font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all text-xs"
-                          onClick={() => handleUpdateStatus(order.id, order.kdsStatus)}
-                        >
-                          Sajikan Pesanan
-                        </button>
-                      </div>
-                    )}
+                      )}
+
+                      {order.kdsStatus === 'Cooking' && (
+                        <div className="flex items-center gap-2">
+                          <button 
+                            className="h-12 w-12 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center flex-shrink-0"
+                            onClick={() => handleUndoStatus(order.id)}
+                            title="Kembali ke Antrean"
+                          >
+                            <Undo2 size={17} />
+                          </button>
+                          <button 
+                            className={`flex-1 h-12 active:scale-[0.98] text-white font-black rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all text-xs sm:text-sm tracking-wide ${
+                              isAllChecked
+                                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 shadow-emerald-200 animate-pulse'
+                                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100'
+                            }`}
+                            onClick={() => handleUpdateStatus(order.id, order.kdsStatus)}
+                          >
+                            <CheckCircle2 size={17} /> Siap Disajikan
+                          </button>
+                        </div>
+                      )}
+
+                      {order.kdsStatus === 'Ready' && (
+                        <div className="flex items-center gap-2">
+                          <button 
+                            className="h-12 w-12 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center flex-shrink-0"
+                            onClick={() => handleUndoStatus(order.id)}
+                            title="Kembali ke Memasak"
+                          >
+                            <Undo2 size={17} />
+                          </button>
+                          <button 
+                            className="flex-1 h-12 bg-slate-900 hover:bg-black active:scale-[0.98] text-white font-black rounded-xl shadow-sm flex items-center justify-center gap-2 transition-all text-xs sm:text-sm tracking-wide"
+                            onClick={() => handleUpdateStatus(order.id, order.kdsStatus)}
+                          >
+                            <CheckCircle size={17} /> Sajikan Pesanan
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Consolidated Summary Sidebar */}
-        {isSummaryOpen && (
-          <div className="w-80 bg-white border border-slate-200/60 rounded-3xl p-5 shadow-sm h-full flex flex-col flex-shrink-0 animate-in slide-in-from-right duration-200">
-            <h3 className="font-extrabold text-slate-800 text-sm flex items-center justify-between mb-3.5 pb-3 border-b border-slate-100 flex-shrink-0">
-              <span className="flex items-center gap-2">
-                <ChefHat className="text-indigo-650" size={16} /> Ringkasan Masakan
-              </span>
-              <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold">
-                {consolidatedSummary.length} Jenis Menu
-              </span>
+        {/* Desktop Sidebar for Ringkasan Masakan (Hidden on Mobile, replaced by Bottom Sheet Modal) */}
+        <div className="hidden lg:flex w-72 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs h-full flex-col flex-shrink-0">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3 flex-shrink-0">
+            <h3 className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+              <ChefHat size={15} className="text-indigo-600" /> Ringkasan Masakan
             </h3>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+            <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-bold">
+              {consolidatedSummary.length} Menu
+            </span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
+            {consolidatedSummary.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 flex flex-col items-center">
+                <CheckCircle size={28} className="text-slate-300 mb-1.5" />
+                <p className="text-xs font-semibold">Semua masakan selesai.</p>
+              </div>
+            ) : (
+              consolidatedSummary.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100/60 transition-colors">
+                  <div className="min-w-0 pr-2">
+                    <div className="font-bold text-slate-700 text-xs truncate" title={item.name}>
+                      {item.name}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {item.pendingQty > 0 && <span className="text-indigo-600 font-semibold">{item.pendingQty} antre </span>}
+                      {item.cookingQty > 0 && <span className="text-amber-600 font-semibold">({item.cookingQty} dimasak)</span>}
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg font-black text-xs flex-shrink-0 shadow-2xs">
+                    {item.qty}x
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Ringkasan Masakan Modal / Bottom Sheet (For Mobile & Tablet) */}
+      {isSummaryModalOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 animate-in fade-in duration-150"
+          onClick={() => setIsSummaryModalOpen(false)}
+        >
+          <div 
+            className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 rounded-t-3xl">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Layers size={16} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Akumulasi Menu Dapur</h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Total porsi masakan yang harus disiapkan</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSummaryModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-all shadow-2xs"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 flex-1 overflow-y-auto space-y-2">
               {consolidatedSummary.length === 0 ? (
-                <div className="text-center py-20 text-slate-450 flex flex-col items-center justify-center">
-                  <CheckCircle className="text-slate-200 mb-2" size={32} />
-                  <p className="text-xs font-semibold">Semua masakan selesai.</p>
+                <div className="text-center py-12 text-slate-400 flex flex-col items-center">
+                  <CheckCircle size={36} className="text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold">Tidak ada menu aktif yang perlu dimasak saat ini.</p>
                 </div>
               ) : (
                 consolidatedSummary.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center bg-slate-50 border border-slate-150 p-3 rounded-xl shadow-2xs hover:bg-slate-100/50 transition-colors animate-in fade-in duration-200">
-                    <span className="font-semibold text-slate-700 text-[12.5px] truncate max-w-[200px]" title={item.name}>
-                      {item.name}
-                    </span>
-                    <span className="px-3 py-1 bg-indigo-600 text-white rounded-lg font-black text-xs shadow-sm flex-shrink-0">
-                      {item.qty}x
-                    </span>
+                  <div key={idx} className="flex items-center justify-between p-3 bg-slate-50/80 rounded-2xl border border-slate-150">
+                    <div className="min-w-0 pr-3">
+                      <span className="font-bold text-slate-800 text-xs sm:text-sm block truncate" title={item.name}>
+                        {item.name}
+                      </span>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px]">
+                        {item.pendingQty > 0 && (
+                          <span className="font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-150">
+                            {item.pendingQty}x Antre
+                          </span>
+                        )}
+                        {item.cookingQty > 0 && (
+                          <span className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                            {item.cookingQty}x Dimasak
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="px-3 py-1.5 bg-indigo-600 text-white font-black text-sm rounded-xl shadow-xs flex-shrink-0">
+                      {item.qty} porsi
+                    </div>
                   </div>
                 ))
               )}
             </div>
+
+            <div className="p-3 border-t border-slate-100 bg-slate-50/50 rounded-b-3xl">
+              <button
+                onClick={() => setIsSummaryModalOpen(false)}
+                className="w-full py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl active:scale-[0.98] transition-all"
+              >
+                Tutup Ringkasan
+              </button>
+            </div>
           </div>
-        )}
-      </div>
-      
-      {/* Riwayat Saji Drawer */}
+        </div>
+      )}
+
+      {/* Riwayat Saji Modal / Drawer */}
       {isHistoryOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-end animate-in fade-in duration-200" style={{ zIndex: 9999 }}>
-          <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-250">
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center sm:justify-end p-0 z-50 animate-in fade-in duration-150"
+          onClick={() => setIsHistoryOpen(false)}
+        >
+          <div 
+            className="bg-white w-full sm:max-w-md h-[85vh] sm:h-full shadow-2xl flex flex-col rounded-t-3xl sm:rounded-none animate-in slide-in-from-bottom sm:slide-in-from-right duration-250"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Drawer Header */}
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-650 flex items-center justify-center">
-                  <Clock size={18} />
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Clock size={16} />
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm">Riwayat Saji Hari Ini</h3>
-                  <span className="text-[10px] text-slate-400 font-medium">Daftar pesanan yang telah selesai disajikan</span>
+                  <span className="text-[10px] text-slate-400 font-medium">Pesanan yang telah disajikan ke pelanggan</span>
                 </div>
               </div>
               <button 
                 onClick={() => setIsHistoryOpen(false)}
-                className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 border border-slate-150 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-all shadow-sm"
+                className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-all shadow-2xs"
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
             {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {servedHistory.length === 0 ? (
                 <div className="text-center py-20 text-slate-400 flex flex-col items-center">
-                  <CheckCircle size={40} className="text-slate-300 mb-2" />
-                  <p className="text-xs font-semibold">Belum ada pesanan disajikan.</p>
+                  <CheckCircle size={36} className="text-slate-300 mb-2" />
+                  <p className="text-xs font-semibold">Belum ada pesanan disajikan hari ini.</p>
                 </div>
               ) : (
                 servedHistory.map(order => (
-                  <div key={order.id} className="p-4 rounded-2xl border border-slate-150 bg-slate-50/30 flex flex-col justify-between gap-3 hover:border-slate-300 transition-all">
+                  <div key={order.id} className="p-3.5 rounded-2xl border border-slate-200 bg-white flex flex-col gap-2.5 shadow-2xs">
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="font-black text-slate-800 text-xs">{order.orderNumber}</div>
-                        <div className="text-[10px] font-bold text-indigo-700 mt-1">Meja {order.table?.tableNo || 'TA'} - {order.customerName}</div>
+                        <div className="text-[11px] font-bold text-indigo-700 mt-0.5">
+                          {order.table?.tableNo ? `Meja ${order.table.tableNo}` : 'Take Away'} • {order.customerName}
+                        </div>
                       </div>
                       <button
                         onClick={() => {
                           handleUndoStatus(order.id);
                         }}
-                        className="py-1.5 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1.5"
+                        className="py-1 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1"
                       >
                         <RotateCcw size={10} /> Recall
                       </button>
                     </div>
-                    <div className="text-[11px] text-slate-500 border-t border-dashed border-slate-200 pt-2">
+
+                    <div className="text-[11px] text-slate-600 border-t border-slate-100 pt-2">
                       <ul className="space-y-1">
                         {order.items.map((item: any) => (
-                          <li key={item.id} className="font-medium text-slate-600">
-                            {item.qty}x {item.product?.name}
+                          <li key={item.id} className="font-medium text-slate-700 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                            <span>{item.qty}x {item.product?.name}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
-                    <div className="text-[9px] text-slate-400 mt-1 self-end font-medium">
-                      Disajikan pada: {new Date(order.servedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+
+                    <div className="text-[10px] text-slate-400 font-medium text-right border-t border-dashed border-slate-100 pt-1.5">
+                      Disajikan: {new Date(order.servedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 ))

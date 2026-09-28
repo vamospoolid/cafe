@@ -5,7 +5,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, Sparkles, Filter, DollarSign, ArrowRight, 
   ShieldAlert, FileText, Coffee, ShoppingBag, Truck, BarChart3, PieChart, 
   ArrowUpRight, ArrowDownRight, Layers, HelpCircle, Send, ShoppingCart,
-  Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target
+  Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target, X
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -66,6 +66,7 @@ interface ProductionForecastItem {
   categoryName: string;
   sellPrice: number;
   buyPrice: number;
+  profitMargin?: number;
   imageUrl?: string;
   hasRecipe: boolean;
   maxPortions: number;
@@ -146,6 +147,7 @@ export const IngredientView: React.FC = () => {
   const [usageEndDate, setUsageEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [usageCategoryFilter, setUsageCategoryFilter] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
   const [usageTypeFilter, setUsageTypeFilter] = useState<string>('ALL');
+  const [usageSearch, setUsageSearch] = useState<string>('');
 
   // Stock Loss Data & Analytics
   const [lossData, setLossData] = useState<any>(null);
@@ -154,10 +156,13 @@ export const IngredientView: React.FC = () => {
   const [lossStartDate, setLossStartDate] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [lossEndDate, setLossEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showLossModal, setShowLossModal] = useState(false);
+  const [allProducts, setAllProducts] = useState<any[]>([]);
   const [lossForm, setLossForm] = useState({
+    targetType: 'INGREDIENT' as 'INGREDIENT' | 'PRODUCT',
     ingredientId: '',
-    qtyLoss: '',
-    reason: 'Busuk / Kadaluarsa',
+    productId: '',
+    qtyLoss: '1',
+    reason: 'Busuk / Basi',
     notes: ''
   });
   const [submittingLoss, setSubmittingLoss] = useState(false);
@@ -175,12 +180,16 @@ export const IngredientView: React.FC = () => {
   const [movementEndDate, setMovementEndDate] = useState<string>('');
   const [movementTypeFilter, setMovementTypeFilter] = useState<string>('ALL');
   const [movementIngredientFilter, setMovementIngredientFilter] = useState<string>('ALL');
+  const [movementSearch, setMovementSearch] = useState<string>('');
+  const [showAdjustPickerModal, setShowAdjustPickerModal] = useState<boolean>(false);
+  const [pickerSearch, setPickerSearch] = useState<string>('');
 
   // Production Forecast Data
   const [forecastList, setForecastList] = useState<ProductionForecastItem[]>([]);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastSearch, setForecastSearch] = useState('');
   const [forecastCategory, setForecastCategory] = useState<string>('Semua');
+  const [forecastStatusFilter, setForecastStatusFilter] = useState<'ALL' | 'READY' | 'LOW' | 'OUT'>('ALL');
   const [expandedForecastId, setExpandedForecastId] = useState<number | null>(null);
 
   // Stock Opname Audit State
@@ -552,10 +561,20 @@ export const IngredientView: React.FC = () => {
         initOpnameItems(data);
       }
       if (resSup.ok) setSuppliers(await resSup.json());
+      fetchProducts();
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch('/api/products', { headers });
+      if (res.ok) setAllProducts(await res.json());
+    } catch (e) {
+      console.error('Error fetching products:', e);
     }
   };
 
@@ -915,21 +934,41 @@ export const IngredientView: React.FC = () => {
     }
   };
 
-  const handleOpenLossModal = (preselectedId?: number) => {
+  const handleOpenLossModal = (preselectedId?: number, initialType: 'INGREDIENT' | 'PRODUCT' = 'INGREDIENT') => {
     setLossForm({
+      targetType: initialType,
       ingredientId: preselectedId ? preselectedId.toString() : (ingredients[0]?.id.toString() || ''),
-      qtyLoss: '',
-      reason: 'Busuk / Kadaluarsa',
+      productId: allProducts[0]?.id?.toString() || '',
+      qtyLoss: '1',
+      reason: 'Busuk / Basi',
       notes: ''
     });
     setShowLossModal(true);
+    if (allProducts.length === 0) fetchProducts();
+  };
+
+  const handleIncrementQty = (increment: number) => {
+    if (increment === 0) {
+      setLossForm(prev => ({ ...prev, qtyLoss: '0' }));
+      return;
+    }
+    const current = parseFloat(lossForm.qtyLoss) || 0;
+    const next = Math.max(0, current + increment);
+    const formatted = parseFloat(next.toFixed(2)).toString();
+    setLossForm(prev => ({ ...prev, qtyLoss: formatted }));
   };
 
   const handleSubmitLoss = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseFloat(lossForm.qtyLoss);
-    if (!lossForm.ingredientId || isNaN(qty) || qty <= 0) {
-      return toast('Masukkan jumlah kerugian yang valid', 'warning');
+    if (isNaN(qty) || qty <= 0) {
+      return toast('Masukkan jumlah kuantitas terbuang yang valid', 'warning');
+    }
+    if (lossForm.targetType === 'INGREDIENT' && !lossForm.ingredientId) {
+      return toast('Pilih bahan baku terlebih dahulu', 'warning');
+    }
+    if (lossForm.targetType === 'PRODUCT' && !lossForm.productId) {
+      return toast('Pilih menu masakan jadi terlebih dahulu', 'warning');
     }
 
     setSubmittingLoss(true);
@@ -940,7 +979,7 @@ export const IngredientView: React.FC = () => {
         body: JSON.stringify(lossForm)
       });
       if (res.ok) {
-        toast('Pencatatan stock loss berhasil disimpan!', 'success');
+        toast('Pencatatan food waste berhasil disimpan!', 'success');
         setShowLossModal(false);
         fetchData();
         if (activeTab === 'loss') fetchLossAnalytics();
@@ -953,6 +992,32 @@ export const IngredientView: React.FC = () => {
       toast('Terjadi kesalahan koneksi', 'error');
     } finally {
       setSubmittingLoss(false);
+    }
+  };
+
+  const handleDeleteLoss = async (id: number) => {
+    const res = await confirmAlert(
+      'Batalkan Catatan Stock Loss?',
+      'Stok bahan baku akan dikembalikan otomatis ke inventaris dan catatan insiden ini akan dihapus dari riwayat audit.'
+    );
+    if (!res.isConfirmed) return;
+
+    try {
+      const res = await fetch(`${API}/ingredients/loss/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (res.ok) {
+        toast('Catatan loss berhasil dibatalkan dan stok dikembalikan!', 'success');
+        fetchLossAnalytics();
+        fetchData();
+        if (activeTab === 'movements') fetchMovements();
+      } else {
+        const err = await res.json();
+        toast(err.error || 'Gagal membatalkan loss', 'error');
+      }
+    } catch {
+      toast('Terjadi kesalahan koneksi', 'error');
     }
   };
 
@@ -1072,11 +1137,25 @@ export const IngredientView: React.FC = () => {
 
   const lowStockCount = ingredients.filter(i => i.stock > 0 && i.stock <= i.minStock).length;
   const outStockCount = ingredients.filter(i => i.stock === 0).length;
+  const safeStockCount = ingredients.filter(i => i.stock > i.minStock).length;
   const totalValuation = ingredients.reduce((sum, i) => sum + (i.stock * i.buyPrice), 0);
 
-  // Selected ingredient in loss modal calculation
+  // Selected ingredient / product in loss modal calculation
   const selectedLossIngredient = ingredients.find(i => i.id === Number(lossForm.ingredientId));
-  const estimatedLossAmount = (parseFloat(lossForm.qtyLoss) || 0) * (selectedLossIngredient?.buyPrice || 0);
+  const selectedLossProduct = allProducts.find(p => p.id === Number(lossForm.productId));
+  const selectedProductForecast = forecastList.find(f => f.productId === Number(lossForm.productId));
+  const fallbackHpp = selectedLossProduct?.price ? Math.round(selectedLossProduct.price * 0.4) : 0;
+  const selectedProductHpp = (selectedLossProduct?.buyPrice && selectedLossProduct.buyPrice > 0)
+    ? selectedLossProduct.buyPrice
+    : ((selectedProductForecast?.buyPrice && selectedProductForecast.buyPrice > 0) ? selectedProductForecast.buyPrice : fallbackHpp);
+
+  const unitHpp = lossForm.targetType === 'INGREDIENT'
+    ? (selectedLossIngredient?.buyPrice || 0)
+    : selectedProductHpp;
+  const unitLabel = lossForm.targetType === 'INGREDIENT'
+    ? (selectedLossIngredient?.unit || 'satuan')
+    : 'porsi';
+  const estimatedLossAmount = (parseFloat(lossForm.qtyLoss) || 0) * unitHpp;
 
   return (
     <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
@@ -1084,167 +1163,274 @@ export const IngredientView: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           1. TOP ACTION BAR
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-3.5 sm:p-5 flex flex-col gap-3.5 shadow-sm shrink-0">
-        <div className="flex justify-between items-center flex-wrap gap-2.5 sm:gap-4">
-          <div className="hidden sm:block">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 bg-purple-50 text-indigo-700 rounded-lg text-xs font-extrabold">
-                {posContext?.settings?.storeName || 'MUKI RAMEN'}
-              </span>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
-                Master Bahan Baku & Intelijen Stok
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Klasifikasi stok, audit potensi stock loss, mutasi distribusi, dan analisis rekomendasi belanja
-            </p>
+      {/* ─────────────────────────────────────────────────────────────
+          1. SUB-HEADER & STORE BADGE (CLEAN HEADER - NO COLLISION)
+      ────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-0.5 shrink-0">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
+              Master Bahan Baku & Intelijen Stok
+            </h2>
+            <span className="px-2.5 py-0.5 bg-purple-50 text-indigo-700 border border-purple-200/80 rounded-full text-xs font-black">
+              {posContext?.settings?.storeName || 'MUKI RAMEN'}
+            </span>
           </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Klasifikasi stok, audit potensi stock loss, mutasi distribusi, dan analisis rekomendasi belanja
+          </p>
+        </div>
 
-          {/* Action Buttons Toolbar */}
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+        {/* Global Toolbar: Refresh & PDF Export */}
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          {/* EXPORT LAPORAN PDF DROPDOWN */}
+          <div className="relative">
             <button
-              onClick={handleOpenAdd}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 py-2.5 px-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-purple-200 active:scale-95 transition-all shrink-0"
+              onClick={() => setPdfDropdownOpen(!pdfDropdownOpen)}
+              disabled={generatingPdf}
+              className="px-3.5 py-2 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all"
             >
-              <Plus size={16} /> <span>Tambah Bahan</span>
+              <FileText size={15} />
+              <span>{generatingPdf ? 'Membuat...' : 'Cetak PDF'}</span>
+              <ChevronDown size={14} className={`transition-transform ${pdfDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            <button
-              onClick={() => handleOpenLossModal()}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 py-2.5 px-3.5 bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-all shrink-0"
-            >
-              <TrendingDown size={15} /> <span>Catat Stock Loss</span>
-            </button>
-
-            {/* EXPORT LAPORAN PDF DROPDOWN */}
-            <div className="relative flex-1 sm:flex-none">
-              <button
-                onClick={() => setPdfDropdownOpen(!pdfDropdownOpen)}
-                disabled={generatingPdf}
-                className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3.5 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl font-bold text-xs sm:text-sm shadow-sm active:scale-95 transition-all shrink-0"
-              >
-                <FileText size={15} />
-                <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak PDF'}</span>
-                <ChevronDown size={14} className={`transition-transform ${pdfDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {pdfDropdownOpen && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setPdfDropdownOpen(false)} 
-                  />
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-fade-in space-y-1">
-                    <div className="px-4 py-2 border-b border-slate-100">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">PILIH LAPORAN AUDIT STOK & KEUANGAN</p>
-                    </div>
-
-                    <button
-                      onClick={handleExportValuationPDF}
-                      className="w-full px-4 py-2.5 hover:bg-purple-50 text-left flex items-start gap-3 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                        <DollarSign size={16} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-slate-800 group-hover:text-purple-900">Laporan Valuasi Aset Persediaan</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Posisi modal uang mengendap di gudang & dapur</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleExportLossPDF}
-                      className="w-full px-4 py-2.5 hover:bg-rose-50 text-left flex items-start gap-3 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-rose-600 group-hover:text-white transition-colors">
-                        <TrendingDown size={16} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-slate-800 group-hover:text-rose-900">Laporan Audit Kerusakan (Stock Loss)</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Evaluasi biaya waste, bahan busuk & yield chef</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleExportShoppingPDF}
-                      className="w-full px-4 py-2.5 hover:bg-indigo-50 text-left flex items-start gap-3 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        <ShoppingCart size={16} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-slate-800 group-hover:text-indigo-900">Laporan Estimasi Belanja (Restock)</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Proyeksi kebutuhan dana kas keluar supplier</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleExportDailyUsagePDF}
-                      className="w-full px-4 py-2.5 hover:bg-emerald-50 text-left flex items-start gap-3 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                        <BarChart3 size={16} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-slate-800 group-hover:text-emerald-900">Laporan Konsumsi Harian (Daily COGS)</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Rekapitulasi HPP bahan keluar & rasio food cost</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleExportOpnamePDF}
-                      className="w-full px-4 py-2.5 hover:bg-sky-50 text-left flex items-start gap-3 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-sky-600 group-hover:text-white transition-colors">
-                        <ClipboardCheck size={16} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-slate-800 group-hover:text-sky-900">Berita Acara Stock Opname Fisik</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Rekonsiliasi selisih fisik riil vs stok buku sistem</p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleExportYieldPDF}
-                      className="w-full px-4 py-2.5 hover:bg-violet-50 text-left flex items-start gap-3 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-violet-600 group-hover:text-white transition-colors">
-                        <Target size={16} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-slate-800 group-hover:text-violet-900">Laporan Audit Tingkat Keberhasilan (Yield)</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5">Analisis akurasi takaran resep vs porsi terjual riil</p>
-                      </div>
-                    </button>
+            {pdfDropdownOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setPdfDropdownOpen(false)} 
+                />
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-fade-in space-y-1">
+                  <div className="px-4 py-2 border-b border-slate-100">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">PILIH LAPORAN AUDIT STOK & KEUANGAN</p>
                   </div>
-                </>
-              )}
-            </div>
 
-            <button
-              onClick={() => {
-                fetchData();
-                if (activeTab === 'loss') fetchLossAnalytics();
-                if (activeTab === 'shopping') fetchShoppingAnalytics();
-                if (activeTab === 'movements') fetchMovements();
-                if (activeTab === 'forecast') fetchForecast();
-                if (activeTab === 'opname') fetchOpnameHistory();
-                if (activeTab === 'daily_usage') fetchDailyUsage();
-                if (activeTab === 'yield') fetchYieldAnalytics();
-              }}
-              title="Perbarui Data"
-              className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl shadow-sm active:scale-95 transition-all shrink-0"
-            >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            </button>
+                  <button
+                    onClick={handleExportValuationPDF}
+                    className="w-full px-4 py-2.5 hover:bg-purple-50 text-left flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                      <DollarSign size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800 group-hover:text-purple-900">Laporan Valuasi Aset Persediaan</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Posisi modal uang mengendap di gudang & dapur</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleExportLossPDF}
+                    className="w-full px-4 py-2.5 hover:bg-rose-50 text-left flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                      <TrendingDown size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800 group-hover:text-rose-900">Laporan Audit Kerusakan (Stock Loss)</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Evaluasi biaya waste, bahan busuk & yield chef</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleExportShoppingPDF}
+                    className="w-full px-4 py-2.5 hover:bg-indigo-50 text-left flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <ShoppingCart size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800 group-hover:text-indigo-900">Laporan Estimasi Belanja (Restock)</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Proyeksi kebutuhan dana kas keluar supplier</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleExportDailyUsagePDF}
+                    className="w-full px-4 py-2.5 hover:bg-emerald-50 text-left flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                      <BarChart3 size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800 group-hover:text-emerald-900">Laporan Konsumsi Harian (Daily COGS)</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Rekapitulasi HPP bahan keluar & rasio food cost</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleExportOpnamePDF}
+                    className="w-full px-4 py-2.5 hover:bg-sky-50 text-left flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-sky-600 group-hover:text-white transition-colors">
+                      <ClipboardCheck size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800 group-hover:text-sky-900">Berita Acara Stock Opname Fisik</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Rekonsiliasi selisih fisik riil vs stok buku sistem</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleExportYieldPDF}
+                    className="w-full px-4 py-2.5 hover:bg-violet-50 text-left flex items-start gap-3 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-violet-600 group-hover:text-white transition-colors">
+                      <Target size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-800 group-hover:text-violet-900">Laporan Audit Tingkat Keberhasilan (Yield)</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Analisis akurasi takaran resep vs porsi terjual riil</p>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
+
+          <button
+            onClick={() => {
+              fetchData();
+              if (activeTab === 'loss') fetchLossAnalytics();
+              if (activeTab === 'shopping') fetchShoppingAnalytics();
+              if (activeTab === 'movements') fetchMovements();
+              if (activeTab === 'forecast') fetchForecast();
+              if (activeTab === 'opname') fetchOpnameHistory();
+              if (activeTab === 'daily_usage') fetchDailyUsage();
+              if (activeTab === 'yield') fetchYieldAnalytics();
+            }}
+            title="Perbarui Data"
+            className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl shadow-xs active:scale-95 transition-all shrink-0"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 9 TAB UTAMA BAHAN BAKU (GRID TANPA SCROLL SAMPING)
+          2. NAVIGASI 9 TAB UTAMA BAHAN BAKU 
+          Mobile: 3x3 Super App Icon Hub (1-Tap Fast Access)
+          Desktop: Structured 3-Column Bento Grid
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 shrink-0">
+      {/* Mobile 3x3 Super App Icon Hub (Zero Scroll Samping, 1-Tap Access) */}
+      <div className="bento-nav-mobile sm:!hidden bg-white rounded-2xl border border-slate-200/90 p-2 shadow-xs shrink-0">
+        <div className="grid grid-cols-3 gap-1.5">
+          {[
+            { 
+              id: 'master', 
+              title: 'Master Bahan', 
+              icon: Package, 
+              badge: ingredients.length > 0 ? `${ingredients.length}` : null,
+              color: 'text-purple-600 bg-purple-50 border-purple-100',
+              activeColor: 'from-purple-600 to-indigo-600 text-white shadow-purple-500/30'
+            },
+            { 
+              id: 'daily_usage', 
+              title: 'Konsumsi Harian', 
+              icon: BarChart3, 
+              badge: (usageData?.items?.length || 0) > 0 ? `${usageData?.items?.length}` : null,
+              color: 'text-sky-600 bg-sky-50 border-sky-100',
+              activeColor: 'from-sky-500 to-blue-600 text-white shadow-sky-500/30'
+            },
+            { 
+              id: 'loss', 
+              title: 'Stock Loss', 
+              icon: TrendingDown, 
+              badge: (lossData?.summary?.totalWasteIncidents ?? lossData?.summary?.totalLossCount ?? 0) > 0 ? `${lossData?.summary?.totalWasteIncidents ?? lossData?.summary?.totalLossCount}` : null,
+              color: 'text-rose-600 bg-rose-50 border-rose-100',
+              activeColor: 'from-rose-500 to-red-600 text-white shadow-rose-500/30'
+            },
+            { 
+              id: 'staff_activity', 
+              title: 'Staf Dapur', 
+              icon: ChefHat, 
+              badge: 'KPI',
+              color: 'text-amber-600 bg-amber-50 border-amber-100',
+              activeColor: 'from-amber-500 to-orange-600 text-white shadow-amber-500/30'
+            },
+            { 
+              id: 'movements', 
+              title: 'Kartu Stok', 
+              icon: History, 
+              badge: movements.length > 0 ? `${movements.length}` : null,
+              color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+              activeColor: 'from-emerald-500 to-teal-600 text-white shadow-emerald-500/30'
+            },
+            { 
+              id: 'shopping', 
+              title: 'Rencana Belanja', 
+              icon: ShoppingCart, 
+              badge: (lowStockCount + outStockCount) > 0 ? `${lowStockCount + outStockCount}` : null,
+              color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+              activeColor: 'from-indigo-600 to-violet-600 text-white shadow-indigo-500/30'
+            },
+            { 
+              id: 'forecast', 
+              title: 'Kapasitas (BOM)', 
+              icon: Utensils, 
+              badge: forecastList.length > 0 ? `${forecastList.length}` : null,
+              color: 'text-teal-600 bg-teal-50 border-teal-100',
+              activeColor: 'from-teal-500 to-cyan-600 text-white shadow-teal-500/30'
+            },
+            { 
+              id: 'opname', 
+              title: 'Stock Opname', 
+              icon: ClipboardCheck, 
+              badge: opnameHistory.length > 0 ? `${opnameHistory.length}` : null,
+              color: 'text-blue-600 bg-blue-50 border-blue-100',
+              activeColor: 'from-blue-600 to-indigo-600 text-white shadow-blue-500/30'
+            },
+            { 
+              id: 'yield', 
+              title: 'Yield Efisiensi', 
+              icon: Target, 
+              badge: (yieldData?.summary?.storeEfficiencyRate !== undefined) ? `${yieldData?.summary?.storeEfficiencyRate}%` : 'Yield',
+              color: 'text-fuchsia-600 bg-fuchsia-50 border-fuchsia-100',
+              activeColor: 'from-fuchsia-600 to-purple-600 text-white shadow-fuchsia-500/30'
+            },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`relative flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all active:scale-95 cursor-pointer ${
+                  isSelected
+                    ? `bg-gradient-to-br ${tab.activeColor} shadow-md`
+                    : 'bg-slate-50/70 hover:bg-slate-100/90 border border-slate-100 text-slate-700'
+                }`}
+              >
+                {/* Micro Badge */}
+                {tab.badge && (
+                  <span className={`absolute top-1 right-1 text-[8px] px-1.5 py-0.2 rounded-full font-black tracking-tight ${
+                    isSelected ? 'bg-white/25 text-white' : 'bg-purple-100 text-purple-700 border border-purple-200/60'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                )}
+
+                {/* Squircle Icon Box */}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1 transition-all ${
+                  isSelected ? 'bg-white/20 text-white' : `${tab.color} border`
+                }`}>
+                  <Icon size={16} />
+                </div>
+
+                {/* Micro Label */}
+                <span className={`text-[10px] font-black leading-tight line-clamp-1 ${
+                  isSelected ? 'text-white font-extrabold' : 'text-slate-800'
+                }`}>
+                  {tab.title}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Desktop & Tablet Bento Grid */}
+      <div className="bento-nav-desktop hidden sm:!grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-2.5 shrink-0 bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 shadow-sm">
         {[
           { 
             id: 'master', 
@@ -1384,186 +1570,377 @@ export const IngredientView: React.FC = () => {
           TAB 1: MASTER BAHAN & KLASIFIKASI
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'master' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* STATS OVERVIEW CARDS */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Bahan Baku</p>
-                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.6rem', fontWeight: 900, color: '#0f172a' }}>{ingredients.length}</h3>
-                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>Semua jenis bahan aktif</p>
+        <div className="space-y-3.5 sm:space-y-6 animate-fade-in">
+          {/* STATS OVERVIEW CARDS (2x2 on Mobile, 4 Columns on Desktop) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+            {/* Card 1: Total Bahan */}
+            <div className="p-3 sm:p-4 bg-purple-50/80 border border-purple-200/80 rounded-2xl flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-xs font-bold text-purple-800 uppercase tracking-wider">Total Bahan Baku</span>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                  <Package size={16} />
+                </div>
               </div>
-              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#ede9fe', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Package size={22} />
-              </div>
-            </div>
-
-            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stok Menipis</p>
-                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.6rem', fontWeight: 900, color: '#d97706' }}>{lowStockCount}</h3>
-                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>Mendekati batas minimum</p>
-              </div>
-              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <AlertTriangle size={22} />
+              <div className="mt-1">
+                <h4 className="text-base sm:text-2xl font-black text-purple-950">
+                  {ingredients.length} <span className="text-xs font-bold text-purple-700">Item</span>
+                </h4>
+                <p className="text-[10px] text-purple-700/80 mt-0.5">Semua jenis bahan aktif</p>
               </div>
             </div>
 
-            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#e11d48', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stok Habis (Kritis)</p>
-                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.6rem', fontWeight: 900, color: '#e11d48' }}>{outStockCount}</h3>
-                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>Harus segera di-restock</p>
+            {/* Card 2: Stok Menipis */}
+            <div className="p-3 sm:p-4 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider">Stok Menipis</span>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={15} />
+                </div>
               </div>
-              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#ffe4e6', color: '#e11d48', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ShieldAlert size={22} />
+              <div className="mt-1">
+                <h4 className="text-base sm:text-2xl font-black text-amber-950">
+                  {lowStockCount} <span className="text-xs font-bold text-amber-700">Bahan</span>
+                </h4>
+                <p className="text-[10px] text-amber-700/80 mt-0.5">Mendekati batas minimum</p>
               </div>
             </div>
 
-            <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1.25rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '.75rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Valuasi Aset Stok</p>
-                <h3 style={{ margin: '.35rem 0 0', fontSize: '1.45rem', fontWeight: 900, color: '#059669' }}>
+            {/* Card 3: Stok Habis (Kritis) */}
+            <div className="p-3 sm:p-4 bg-rose-50/80 border border-rose-200/80 rounded-2xl flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-xs font-bold text-rose-800 uppercase tracking-wider">Stok Habis (Kritis)</span>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                  <ShieldAlert size={15} />
+                </div>
+              </div>
+              <div className="mt-1">
+                <h4 className="text-base sm:text-2xl font-black text-rose-600">
+                  {outStockCount} <span className="text-xs font-bold text-rose-500">Bahan</span>
+                </h4>
+                <p className="text-[10px] text-rose-600/80 mt-0.5">Harus segera di-restock</p>
+              </div>
+            </div>
+
+            {/* Card 4: Valuasi Aset Stok */}
+            <div className="p-3 sm:p-4 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] sm:text-xs font-bold text-emerald-800 uppercase tracking-wider">Valuasi Aset Stok</span>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <DollarSign size={16} />
+                </div>
+              </div>
+              <div className="mt-1">
+                <h4 className="text-base sm:text-xl font-black text-emerald-950 truncate">
                   Rp {totalValuation.toLocaleString('id-ID')}
-                </h3>
-                <p style={{ margin: '.25rem 0 0', fontSize: '.78rem', color: '#64748b', fontWeight: 500 }}>{ingredients.length} item tersimpan</p>
-              </div>
-              <div style={{ width: 44, height: 44, borderRadius: '.85rem', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <DollarSign size={22} />
+                </h4>
+                <p className="text-[10px] text-emerald-700/80 mt-0.5">{ingredients.length} item tersimpan</p>
               </div>
             </div>
           </div>
 
-          {/* FILTER CONTROLS */}
-          <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
-            <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-              <div className="relative w-full md:w-96">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          {/* FILTER & CONTROL TOOLBAR */}
+          <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <Package size={18} className="text-purple-600 shrink-0" />
+                  Katalog Master Bahan Baku
+                </h3>
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                  Kelola stok fisik dapur, harga beli HPP, klasifikasi stasiun, dan supplier langganan.
+                </p>
+              </div>
+
+              {/* ACTION BUTTONS: + TAMBAH BAHAN & REFRESH */}
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                <button
+                  onClick={handleOpenAdd}
+                  className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-purple-600/20 active:scale-95 flex items-center gap-1.5 shrink-0"
+                >
+                  <Plus size={15} />
+                  <span>Tambah Bahan</span>
+                </button>
+
+                <button
+                  onClick={() => fetchData()}
+                  className="p-1.5 sm:p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all shrink-0"
+                  title="Perbarui Data Master Bahan"
+                >
+                  <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+
+            {/* SEARCH & CATEGORY PILLS ROW */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+              <div className="relative w-full md:w-72 shrink-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 <input
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Cari nama bahan atau supplier..."
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-purple-500 transition-colors"
                 />
               </div>
 
-              {/* CATEGORY FILTER PILLS */}
-              <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
-                <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Kategori:</span>
-                <button
-                  onClick={() => {
-                    setCategoryFilter('ALL');
-                    setSubCategoryFilter('ALL');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    categoryFilter === 'ALL' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Semua
-                </button>
-                <button
-                  onClick={() => {
-                    setCategoryFilter('FOOD');
-                    setSubCategoryFilter('ALL');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    categoryFilter === 'FOOD' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <Utensils size={13} />
-                  <span>🍲 Dapur (Food)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCategoryFilter('DRINK');
-                    setSubCategoryFilter('ALL');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    categoryFilter === 'DRINK' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <Coffee size={13} />
-                  <span>☕ Bar (Drink)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCategoryFilter('PACKAGING');
-                    setSubCategoryFilter('ALL');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    categoryFilter === 'PACKAGING' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <ShoppingBag size={13} />
-                  <span>📦 Kemasan</span>
-                </button>
+              {/* Station Category Quick Pills (Scrollable horizontal strip) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+                {[
+                  { id: 'ALL', label: 'Semua Kategori' },
+                  { id: 'FOOD', label: '🍲 Dapur (Food)' },
+                  { id: 'DRINK', label: '☕ Bar (Drink)' },
+                  { id: 'PACKAGING', label: '📦 Kemasan' },
+                ].map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => {
+                      setCategoryFilter(c.id as any);
+                      setSubCategoryFilter('ALL');
+                    }}
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                      categoryFilter === c.id
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                {/* DYNAMIC SUBCATEGORY SELECTOR IN FILTER */}
-                {categoryFilter !== 'ALL' && (
-                  <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 animate-fade-in">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">Sub:</span>
-                    <select
-                      value={subCategoryFilter}
-                      onChange={e => setSubCategoryFilter(e.target.value)}
-                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                    >
-                      <option value="ALL">Semua Sub-Kategori</option>
-                      {(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).map(sc => (
-                        <option key={sc} value={sc}>{sc}</option>
-                      ))}
-                      {Array.from(new Set(ingredients.filter(i => (i.category || 'FOOD') === categoryFilter && i.subCategory && !(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).includes(i.subCategory)).map(i => i.subCategory as string))).map(customSc => (
-                        <option key={customSc} value={customSc}>{customSc}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+            {/* STATUS PILLS & SUB-CATEGORY ROW */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100">
+              {/* Status Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 mr-0.5 shrink-0">Status:</span>
+                {[
+                  { id: 'all', label: `Semua (${ingredients.length})` },
+                  { id: 'low', label: `● Menipis (${lowStockCount})`, color: 'text-amber-600' },
+                  { id: 'out', label: `● Habis (${outStockCount})`, color: 'text-rose-600' },
+                  { id: 'safe', label: `● Aman (${safeStockCount})`, color: 'text-emerald-600' },
+                ].map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => setStatusFilter(s.id as any)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                      statusFilter === s.id
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : `bg-slate-50 hover:bg-slate-100 border border-slate-200 ${s.color || 'text-slate-600'}`
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
               </div>
 
-              {/* STATUS FILTER PILLS */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-                <button
-                  onClick={() => setStatusFilter('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    statusFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  Semua
-                </button>
-                <button
-                  onClick={() => setStatusFilter('low')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    statusFilter === 'low' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  Menipis
-                </button>
-                <button
-                  onClick={() => setStatusFilter('out')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    statusFilter === 'out' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  Habis
-                </button>
-              </div>
+              {/* Dynamic Sub-Category Dropdown */}
+              {categoryFilter !== 'ALL' && (
+                <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Sub:</span>
+                  <select
+                    value={subCategoryFilter}
+                    onChange={e => setSubCategoryFilter(e.target.value)}
+                    className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-700 outline-none max-w-[200px] truncate"
+                  >
+                    <option value="ALL">Semua Sub-Kategori</option>
+                    {(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).map(sc => (
+                      <option key={sc} value={sc}>{sc}</option>
+                    ))}
+                    {Array.from(new Set(ingredients.filter(i => (i.category || 'FOOD') === categoryFilter && i.subCategory && !(INGREDIENT_SUB_CATEGORIES[categoryFilter] || []).includes(i.subCategory)).map(i => i.subCategory as string))).map(customSc => (
+                      <option key={customSc} value={customSc}>{customSc}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* INGREDIENTS TABLE */}
-          <div style={{ background: 'white', borderRadius: '1.15rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
-            <div className="overflow-x-auto">
+          {/* INGREDIENTS VIEW: MOBILE CARDS & DESKTOP TABLE */}
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden space-y-3 sm:space-y-4 p-4 sm:p-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Package size={16} className="text-purple-600" />
+                Daftar Bahan Baku Terdaftar
+              </h4>
+              <span className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
+                {filtered.length} Bahan
+              </span>
+            </div>
+
+            {/* MOBILE CARDS VIEW (< md screen) */}
+            <div className="block md:hidden space-y-2.5">
+              {loading ? (
+                <div className="py-10 text-center text-xs text-slate-400">
+                  <RefreshCw className="animate-spin inline-block mb-2 text-purple-600" size={20} />
+                  <p>Memuat katalog bahan baku...</p>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl p-4 space-y-3">
+                  <Package className="mx-auto mb-1 opacity-40 text-slate-400" size={28} />
+                  <div>
+                    <p className="font-bold text-slate-700 text-sm">Tidak ada bahan baku yang cocok.</p>
+                    <p className="text-slate-400 text-xs mt-0.5">Sesuaikan filter atau buat bahan baku baru.</p>
+                  </div>
+                  <button
+                    onClick={handleOpenAdd}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95"
+                  >
+                    <Plus size={14} />
+                    <span>Tambah Bahan Baku</span>
+                  </button>
+                </div>
+              ) : (
+                filtered.map((ing) => {
+                  const isOut = ing.stock === 0;
+                  const isLow = ing.stock > 0 && ing.stock <= ing.minStock;
+                  const cat = ing.category || 'FOOD';
+                  const valuation = ing.stock * ing.buyPrice;
+
+                  return (
+                    <div key={ing.id} className="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200/80 space-y-2.5 transition-colors">
+                      {/* Card Header: Category Icon, Name, and Status Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="text-lg shrink-0 mt-0.5">
+                            {cat === 'FOOD' ? '🍲' : (cat === 'DRINK' ? '☕' : '📦')}
+                          </span>
+                          <div className="min-w-0">
+                            <h5 className="font-black text-sm text-slate-900 truncate">{ing.name}</h5>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="text-[9px] text-purple-700 font-extrabold uppercase bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200/60">
+                                {cat === 'FOOD' ? 'Dapur' : (cat === 'DRINK' ? 'Bar' : 'Kemasan')}
+                              </span>
+                              {ing.subCategory && (
+                                <span className="text-[9px] font-semibold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                  {ing.subCategory}
+                                </span>
+                              )}
+                              {typeof ing.warehouseStock === 'number' && ing.warehouseStock > 0 && (
+                                <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200/60 inline-flex items-center gap-0.5">
+                                  <Boxes size={9} /> {ing.warehouseStock.toLocaleString('id-ID')} {ing.unit}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="shrink-0">
+                          {isOut ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                              Habis
+                            </span>
+                          ) : isLow ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                              Menipis
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                              Aman
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 3-Column Sub-Metrics Grid */}
+                      <div className="grid grid-cols-3 gap-2 p-2.5 bg-white rounded-xl border border-slate-200/80 text-center">
+                        <div>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Stok Fisik</p>
+                          <p className={`text-xs font-black mt-0.5 ${isOut ? 'text-rose-600' : (isLow ? 'text-amber-600' : 'text-slate-900')}`}>
+                            {ing.stock.toLocaleString('id-ID')} <span className="text-[10px] font-medium text-slate-500">{ing.unit}</span>
+                          </p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">Min: {ing.minStock.toLocaleString('id-ID')}</p>
+                        </div>
+
+                        <div className="border-x border-slate-100 px-1">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Harga Beli</p>
+                          <p className="text-xs font-black text-slate-800 mt-0.5">
+                            Rp {ing.buyPrice.toLocaleString('id-ID')}
+                          </p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">per {ing.unit}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Valuasi Stok</p>
+                          <p className="text-xs font-black text-emerald-700 mt-0.5">
+                            Rp {valuation.toLocaleString('id-ID')}
+                          </p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">Total Modal</p>
+                        </div>
+                      </div>
+
+                      {/* Supplier & Actions Bar */}
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs">
+                        <span className="text-[10px] font-semibold text-slate-500 truncate max-w-[130px]">
+                          {ing.supplier ? `🏢 ${ing.supplier.name}` : <span className="italic text-slate-400">Supplier: -</span>}
+                        </span>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Sesuaikan Stok */}
+                          <button
+                            onClick={() => {
+                              setAdjustModal({ open: true, ingredient: ing });
+                              setAdjustForm({ change: '', type: 'Restock', description: '' });
+                            }}
+                            className="px-2 py-1 bg-white hover:bg-slate-100 text-purple-700 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs flex items-center gap-1 active:scale-95"
+                            title="Sesuaikan Stok"
+                          >
+                            <RefreshCw size={11} />
+                            <span>Sesuaikan</span>
+                          </button>
+
+                          {/* Loss */}
+                          <button
+                            onClick={() => handleOpenLossModal(ing.id)}
+                            className="p-1 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg transition-all active:scale-95"
+                            title="Catat Kerusakan/Loss"
+                          >
+                            <TrendingDown size={13} />
+                          </button>
+
+                          {/* Edit */}
+                          <button
+                            onClick={() => handleOpenEdit(ing)}
+                            className="p-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-all active:scale-95"
+                            title="Edit Bahan Baku"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            onClick={() => handleDelete(ing.id, ing.name)}
+                            className="p-1 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg transition-all active:scale-95"
+                            title="Hapus Bahan Baku"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* DESKTOP TABLE VIEW (>= md screen) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                    <th className="py-4 px-6">Nama Bahan & Kategori</th>
-                    <th className="py-4 px-4 text-center">Status</th>
-                    <th className="py-4 px-4 text-right">Stok Saat Ini</th>
-                    <th className="py-4 px-4 text-right">Min. Stok</th>
-                    <th className="py-4 px-4 text-right">Harga Beli / Unit</th>
-                    <th className="py-4 px-4 text-right">Est. Total Nilai</th>
-                    <th className="py-4 px-4">Supplier Langganan</th>
-                    <th className="py-4 px-6 text-center">Aksi</th>
+                <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase sticky top-0">
+                  <tr>
+                    <th className="py-3.5 px-5">Nama Bahan & Kategori</th>
+                    <th className="py-3.5 px-3 text-center">Status</th>
+                    <th className="py-3.5 px-4 text-right">Stok Riil</th>
+                    <th className="py-3.5 px-3 text-right">Batas Min.</th>
+                    <th className="py-3.5 px-4 text-right">Harga Beli / Unit</th>
+                    <th className="py-3.5 px-4 text-right">Valuasi Stok</th>
+                    <th className="py-3.5 px-4">Supplier</th>
+                    <th className="py-3.5 px-4 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -1586,12 +1963,13 @@ export const IngredientView: React.FC = () => {
                       const isOut = ing.stock === 0;
                       const isLow = ing.stock > 0 && ing.stock <= ing.minStock;
                       const cat = ing.category || 'FOOD';
+                      const valuation = ing.stock * ing.buyPrice;
 
                       return (
                         <tr key={ing.id} className="hover:bg-purple-50/30 transition-colors">
-                          <td className="py-4 px-6">
+                          <td className="py-3.5 px-5">
                             <div className="flex items-center gap-2.5">
-                              <span className="text-base">
+                              <span className="text-base shrink-0">
                                 {cat === 'FOOD' ? '🍲' : (cat === 'DRINK' ? '☕' : '📦')}
                               </span>
                               <div>
@@ -1615,84 +1993,84 @@ export const IngredientView: React.FC = () => {
                             </div>
                           </td>
 
-                          <td className="py-4 px-4 text-center">
+                          <td className="py-3.5 px-3 text-center whitespace-nowrap">
                             {isOut ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
                                 Habis
                               </span>
                             ) : isLow ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                                 Menipis
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                                 Aman
                               </span>
                             )}
                           </td>
 
-                          <td className="py-4 px-4 text-right font-black text-slate-900">
-                            {ing.stock.toLocaleString('id-ID')} <span className="text-[11px] font-bold text-slate-400">{ing.unit}</span>
+                          <td className="py-3.5 px-4 text-right font-black text-slate-900 whitespace-nowrap">
+                            {ing.stock.toLocaleString('id-ID')} <span className="text-[10px] font-bold text-slate-400">{ing.unit}</span>
                           </td>
 
-                          <td className="py-4 px-4 text-right font-bold text-slate-500">
+                          <td className="py-3.5 px-3 text-right font-bold text-slate-500 whitespace-nowrap">
                             {ing.minStock.toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{ing.unit}</span>
                           </td>
 
-                          <td className="py-4 px-4 text-right font-bold text-slate-800">
+                          <td className="py-3.5 px-4 text-right font-bold text-slate-800 whitespace-nowrap">
                             Rp {ing.buyPrice.toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">/{ing.unit}</span>
                           </td>
 
-                          <td className="py-4 px-4 text-right font-black text-emerald-700">
-                            Rp {(ing.stock * ing.buyPrice).toLocaleString('id-ID')}
+                          <td className="py-3.5 px-4 text-right font-black text-emerald-700 whitespace-nowrap">
+                            Rp {valuation.toLocaleString('id-ID')}
                           </td>
 
-                          <td className="py-4 px-4">
+                          <td className="py-3.5 px-4 text-slate-600 text-xs">
                             {ing.supplier ? (
-                              <div className="font-bold text-slate-700">{ing.supplier.name}</div>
+                              <div className="font-bold text-slate-700 truncate max-w-[150px]">{ing.supplier.name}</div>
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">Belum diatur</span>
                             )}
                           </td>
 
-                          <td className="py-4 px-6 text-center">
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => handleOpenLossModal(ing.id)}
-                                title="Catat Kerusakan/Loss"
-                                className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition-colors"
-                              >
-                                <TrendingDown size={14} />
-                              </button>
-
                               <button
                                 onClick={() => {
                                   setAdjustModal({ open: true, ingredient: ing });
                                   setAdjustForm({ change: '', type: 'Restock', description: '' });
                                 }}
-                                title="Penyesuaian Cepat / Restock"
-                                className="p-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-xl transition-colors"
+                                title="Sesuaikan Stok / Restock"
+                                className="px-2 py-1 bg-white hover:bg-slate-100 text-purple-700 hover:border-purple-300 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs"
                               >
-                                <RefreshCw size={14} />
+                                Sesuaikan
+                              </button>
+
+                              <button
+                                onClick={() => handleOpenLossModal(ing.id)}
+                                title="Catat Kerusakan/Loss"
+                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors"
+                              >
+                                <TrendingDown size={13} />
                               </button>
 
                               <button
                                 onClick={() => handleOpenEdit(ing)}
                                 title="Edit Bahan"
-                                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
                               >
-                                <Edit2 size={14} />
+                                <Edit2 size={13} />
                               </button>
 
                               <button
                                 onClick={() => handleDelete(ing.id, ing.name)}
                                 title="Hapus Bahan"
-                                className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition-colors"
+                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors"
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={13} />
                               </button>
                             </div>
                           </td>
@@ -1710,324 +2088,428 @@ export const IngredientView: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           TAB: KONSUMSI BAHAN BAKU HARIAN & COGS ANALYTICS
       ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'daily_usage' && (
-        <div className="space-y-6 animate-fade-in">
-          {/* FILTER & CONTROL TOOLBAR */}
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <BarChart3 size={20} className="text-indigo-600" />
-                  Analisis Konsumsi Bahan Baku & Beban Pokok Penjualan (HPP)
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Pantau total pemakaian bahan riil harian dari pesanan POS, evaluasi biaya HPP, dan rasio food cost.
-                </p>
-              </div>
+      {activeTab === 'daily_usage' && (() => {
+        const filteredUsageItems = (usageData?.items || []).filter((item: any) => {
+          if (!usageSearch.trim()) return true;
+          const q = usageSearch.toLowerCase();
+          return item.name?.toLowerCase().includes(q) || item.subCategory?.toLowerCase().includes(q);
+        });
 
-              {/* ACTION BUTTONS */}
-              <div className="flex items-center gap-2 flex-wrap self-start lg:self-auto">
-                <button
-                  onClick={handleExportDailyUsagePDF}
-                  disabled={generatingPdf}
-                  className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95"
-                  title="Cetak Laporan PDF Konsumsi Bahan Baku & COGS"
-                >
-                  <Printer size={15} />
-                  <span>{generatingPdf ? 'Membuat PDF...' : 'Cetak Laporan PDF'}</span>
-                </button>
+        return (
+          <div className="space-y-3.5 sm:space-y-6 animate-fade-in">
+            {/* FILTER & CONTROL TOOLBAR */}
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs space-y-3 sm:space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                    <BarChart3 size={18} className="text-indigo-600 shrink-0" />
+                    Analisis Konsumsi Bahan & COGS
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                    Pantau pemakaian bahan riil harian dari pesanan POS, evaluasi HPP, dan rasio food cost.
+                  </p>
+                </div>
 
-                <button
-                  onClick={() => fetchDailyUsage()}
-                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all"
-                  title="Perbarui Data"
-                >
-                  <RefreshCw size={15} className={usageLoading ? 'animate-spin' : ''} />
-                </button>
-              </div>
-            </div>
-
-            {/* PRESETS & FILTERS ROW */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
-              {/* Quick Date Presets */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold text-slate-400 mr-1">Periode:</span>
-                {[
-                  { id: 'today', label: 'Hari Ini' },
-                  { id: 'yesterday', label: 'Kemarin' },
-                  { id: 'last7', label: '7 Hari Terakhir' },
-                  { id: 'this_month', label: 'Bulan Ini' },
-                ].map(p => (
+                {/* ACTION BUTTONS */}
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                   <button
-                    key={p.id}
-                    onClick={() => setPresetDate(p.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      usagePreset === p.id
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                    }`}
+                    onClick={handleExportDailyUsagePDF}
+                    disabled={generatingPdf}
+                    className="px-3 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 shrink-0"
+                    title="Cetak Laporan PDF Konsumsi Bahan Baku & COGS"
                   >
-                    {p.label}
+                    <Printer size={14} />
+                    <span>{generatingPdf ? 'Membuat...' : 'Cetak PDF'}</span>
                   </button>
-                ))}
+
+                  <button
+                    onClick={() => fetchDailyUsage()}
+                    className="p-1.5 sm:p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all shrink-0"
+                    title="Perbarui Data"
+                  >
+                    <RefreshCw size={14} className={usageLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
 
-              {/* Custom Date Inputs & Category Filter */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs">
-                  <span className="text-[10px] font-bold text-slate-400">Dari:</span>
-                  <input
-                    type="date"
-                    value={usageStartDate}
+              {/* PRESETS & FILTERS ROW */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+                {/* Quick Date Presets (Scrollable horizontal strip on mobile) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 mr-0.5 shrink-0">Periode:</span>
+                  {[
+                    { id: 'today', label: 'Hari Ini' },
+                    { id: 'yesterday', label: 'Kemarin' },
+                    { id: 'last7', label: '7 Hari' },
+                    { id: 'this_month', label: 'Bulan Ini' },
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setPresetDate(p.id as any)}
+                      className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                        usagePreset === p.id
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Date Inputs & Dropdowns */}
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs">
+                    <span className="text-[9px] font-bold text-slate-400">Dari:</span>
+                    <input
+                      type="date"
+                      value={usageStartDate}
+                      onChange={e => {
+                        setUsagePreset('custom' as any);
+                        setUsageStartDate(e.target.value);
+                        fetchDailyUsage(e.target.value, usageEndDate, usageCategoryFilter, usageTypeFilter);
+                      }}
+                      className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800"
+                    />
+                    <span className="text-[9px] font-bold text-slate-400">s/d:</span>
+                    <input
+                      type="date"
+                      value={usageEndDate}
+                      onChange={e => {
+                        setUsagePreset('custom' as any);
+                        setUsageEndDate(e.target.value);
+                        fetchDailyUsage(usageStartDate, e.target.value, usageCategoryFilter, usageTypeFilter);
+                      }}
+                      className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <select
+                    value={usageCategoryFilter}
                     onChange={e => {
-                      setUsagePreset('custom' as any);
-                      setUsageStartDate(e.target.value);
-                      fetchDailyUsage(e.target.value, usageEndDate, usageCategoryFilter, usageTypeFilter);
+                      setUsageCategoryFilter(e.target.value as any);
+                      fetchDailyUsage(usageStartDate, usageEndDate, e.target.value, usageTypeFilter);
                     }}
-                    className="bg-transparent border-none outline-none text-xs font-bold text-slate-800"
-                  />
-                  <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
-                  <input
-                    type="date"
-                    value={usageEndDate}
+                    className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-700 outline-none"
+                  >
+                    <option value="ALL">Semua Kategori</option>
+                    <option value="FOOD">🍲 Dapur</option>
+                    <option value="DRINK">☕ Bar</option>
+                    <option value="PACKAGING">📦 Kemasan</option>
+                  </select>
+
+                  <select
+                    value={usageTypeFilter}
                     onChange={e => {
-                      setUsagePreset('custom' as any);
-                      setUsageEndDate(e.target.value);
-                      fetchDailyUsage(usageStartDate, e.target.value, usageCategoryFilter, usageTypeFilter);
+                      setUsageTypeFilter(e.target.value);
+                      fetchDailyUsage(usageStartDate, usageEndDate, usageCategoryFilter, e.target.value);
                     }}
-                    className="bg-transparent border-none outline-none text-xs font-bold text-slate-800"
-                  />
-                </div>
-
-                <select
-                  value={usageCategoryFilter}
-                  onChange={e => {
-                    setUsageCategoryFilter(e.target.value as any);
-                    fetchDailyUsage(usageStartDate, usageEndDate, e.target.value, usageTypeFilter);
-                  }}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-                >
-                  <option value="ALL">Semua Kategori</option>
-                  <option value="FOOD">🍲 Dapur (Food)</option>
-                  <option value="DRINK">☕ Bar (Drink)</option>
-                  <option value="PACKAGING">📦 Kemasan (Packaging)</option>
-                </select>
-
-                <select
-                  value={usageTypeFilter}
-                  onChange={e => {
-                    setUsageTypeFilter(e.target.value);
-                    fetchDailyUsage(usageStartDate, usageEndDate, usageCategoryFilter, e.target.value);
-                  }}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-                >
-                  <option value="ALL">Semua Pengurangan</option>
-                  <option value="Produksi">🍳 Produksi POS Saja</option>
-                  <option value="Rusak">🗑️ Waste / Kerusakan Saja</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* KPI METRIC CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-3xl text-white shadow-lg shadow-indigo-600/20">
-              <div className="flex justify-between items-start">
-                <p className="text-xs font-bold text-indigo-100 uppercase tracking-wider">Total Estimasi HPP Terpakai</p>
-                <span className="px-2 py-0.5 bg-white/20 text-white rounded-md text-[10px] font-black">
-                  COGS
-                </span>
-              </div>
-              <h3 className="text-2xl sm:text-3xl font-black mt-1">
-                Rp {(usageData?.summary?.totalCostUsage || 0).toLocaleString('id-ID')}
-              </h3>
-              <p className="text-xs text-indigo-100/90 mt-1 flex items-center gap-1.5">
-                <span>Rasio Food Cost:</span>
-                <span className="font-black px-1.5 py-0.2 bg-white text-indigo-900 rounded-md text-[11px]">
-                  {usageData?.summary?.foodCostRatio || 0}%
-                </span>
-              </p>
-            </div>
-
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Omzet Penjualan POS</p>
-                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
-                  Rp {(usageData?.summary?.totalRevenue || 0).toLocaleString('id-ID')}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Penjualan lunas periode ini</p>
-              </div>
-              <div className="w-13 h-13 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <DollarSign size={24} />
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-rose-600 uppercase tracking-wider">Biaya Kerugian (Loss/Waste)</p>
-                <h3 className="text-2xl sm:text-3xl font-black text-rose-600 mt-1">
-                  Rp {(usageData?.summary?.totalLossCost || 0).toLocaleString('id-ID')}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Bahan basi / tumpah / rusak</p>
-              </div>
-              <div className="w-13 h-13 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                <TrendingDown size={24} />
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Bahan Aktif Terpakai</p>
-                <h3 className="text-2xl sm:text-3xl font-black text-slate-900 mt-1">
-                  {usageData?.summary?.totalActiveIngredientsUsed || 0}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Macam bahan baku yang keluar</p>
-              </div>
-              <div className="w-13 h-13 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                <Package size={24} />
-              </div>
-            </div>
-          </div>
-
-          {/* BREAKDOWN PER STASIUN (FOOD vs DRINK vs PACKAGING) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 bg-amber-50/60 border border-amber-200/70 rounded-2xl flex items-center justify-between">
-              <div>
-                <div className="text-[11px] font-bold text-amber-700 uppercase">🍲 Biaya Dapur (Food)</div>
-                <div className="text-lg font-black text-amber-900 mt-0.5">
-                  Rp {(usageData?.summary?.foodCost || 0).toLocaleString('id-ID')}
+                    className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-700 outline-none"
+                  >
+                    <option value="ALL">Semua Pemakaian</option>
+                    <option value="Produksi">🍳 Produksi POS</option>
+                    <option value="Rusak">🗑️ Loss / Waste</option>
+                  </select>
                 </div>
               </div>
-              <span className="text-2xl">🍜</span>
             </div>
 
-            <div className="p-4 bg-sky-50/60 border border-sky-200/70 rounded-2xl flex items-center justify-between">
-              <div>
-                <div className="text-[11px] font-bold text-sky-700 uppercase">☕ Biaya Bar (Drink)</div>
-                <div className="text-lg font-black text-sky-900 mt-0.5">
-                  Rp {(usageData?.summary?.drinkCost || 0).toLocaleString('id-ID')}
+            {/* KPI METRIC CARDS (2x2 on Mobile, 4 Columns on Desktop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+              {/* Card 1: Total HPP (COGS) */}
+              <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl text-white shadow-md shadow-indigo-600/20 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <p className="text-[10px] sm:text-xs font-bold text-indigo-100 uppercase tracking-wider">Total HPP Terpakai</p>
+                    <span className="px-1.5 py-0.2 bg-white/20 text-white rounded text-[9px] font-black">COGS</span>
+                  </div>
+                  <h3 className="text-base sm:text-2xl font-black mt-1">
+                    Rp {(usageData?.summary?.totalCostUsage || 0).toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="text-[10px] sm:text-xs text-indigo-100/90 mt-2 flex items-center gap-1.5 flex-wrap">
+                  <span>Food Cost:</span>
+                  <span className="font-black px-1.5 py-0.2 bg-white text-indigo-900 rounded-md text-[10px]">
+                    {usageData?.summary?.foodCostRatio || 0}%
+                  </span>
                 </div>
               </div>
-              <span className="text-2xl">🥤</span>
+
+              {/* Card 2: Omzet Penjualan POS */}
+              <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] sm:text-xs font-bold text-emerald-600 uppercase tracking-wider">Omzet POS</p>
+                    <h3 className="text-base sm:text-2xl font-black text-slate-900 mt-1">
+                      Rp {(usageData?.summary?.totalRevenue || 0).toLocaleString('id-ID')}
+                    </h3>
+                  </div>
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <DollarSign size={18} />
+                  </div>
+                </div>
+                <p className="text-[10px] sm:text-xs text-slate-400 mt-2">Penjualan lunas</p>
+              </div>
+
+              {/* Card 3: Biaya Kerugian (Loss/Waste) */}
+              <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] sm:text-xs font-bold text-rose-600 uppercase tracking-wider">Loss / Waste</p>
+                    <h3 className="text-base sm:text-2xl font-black text-rose-600 mt-1">
+                      Rp {(usageData?.summary?.totalLossCost || 0).toLocaleString('id-ID')}
+                    </h3>
+                  </div>
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <TrendingDown size={18} />
+                  </div>
+                </div>
+                <p className="text-[10px] sm:text-xs text-slate-400 mt-2">Bahan rusak / basi</p>
+              </div>
+
+              {/* Card 4: Bahan Aktif Terpakai */}
+              <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Bahan Aktif</p>
+                    <h3 className="text-base sm:text-2xl font-black text-slate-900 mt-1">
+                      {usageData?.summary?.totalActiveIngredientsUsed || 0} <span className="text-xs font-bold text-slate-400">Bahan</span>
+                    </h3>
+                  </div>
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                    <Package size={18} />
+                  </div>
+                </div>
+                <p className="text-[10px] sm:text-xs text-slate-400 mt-2">Macam bahan keluar</p>
+              </div>
             </div>
 
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
-              <div>
-                <div className="text-[11px] font-bold text-slate-600 uppercase">📦 Biaya Kemasan (Packaging)</div>
-                <div className="text-lg font-black text-slate-900 mt-0.5">
-                  Rp {(usageData?.summary?.packagingCost || 0).toLocaleString('id-ID')}
+            {/* BREAKDOWN PER STASIUN (FOOD vs DRINK vs PACKAGING) - 3 Columns on all devices */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
+              <div className="p-2.5 sm:p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-amber-800 uppercase tracking-tight">🍲 Dapur</div>
+                  <div className="text-xs sm:text-base font-black text-amber-950 mt-0.5">
+                    Rp {(usageData?.summary?.foodCost || 0).toLocaleString('id-ID')}
+                  </div>
+                </div>
+                <span className="text-lg sm:text-2xl self-end sm:self-center">🍜</span>
+              </div>
+
+              <div className="p-2.5 sm:p-3.5 bg-sky-50/70 border border-sky-200/80 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-sky-800 uppercase tracking-tight">☕ Bar</div>
+                  <div className="text-xs sm:text-base font-black text-sky-950 mt-0.5">
+                    Rp {(usageData?.summary?.drinkCost || 0).toLocaleString('id-ID')}
+                  </div>
+                </div>
+                <span className="text-lg sm:text-2xl self-end sm:self-center">🥤</span>
+              </div>
+
+              <div className="p-2.5 sm:p-3.5 bg-slate-50 border border-slate-200 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div>
+                  <div className="text-[10px] sm:text-[11px] font-bold text-slate-700 uppercase tracking-tight">📦 Kemasan</div>
+                  <div className="text-xs sm:text-base font-black text-slate-900 mt-0.5">
+                    Rp {(usageData?.summary?.packagingCost || 0).toLocaleString('id-ID')}
+                  </div>
+                </div>
+                <span className="text-lg sm:text-2xl self-end sm:self-center">🛍️</span>
+              </div>
+            </div>
+
+            {/* TABEL & KARTU RINCIAN KONSUMSI BAHAN BAKU */}
+            <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden space-y-3 sm:space-y-4 p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3 sm:pb-4">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <Layers size={18} className="text-indigo-600" />
+                    Rincian Pemakaian Riil per-Item Bahan Baku
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Total kuantitas gram/ml/pcs bahan yang terpakai beserta nilai rupiah HPP-nya.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative w-full sm:w-60">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <input
+                      type="text"
+                      value={usageSearch}
+                      onChange={e => setUsageSearch(e.target.value)}
+                      placeholder="Cari bahan..."
+                      className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200 whitespace-nowrap shrink-0">
+                    {filteredUsageItems.length} Bahan
+                  </span>
                 </div>
               </div>
-              <span className="text-2xl">🛍️</span>
-            </div>
-          </div>
 
-          {/* TABEL RINCIAN KONSUMSI BAHAN BAKU */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-4 p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
-              <div>
-                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <Layers size={18} className="text-indigo-600" />
-                  Rincian Pemakaian Riil per-Item Bahan Baku
-                </h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Total kuantitas gram/ml/pcs bahan yang terpakai beserta nilai rupiah HPP-nya.
-                </p>
-              </div>
-              <div className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                Total {usageData?.items?.length || 0} Bahan Terkonsumsi
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase">
-                  <tr>
-                    <th className="py-3.5 px-4">Nama Bahan Baku</th>
-                    <th className="py-3.5 px-3">Kategori</th>
-                    <th className="py-3.5 px-4 text-right">Total Pakai</th>
-                    <th className="py-3.5 px-3 text-right">Produksi POS</th>
-                    <th className="py-3.5 px-3 text-right">Waste / Loss</th>
-                    <th className="py-3.5 px-4 text-right">Harga Beli</th>
-                    <th className="py-3.5 px-4 text-right">Total Biaya (HPP)</th>
-                    <th className="py-3.5 px-4 text-right">Sisa Stok Fisik</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {usageLoading ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
-                        <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={24} />
-                        <p>Menghitung analisis konsumsi bahan baku...</p>
-                      </td>
-                    </tr>
-                  ) : usageData?.items?.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
-                        <Package className="inline-block mb-2 opacity-40 text-slate-400" size={32} />
-                        <p className="font-semibold text-slate-600">Tidak ada data pemakaian bahan baku pada periode ini.</p>
-                        <p className="text-[11px] text-slate-400 mt-1">Pastikan sudah ada transaksi POS atau pencatatan stock loss di rentang tanggal yang dipilih.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    usageData?.items?.map((item: any, idx: number) => {
-                      const cat = item.category || 'FOOD';
-                      return (
-                        <tr key={item.ingredientId || idx} className="hover:bg-indigo-50/20 transition-colors">
-                          <td className="py-3.5 px-4 font-black text-slate-900">
-                            <div>{item.name}</div>
+              {/* MOBILE CARDS VIEW (< md screen) */}
+              <div className="block md:hidden space-y-2.5">
+                {usageLoading ? (
+                  <div className="py-10 text-center text-xs text-slate-400">
+                    <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={20} />
+                    <p>Menghitung analisis konsumsi bahan...</p>
+                  </div>
+                ) : filteredUsageItems.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl p-4">
+                    <Package className="mx-auto mb-1.5 opacity-40 text-slate-400" size={28} />
+                    <p className="font-bold text-slate-600">Tidak ada data pemakaian bahan baku.</p>
+                  </div>
+                ) : (
+                  filteredUsageItems.map((item: any, idx: number) => {
+                    const cat = item.category || 'FOOD';
+                    return (
+                      <div key={item.ingredientId || idx} className="p-3 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200/80 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h5 className="font-black text-sm text-slate-900 truncate">{item.name}</h5>
                             {item.subCategory && (
-                              <span className="text-[10px] text-indigo-600 font-semibold">
-                                {item.subCategory}
-                              </span>
+                              <span className="text-[10px] text-indigo-600 font-semibold">{item.subCategory}</span>
                             )}
-                          </td>
+                          </div>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-white text-slate-700 border border-slate-200 shrink-0">
+                            {cat === 'FOOD' ? '🍲 Dapur' : (cat === 'DRINK' ? '☕ Bar' : '📦 Kemasan')}
+                          </span>
+                        </div>
 
-                          <td className="py-3.5 px-3">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                              {cat === 'FOOD' ? '🍲 Dapur' : (cat === 'DRINK' ? '☕ Bar' : '📦 Kemasan')}
-                            </span>
-                          </td>
+                        {/* Middle Stat Highlight */}
+                        <div className="p-2.5 bg-white rounded-xl border border-slate-200/70 flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Total Terpakai</span>
+                            <div className="text-sm font-black text-indigo-700 mt-0.5">
+                              {(item.totalQtyUsed || 0).toLocaleString('id-ID')} <span className="text-[10px] font-bold text-slate-500">{item.unit}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Biaya HPP</span>
+                            <div className="text-sm font-black text-slate-900 mt-0.5">
+                              Rp {(item.totalCost || 0).toLocaleString('id-ID')}
+                            </div>
+                          </div>
+                        </div>
 
-                          <td className="py-3.5 px-4 text-right font-black text-indigo-700 text-sm">
-                            {(item.totalQtyUsed || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400 font-normal">{item.unit}</span>
-                          </td>
+                        {/* Sub Metrics (Produksi, Loss, Sisa Stok) */}
+                        <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] pt-1 border-t border-slate-200/60">
+                          <div className="bg-white/90 p-1.5 rounded-lg border border-slate-200/60">
+                            <div className="text-slate-400 font-semibold">Produksi</div>
+                            <div className="font-black text-slate-800 mt-0.5 truncate">
+                              {(item.productionQty || 0).toLocaleString('id-ID')} {item.unit}
+                            </div>
+                          </div>
+                          <div className="bg-white/90 p-1.5 rounded-lg border border-slate-200/60">
+                            <div className="text-slate-400 font-semibold">Loss / Waste</div>
+                            <div className={`font-black mt-0.5 truncate ${item.lossQty > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                              {item.lossQty > 0 ? `${item.lossQty.toLocaleString('id-ID')} ${item.unit}` : '-'}
+                            </div>
+                          </div>
+                          <div className="bg-white/90 p-1.5 rounded-lg border border-slate-200/60">
+                            <div className="text-slate-400 font-semibold">Sisa Stok</div>
+                            <div className="font-black text-emerald-700 mt-0.5 truncate">
+                              {(item.currentStock || 0).toLocaleString('id-ID')} {item.unit}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
 
-                          <td className="py-3.5 px-3 text-right font-semibold text-slate-700">
-                            {(item.productionQty || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{item.unit}</span>
-                          </td>
+              {/* DESKTOP TABLE VIEW (>= md screen) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase">
+                    <tr>
+                      <th className="py-3.5 px-4">Nama Bahan Baku</th>
+                      <th className="py-3.5 px-3">Kategori</th>
+                      <th className="py-3.5 px-4 text-right">Total Pakai</th>
+                      <th className="py-3.5 px-3 text-right">Produksi POS</th>
+                      <th className="py-3.5 px-3 text-right">Waste / Loss</th>
+                      <th className="py-3.5 px-4 text-right">Harga Beli</th>
+                      <th className="py-3.5 px-4 text-right">Total Biaya (HPP)</th>
+                      <th className="py-3.5 px-4 text-right">Sisa Stok Fisik</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {usageLoading ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                          <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={24} />
+                          <p>Menghitung analisis konsumsi bahan baku...</p>
+                        </td>
+                      </tr>
+                    ) : filteredUsageItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                          <Package className="inline-block mb-2 opacity-40 text-slate-400" size={32} />
+                          <p className="font-semibold text-slate-600">Tidak ada data pemakaian bahan baku pada periode ini.</p>
+                          <p className="text-[11px] text-slate-400 mt-1">Pastikan sudah ada transaksi POS atau pencatatan stock loss di rentang tanggal yang dipilih.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredUsageItems.map((item: any, idx: number) => {
+                        const cat = item.category || 'FOOD';
+                        return (
+                          <tr key={item.ingredientId || idx} className="hover:bg-indigo-50/20 transition-colors">
+                            <td className="py-3.5 px-4 font-black text-slate-900">
+                              <div>{item.name}</div>
+                              {item.subCategory && (
+                                <span className="text-[10px] text-indigo-600 font-semibold">
+                                  {item.subCategory}
+                                </span>
+                              )}
+                            </td>
 
-                          <td className="py-3.5 px-3 text-right">
-                            {item.lossQty > 0 ? (
-                              <span className="font-bold text-rose-600">
-                                {item.lossQty.toLocaleString('id-ID')} <span className="text-[10px] text-rose-400">{item.unit}</span>
+                            <td className="py-3.5 px-3">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {cat === 'FOOD' ? '🍲 Dapur' : (cat === 'DRINK' ? '☕ Bar' : '📦 Kemasan')}
                               </span>
-                            ) : (
-                              <span className="text-slate-300">-</span>
-                            )}
-                          </td>
+                            </td>
 
-                          <td className="py-3.5 px-4 text-right text-slate-600">
-                            Rp {(item.buyPrice || 0).toLocaleString('id-ID')}
-                          </td>
+                            <td className="py-3.5 px-4 text-right font-black text-indigo-700 text-sm">
+                              {(item.totalQtyUsed || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400 font-normal">{item.unit}</span>
+                            </td>
 
-                          <td className="py-3.5 px-4 text-right font-black text-slate-900 text-sm">
-                            Rp {(item.totalCost || 0).toLocaleString('id-ID')}
-                          </td>
+                            <td className="py-3.5 px-3 text-right font-semibold text-slate-700">
+                              {(item.productionQty || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{item.unit}</span>
+                            </td>
 
-                          <td className="py-3.5 px-4 text-right font-bold text-slate-800">
-                            {(item.currentStock || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{item.unit}</span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                            <td className="py-3.5 px-3 text-right">
+                              {item.lossQty > 0 ? (
+                                <span className="font-bold text-rose-600">
+                                  {item.lossQty.toLocaleString('id-ID')} <span className="text-[10px] text-rose-400">{item.unit}</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">-</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right text-slate-600">
+                              Rp {(item.buyPrice || 0).toLocaleString('id-ID')}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-black text-slate-900 text-sm">
+                              Rp {(item.totalCost || 0).toLocaleString('id-ID')}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-bold text-slate-800">
+                              {(item.currentStock || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{item.unit}</span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─────────────────────────────────────────────────────────────
           TAB 3: STOCK LOSS & ANALISIS KERUSAKAN
@@ -2098,171 +2580,395 @@ export const IngredientView: React.FC = () => {
                 <span>Cetak PDF</span>
               </button>
               <button
-                onClick={() => handleOpenLossModal()}
+                onClick={() => handleOpenLossModal(undefined, 'INGREDIENT')}
                 className="flex-1 sm:flex-none px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
               >
                 <Plus size={15} />
-                <span>Catat Loss</span>
+                <span>Catat Waste / Loss</span>
               </button>
             </div>
           </div>
 
-          {/* LOSS SUMMARY METRICS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-rose-500 to-rose-600 p-6 rounded-3xl text-white shadow-lg shadow-rose-500/20">
-              <p className="text-xs font-bold text-rose-100 uppercase tracking-wider">Total Kerugian Stock Loss</p>
-              <h3 className="text-2xl sm:text-3xl font-black mt-1">
-                Rp {(lossData?.summary?.totalLossCost || 0).toLocaleString('id-ID')}
-              </h3>
-              <p className="text-xs text-rose-100/80 mt-1">
+          {/* 4 KPI CARDS: 2x2 on Mobile, 4 columns on Desktop */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Card 1: Total Kerugian */}
+            <div className="bg-gradient-to-br from-rose-500 to-rose-600 p-4 sm:p-5 rounded-2xl sm:rounded-3xl text-white shadow-lg shadow-rose-500/20 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] sm:text-xs font-bold text-rose-100 uppercase tracking-wider">Total Kerugian (Loss)</p>
+                <h3 className="text-lg sm:text-2xl lg:text-3xl font-black mt-1">
+                  Rp {(lossData?.summary?.totalLossCost || 0).toLocaleString('id-ID')}
+                </h3>
+              </div>
+              <p className="text-[10px] sm:text-xs text-rose-100/80 mt-2">
                 {lossData?.summary?.totalLossCount || 0} insiden tercatat
               </p>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">% Tingkat Kerugian</p>
-                <h3 className="text-2xl font-black text-rose-600 mt-1">
-                  {lossData?.summary?.lossPercentage || 0}%
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Dari total bahan keluar</p>
+            {/* Card 2: Waste Ratio */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-1">
+                <div>
+                  <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Waste Ratio</p>
+                  <h3 className="text-lg sm:text-2xl lg:text-3xl font-black text-rose-600 mt-1">
+                    {Number(lossData?.summary?.wasteRatio || lossData?.summary?.lossPercentage || 0).toFixed(2)}%
+                  </h3>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shrink-0 ${
+                  Number(lossData?.summary?.wasteRatio || 0) <= 2.0
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}>
+                  &lt; 2.0% Target
+                </span>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                <TrendingDown size={22} />
+              <p className="text-[10px] sm:text-xs text-slate-500 mt-2">vs Total Penjualan Kotor</p>
+            </div>
+
+            {/* Card 3: Bahan Mentah */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] sm:text-xs font-bold text-amber-600 uppercase tracking-wider">Bahan Mentah</p>
+                  <h3 className="text-base sm:text-xl lg:text-2xl font-black text-slate-900 mt-1">
+                    Rp {(lossData?.summary?.rawLossCost || 0).toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Layers size={18} />
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-slate-500 mt-2">
+                {lossData?.summary?.rawLossCount || 0} kali insiden bahan
+              </p>
+            </div>
+
+            {/* Card 4: Porsi Masakan */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] sm:text-xs font-bold text-purple-600 uppercase tracking-wider">Porsi Masakan</p>
+                  <h3 className="text-base sm:text-xl lg:text-2xl font-black text-slate-900 mt-1">
+                    Rp {(lossData?.summary?.dishLossCost || 0).toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                  <Utensils size={18} />
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-slate-500 mt-2">
+                {lossData?.summary?.dishLossCount || 0} porsi terbuang
+              </p>
+            </div>
+          </div>
+
+          {/* TOP 5 ITEMS, DISTRIBUSI ALASAN & SOP DARK CARD (3-COLUMN BENTO GRID) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Kolom 1: Top 5 Loss Items */}
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <ShieldAlert size={18} className="text-rose-600" />
+                    Top 5 Item Penyumbang Kerugian
+                  </h3>
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Paling Berdampak</span>
+                </div>
+
+                <div className="space-y-3 mt-3.5">
+                  {(!lossData?.topLossItems || lossData.topLossItems.length === 0) ? (
+                    <div className="text-center py-8 text-xs text-slate-400">
+                      Belum ada data kerugian pada periode ini 🎉
+                    </div>
+                  ) : (
+                    lossData.topLossItems.map((item: any, idx: number) => (
+                      <div key={item.id || idx} className="p-3 bg-slate-50 hover:bg-slate-100/80 transition-colors rounded-2xl border border-slate-100 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-black flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-black text-xs text-slate-800 truncate">{item.name}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black shrink-0 ${
+                                item.type === 'PRODUCT'
+                                  ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                  : 'bg-blue-100 text-blue-700 border border-blue-200'
+                              }`}>
+                                {item.type === 'PRODUCT' ? 'Menu' : 'Bahan'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              Total Loss: {item.totalQty.toLocaleString('id-ID')} {item.unit}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="font-black text-xs text-rose-600 text-right shrink-0">
+                          Rp {item.totalCost.toLocaleString('id-ID')}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+            {/* Kolom 2: Distribusi Alasan Kerugian */}
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4 flex flex-col justify-between">
               <div>
-                <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">% Efisiensi Pemakaian</p>
-                <h3 className="text-2xl font-black text-emerald-600 mt-1">
-                  {lossData?.summary?.efficiencyPercentage || 100}%
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Yield bahan sukses terjual</p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <TrendingUp size={22} />
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <PieChart size={18} className="text-indigo-600" />
+                    Distribusi Alasan Kerugian
+                  </h3>
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">Penyebab Waste</span>
+                </div>
+
+                <div className="space-y-3 mt-3.5">
+                  {(!lossData?.reasonDistribution || lossData.reasonDistribution.length === 0) ? (
+                    <div className="text-center py-8 text-xs text-slate-400">
+                      Belum ada insiden tercatat pada periode ini 🎉
+                    </div>
+                  ) : (
+                    lossData.reasonDistribution.map((r: any, idx: number) => (
+                      <div key={idx} className="space-y-1.5 p-2 rounded-xl hover:bg-slate-50/80 transition-colors">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-800 flex items-center gap-1.5 truncate mr-2">
+                            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                            <span className="truncate">{r.reason}</span>
+                            <span className="text-[10px] text-slate-400 font-medium shrink-0">({r.count}x)</span>
+                          </span>
+                          <div className="text-right shrink-0">
+                            <span className="font-black text-slate-900">Rp {r.cost.toLocaleString('id-ID')}</span>
+                            <span className="text-[10px] font-bold text-rose-600 ml-1.5">({r.percentage}%)</span>
+                          </div>
+                        </div>
+                        {/* Visual progress bar */}
+                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-rose-500 to-amber-500 rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(100, Math.max(2, r.percentage))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Nilai Produksi Sukses</p>
-                <h3 className="text-xl font-black text-slate-900 mt-1">
-                  Rp {(lossData?.summary?.totalProductionCost || 0).toLocaleString('id-ID')}
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Bahan keluar via POS</p>
+            {/* Kolom 3: SOP Dark Card */}
+            <div className="bg-slate-900 text-white p-5 sm:p-6 rounded-3xl border border-slate-800 shadow-xl flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                    <ChefHat size={20} />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Standar Operasional</span>
+                    <h4 className="text-sm font-black text-white leading-tight">
+                      Cegah Kebocoran Biaya Dapur
+                    </h4>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Setiap kegagalan porsi menu, tumpah, atau bahan mentah kadaluarsa wajib dicatat langsung oleh staf dapur demi akurasi HPP & kepastian stok.
+                </p>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <Utensils size={22} />
+
+              <div className="space-y-2.5 pt-2">
+                <button
+                  onClick={() => handleOpenLossModal(undefined, 'INGREDIENT')}
+                  className="w-full py-2.5 px-4 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-bold transition-all shadow-md active:scale-98 flex items-center justify-center gap-2"
+                >
+                  <Layers size={15} className="text-amber-600" />
+                  <span>+ Catat Bahan Terbuang</span>
+                </button>
+                <button
+                  onClick={() => handleOpenLossModal(undefined, 'PRODUCT')}
+                  className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-rose-600/30 active:scale-98 flex items-center justify-center gap-2"
+                >
+                  <Utensils size={15} />
+                  <span>+ Catat Menu / Porsi Rusak</span>
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2 text-[10px] text-slate-400">
+                <ShieldAlert size={13} className="text-emerald-400 shrink-0" />
+                <span>Setiap laporan diverifikasi otomatis ke pergerakan stok & HPP.</span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* TOP 5 LOSS ITEMS */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          {/* RIWAYAT LOG KERUGIAN (AUDIT LOG) - RESPONSIVE MOBILE CARDS + DESKTOP TABLE */}
+          <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-2">
+              <div>
                 <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <ShieldAlert size={18} className="text-rose-600" />
-                  Top 5 Bahan Paling Banyak Rugi
+                  <History size={18} className="text-indigo-600" />
+                  Riwayat Log Kerusakan & Waste Dapur
                 </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Jejak audit insiden bahan busuk, kadaluarsa, salah masak, atau porsi gagal.</p>
               </div>
-
-              <div className="space-y-3">
-                {lossData?.topLossItems?.length === 0 ? (
-                  <div className="text-center py-8 text-xs text-slate-400">
-                    Belum ada data kerugian pada periode ini 🎉
-                  </div>
-                ) : (
-                  lossData?.topLossItems?.map((item: any, idx: number) => (
-                    <div key={item.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-black flex items-center justify-center shrink-0">
-                          {idx + 1}
-                        </span>
-                        <div>
-                          <div className="font-black text-xs text-slate-800">{item.name}</div>
-                          <div className="text-[11px] text-slate-500">
-                            Total Loss: {item.totalQty.toLocaleString('id-ID')} {item.unit}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="font-black text-xs text-rose-600 text-right">
-                        Rp {item.totalCost.toLocaleString('id-ID')}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              <span className="text-[11px] font-bold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg self-start sm:self-auto">
+                {lossData?.logs?.length || 0} entri riwayat
+              </span>
             </div>
 
-            {/* RIWAYAT LOG KERUGIAN */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                    <History size={18} className="text-indigo-600" />
-                    Riwayat Pencatatan Kerusakan & Pembuangan (Loss Log)
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Jejak audit insiden bahan busuk, kadaluarsa, atau rusak periode ini.</p>
+            {/* MOBILE CARD VIEW (< md screen) */}
+            <div className="block md:hidden space-y-3">
+              {lossLoading ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Memuat data riwayat loss...
                 </div>
-              </div>
+              ) : (!lossData?.logs || lossData.logs.length === 0) ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Belum ada log stock loss yang tercatat pada rentang tanggal ini.
+                </div>
+              ) : (
+                lossData.logs.map((l: any) => {
+                  const isMenu = l.targetType === 'PRODUCT' || !!l.productName;
+                  const itemName = l.productName || l.ingredient?.name || 'Item Unknown';
+                  const unitStr = isMenu ? 'porsi' : (l.ingredient?.unit || 'unit');
+                  const lossCost = l.cost || (Math.abs(l.change) * (l.ingredient?.buyPrice || 0));
 
-              <div className="overflow-x-auto max-h-[480px]">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50/80 text-[10px] font-black text-slate-500 uppercase">
+                  return (
+                    <div key={l.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <span className="font-semibold">{new Date(l.createdAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                            {l.user?.name || 'Staff Dapur'}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteLoss(l.id)}
+                            title="Batalkan / Void Loss"
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-sm text-slate-900">{itemName}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                              isMenu
+                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                : 'bg-blue-100 text-blue-700 border border-blue-200'
+                            }`}>
+                              {isMenu ? 'Menu Porsi' : 'Bahan'}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
+                          {l.reason || 'Rusak'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-xs">
+                        <span className="text-slate-600 font-bold">
+                          Qty: <span className="text-rose-600 font-black">{Math.abs(l.change).toLocaleString('id-ID')}</span> {unitStr}
+                        </span>
+                        <span className="font-black text-sm text-rose-700">
+                          Rp {lossCost.toLocaleString('id-ID')}
+                        </span>
+                      </div>
+
+                      {l.notes && (
+                        <div className="text-[11px] bg-white p-2 rounded-xl border border-slate-200 text-slate-600 italic">
+                          "{l.notes}"
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* DESKTOP TABLE VIEW (>= md screen) */}
+            <div className="hidden md:block overflow-x-auto max-h-[480px]">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 text-[10px] font-black text-slate-500 uppercase sticky top-0 z-10 backdrop-blur-sm">
+                  <tr>
+                    <th className="py-3 px-4">Waktu</th>
+                    <th className="py-3 px-4">Item / Target</th>
+                    <th className="py-3 px-3">Tipe</th>
+                    <th className="py-3 px-3 text-right">Jumlah Rusak</th>
+                    <th className="py-3 px-4 text-right">Kerugian (Rp)</th>
+                    <th className="py-3 px-4">Alasan</th>
+                    <th className="py-3 px-4">Dicatat Oleh & Catatan</th>
+                    <th className="py-3 px-3 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {lossLoading ? (
                     <tr>
-                      <th className="py-3 px-4">Waktu</th>
-                      <th className="py-3 px-4">Bahan Baku</th>
-                      <th className="py-3 px-3 text-right">Jumlah Rusak</th>
-                      <th className="py-3 px-4 text-right">Kerugian (Rp)</th>
-                      <th className="py-3 px-4">Alasan</th>
-                      <th className="py-3 px-4">Dicatat Oleh</th>
+                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                        Memuat data riwayat loss...
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {lossLoading ? (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
-                          Memuat data riwayat loss...
-                        </td>
-                      </tr>
-                    ) : lossData?.logs?.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
-                          Belum ada log stock loss yang tercatat pada rentang tanggal ini.
-                        </td>
-                      </tr>
-                    ) : (
-                      lossData?.logs?.map((l: any) => (
-                        <tr key={l.id} className="hover:bg-slate-50/60">
-                          <td className="py-3 px-4 text-[11px] font-bold text-slate-500">
+                  ) : (!lossData?.logs || lossData.logs.length === 0) ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                        Belum ada log stock loss yang tercatat pada rentang tanggal ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    lossData.logs.map((l: any) => {
+                      const isMenu = l.targetType === 'PRODUCT' || !!l.productName;
+                      const itemName = l.productName || l.ingredient?.name || 'Unknown';
+                      const unitStr = isMenu ? 'porsi' : (l.ingredient?.unit || '');
+                      const lossCost = l.cost || (Math.abs(l.change) * (l.ingredient?.buyPrice || 0));
+
+                      return (
+                        <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4 text-[11px] font-bold text-slate-500 whitespace-nowrap">
                             {new Date(l.createdAt).toLocaleString('id-ID')}
                           </td>
                           <td className="py-3 px-4 font-black text-slate-900">
-                            {l.ingredient?.name || 'Unknown'}
+                            {itemName}
                           </td>
-                          <td className="py-3 px-3 text-right font-black text-rose-600">
-                            {Math.abs(l.change).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{l.ingredient?.unit}</span>
+                          <td className="py-3 px-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                              isMenu
+                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                : 'bg-blue-100 text-blue-700 border border-blue-200'
+                            }`}>
+                              {isMenu ? 'Menu Porsi' : 'Bahan Mentah'}
+                            </span>
                           </td>
-                          <td className="py-3 px-4 text-right font-black text-rose-700">
-                            Rp {(l.cost || (Math.abs(l.change) * (l.ingredient?.buyPrice || 0))).toLocaleString('id-ID')}
+                          <td className="py-3 px-3 text-right font-black text-rose-600 whitespace-nowrap">
+                            {Math.abs(l.change).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{unitStr}</span>
                           </td>
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-4 text-right font-black text-rose-700 whitespace-nowrap">
+                            Rp {lossCost.toLocaleString('id-ID')}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                               {l.reason || 'Rusak'}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-[11px] text-slate-600">
-                            {l.user?.name || 'Staff Dapur'}
+                            <div className="font-semibold text-slate-800">{l.user?.name || 'Staff Dapur'}</div>
+                            {l.notes && <div className="text-[10px] text-slate-400 italic truncate max-w-xs">{l.notes}</div>}
+                          </td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            <button
+                              onClick={() => handleDeleteLoss(l.id)}
+                              title="Batalkan / Void Loss dan Kembalikan Stok"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -2363,69 +3069,69 @@ export const IngredientView: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* TOP 4 KPI CARDS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* TOP 4 KPI CARDS (2 cols on mobile, 4 cols on desktop) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
                 {/* Total Tindakan */}
-                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Aksi Tim</p>
-                    <h3 className="text-2xl font-black text-slate-900 mt-0.5">
+                <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">Total Aksi Tim</p>
+                    <h3 className="text-lg sm:text-2xl font-black text-slate-900 mt-0.5">
                       {(staffActivityData?.summary?.teamTotalActions || 0).toLocaleString('id-ID')}
                     </h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Mutasi stok, restock, waste & opname
+                    <p className="text-[9px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
+                      Mutasi, restock, waste
                     </p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
-                    <Activity size={24} />
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+                    <Activity size={18} className="sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* Total Kerugian (Loss / Waste) */}
-                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-rose-500 uppercase tracking-wider">Total Biaya Waste</p>
-                    <h3 className="text-2xl font-black text-rose-600 mt-0.5">
+                <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-rose-500 uppercase tracking-wider truncate">Total Biaya Waste</p>
+                    <h3 className="text-base sm:text-2xl font-black text-rose-600 mt-0.5 truncate">
                       Rp {(staffActivityData?.summary?.teamTotalLossCost || 0).toLocaleString('id-ID')}
                     </h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      {(staffActivityData?.summary?.teamLossCount || 0)} insiden tercatat
+                    <p className="text-[9px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
+                      {(staffActivityData?.summary?.teamLossCount || 0)} insiden
                     </p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-                    <TrendingDown size={24} />
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <TrendingDown size={18} className="sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* Human Error Loss */}
-                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-amber-500 uppercase tracking-wider">Kelalaian / Salah Masak</p>
-                    <h3 className="text-2xl font-black text-amber-600 mt-0.5">
+                <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-amber-500 uppercase tracking-wider truncate">Salah Masak</p>
+                    <h3 className="text-base sm:text-2xl font-black text-amber-600 mt-0.5 truncate">
                       Rp {(staffActivityData?.summary?.teamHumanErrorCost || 0).toLocaleString('id-ID')}
                     </h3>
-                    <p className="text-[11px] text-amber-700 font-bold mt-0.5">
-                      {staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0}% dari seluruh waste
+                    <p className="text-[9px] sm:text-[11px] text-amber-700 font-bold mt-0.5 truncate">
+                      {staffActivityData?.summary?.teamLossCompositionPercentages?.humanError || 0}% waste
                     </p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                    <Flame size={24} />
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                    <Flame size={18} className="sm:w-6 sm:h-6" />
                   </div>
                 </div>
 
                 {/* Staff Meal / Konsumsi Karyawan */}
-                <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Makan Karyawan</p>
-                    <h3 className="text-2xl font-black text-emerald-700 mt-0.5">
+                <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-emerald-600 uppercase tracking-wider truncate">Makan Karyawan</p>
+                    <h3 className="text-base sm:text-2xl font-black text-emerald-700 mt-0.5 truncate">
                       Rp {(staffActivityData?.summary?.teamStaffMealCost || 0).toLocaleString('id-ID')}
                     </h3>
-                    <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
-                      Tercatat resmi sebagai konsumsi
+                    <p className="text-[9px] sm:text-[11px] text-emerald-600 font-bold mt-0.5 truncate">
+                      Konsumsi resmi
                     </p>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <Utensils size={24} />
+                  <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Utensils size={18} className="sm:w-6 sm:h-6" />
                   </div>
                 </div>
               </div>
@@ -2578,7 +3284,7 @@ export const IngredientView: React.FC = () => {
               </div>
 
               {/* TABEL LEADERBOARD & AKUNTABILITAS PER STAF */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+              <div className="bg-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs space-y-3 sm:space-y-4">
                 <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                   <div>
                     <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
@@ -2591,43 +3297,33 @@ export const IngredientView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50/80 text-[10px] font-black text-slate-500 uppercase">
-                      <tr>
-                        <th className="py-3 px-4">Nama Staf</th>
-                        <th className="py-3 px-4 text-center">Role / Peran</th>
-                        <th className="py-3 px-4 text-right">Total Aksi</th>
-                        <th className="py-3 px-4">Distribusi Aktivitas (%)</th>
-                        <th className="py-3 px-4 text-right">Total Loss (Rp)</th>
-                        <th className="py-3 px-4 text-center">Beban Tim (%)</th>
-                        <th className="py-3 px-4 text-center">Status KPI</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                      {staffActivityData?.staffList?.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="py-8 text-center text-slate-400">
-                            Belum ada rekaman aktivitas mutasi stok oleh staf pada periode ini.
-                          </td>
-                        </tr>
-                      ) : (
-                        staffActivityData?.staffList?.map((s: any) => {
-                          const isHighLoss = s.teamLossSharePercentage > 40 && s.totalLossCost > 50000;
-                          const isZeroLoss = s.totalLossCost === 0;
+                {staffActivityData?.staffList?.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs font-medium">
+                    Belum ada rekaman aktivitas mutasi stok oleh staf pada periode ini.
+                  </div>
+                ) : (
+                  <>
+                    {/* MOBILE CARD VIEW (< md) */}
+                    <div className="md:hidden divide-y divide-slate-100 space-y-1">
+                      {staffActivityData?.staffList?.map((s: any) => {
+                        const isHighLoss = s.teamLossSharePercentage > 40 && s.totalLossCost > 50000;
+                        const isZeroLoss = s.totalLossCost === 0;
 
-                          return (
-                            <tr key={s.user.id} className="hover:bg-slate-50/70 transition-colors">
-                              <td className="py-3 px-4 font-black text-slate-900 flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-black shrink-0">
-                                  {s.user.name.charAt(0).toUpperCase()}
+                        return (
+                          <div key={s.user.id} className="p-3 bg-white hover:bg-slate-50/50 rounded-xl space-y-2.5 transition-colors">
+                            {/* Header: User, Role, Status */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-black shrink-0">
+                                  {s.user.name?.charAt(0).toUpperCase() || 'U'}
                                 </div>
-                                <div>
-                                  <div>{s.user.name}</div>
-                                  <div className="text-[10px] text-slate-400 font-normal">@{s.user.username}</div>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-slate-900 text-xs sm:text-sm truncate">{s.user.name}</div>
+                                  <div className="text-[10px] text-slate-400 font-normal font-mono">@{s.user.username}</div>
                                 </div>
-                              </td>
-                              <td className="py-3 px-4 text-center">
+                              </div>
+
+                              <div className="flex flex-col items-end gap-1 shrink-0">
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
                                   s.user.role === 'Dapur' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
                                   s.user.role === 'Admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
@@ -2635,51 +3331,140 @@ export const IngredientView: React.FC = () => {
                                 }`}>
                                   {s.user.role}
                                 </span>
-                              </td>
-                              <td className="py-3 px-4 text-right font-black text-slate-900">
-                                {s.totalActions}
-                              </td>
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-1.5 text-[10px]">
-                                  <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-bold" title="Restock">
-                                    📥 {s.activityPercentages?.restock || 0}%
-                                  </span>
-                                  <span className="px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded font-bold" title="Opname / Koreksi">
-                                    🔧 {s.activityPercentages?.adjustment || 0}%
-                                  </span>
-                                  <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-bold" title="Loss / Rusak">
-                                    ⚠️ {s.activityPercentages?.loss || 0}%
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="py-3 px-4 text-right font-black text-rose-600">
-                                Rp {s.totalLossCost.toLocaleString('id-ID')}
-                              </td>
-                              <td className="py-3 px-4 text-center font-bold text-slate-700">
-                                {s.teamLossSharePercentage}%
-                              </td>
-                              <td className="py-3 px-4 text-center">
                                 {isZeroLoss ? (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center gap-1 mx-auto w-max">
-                                    <Award size={12} /> Sangat Hemat (0 Loss)
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                    <Award size={10} /> 0 Loss
                                   </span>
                                 ) : isHighLoss ? (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center gap-1 mx-auto w-max">
-                                    <Flame size={12} /> Perlu Review Resep
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+                                    <Flame size={10} /> Review Resep
                                   </span>
                                 ) : (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center gap-1 mx-auto w-max">
-                                    <UserCheck size={12} /> Normal / Wajar
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                                    <UserCheck size={10} /> Wajar
                                   </span>
                                 )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                              </div>
+                            </div>
+
+                            {/* 3 Metrics Row */}
+                            <div className="grid grid-cols-3 gap-1.5 text-center">
+                              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                                <span className="text-[9px] font-bold text-slate-400 block uppercase">Total Aksi</span>
+                                <span className="text-xs font-black text-slate-900">{s.totalActions}</span>
+                              </div>
+                              <div className="p-2 bg-rose-50/60 rounded-xl border border-rose-100">
+                                <span className="text-[9px] font-bold text-rose-500 block uppercase">Total Loss</span>
+                                <span className="text-xs font-black text-rose-600 truncate block">Rp {s.totalLossCost.toLocaleString('id-ID')}</span>
+                              </div>
+                              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                                <span className="text-[9px] font-bold text-slate-400 block uppercase">Beban Tim</span>
+                                <span className="text-xs font-black text-slate-700">{s.teamLossSharePercentage}%</span>
+                              </div>
+                            </div>
+
+                            {/* Activity Distribution Pills */}
+                            <div className="flex flex-wrap items-center gap-1 pt-0.5 text-[10px]">
+                              <span className="text-[10px] text-slate-400 font-semibold mr-0.5">Distribusi:</span>
+                              <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-bold">
+                                📥 Restock {s.activityPercentages?.restock || 0}%
+                              </span>
+                              <span className="px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded font-bold">
+                                🔧 Opname {s.activityPercentages?.adjustment || 0}%
+                              </span>
+                              <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-bold">
+                                ⚠️ Loss {s.activityPercentages?.loss || 0}%
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* DESKTOP TABLE VIEW (>= md) */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50/80 text-[10px] font-black text-slate-500 uppercase">
+                          <tr>
+                            <th className="py-3 px-4">Nama Staf</th>
+                            <th className="py-3 px-4 text-center">Role / Peran</th>
+                            <th className="py-3 px-4 text-right">Total Aksi</th>
+                            <th className="py-3 px-4">Distribusi Aktivitas (%)</th>
+                            <th className="py-3 px-4 text-right">Total Loss (Rp)</th>
+                            <th className="py-3 px-4 text-center">Beban Tim (%)</th>
+                            <th className="py-3 px-4 text-center">Status KPI</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                          {staffActivityData?.staffList?.map((s: any) => {
+                            const isHighLoss = s.teamLossSharePercentage > 40 && s.totalLossCost > 50000;
+                            const isZeroLoss = s.totalLossCost === 0;
+
+                            return (
+                              <tr key={s.user.id} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="py-3 px-4 font-black text-slate-900 flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center text-xs font-black shrink-0">
+                                    {s.user.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div>{s.user.name}</div>
+                                    <div className="text-[10px] text-slate-400 font-normal">@{s.user.username}</div>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                    s.user.role === 'Dapur' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                    s.user.role === 'Admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                    'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {s.user.role}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-right font-black text-slate-900">
+                                  {s.totalActions}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex items-center gap-1.5 text-[10px]">
+                                    <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded font-bold" title="Restock">
+                                      📥 {s.activityPercentages?.restock || 0}%
+                                    </span>
+                                    <span className="px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded font-bold" title="Opname / Koreksi">
+                                      🔧 {s.activityPercentages?.adjustment || 0}%
+                                    </span>
+                                    <span className="px-1.5 py-0.5 bg-rose-50 text-rose-700 rounded font-bold" title="Loss / Rusak">
+                                      ⚠️ {s.activityPercentages?.loss || 0}%
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-right font-black text-rose-600">
+                                  Rp {s.totalLossCost.toLocaleString('id-ID')}
+                                </td>
+                                <td className="py-3 px-4 text-center font-bold text-slate-700">
+                                  {s.teamLossSharePercentage}%
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  {isZeroLoss ? (
+                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center gap-1 mx-auto w-max">
+                                      <Award size={12} /> Sangat Hemat (0 Loss)
+                                    </span>
+                                  ) : isHighLoss ? (
+                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center gap-1 mx-auto w-max">
+                                      <Flame size={12} /> Perlu Review Resep
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center gap-1 mx-auto w-max">
+                                      <UserCheck size={12} /> Normal / Wajar
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -2689,186 +3474,510 @@ export const IngredientView: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           TAB 4: KARTU STOK & ALUR DISTRIBUSI
       ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'movements' && (
-        <div className="space-y-6 animate-fade-in">
-          {/* RESPONSIVE FILTER BAR */}
-          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <History size={20} className="text-indigo-600" />
-                  Kartu Stok Digital & Alur Mutasi
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Jejak lengkap keluar/masuk stok: Restock PO, Produksi POS, Stock Loss, dan Opname.</p>
-              </div>
+      {activeTab === 'movements' && (() => {
+        const filteredMovements = movements.filter((m: any) => {
+          if (!movementSearch.trim()) return true;
+          const q = movementSearch.toLowerCase();
+          return (
+            m.ingredient?.name?.toLowerCase().includes(q) ||
+            m.description?.toLowerCase().includes(q) ||
+            m.referenceId?.toLowerCase().includes(q) ||
+            m.user?.name?.toLowerCase().includes(q) ||
+            m.type?.toLowerCase().includes(q)
+          );
+        });
 
-              {/* Dropdown Filters */}
-              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-                <select
-                  className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none"
-                  value={movementIngredientFilter}
-                  onChange={e => {
-                    setMovementIngredientFilter(e.target.value);
-                    fetchMovements(movementStartDate, movementEndDate, movementTypeFilter, e.target.value);
-                  }}
-                >
-                  <option value="ALL">Semua Bahan Baku</option>
-                  {ingredients.map(i => (
-                    <option key={i.id} value={i.id.toString()}>{i.name}</option>
-                  ))}
-                </select>
+        // Quick KPI calculations
+        const restockCount = movements.filter(m => m.type === 'Restock' || m.change > 0).length;
+        const produksiCount = movements.filter(m => m.type === 'Produksi').length;
+        const lossCount = movements.filter(m => m.type === 'Rusak').length;
+        const adjustCount = movements.filter(m => m.type === 'Penyesuaian' || m.type === 'Stock Opname').length;
 
-                <select
-                  className="form-control text-xs font-bold py-2 bg-slate-50 border border-slate-200 rounded-xl flex-1 sm:flex-none"
-                  value={movementTypeFilter}
-                  onChange={e => {
-                    setMovementTypeFilter(e.target.value);
-                    fetchMovements(movementStartDate, movementEndDate, e.target.value, movementIngredientFilter);
-                  }}
-                >
-                  <option value="ALL">Semua Jenis Mutasi</option>
-                  <option value="Produksi">🍳 Produksi (POS Sale)</option>
-                  <option value="Restock">📥 Restock / Pembelian</option>
-                  <option value="Rusak">🗑️ Stock Loss / Rusak</option>
-                  <option value="Stock Opname">⚖️ Stock Opname Audit</option>
-                  <option value="Penyesuaian">🔧 Penyesuaian Manual</option>
-                </select>
-              </div>
-            </div>
+        const handleOpenAdjustFromMovements = () => {
+          if (movementIngredientFilter !== 'ALL') {
+            const ing = ingredients.find(i => i.id.toString() === movementIngredientFilter);
+            if (ing) {
+              setAdjustModal({ open: true, ingredient: ing });
+              return;
+            }
+          }
+          setShowAdjustPickerModal(true);
+        };
 
-            {/* Date Filters Row */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 flex-wrap">
-              {/* Quick Date Presets */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-full pb-1 sm:pb-0">
-                <span className="text-[11px] font-bold text-slate-400 mr-1 shrink-0">Tanggal:</span>
-                {[
-                  { id: 'all', label: 'Semua Waktu' },
-                  { id: 'today', label: 'Hari Ini' },
-                  { id: 'yesterday', label: 'Kemarin' },
-                  { id: 'last7', label: '7 Hari' },
-                  { id: 'this_month', label: 'Bulan Ini' },
-                ].map(p => (
+        return (
+          <div className="space-y-3.5 sm:space-y-6 animate-fade-in">
+            {/* TOOLBAR HEADER */}
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs space-y-3 sm:space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                    <History size={18} className="text-emerald-600 shrink-0" />
+                    Kartu Stok Digital & Alur Mutasi
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                    Jejak lengkap keluar/masuk stok: Restock PO, Produksi POS, Stock Loss, dan Opname.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                   <button
-                    key={p.id}
-                    onClick={() => setMovementPresetDate(p.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
-                      movementPreset === p.id
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
-                    }`}
+                    onClick={handleOpenAdjustFromMovements}
+                    className="px-3 py-1.5 sm:px-4 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-emerald-600/20 active:scale-95 flex items-center gap-1.5 shrink-0"
                   >
-                    {p.label}
+                    <Plus size={14} />
+                    <span>Sesuaikan Stok</span>
                   </button>
-                ))}
+
+                  <button
+                    onClick={() => fetchMovements()}
+                    className="p-1.5 sm:p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all shrink-0"
+                    title="Perbarui Data Mutasi"
+                  >
+                    <RefreshCw size={14} className={movementsLoading ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
 
-              {/* Custom Date Inputs */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs w-full sm:w-auto justify-between sm:justify-start">
-                <span className="text-[10px] font-bold text-slate-400">Dari:</span>
-                <input
-                  type="date"
-                  value={movementStartDate}
-                  onChange={e => {
-                    setMovementPreset('custom' as any);
-                    setMovementStartDate(e.target.value);
-                    fetchMovements(e.target.value, movementEndDate, movementTypeFilter, movementIngredientFilter);
-                  }}
-                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
-                />
-                <span className="text-[10px] font-bold text-slate-400 ml-1">s/d:</span>
-                <input
-                  type="date"
-                  value={movementEndDate}
-                  onChange={e => {
-                    setMovementPreset('custom' as any);
-                    setMovementEndDate(e.target.value);
-                    fetchMovements(movementStartDate, e.target.value, movementTypeFilter, movementIngredientFilter);
-                  }}
-                  className="bg-transparent border-none outline-none text-xs font-bold text-slate-800 cursor-pointer"
-                />
+              {/* SEARCH & MUTATION TYPE PILLS */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+                <div className="relative w-full md:w-72 shrink-0">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input
+                    type="text"
+                    value={movementSearch}
+                    onChange={e => setMovementSearch(e.target.value)}
+                    placeholder="Cari bahan, keterangan, ref, petugas..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-emerald-500 transition-colors"
+                  />
+                </div>
+
+                {/* Mutation Type Quick Pills (Scrollable horizontal strip) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+                  {[
+                    { id: 'ALL', label: 'Semua Mutasi' },
+                    { id: 'Produksi', label: '🍳 Produksi POS' },
+                    { id: 'Restock', label: '📥 Restock Masuk' },
+                    { id: 'Rusak', label: '🗑️ Stock Loss' },
+                    { id: 'Penyesuaian', label: '🔧 Penyesuaian' },
+                    { id: 'Stock Opname', label: '⚖️ Opname Fisik' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setMovementTypeFilter(t.id);
+                        fetchMovements(movementStartDate, movementEndDate, t.id, movementIngredientFilter);
+                      }}
+                      className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                        movementTypeFilter === t.id
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* DATE PRESETS & INGREDIENT FILTER ROW */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100">
+                {/* Date Presets */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 mr-0.5 shrink-0">Waktu:</span>
+                  {[
+                    { id: 'all', label: 'Semua' },
+                    { id: 'today', label: 'Hari Ini' },
+                    { id: 'yesterday', label: 'Kemarin' },
+                    { id: 'last7', label: '7 Hari' },
+                    { id: 'this_month', label: 'Bulan Ini' },
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setMovementPresetDate(p.id as any)}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                        movementPreset === p.id
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Specific Ingredient Picker & Date Pickers */}
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <select
+                    className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-xl text-[11px] sm:text-xs font-bold text-slate-700 outline-none max-w-[180px] sm:max-w-xs truncate"
+                    value={movementIngredientFilter}
+                    onChange={e => {
+                      setMovementIngredientFilter(e.target.value);
+                      fetchMovements(movementStartDate, movementEndDate, movementTypeFilter, e.target.value);
+                    }}
+                  >
+                    <option value="ALL">Semua Bahan Baku ({ingredients.length})</option>
+                    {ingredients.map(i => (
+                      <option key={i.id} value={i.id.toString()}>{i.name}</option>
+                    ))}
+                  </select>
+
+                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs">
+                    <span className="text-[9px] font-bold text-slate-400">Dari:</span>
+                    <input
+                      type="date"
+                      value={movementStartDate}
+                      onChange={e => {
+                        setMovementPreset('custom' as any);
+                        setMovementStartDate(e.target.value);
+                        fetchMovements(e.target.value, movementEndDate, movementTypeFilter, movementIngredientFilter);
+                      }}
+                      className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800"
+                    />
+                    <span className="text-[9px] font-bold text-slate-400">s/d:</span>
+                    <input
+                      type="date"
+                      value={movementEndDate}
+                      onChange={e => {
+                        setMovementPreset('custom' as any);
+                        setMovementEndDate(e.target.value);
+                        fetchMovements(movementStartDate, e.target.value, movementTypeFilter, movementIngredientFilter);
+                      }}
+                      className="bg-transparent border-none outline-none text-[11px] sm:text-xs font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase">
-                  <tr>
-                    <th className="py-4 px-6">Waktu Mutasi</th>
-                    <th className="py-4 px-4">Bahan Baku</th>
-                    <th className="py-4 px-4">Tipe Alur</th>
-                    <th className="py-4 px-4 text-right">Perubahan Qty</th>
-                    <th className="py-4 px-4">Keterangan / Referensi</th>
-                    <th className="py-4 px-6">Petugas</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {movementsLoading ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={24} />
-                        <p>Memuat kartu stok mutasi...</p>
-                      </td>
-                    </tr>
-                  ) : movements.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        Belum ada riwayat mutasi yang cocok dengan filter.
-                      </td>
-                    </tr>
-                  ) : (
-                    movements.map((m: any) => {
-                      const isPositive = m.change > 0;
-                      return (
-                        <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-4 px-6 text-[11px] font-bold text-slate-500">
-                            {new Date(m.createdAt).toLocaleString('id-ID')}
-                          </td>
+            {/* KPI METRIC CARDS (2x2 on Mobile, 4 Columns on Desktop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+              {/* Card 1: Masuk / Restock */}
+              <div className="p-3 sm:p-4 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-emerald-800 uppercase tracking-wider">Restock Masuk</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <ArrowDownRight size={16} />
+                  </div>
+                </div>
+                <div className="mt-1">
+                  <h4 className="text-base sm:text-2xl font-black text-emerald-950">
+                    {restockCount} <span className="text-xs font-bold text-emerald-700">Entri</span>
+                  </h4>
+                  <p className="text-[10px] text-emerald-700/80 mt-0.5">Penambahan inventaris</p>
+                </div>
+              </div>
 
-                          <td className="py-4 px-4 font-black text-slate-900">
-                            {m.ingredient?.name}
-                          </td>
+              {/* Card 2: Produksi POS */}
+              <div className="p-3 sm:p-4 bg-indigo-50/80 border border-indigo-200/80 rounded-2xl flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-indigo-800 uppercase tracking-wider">Produksi POS</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                    <Utensils size={15} />
+                  </div>
+                </div>
+                <div className="mt-1">
+                  <h4 className="text-base sm:text-2xl font-black text-indigo-950">
+                    {produksiCount} <span className="text-xs font-bold text-indigo-700">Order</span>
+                  </h4>
+                  <p className="text-[10px] text-indigo-700/80 mt-0.5">Potong resep otomatis</p>
+                </div>
+              </div>
 
-                          <td className="py-4 px-4">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black ${
-                              m.type === 'Produksi' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
-                              (m.type === 'Restock' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                              (m.type === 'Rusak' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-slate-100 text-slate-700 border border-slate-200'))
-                            }`}>
-                              {m.type === 'Produksi' && '🍳 Produksi POS'}
-                              {m.type === 'Restock' && '📥 Restock Masuk'}
-                              {m.type === 'Rusak' && '🗑️ Stock Loss'}
-                              {m.type === 'Stock Opname' && '⚖️ Opname Fisik'}
-                              {m.type === 'Penyesuaian' && '🔧 Penyesuaian'}
-                              {!['Produksi', 'Restock', 'Rusak', 'Stock Opname', 'Penyesuaian'].includes(m.type) && m.type}
-                            </span>
-                          </td>
+              {/* Card 3: Stock Loss / Rusak */}
+              <div className="p-3 sm:p-4 bg-rose-50/80 border border-rose-200/80 rounded-2xl flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-rose-800 uppercase tracking-wider">Waste / Loss</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                    <TrendingDown size={15} />
+                  </div>
+                </div>
+                <div className="mt-1">
+                  <h4 className="text-base sm:text-2xl font-black text-rose-600">
+                    {lossCount} <span className="text-xs font-bold text-rose-500">Insiden</span>
+                  </h4>
+                  <p className="text-[10px] text-rose-600/80 mt-0.5">Bahan rusak / tumpah</p>
+                </div>
+              </div>
 
-                          <td className={`py-4 px-4 text-right font-black ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {isPositive ? `+${m.change.toLocaleString('id-ID')}` : m.change.toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{m.ingredient?.unit}</span>
-                          </td>
+              {/* Card 4: Penyesuaian Koreksi */}
+              <div className="p-3 sm:p-4 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider">Penyesuaian</span>
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <ClipboardCheck size={15} />
+                  </div>
+                </div>
+                <div className="mt-1">
+                  <h4 className="text-base sm:text-2xl font-black text-amber-950">
+                    {adjustCount} <span className="text-xs font-bold text-amber-700">Koreksi</span>
+                  </h4>
+                  <p className="text-[10px] text-amber-700/80 mt-0.5">Opname / adjust staf</p>
+                </div>
+              </div>
+            </div>
 
-                          <td className="py-4 px-4 text-slate-600">
-                            <div className="font-semibold text-xs text-slate-800">{m.description || '-'}</div>
+            {/* MUTATION RECORDS: MOBILE CARDS & DESKTOP TABLE */}
+            <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden space-y-3 sm:space-y-4 p-4 sm:p-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <History size={16} className="text-emerald-600" />
+                  Log Mutasi Stok Terverifikasi
+                </h4>
+                <span className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
+                  {filteredMovements.length} Log Mutasi
+                </span>
+              </div>
+
+              {/* MOBILE CARDS VIEW (< md screen) */}
+              <div className="block md:hidden space-y-2.5">
+                {movementsLoading ? (
+                  <div className="py-10 text-center text-xs text-slate-400">
+                    <RefreshCw className="animate-spin inline-block mb-2 text-emerald-600" size={20} />
+                    <p>Memuat kartu stok mutasi...</p>
+                  </div>
+                ) : filteredMovements.length === 0 ? (
+                  <div className="py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl p-4">
+                    <Package className="mx-auto mb-1.5 opacity-40 text-slate-400" size={28} />
+                    <p className="font-bold text-slate-600">Tidak ada riwayat mutasi yang cocok.</p>
+                  </div>
+                ) : (
+                  filteredMovements.map((m: any) => {
+                    const isPositive = m.change > 0;
+                    const ingObj = ingredients.find(i => i.id === m.ingredient?.id) || m.ingredient;
+                    const currentStockVal = ingObj?.stock ?? m.ingredient?.stock;
+
+                    return (
+                      <div key={m.id} className="p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200/80 space-y-2.5">
+                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                          <span className="font-semibold">
+                            {new Date(m.createdAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}
+                          </span>
+                          <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                            {m.user?.name || 'Sistem POS'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h5 className="font-black text-sm text-slate-900 truncate">{m.ingredient?.name}</h5>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black ${
+                                m.type === 'Produksi' ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' :
+                                (m.type === 'Restock' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                (m.type === 'Rusak' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 
+                                (m.type === 'Penyesuaian' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-700 border border-slate-200')))
+                              }`}>
+                                {m.type === 'Produksi' && '🍳 Produksi POS'}
+                                {m.type === 'Restock' && '📥 Restock Masuk'}
+                                {m.type === 'Rusak' && '🗑️ Stock Loss'}
+                                {m.type === 'Stock Opname' && '⚖️ Opname Fisik'}
+                                {m.type === 'Penyesuaian' && '🔧 Penyesuaian'}
+                                {!['Produksi', 'Restock', 'Rusak', 'Stock Opname', 'Penyesuaian'].includes(m.type) && m.type}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className={`px-2.5 py-1 rounded-xl text-xs font-black shrink-0 ${
+                            isPositive
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                          }`}>
+                            {isPositive ? `+${m.change.toLocaleString('id-ID')}` : m.change.toLocaleString('id-ID')} {m.ingredient?.unit}
+                          </div>
+                        </div>
+
+                        {m.description && (
+                          <div className="text-[11px] bg-white p-2 rounded-xl border border-slate-200 text-slate-600">
+                            {m.description}
                             {m.referenceId && (
-                              <div className="text-[10px] font-mono text-slate-400">Ref: {m.referenceId}</div>
+                              <span className="block text-[10px] text-slate-400 font-mono mt-0.5">Ref: {m.referenceId}</span>
                             )}
-                          </td>
+                          </div>
+                        )}
 
-                          <td className="py-4 px-6 text-slate-600 font-bold text-[11px]">
-                            {m.user?.name || 'Sistem'}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-200/60">
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            Stok Fisik Saat Ini: <strong className="text-slate-800 font-bold">{currentStockVal !== undefined ? Number(currentStockVal).toLocaleString('id-ID') : '-'} {m.ingredient?.unit}</strong>
+                          </span>
+                          <button
+                            onClick={() => {
+                              if (ingObj) setAdjustModal({ open: true, ingredient: ingObj });
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 hover:text-emerald-700 border border-slate-200 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 active:scale-95 shadow-2xs"
+                          >
+                            <span>Sesuaikan Stok</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* DESKTOP TABLE VIEW (>= md screen) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-black text-slate-500 uppercase sticky top-0">
+                    <tr>
+                      <th className="py-3.5 px-4">Waktu Mutasi</th>
+                      <th className="py-3.5 px-4">Bahan Baku</th>
+                      <th className="py-3.5 px-3">Tipe Alur</th>
+                      <th className="py-3.5 px-3 text-right">Perubahan Qty</th>
+                      <th className="py-3.5 px-4 text-right">Stok Riil Sekarang</th>
+                      <th className="py-3.5 px-4">Keterangan / Referensi</th>
+                      <th className="py-3.5 px-4">Petugas</th>
+                      <th className="py-3.5 px-3 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {movementsLoading ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                          <RefreshCw className="animate-spin inline-block mb-2 text-indigo-600" size={24} />
+                          <p>Memuat kartu stok mutasi...</p>
+                        </td>
+                      </tr>
+                    ) : filteredMovements.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                          Belum ada riwayat mutasi yang cocok dengan filter.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredMovements.map((m: any) => {
+                        const isPositive = m.change > 0;
+                        const ingObj = ingredients.find(i => i.id === m.ingredient?.id) || m.ingredient;
+                        const currentStockVal = ingObj?.stock ?? m.ingredient?.stock;
+
+                        return (
+                          <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3.5 px-4 text-[11px] font-bold text-slate-500 whitespace-nowrap">
+                              {new Date(m.createdAt).toLocaleString('id-ID')}
+                            </td>
+
+                            <td className="py-3.5 px-4 font-black text-slate-900">
+                              {m.ingredient?.name}
+                            </td>
+
+                            <td className="py-3.5 px-3 whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                                m.type === 'Produksi' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                                (m.type === 'Restock' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                (m.type === 'Rusak' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 
+                                (m.type === 'Penyesuaian' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-700 border border-slate-200')))
+                              }`}>
+                                {m.type === 'Produksi' && '🍳 Produksi POS'}
+                                {m.type === 'Restock' && '📥 Restock Masuk'}
+                                {m.type === 'Rusak' && '🗑️ Stock Loss'}
+                                {m.type === 'Stock Opname' && '⚖️ Opname Fisik'}
+                                {m.type === 'Penyesuaian' && '🔧 Penyesuaian'}
+                                {!['Produksi', 'Restock', 'Rusak', 'Stock Opname', 'Penyesuaian'].includes(m.type) && m.type}
+                              </span>
+                            </td>
+
+                            <td className={`py-3.5 px-3 text-right font-black whitespace-nowrap ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {isPositive ? `+${m.change.toLocaleString('id-ID')}` : m.change.toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{m.ingredient?.unit}</span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-right font-bold text-slate-800 whitespace-nowrap">
+                              {currentStockVal !== undefined ? Number(currentStockVal).toLocaleString('id-ID') : '-'} <span className="text-[10px] text-slate-400">{m.ingredient?.unit}</span>
+                            </td>
+
+                            <td className="py-3.5 px-4 text-slate-600">
+                              <div className="font-semibold text-xs text-slate-800">{m.description || '-'}</div>
+                              {m.referenceId && (
+                                <div className="text-[10px] font-mono text-slate-400">Ref: {m.referenceId}</div>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 text-slate-600 font-bold text-[11px] whitespace-nowrap">
+                              {m.user?.name || 'Sistem'}
+                            </td>
+
+                            <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                              <button
+                                onClick={() => {
+                                  if (ingObj) setAdjustModal({ open: true, ingredient: ingObj });
+                                }}
+                                title="Sesuaikan Stok Bahan Ini"
+                                className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 hover:text-emerald-700 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs"
+                              >
+                                Sesuaikan
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
+
+            {/* QUICK INGREDIENT PICKER MODAL FOR STAFF ADJUSTMENT */}
+            {showAdjustPickerModal && (
+              <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-scale-up space-y-4 p-5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h4 className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                        <Plus size={16} className="text-emerald-600" />
+                        Pilih Bahan untuk Disesuaikan
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Pilih bahan baku yang ingin disesuaikan stok fisiknya.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAdjustPickerModal(false)}
+                      className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <input
+                      type="text"
+                      value={pickerSearch}
+                      onChange={e => setPickerSearch(e.target.value)}
+                      placeholder="Ketik nama bahan baku..."
+                      autoFocus
+                      className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:bg-white focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+                    {ingredients
+                      .filter(i => !pickerSearch.trim() || i.name.toLowerCase().includes(pickerSearch.toLowerCase()))
+                      .map(ing => (
+                        <button
+                          key={ing.id}
+                          onClick={() => {
+                            setShowAdjustPickerModal(false);
+                            setPickerSearch('');
+                            setAdjustModal({ open: true, ingredient: ing });
+                          }}
+                          className="w-full p-2.5 bg-slate-50 hover:bg-emerald-50 border border-slate-200/80 hover:border-emerald-200 rounded-xl text-left flex items-center justify-between transition-colors group"
+                        >
+                          <div>
+                            <span className="font-black text-xs text-slate-800 group-hover:text-emerald-950 block">{ing.name}</span>
+                            <span className="text-[10px] text-slate-400">{ing.category || 'FOOD'}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-black text-slate-900 group-hover:text-emerald-700 block">
+                              {ing.stock.toLocaleString('id-ID')} {ing.unit}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-bold">Stok Saat Ini</span>
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─────────────────────────────────────────────────────────────
           TAB 5: ANALISIS BELANJA & STOK MINIM
@@ -2928,43 +4037,43 @@ export const IngredientView: React.FC = () => {
             </div>
           </div>
 
-          {/* SHOPPING SUMMARY CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 rounded-3xl text-white shadow-lg shadow-emerald-600/20">
-              <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Estimasi Modal Belanja ({shoppingHorizonDays} Hari)</p>
-              <h3 className="text-2xl sm:text-3xl font-black mt-1">
+          {/* SHOPPING SUMMARY CARDS (2 cols on mobile, 3 cols on desktop) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
+            <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-emerald-600 to-teal-700 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl text-white shadow-md shadow-emerald-600/20">
+              <p className="text-[10px] sm:text-xs font-bold text-emerald-100 uppercase tracking-wider">Estimasi Modal Belanja ({shoppingHorizonDays} Hari)</p>
+              <h3 className="text-xl sm:text-2xl font-black mt-0.5 sm:mt-1">
                 Rp {(shoppingData?.summary?.totalRestockCost || 0).toLocaleString('id-ID')}
               </h3>
-              <p className="text-xs text-emerald-100/80 mt-1">
+              <p className="text-[10px] sm:text-xs text-emerald-100/80 mt-0.5">
                 Untuk mengembalikan seluruh stok menipis ke batas aman optimal {shoppingHorizonDays} hari ke depan.
               </p>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Item Menipis / Kritis</p>
-                <h3 className="text-3xl font-black text-amber-600 mt-1">
+            <div className="col-span-1 bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs font-bold text-amber-600 uppercase tracking-wider truncate">Menipis / Kritis</p>
+                <h3 className="text-lg sm:text-2xl font-black text-amber-600 mt-0.5">
                   {shoppingData?.summary?.totalLowStockCount || 0}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {shoppingData?.summary?.totalCriticalCount || 0} di antaranya sudah Sold Out (0).
+                <p className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">
+                  {shoppingData?.summary?.totalCriticalCount || 0} Sold Out
                 </p>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                <AlertTriangle size={26} />
+              <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={18} className="sm:w-6 sm:h-6" />
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Supplier Terkait</p>
-                <h3 className="text-3xl font-black text-indigo-600 mt-1">
+            <div className="col-span-1 bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] sm:text-xs font-bold text-indigo-600 uppercase tracking-wider truncate">Supplier Terkait</p>
+                <h3 className="text-lg sm:text-2xl font-black text-indigo-600 mt-0.5">
                   {shoppingData?.supplierGrouping?.length || 0}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Vendor siap dihubungi untuk PO</p>
+                <p className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">Vendor siap PO</p>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <Truck size={26} />
+              <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Truck size={18} className="sm:w-6 sm:h-6" />
               </div>
             </div>
           </div>
@@ -3092,104 +4201,247 @@ export const IngredientView: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           TAB 5: KAPASITAS MENU (BOM)
       ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'forecast' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <Utensils size={20} className="text-amber-600" />
-                Analisis Kapasitas Produksi Menu & Bottleneck (BOM)
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">Memprediksi berapa porsi menu ramen & minuman yang dapat disajikan dari stok bahan saat ini.</p>
+      {activeTab === 'forecast' && (() => {
+        const readyCount = forecastList.filter(p => p.maxPortions > 15).length;
+        const lowCount = forecastList.filter(p => p.maxPortions > 0 && p.maxPortions <= 15).length;
+        const outCount = forecastList.filter(p => p.maxPortions <= 0).length;
+        const totalCapacity = forecastList.reduce((sum, p) => sum + (p.maxPortions || 0), 0);
+
+        const filteredForecastList = forecastList.filter(prod => {
+          const matchesSearch = prod.productName.toLowerCase().includes(forecastSearch.toLowerCase()) ||
+            prod.categoryName.toLowerCase().includes(forecastSearch.toLowerCase());
+          if (!matchesSearch) return false;
+
+          if (forecastStatusFilter === 'READY') return prod.maxPortions > 15;
+          if (forecastStatusFilter === 'LOW') return prod.maxPortions > 0 && prod.maxPortions <= 15;
+          if (forecastStatusFilter === 'OUT') return prod.maxPortions <= 0;
+          return true;
+        });
+
+        return (
+          <div className="space-y-4 sm:space-y-6 animate-fade-in">
+            {/* TOOLBAR: SEARCH & STATUS PILLS & TOTAL COUNTER */}
+            <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <Utensils size={20} className="text-amber-600" />
+                    Analisis Kapasitas Produksi Menu & Bottleneck (BOM)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Memprediksi berapa porsi menu ramen & minuman yang dapat disajikan dari stok bahan saat ini.</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      value={forecastSearch}
+                      onChange={e => setForecastSearch(e.target.value)}
+                      placeholder="Cari nama menu..."
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:border-amber-500 outline-none transition-colors"
+                    />
+                  </div>
+
+                  <div className="hidden sm:flex items-center gap-1.5 bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shrink-0 shadow-sm">
+                    <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Kapasitas:</span>
+                    <span className="text-amber-400">{totalCapacity.toLocaleString('id-ID')} Porsi</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Filter Pills */}
+              <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3 flex-wrap">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  <button
+                    onClick={() => setForecastStatusFilter('ALL')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                      forecastStatusFilter === 'ALL'
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    Semua ({forecastList.length})
+                  </button>
+
+                  <button
+                    onClick={() => setForecastStatusFilter('READY')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      forecastStatusFilter === 'READY'
+                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                        : 'bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Siap Saji ({readyCount})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setForecastStatusFilter('LOW')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      forecastStatusFilter === 'LOW'
+                        ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/20'
+                        : 'bg-amber-50/70 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span>Menipis ({lowCount})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setForecastStatusFilter('OUT')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      forecastStatusFilter === 'OUT'
+                        ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/20'
+                        : 'bg-rose-50/70 text-rose-800 hover:bg-rose-100 border border-rose-200'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                    <span>Habis ({outCount})</span>
+                  </button>
+                </div>
+
+                <div className="sm:hidden text-xs font-bold text-slate-600">
+                  Total: <span className="font-black text-slate-900">{totalCapacity} Porsi</span>
+                </div>
+              </div>
             </div>
 
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-              <input
-                type="text"
-                value={forecastSearch}
-                onChange={e => setForecastSearch(e.target.value)}
-                placeholder="Cari nama menu..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {forecastLoading ? (
-              <div className="col-span-full py-12 text-center text-slate-400">
-                <RefreshCw className="animate-spin inline-block mb-2 text-amber-500" size={24} />
-                <p>Menganalisis kapasitas menu dari resep BOM...</p>
-              </div>
-            ) : forecastList.length === 0 ? (
-              <div className="col-span-full py-12 text-center text-slate-400">
-                Belum ada data resep menu yang terkonfigurasi.
-              </div>
-            ) : (
-              forecastList
-                .filter(p => p.productName.toLowerCase().includes(forecastSearch.toLowerCase()))
-                .map(prod => {
+            {/* PRODUCT BOM CARDS GRID (3 COLUMNS) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              {forecastLoading ? (
+                <div className="col-span-full py-16 text-center text-slate-400">
+                  <RefreshCw className="animate-spin inline-block mb-3 text-amber-500" size={28} />
+                  <p className="text-xs font-bold">Menganalisis kapasitas menu dari resep BOM...</p>
+                </div>
+              ) : filteredForecastList.length === 0 ? (
+                <div className="col-span-full py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200/80 p-8">
+                  <Utensils className="mx-auto mb-2 text-slate-300" size={32} />
+                  <p className="font-bold text-sm text-slate-600">Tidak ada menu yang sesuai kriteria filter.</p>
+                  <p className="text-xs text-slate-400 mt-1">Coba ubah kata kunci pencarian atau status filter.</p>
+                </div>
+              ) : (
+                filteredForecastList.map(prod => {
                   const isExpanded = expandedForecastId === prod.productId;
+                  const isOut = prod.maxPortions <= 0;
+                  const isLow = prod.maxPortions > 0 && prod.maxPortions <= 15;
+
                   return (
-                    <div key={prod.productId} className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div
+                      key={prod.productId}
+                      className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-3.5"
+                    >
                       <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h4 className="font-black text-sm text-slate-900">{prod.productName}</h4>
-                            <p className="text-[11px] text-slate-400 font-bold uppercase">{prod.categoryName}</p>
+                        {/* Top Row: Thumbnail + Category & Sell Price + Status Pill */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                              {prod.imageUrl ? (
+                                <img
+                                  src={prod.imageUrl}
+                                  alt={prod.productName}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <Utensils size={20} className="text-amber-600" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-100 text-amber-800 tracking-wide uppercase">
+                                  {prod.categoryName || 'MENU'}
+                                </span>
+                                <span className="text-[11px] font-bold text-slate-500">
+                                  Jual: Rp {(prod.sellPrice || 0).toLocaleString('id-ID')}
+                                </span>
+                              </div>
+                              <h4 className="font-black text-sm text-slate-900 mt-0.5 truncate" title={prod.productName}>
+                                {prod.productName}
+                              </h4>
+                            </div>
                           </div>
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
-                            prod.maxPortions === 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' :
-                            (prod.maxPortions <= 5 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')
+
+                          {/* Status Badge */}
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                            isOut
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : isLow
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           }`}>
-                            {prod.status}
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              isOut ? 'bg-rose-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'
+                            }`} />
+                            {isOut ? 'Habis' : isLow ? 'Menipis' : 'Siap Saji'}
                           </span>
                         </div>
 
-                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                        {/* Capacity & HPP Box */}
+                        <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
                           <div>
-                            <div className="text-[10px] font-bold text-slate-400 uppercase">Kapasitas Saji Tersedia</div>
-                            <div className="text-2xl font-black text-slate-900 mt-0.5">
-                              {prod.maxPortions.toLocaleString('id-ID')} <span className="text-xs font-bold text-slate-500">Porsi</span>
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kapasitas Saji</div>
+                            <div className="text-2xl font-black text-slate-900 mt-0.5 flex items-baseline gap-1">
+                              {prod.maxPortions.toLocaleString('id-ID')}
+                              <span className="text-xs font-bold text-slate-500">Porsi</span>
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase">HPP / Porsi</div>
-                            <div className="text-xs font-black text-emerald-700 mt-0.5">
-                              Rp {prod.buyPrice.toLocaleString('id-ID')}
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">HPP / Porsi</div>
+                            <div className="text-xs font-black text-slate-800 mt-0.5">
+                              Rp {(prod.buyPrice || 0).toLocaleString('id-ID')}
                             </div>
+                            {prod.profitMargin !== undefined && prod.profitMargin > 0 && (
+                              <span className="inline-block mt-0.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                +{prod.profitMargin}% Margin
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        {prod.bottleneck && (
-                          <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200/80 text-[11px] text-amber-800 space-y-1">
-                            <div className="font-black flex items-center gap-1.5">
-                              <AlertTriangle size={13} />
+                        {/* Bottleneck Alert or Optimal Badge */}
+                        {prod.bottleneck ? (
+                          <div className="p-3 bg-amber-50/90 rounded-2xl border border-amber-200/80 text-[11px] text-amber-900 space-y-0.5">
+                            <div className="font-black flex items-center gap-1.5 text-amber-800">
+                              <AlertTriangle size={13} className="shrink-0 text-amber-600" />
                               Bahan Pembatas (Bottleneck):
                             </div>
-                            <p className="font-medium text-amber-900">
+                            <p className="font-semibold text-amber-950 text-[11px] leading-tight">
                               {prod.bottleneck.ingredientName} tersisa {prod.bottleneck.currentStock} {prod.bottleneck.unit} (hanya cukup {prod.bottleneck.maxPortions} porsi).
                             </p>
+                          </div>
+                        ) : prod.maxPortions > 0 ? (
+                          <div className="p-2.5 bg-emerald-50/70 rounded-2xl border border-emerald-100 text-[11px] text-emerald-800 flex items-center gap-1.5">
+                            <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                            <span className="font-semibold">Seluruh stok bahan baku mencukupi dengan optimal.</span>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 bg-rose-50/80 rounded-2xl border border-rose-200 text-[11px] text-rose-800 flex items-center gap-1.5">
+                            <XCircle size={13} className="text-rose-600 shrink-0" />
+                            <span className="font-semibold">Bahan baku habis, menu tidak dapat disajikan.</span>
                           </div>
                         )}
                       </div>
 
-                      {prod.recipeDetails.length > 0 && (
-                        <div>
+                      {/* Recipe Accordion */}
+                      {prod.recipeDetails && prod.recipeDetails.length > 0 && (
+                        <div className="pt-1">
                           <button
                             onClick={() => setExpandedForecastId(isExpanded ? null : prod.productId)}
-                            className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                            className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200/80 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
                           >
-                            <span>{isExpanded ? 'Sembunyikan Komposisi Bahan' : 'Lihat Komposisi Bahan Resep'}</span>
+                            <span>{isExpanded ? 'Sembunyikan Komposisi Bahan' : `Komposisi Resep (${prod.recipeDetails.length} Bahan)`}</span>
                             {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                           </button>
 
                           {isExpanded && (
-                            <div className="mt-3 space-y-2 pt-2 border-t border-slate-100">
+                            <div className="mt-2.5 space-y-1.5 pt-2 border-t border-slate-100 max-h-48 overflow-y-auto pr-1">
                               {prod.recipeDetails.map(r => (
-                                <div key={r.ingredientId} className="flex items-center justify-between text-[11px] p-2 bg-slate-50 rounded-lg">
-                                  <span className="font-bold text-slate-800">{r.ingredientName}</span>
-                                  <span className="text-slate-500">
+                                <div key={r.ingredientId} className="flex items-center justify-between text-[11px] p-2 bg-slate-50 rounded-xl border border-slate-100/80">
+                                  <span className="font-bold text-slate-800 truncate mr-2">{r.ingredientName}</span>
+                                  <span className="text-slate-500 whitespace-nowrap text-[10px]">
                                     {r.qtyPerServing} {r.unit}/porsi (stok: {r.currentStock})
                                   </span>
                                 </div>
@@ -3201,54 +4453,115 @@ export const IngredientView: React.FC = () => {
                     </div>
                   );
                 })
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─────────────────────────────────────────────────────────────
           TAB 6: AUDIT STOCK OPNAME FISIK
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'opname' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="space-y-3.5 sm:space-y-6 animate-fade-in">
+          <div className="bg-white p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-slate-100 pb-3 sm:pb-4">
               <div>
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <ClipboardCheck size={20} className="text-blue-600" />
+                <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <ClipboardCheck size={20} className="text-blue-600 shrink-0" />
                   Formulir Audit Stock Opname Fisik
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">Cocokkan stok fisik di gudang/chiller dengan stok sistem untuk auto-adjust selisih.</p>
               </div>
 
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={handleExportOpnamePDF}
-                  className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                  className="flex-1 sm:flex-none px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
                   title="Cetak Berita Acara Stock Opname (PDF)"
                 >
-                  <Printer size={15} />
-                  <span>Cetak Berita Acara (PDF)</span>
+                  <Printer size={14} />
+                  <span>Cetak PDF</span>
                 </button>
                 <input
                   type="text"
                   value={auditorName}
                   onChange={e => setAuditorName(e.target.value)}
                   placeholder="Nama Auditor"
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                  className="flex-1 sm:flex-none w-28 sm:w-36 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                 />
                 <button
                   onClick={handleSubmitOpname}
                   disabled={submittingOpname}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all"
+                  className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 transition-all active:scale-95"
                 >
-                  <CheckCircle2 size={16} />
+                  <CheckCircle2 size={15} />
                   <span>{submittingOpname ? 'Menyimpan...' : 'Simpan & Sinkronkan Opname'}</span>
                 </button>
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[600px]">
+            {/* MOBILE CARD VIEW (< md) */}
+            <div className="md:hidden divide-y divide-slate-100 max-h-[600px] overflow-y-auto space-y-1">
+              {opnameItems.map(item => {
+                const diff = Number(item.physicalStock) - item.systemStock;
+                const isMiss = Math.abs(diff) > 0.001;
+
+                return (
+                  <div key={item.ingredientId} className={`p-2.5 space-y-2 rounded-xl transition-colors ${isMiss ? 'bg-amber-50/50' : 'bg-white'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-bold text-slate-900 text-xs truncate">{item.name}</div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                        diff < 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (diff > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-500')
+                      }`}>
+                        {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-1.5 bg-slate-50 rounded-lg border border-slate-100 text-center">
+                        <span className="text-[9px] font-bold text-slate-400 block uppercase">Stok Sistem</span>
+                        <span className="text-xs font-black text-slate-700">{item.systemStock.toLocaleString('id-ID')} {item.unit}</span>
+                      </div>
+                      <div className="p-1.5 bg-blue-50/60 rounded-lg border border-blue-100 text-center">
+                        <span className="text-[9px] font-bold text-blue-600 block uppercase">Fisik Riil</span>
+                        <input
+                          type="number"
+                          step="any"
+                          value={item.physicalStock}
+                          onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
+                          className="w-full mt-0.5 px-2 py-0.5 bg-white border border-blue-200 rounded text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={item.reason}
+                        onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
+                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700"
+                      >
+                        <option value="Normal">Normal</option>
+                        <option value="Susut/Trimming">Susut / Trimming</option>
+                        <option value="Busuk/Rusak">Busuk / Rusak</option>
+                        <option value="Selisih Timbang">Selisih Timbang</option>
+                        <option value="Lainnya">Lainnya</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={item.notes}
+                        onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
+                        placeholder="Catatan..."
+                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px]"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* DESKTOP TABLE VIEW (>= md) */}
+            <div className="hidden md:block overflow-x-auto max-h-[600px]">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase sticky top-0">
                   <tr>
@@ -3993,130 +5306,263 @@ export const IngredientView: React.FC = () => {
           MODAL 2: CATAT STOCK LOSS (WASTE & KERUSAKAN)
       ───────────────────────────────────────────────────────────── */}
       {showLossModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-scale-up">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                <TrendingDown size={20} />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up my-auto border border-slate-100 max-h-[92vh] flex flex-col">
+            
+            {/* Header with Title & Close button */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                  <TrendingDown size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Catat Kerusakan / Stock Loss</h3>
+                  <p className="text-xs text-slate-500">Mencatat bahan busuk, rusak, expired, atau porsi menu gagal.</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-black text-slate-900">Catat Kerusakan / Stock Loss</h3>
-                <p className="text-xs text-slate-500">Mencatat bahan busuk, rusak, expired, atau trimming.</p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowLossModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            <form onSubmit={handleSubmitLoss} className="space-y-4">
+            <form onSubmit={handleSubmitLoss} className="space-y-4 overflow-y-auto pr-1 flex-1">
+              
+              {/* DUAL-MODE TOGGLE TABS */}
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Pilih Bahan Baku</label>
-                <select
-                  value={lossForm.ingredientId}
-                  onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                >
-                  {ingredients.map(i => (
-                    <option key={i.id} value={i.id.toString()}>
-                      {i.name} (Stok: {i.stock} {i.unit})
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  Tipe Objek Yang Terbuang
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLossForm(prev => ({
+                        ...prev,
+                        targetType: 'INGREDIENT',
+                        ingredientId: prev.ingredientId || (ingredients[0]?.id?.toString() || ''),
+                        qtyLoss: '1'
+                      }));
+                    }}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                      lossForm.targetType === 'INGREDIENT'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Layers size={15} className={lossForm.targetType === 'INGREDIENT' ? 'text-amber-500' : ''} />
+                    <span>Bahan Baku Mentah</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (allProducts.length === 0) fetchProducts();
+                      setLossForm(prev => ({
+                        ...prev,
+                        targetType: 'PRODUCT',
+                        productId: prev.productId || (allProducts[0]?.id?.toString() || ''),
+                        qtyLoss: '1'
+                      }));
+                    }}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                      lossForm.targetType === 'PRODUCT'
+                        ? 'bg-white text-purple-700 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Utensils size={15} className={lossForm.targetType === 'PRODUCT' ? 'text-purple-600' : ''} />
+                    <span>Menu / Porsi Masakan</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* SELECT ITEM ACCORDING TO TARGET TYPE */}
+              {lossForm.targetType === 'INGREDIENT' ? (
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Jumlah Rusak / Loss ({selectedLossIngredient?.unit || 'unit'})
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    placeholder="Contoh: 2.5"
-                    value={lossForm.qtyLoss}
-                    onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Alasan Loss / Pengurangan</label>
-                  
-                  {/* 1-Tap Quick Reason Chips */}
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {[
-                      { label: 'Kadaluarsa / Basi', val: 'Busuk / Kadaluarsa', color: 'border-amber-200 text-amber-700 bg-amber-50/60' },
-                      { label: 'Gosong / Salah Masak', val: 'Kesalahan Masak', color: 'border-rose-200 text-rose-700 bg-rose-50/60' },
-                      { label: 'Tumpah / Rusak Fisik', val: 'Tumpah / Rusak', color: 'border-orange-200 text-orange-700 bg-orange-50/60' },
-                      { label: 'Makan Staf (Konsumsi)', val: 'Makan Karyawan / Konsumsi Staf', color: 'border-emerald-200 text-emerald-700 bg-emerald-50/60' },
-                      { label: 'Sisa Trimming', val: 'Sisa Trimming / Kupas', color: 'border-purple-200 text-purple-700 bg-purple-50/60' },
-                    ].map(tag => (
-                      <button
-                        key={tag.val}
-                        type="button"
-                        onClick={() => setLossForm({ ...lossForm, reason: tag.val })}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
-                          lossForm.reason === tag.val 
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
-                            : `${tag.color} hover:opacity-80`
-                        }`}
-                      >
-                        {tag.label}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">Pilih Bahan Baku</label>
+                    <span className="text-[11px] text-slate-500">
+                      Stok saat ini: <strong className="text-slate-800">{selectedLossIngredient?.stock || 0} {selectedLossIngredient?.unit}</strong>
+                    </span>
                   </div>
-
                   <select
-                    value={lossForm.reason}
-                    onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                    value={lossForm.ingredientId}
+                    onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500 focus:bg-white transition-all"
                   >
-                    <option value="Busuk / Kadaluarsa">Busuk / Kadaluarsa</option>
-                    <option value="Tumpah / Rusak">Tumpah / Rusak Fisik</option>
-                    <option value="Sisa Trimming / Kupas">Sisa Trimming / Kupas</option>
-                    <option value="Kesalahan Masak">Kesalahan Masak / Olah</option>
-                    <option value="Makan Karyawan / Konsumsi Staf">Makan Karyawan / Konsumsi Staf</option>
-                    <option value="Lainnya">Lainnya</option>
+                    {ingredients.map(i => (
+                      <option key={i.id} value={i.id.toString()}>
+                        {i.name} (Stok: {i.stock} {i.unit}) — Rp {i.buyPrice.toLocaleString('id-ID')}/{i.unit}
+                      </option>
+                    ))}
                   </select>
                 </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">Pilih Menu / Porsi Masakan</label>
+                    <span className="text-[11px] text-purple-600 font-bold">
+                      HPP Satuan: Rp {unitHpp.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  <select
+                    value={lossForm.productId}
+                    onChange={e => setLossForm({ ...lossForm, productId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500 focus:bg-white transition-all"
+                  >
+                    {allProducts.map(p => {
+                      const pCost = p.buyPrice || 0;
+                      return (
+                        <option key={p.id} value={p.id.toString()}>
+                          {p.name} {pCost > 0 ? `— HPP: Rp ${pCost.toLocaleString('id-ID')}` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-[10px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200/80 mt-1.5 flex items-center gap-1.5">
+                    <Sparkles size={12} className="shrink-0" />
+                    <span>Sistem otomatis mengurangi stok bahan baku penyusun resep menu ini di database.</span>
+                  </p>
+                </div>
+              )}
+
+              {/* QUANTITY & QUICK INCREMENTS */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    Jumlah Terbuang / Rusak ({unitLabel.toUpperCase()})
+                  </label>
+                  <span className="text-[11px] font-bold text-rose-600">
+                    {lossForm.qtyLoss || 0} {unitLabel}
+                  </span>
+                </div>
+                
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  required
+                  placeholder="0"
+                  value={lossForm.qtyLoss}
+                  onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-slate-900 outline-none focus:border-rose-500 focus:bg-white transition-all"
+                />
+
+                {/* Quick Increment Buttons */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  {(lossForm.targetType === 'INGREDIENT'
+                    ? [0.1, 0.5, 1, 5]
+                    : [0.5, 1, 2, 5]
+                  ).map(inc => (
+                    <button
+                      key={inc}
+                      type="button"
+                      onClick={() => handleIncrementQty(inc)}
+                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 rounded-lg text-xs font-black transition-all border border-slate-200"
+                    >
+                      +{inc}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleIncrementQty(0)}
+                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-all border border-rose-200 ml-auto"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
 
-              {/* ESTIMATED LOSS BADGE */}
-              <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200/80 flex items-center justify-between">
+              {/* 8 INTERACTIVE 1-TAP REASON BUTTONS */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Alasan Kerusakan / Pembuangan (Pilih 1-Tap)
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { label: 'Busuk / Basi', val: 'Busuk / Basi', color: 'border-amber-200 text-amber-800 bg-amber-50/80', active: 'bg-amber-600 text-white border-amber-600' },
+                    { label: 'Kadaluarsa (Expired)', val: 'Kadaluarsa (Expired)', color: 'border-rose-200 text-rose-800 bg-rose-50/80', active: 'bg-rose-600 text-white border-rose-600' },
+                    { label: 'Gosong / Overcooked', val: 'Gosong / Overcooked', color: 'border-stone-300 text-stone-800 bg-stone-100', active: 'bg-stone-800 text-white border-stone-800' },
+                    { label: 'Salah Buat Dapur', val: 'Salah Buat Dapur', color: 'border-purple-200 text-purple-800 bg-purple-50/80', active: 'bg-purple-600 text-white border-purple-600' },
+                    { label: 'Tumpah / Terjatuh', val: 'Tumpah / Terjatuh', color: 'border-sky-200 text-sky-800 bg-sky-50/80', active: 'bg-sky-600 text-white border-sky-600' },
+                    { label: 'Trimming / Kulit Berlebih', val: 'Trimming / Kulit Berlebih', color: 'border-emerald-200 text-emerald-800 bg-emerald-50/80', active: 'bg-emerald-600 text-white border-emerald-600' },
+                    { label: 'Sisa Tutup Toko', val: 'Sisa Tutup Toko', color: 'border-indigo-200 text-indigo-800 bg-indigo-50/80', active: 'bg-indigo-600 text-white border-indigo-600' },
+                    { label: 'Lainnya / Kerusakan Lain', val: 'Lainnya / Kerusakan Lain', color: 'border-slate-300 text-slate-800 bg-slate-100', active: 'bg-slate-800 text-white border-slate-800' },
+                  ].map(r => (
+                    <button
+                      key={r.val}
+                      type="button"
+                      onClick={() => setLossForm({ ...lossForm, reason: r.val })}
+                      className={`p-2 rounded-xl text-[11px] font-black border text-left transition-all flex items-center justify-between gap-1 ${
+                        lossForm.reason === r.val
+                          ? `${r.active} shadow-sm ring-2 ring-slate-900/10`
+                          : `${r.color} hover:opacity-90`
+                      }`}
+                    >
+                      <span className="truncate">{r.label}</span>
+                      {lossForm.reason === r.val && <CheckCircle2 size={13} className="shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* LIVE HPP CALCULATION CARD */}
+              <div className="p-3.5 bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl border border-rose-200/80 flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] font-bold text-rose-600 uppercase">Kalkulasi Kerugian (Rp)</div>
-                  <div className="text-base font-black text-rose-700">
+                  <div className="text-[10px] font-black text-rose-600 uppercase tracking-wider">
+                    Estimasi Kerugian HPP Riil
+                  </div>
+                  <div className="text-lg sm:text-xl font-black text-rose-700">
                     Rp {estimatedLossAmount.toLocaleString('id-ID')}
                   </div>
                 </div>
-                <div className="text-right text-[11px] text-rose-800 font-medium">
-                  Harga Beli: Rp {selectedLossIngredient?.buyPrice.toLocaleString('id-ID') || 0}/{selectedLossIngredient?.unit}
+                <div className="text-right text-[11px] text-slate-600 font-medium">
+                  <div>{lossForm.qtyLoss || 0} {unitLabel} × Rp {unitHpp.toLocaleString('id-ID')}</div>
+                  <div className="text-[10px] text-slate-400">HPP Satuan {unitLabel}</div>
                 </div>
               </div>
 
+              {/* CATATAN TAMBAHAN (OPSIONAL) */}
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Catatan Tambahan (Opsional)</label>
                 <textarea
                   rows={2}
-                  placeholder="Contoh: Tomat layu di chiller bagian bawah"
+                  placeholder="Contoh: Chiller mati semalam / Salah resep ramen pedas meja 4..."
                   value={lossForm.notes}
                   onChange={e => setLossForm({ ...lossForm, notes: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 resize-none"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 resize-none outline-none focus:border-rose-500 focus:bg-white"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              {/* MODAL FOOTER ACTIONS */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowLossModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submittingLoss}
-                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md shadow-rose-500/20"
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md shadow-rose-500/20 active:scale-95 transition-all flex items-center gap-1.5"
                 >
-                  {submittingLoss ? 'Menyimpan...' : 'Simpan Stock Loss'}
+                  {submittingLoss ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={15} />
+                      <span>Simpan Stock Loss</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

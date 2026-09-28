@@ -36,7 +36,8 @@ import {
   CreditCard,
   ShieldAlert,
   Sparkles,
-  Store
+  Store,
+  LayoutGrid
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -128,7 +129,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/crm': 'Pelanggan & CRM',
     '/laporan': 'Laporan Penjualan',
     '/audit-log': 'Audit Trail & Log Aktivitas',
-    '/cabang': 'Manajemen Cabang & Paket Langganan',
+    '/cabang': 'Manajemen Cabang',
     '/pengaturan': 'Pengaturan Sistem'
   };
   const pageTitle = titleMap[location.pathname] || 'MUKI RAMEN POS';
@@ -240,13 +241,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
           </div>
-
-          {/* Multi-Tenant Switcher */}
-          {!isCollapsed && (
-            <div className="px-3 pb-3">
-              <TenantOutletSwitcher />
-            </div>
-          )}
         
           <nav className="nav-menu">
             {checkAccess(['Admin']) && (
@@ -412,39 +406,55 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
       {/* Main Content */}
       <main className="main-content">
-        <header className="topbar" style={{ padding: isMobile ? '0 1rem' : '0 1.5rem' }}>
+        <header className="topbar" style={{ padding: isMobile ? '0.75rem 1rem' : '0 1.5rem', minHeight: isMobile ? '64px' : '64px' }}>
           <div className="flex items-center gap-3">
-            {!isMobile && (
-              <button 
-                type="button"
-                className="icon-btn hover:bg-slate-100 p-2 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors"
-                onClick={toggleSidebar}
-                title={isCollapsed ? "Perluas Sidebar" : "Kecilkan Sidebar (Minimize)"}
-              >
-                {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-              </button>
+            {!isMobile ? (
+              <>
+                <button 
+                  type="button"
+                  className="icon-btn hover:bg-slate-100 p-2 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors"
+                  onClick={toggleSidebar}
+                  title={isCollapsed ? "Perluas Sidebar" : "Kecilkan Sidebar (Minimize)"}
+                >
+                  {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+                </button>
+                <h1 className="page-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>{pageTitle}</h1>
+              </>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
+                  <LayoutGrid size={20} />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <h1 className="text-base font-extrabold text-slate-900 leading-tight truncate">{pageTitle}</h1>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate mt-0.5">
+                    {posContext?.settings?.storeName || 'VAMOS POOL & CAFE'}
+                  </span>
+                </div>
+              </div>
             )}
-            <h1 className="page-title" style={{ fontSize: isMobile ? '1.15rem' : '1.25rem', fontWeight: 800 }}>{pageTitle}</h1>
           </div>
           
-          <div className="topbar-actions flex items-center gap-3">
+          <div className="topbar-actions flex items-center gap-2 sm:gap-3">
             {/* Indikator Status Koneksi */}
             {posContext?.isOnline ? (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full select-none shadow-sm">
+              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full select-none shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Online</span>
+                {!isMobile && <span>Online</span>}
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-full select-none shadow-sm animate-pulse">
+              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-full select-none shadow-sm animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                <span>Mode Offline</span>
+                {!isMobile && <span>Mode Offline</span>}
               </span>
             )}
             
             <NotificationBell />
             
-            <div className="user-profile relative group cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-colors">
-              <div className="avatar bg-indigo-100 text-indigo-700">{posContext?.user?.username?.substring(0, 2).toUpperCase() || 'U'}</div>
+            <div className="user-profile relative group cursor-pointer hover:bg-gray-50 rounded-lg p-1 transition-colors">
+              <div className="avatar bg-indigo-600 text-white font-black text-xs w-9 h-9 rounded-full flex items-center justify-center shadow-sm">
+                {posContext?.user?.username?.substring(0, 2).toUpperCase() || 'AD'}
+              </div>
               {!isMobile && (
                 <>
                   <div className="user-info">
@@ -474,7 +484,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
         
-        <div className="page-content flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="page-content flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col pb-24 md:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
           {children}
         </div>
       </main>
@@ -571,256 +581,351 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         </div>
       )}
 
-      {/* Docked Native-style Bottom Navigation Bar for Mobile */}
+      {/* Docked Native Android-style Bottom Navigation Bar for Mobile */}
       {isMobile && (
-        <div className="fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] flex items-center justify-around px-2 z-40 pb-[env(safe-area-inset-bottom)]">
-          <NavLink to="/dashboard" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
-            <LayoutDashboard size={20} className="transition-transform active:scale-95" />
-            <span className="text-[10px] tracking-tight">Home</span>
-          </NavLink>
-          <NavLink to="/pos" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
-            <ShoppingCart size={20} className="transition-transform active:scale-95" />
-            <span className="text-[10px] tracking-tight">POS</span>
-          </NavLink>
-          <NavLink to="/meja" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
-            <Grid size={20} className="transition-transform active:scale-95" />
-            <span className="text-[10px] tracking-tight">Meja</span>
-          </NavLink>
-          <NavLink to="/riwayat" className={({isActive}) => `flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl transition-all ${isActive ? 'text-indigo-600 font-black' : 'text-slate-400 font-medium'}`}>
-            <History size={20} className="transition-transform active:scale-95" />
-            <span className="text-[10px] tracking-tight">Riwayat</span>
-          </NavLink>
-          <button 
-            type="button" 
-            onClick={() => setIsMoreMenuOpen(true)}
-            className="flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-xl text-slate-400 font-medium focus:outline-none"
-          >
-            <Menu size={20} className="transition-transform active:scale-95" />
-            <span className="text-[10px] tracking-tight">Lainnya</span>
-          </button>
+        <div
+          className="fixed bottom-0 left-0 right-0 z-40"
+          style={{
+            background: 'rgba(255,255,255,0.98)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            borderTop: '1px solid rgba(0,0,0,0.07)',
+            boxShadow: '0 -4px 30px rgba(0,0,0,0.07)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          }}
+        >
+          <div className="grid grid-cols-5 items-end h-[62px] px-1">
+
+            {/* 1. Home */}
+            <NavLink
+              to="/dashboard"
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 ${
+                  isActive
+                    ? 'text-emerald-700'
+                    : 'text-slate-400'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div className={`flex items-center justify-center rounded-2xl transition-all ${
+                    isActive ? 'bg-emerald-100 px-4 py-1' : 'px-4 py-1'
+                  }`}>
+                    <LayoutGrid size={22} strokeWidth={isActive ? 2.5 : 2} />
+                  </div>
+                  <span className={`text-[11px] leading-none transition-all ${
+                    isActive ? 'font-bold' : 'font-medium'
+                  }`}>Home</span>
+                </>
+              )}
+            </NavLink>
+
+            {/* 2. Meja */}
+            <NavLink
+              to="/meja"
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 ${
+                  isActive
+                    ? 'text-emerald-700'
+                    : 'text-slate-400'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div className={`flex items-center justify-center rounded-2xl transition-all ${
+                    isActive ? 'bg-emerald-100 px-4 py-1' : 'px-4 py-1'
+                  }`}>
+                    <Grid size={22} strokeWidth={isActive ? 2.5 : 2} />
+                  </div>
+                  <span className={`text-[11px] leading-none transition-all ${
+                    isActive ? 'font-bold' : 'font-medium'
+                  }`}>Meja</span>
+                </>
+              )}
+            </NavLink>
+
+            {/* 3. Floating Center FAB: KASIR */}
+            <div className="flex flex-col items-center justify-end pb-1">
+              <NavLink
+                to="/pos"
+                title="Kasir POS"
+                className={({ isActive }) =>
+                  `relative flex flex-col items-center justify-center w-[58px] h-[58px] rounded-full -mt-6
+                  bg-gradient-to-b from-teal-400 to-emerald-600
+                  shadow-[0_6px_24px_rgba(16,185,129,0.45)]
+                  border-[3.5px] border-white
+                  active:scale-90 transition-all
+                  ${ isActive ? 'ring-2 ring-offset-1 ring-emerald-400' : '' }`
+                }
+              >
+                <ShoppingCart size={22} strokeWidth={2.5} className="text-white" />
+                <span className="text-[8.5px] font-black tracking-widest text-white uppercase mt-0.5">KASIR</span>
+              </NavLink>
+            </div>
+
+            {/* 4. Riwayat */}
+            <NavLink
+              to="/riwayat"
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 ${
+                  isActive
+                    ? 'text-emerald-700'
+                    : 'text-slate-400'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div className={`flex items-center justify-center rounded-2xl transition-all ${
+                    isActive ? 'bg-emerald-100 px-4 py-1' : 'px-4 py-1'
+                  }`}>
+                    <History size={22} strokeWidth={isActive ? 2.5 : 2} />
+                  </div>
+                  <span className={`text-[11px] leading-none transition-all ${
+                    isActive ? 'font-bold' : 'font-medium'
+                  }`}>Riwayat</span>
+                </>
+              )}
+            </NavLink>
+
+            {/* 5. Lainnya */}
+            <button
+              type="button"
+              onClick={() => setIsMoreMenuOpen(true)}
+              className={`flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 focus:outline-none ${
+                isMoreMenuOpen
+                  ? 'text-emerald-700'
+                  : 'text-slate-400'
+              }`}
+            >
+              <div className={`flex items-center justify-center rounded-2xl transition-all ${
+                isMoreMenuOpen ? 'bg-emerald-100 px-4 py-1' : 'px-4 py-1'
+              }`}>
+                <Menu size={22} strokeWidth={isMoreMenuOpen ? 2.5 : 2} />
+              </div>
+              <span className={`text-[11px] leading-none transition-all ${
+                isMoreMenuOpen ? 'font-bold' : 'font-medium'
+              }`}>Lainnya</span>
+            </button>
+
+          </div>
         </div>
       )}
 
       {/* Slide up Drawer Menu for other features */}
       {isMobile && isMoreMenuOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end justify-center animate-in fade-in duration-200" onClick={() => setIsMoreMenuOpen(false)}>
-          <div 
-            className="bg-white w-full rounded-t-3xl p-6 pb-8 shadow-2xl max-w-md border-t border-slate-100 flex flex-col gap-4 animate-in slide-in-from-bottom duration-300"
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center animate-in fade-in duration-200"
+          style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)' }}
+          onClick={() => setIsMoreMenuOpen(false)}
+        >
+          <div
+            className="bg-white w-full rounded-t-[28px] shadow-2xl max-w-md flex flex-col animate-in slide-in-from-bottom duration-300"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
-                  <Grid size={16} />
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-200" />
+            </div>
+
+            {/* Header */}
+            <div className="flex justify-between items-center px-5 pt-1 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
+                  <LayoutGrid size={15} className="text-white" />
                 </div>
-                <span className="font-extrabold text-sm text-slate-800">Semua Fitur POS</span>
+                <div>
+                  <p className="font-extrabold text-sm text-slate-800 leading-tight">Menu Lengkap</p>
+                  <p className="text-[10px] text-slate-400 font-medium">{posContext?.settings?.storeName || 'VAMOS POOL & CAFE'}</p>
+                </div>
               </div>
-              <button 
+              <button
                 type="button"
-                className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"
                 onClick={() => setIsMoreMenuOpen(false)}
               >
-                Tutup
+                <ChevronDown size={16} />
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-3 gap-2.5 max-h-[60vh] overflow-y-auto px-4 py-3">
               {checkAccess(['Admin']) && (
-                <NavLink 
-                  to="/produk" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Package size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Produk</span>
+                <NavLink to="/produk" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-violet-100 flex items-center justify-center">
+                    <Package size={20} className="text-violet-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Produk</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin', 'Kasir']) && (
-                <NavLink 
-                  to="/reservasi" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Calendar size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Reservasi</span>
+                <NavLink to="/reservasi" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-100 flex items-center justify-center">
+                    <Calendar size={20} className="text-blue-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Reservasi</span>
                 </NavLink>
               )}
 
               {isKDSEnabled && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
-                <NavLink 
-                  to="/kds" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center relative"
-                >
-                  <ChefHat size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Dapur (KDS)</span>
-                  {kdsCount > 0 && (
-                    <span className="absolute top-1.5 right-1.5 bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full">
-                      {kdsCount}
-                    </span>
-                  )}
+                <NavLink to="/kds" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-orange-100 flex items-center justify-center relative">
+                    <ChefHat size={20} className="text-orange-600" />
+                    {kdsCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full min-w-[16px] text-center">{kdsCount}</span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Dapur KDS</span>
                 </NavLink>
               )}
 
-              {/* Gudang Pusat */}
               {checkAccess(['Admin', 'Dapur']) && (
-                <NavLink 
-                  to="/gudang" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Boxes size={18} className="text-indigo-600" />
-                  <span className="text-[10px] font-bold text-slate-700">Gudang Pusat</span>
+                <NavLink to="/gudang" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-cyan-100 flex items-center justify-center">
+                    <Boxes size={20} className="text-cyan-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Gudang</span>
                 </NavLink>
               )}
 
-              {/* Bahan Baku / Inventory */}
               {checkAccess(['Admin', 'Dapur']) && (
-                <NavLink 
-                  to="/bahan-baku" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <PackageSearch size={18} className="text-indigo-600" />
-                  <span className="text-[10px] font-bold text-slate-700">Bahan Baku</span>
+                <NavLink to="/bahan-baku" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-lime-100 flex items-center justify-center">
+                    <PackageSearch size={20} className="text-lime-700" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Bahan Baku</span>
                 </NavLink>
               )}
 
-              {/* Purchase Order (Opsional) */}
               {checkAccess(['Admin', 'Dapur']) && localStorage.getItem('feature_enable_po') === 'true' && (
-                <NavLink 
-                  to="/purchase-order" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <ClipboardList size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">PO / Belanja</span>
+                <NavLink to="/purchase-order" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center">
+                    <ClipboardList size={20} className="text-amber-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">PO Belanja</span>
                 </NavLink>
               )}
 
-              {/* Supplier */}
               {checkAccess(['Admin', 'Dapur']) && (
-                <NavLink 
-                  to="/supplier" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Truck size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Supplier</span>
+                <NavLink to="/supplier" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-teal-100 flex items-center justify-center">
+                    <Truck size={20} className="text-teal-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Supplier</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin', 'Kasir']) && (
-                <NavLink 
-                  to="/qrcode" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <QrCode size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">QR Code</span>
+                <NavLink to="/qrcode" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-slate-100 flex items-center justify-center">
+                    <QrCode size={20} className="text-slate-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">QR Code</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin', 'Kasir']) && (
-                <NavLink 
-                  to="/kas" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Wallet size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Petty Cash</span>
+                <NavLink to="/kas" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-100 flex items-center justify-center">
+                    <Wallet size={20} className="text-emerald-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Petty Cash</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin']) && (
-                <NavLink 
-                  to="/karyawan" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Users size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Karyawan</span>
+                <NavLink to="/karyawan" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-100 flex items-center justify-center">
+                    <Users size={20} className="text-indigo-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Karyawan</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin']) && (
-                <NavLink 
-                  to="/crm" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Award size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">CRM Member</span>
+                <NavLink to="/crm" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-pink-100 flex items-center justify-center">
+                    <Award size={20} className="text-pink-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">CRM Member</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin']) && (
-                <NavLink 
-                  to="/absensi" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Fingerprint size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Absensi</span>
+                <NavLink to="/absensi" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-yellow-100 flex items-center justify-center">
+                    <Fingerprint size={20} className="text-yellow-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Absensi</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin']) && (
-                <NavLink 
-                  to="/kasbon" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <CreditCard size={18} className="text-indigo-600" />
-                  <span className="text-[10px] font-bold text-slate-700">Kasbon Staf</span>
+                <NavLink to="/kasbon" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-rose-100 flex items-center justify-center">
+                    <CreditCard size={20} className="text-rose-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Kasbon Staf</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin', 'Kasir']) && (
-                <NavLink 
-                  to="/shift" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Clock size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Shift History</span>
+                <NavLink to="/shift" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-sky-100 flex items-center justify-center">
+                    <Clock size={20} className="text-sky-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Shift</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin']) && (
-                <NavLink 
-                  to="/laporan" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <FileText size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Laporan</span>
+                <NavLink to="/laporan" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-fuchsia-100 flex items-center justify-center">
+                    <FileText size={20} className="text-fuchsia-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Laporan</span>
                 </NavLink>
               )}
 
               {checkAccess(['Admin']) && (
-                <NavLink 
-                  to="/pengaturan" 
-                  onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-100 transition-colors gap-2 text-center"
-                >
-                  <Settings size={18} className="text-slate-500" />
-                  <span className="text-[10px] font-bold text-slate-700">Pengaturan</span>
+                <NavLink to="/pengaturan" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-slate-100 flex items-center justify-center">
+                    <Settings size={20} className="text-slate-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Pengaturan</span>
                 </NavLink>
               )}
             </div>
 
-            <div className="border-t border-slate-100 pt-4 flex gap-2">
-              <button 
+            <div className="flex gap-2 px-4 py-3 border-t border-slate-100">
+              <button
                 onClick={() => { setIsMoreMenuOpen(false); setIsPinModalOpen(true); }}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-indigo-600 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                className="flex-1 py-3 px-4 rounded-2xl border border-slate-200 bg-white text-indigo-600 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
               >
-                <Fingerprint size={14} /> Ganti Kasir
+                <Fingerprint size={15} /> Ganti Kasir
               </button>
-              <button 
+              <button
                 onClick={() => posContext?.logout()}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                className="flex-1 py-3 px-4 rounded-2xl bg-rose-50 text-rose-600 text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
               >
                 Log Out
               </button>

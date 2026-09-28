@@ -145,7 +145,7 @@ const TransactionHistoryView = () => {
 
   const validOrders = orders.filter(o => o.status !== 'Void');
   const totalSales = validOrders.reduce((sum, o) => sum + o.total, 0);
-  const avgSales = validOrders.length > 0 ? totalSales / validOrders.length : 0;
+  const avgSales = validOrders.length > 0 ? Math.round(totalSales / validOrders.length) : 0;
 
   // EXPORT FUNCTIONS
   const exportPDF = async () => {
@@ -185,9 +185,9 @@ const TransactionHistoryView = () => {
   };
 
   return (
-    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+    <div className="p-2.5 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-2.5 sm:gap-4">
       {/* HEADER / ACTION TOOLBAR */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 shrink-0">
         <div className="hidden sm:block">
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
             <History className="text-primary" size={24} /> Riwayat Transaksi
@@ -195,128 +195,129 @@ const TransactionHistoryView = () => {
           <p className="text-xs text-slate-500 mt-0.5">Daftar transaksi penjualan dengan sinkronisasi waktu lokal real-time</p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button className="flex-1 sm:flex-none btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2.5 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all active:scale-95" onClick={exportPDF}>
-            <FileText size={15} className="text-rose-500" /> Export PDF
+          <button className="flex-1 sm:flex-none btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 sm:py-2.5 px-3 sm:px-3.5 text-[11px] sm:text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-xl transition-all active:scale-95" onClick={exportPDF}>
+            <FileText size={14} className="text-rose-500 shrink-0" /> Export PDF
           </button>
-          <button className="flex-1 sm:flex-none btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2.5 px-3.5 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 rounded-xl transition-all active:scale-95" onClick={exportExcel}>
-            <Download size={15} className="text-emerald-600" /> Export Excel
+          <button className="flex-1 sm:flex-none btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 sm:py-2.5 px-3 sm:px-3.5 text-[11px] sm:text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 rounded-xl transition-all active:scale-95" onClick={exportExcel}>
+            <Download size={14} className="text-emerald-600 shrink-0" /> Export Excel
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
-        <div className="card flex items-center justify-between p-4 border-l-4 border-primary shadow-sm bg-white rounded-2xl">
-          <div>
-            <div className="text-2xl font-black text-slate-900">{validOrders.length}</div>
-            <div className="text-xs font-semibold text-slate-500">Total Transaksi Sah</div>
+      {/* 3 KPI CARDS - 2 cols on mobile, 3 cols on desktop */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 shrink-0">
+        <div className="card flex items-center justify-between p-2.5 sm:p-4 border-l-4 border-primary shadow-xs bg-white rounded-xl sm:rounded-2xl">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-slate-900 tracking-tight truncate">{validOrders.length}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Total Transaksi Sah</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
-            <ShoppingCart size={20} />
+          <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-blue-50 flex items-center justify-center text-primary shrink-0">
+            <ShoppingCart size={15} className="sm:w-5 sm:h-5" />
           </div>
         </div>
         
-        <div className="card flex items-center justify-between p-4 border-l-4 border-success shadow-sm bg-white rounded-2xl">
-          <div>
-            <div className="text-2xl font-black text-emerald-600">{formatCurrency(totalSales)}</div>
-            <div className="text-xs font-semibold text-slate-500">Total Penjualan</div>
+        <div className="card flex items-center justify-between p-2.5 sm:p-4 border-l-4 border-emerald-500 shadow-xs bg-white rounded-xl sm:rounded-2xl">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-emerald-600 tracking-tight truncate">{formatCurrency(totalSales)}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Total Penjualan</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <DollarSign size={20} />
+          <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+            <DollarSign size={15} className="sm:w-5 sm:h-5" />
           </div>
         </div>
 
-        <div className="card flex items-center justify-between p-4 border-l-4 border-indigo-500 shadow-sm bg-white rounded-2xl">
-          <div>
-            <div className="text-2xl font-black text-indigo-700">{formatCurrency(avgSales)}</div>
-            <div className="text-xs font-semibold text-slate-500">Rata-rata Transaksi</div>
+        <div className="card col-span-2 sm:col-span-1 flex items-center justify-between p-2.5 sm:p-4 border-l-4 border-indigo-500 shadow-xs bg-white rounded-xl sm:rounded-2xl">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-indigo-700 tracking-tight truncate">{formatCurrency(avgSales)}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Rata-rata Transaksi</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
-            <BarChart2 size={20} />
+          <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 shrink-0">
+            <BarChart2 size={15} className="sm:w-5 sm:h-5" />
           </div>
         </div>
       </div>
 
-      <div className="card flex-initial md:flex-1 flex flex-col p-0 shadow-sm bg-white rounded-2xl border border-slate-200/80 overflow-hidden shrink-0">
+      <div className="card flex-initial md:flex-1 flex flex-col p-0 shadow-xs bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 overflow-hidden shrink-0">
         <div className="border-b border-slate-200">
           <button 
-            className="w-full p-3.5 sm:p-4 flex justify-between items-center bg-slate-50/70 hover:bg-slate-100/70 transition-colors"
+            className="w-full p-2.5 sm:p-3.5 flex justify-between items-center bg-slate-50/70 hover:bg-slate-100/70 transition-colors"
             onClick={() => setIsFilterOpen(!isFilterOpen)}
           >
-            <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-indigo-700">
-              <Filter size={16} /> Filter &amp; Pencarian Transaksi
+            <div className="flex items-center gap-1.5 sm:gap-2 font-bold text-xs sm:text-sm text-indigo-700">
+              <Filter size={14} /> Filter &amp; Pencarian Transaksi
             </div>
-            <span className={`text-xs text-slate-400 transform transition-transform ${isFilterOpen ? 'rotate-180' : ''}`}>▼</span>
+            <span className={`text-[10px] sm:text-xs text-slate-400 transform transition-transform ${isFilterOpen ? 'rotate-180' : ''}`}>▼</span>
           </button>
           
           {isFilterOpen && (
-            <div className="p-3.5 sm:p-4 bg-white space-y-3.5 border-t border-slate-100">
+            <div className="p-2.5 sm:p-4 bg-white space-y-2.5 sm:space-y-3.5 border-t border-slate-100">
               {/* Quick Preset Buttons */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap mr-1 flex items-center gap-1">
-                  <Calendar size={13} /> Periode:
+              <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 whitespace-nowrap mr-1 flex items-center gap-1">
+                  <Calendar size={12} /> Periode:
                 </span>
                 <button 
                   type="button"
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'today' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-2.5 py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${preset === 'today' ? 'bg-primary text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                   onClick={() => handleSelectPreset('today')}
                 >
                   Hari Ini
                 </button>
                 <button 
                   type="button"
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'yesterday' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-2.5 py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${preset === 'yesterday' ? 'bg-primary text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                   onClick={() => handleSelectPreset('yesterday')}
                 >
                   Kemarin
                 </button>
                 <button 
                   type="button"
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'week' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-2.5 py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${preset === 'week' ? 'bg-primary text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                   onClick={() => handleSelectPreset('week')}
                 >
-                  7 Hari Terakhir
+                  7 Hari
                 </button>
                 <button 
                   type="button"
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'month' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-2.5 py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${preset === 'month' ? 'bg-primary text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                   onClick={() => handleSelectPreset('month')}
                 >
                   Bulan Ini
                 </button>
                 <button 
                   type="button"
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'all' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-2.5 py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${preset === 'all' ? 'bg-primary text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                   onClick={() => handleSelectPreset('all')}
                 >
                   Semua
                 </button>
                 <button 
                   type="button"
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${preset === 'custom' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-2.5 py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shrink-0 ${preset === 'custom' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                   onClick={() => setPreset('custom')}
                 >
                   Kustom ⚙️
                 </button>
               </div>
 
-              {/* Filter Inputs Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1 border-t border-slate-50">
+              {/* Filter Inputs Grid - 2 cols on mobile, 4 cols on desktop */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 pt-1 border-t border-slate-50">
                 {preset === 'custom' ? (
                   <>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-500 mb-1">Dari Tanggal</label>
+                      <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 mb-0.5">Dari Tanggal</label>
                       <input 
                         type="date" 
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                        className="w-full px-2.5 py-1.5 rounded-lg sm:rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
                         value={startDate} 
                         onChange={e => setStartDate(e.target.value)} 
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-500 mb-1">Sampai Tanggal</label>
+                      <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 mb-0.5">Sampai Tanggal</label>
                       <input 
                         type="date" 
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                        className="w-full px-2.5 py-1.5 rounded-lg sm:rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
                         value={endDate} 
                         onChange={e => setEndDate(e.target.value)} 
                       />
@@ -324,10 +325,10 @@ const TransactionHistoryView = () => {
                   </>
                 ) : (
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">Pilih Tanggal Spesifik</label>
+                    <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 mb-0.5 truncate">Tanggal Spesifik</label>
                     <input 
                       type="date" 
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                      className="w-full px-2.5 py-1.5 rounded-lg sm:rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/20" 
                       value={startDate} 
                       onChange={e => {
                         setPreset('custom');
@@ -339,9 +340,9 @@ const TransactionHistoryView = () => {
                 )}
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Status Pembayaran</label>
+                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 mb-0.5 truncate">Status Bayar</label>
                   <select 
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                    className="w-full px-2.5 py-1.5 rounded-lg sm:rounded-xl border border-slate-200 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-primary/20" 
                     value={statusFilter} 
                     onChange={e => setStatusFilter(e.target.value)}
                   >
@@ -352,25 +353,25 @@ const TransactionHistoryView = () => {
                   </select>
                 </div>
 
-                <div className={preset === 'custom' ? 'sm:col-span-2 md:col-span-1' : 'sm:col-span-2'}>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Cari Spesifik</label>
-                  <div className="flex gap-2">
+                <div className={preset === 'custom' ? 'col-span-2 md:col-span-1' : 'col-span-2'}>
+                  <label className="block text-[10px] sm:text-[11px] font-bold text-slate-500 mb-0.5 truncate">Cari Spesifik</label>
+                  <div className="flex gap-1.5 sm:gap-2">
                     <div className="relative flex-1">
-                      <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                      <Search size={14} className="absolute left-2.5 top-2 text-slate-400" />
                       <input 
                         type="text" 
-                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                        className="w-full pl-8 pr-2.5 py-1.5 rounded-lg sm:rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20" 
                         placeholder="No. Transaksi / Pelanggan..." 
                         value={searchQuery} 
                         onChange={e => setSearchQuery(e.target.value)} 
                       />
                     </div>
                     <button 
-                      className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors" 
+                      className="px-2.5 sm:px-3 py-1.5 rounded-lg sm:rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-xs flex items-center gap-1 whitespace-nowrap shrink-0 transition-colors" 
                       onClick={handleReset}
                       title="Reset Filter ke Hari Ini"
                     >
-                      <RotateCcw size={14} /> Reset
+                      <RotateCcw size={13} /> Reset
                     </button>
                   </div>
                 </div>
@@ -389,61 +390,61 @@ const TransactionHistoryView = () => {
             {/* Mobile Cards View (Visible on Mobile Screens < 640px) */}
             <div className="sm:hidden divide-y divide-slate-100">
               {filteredOrders.map((trx, idx) => (
-                <div key={trx.id} className={`p-4 space-y-3 ${trx.status === 'Void' ? 'opacity-60 bg-slate-50/50' : 'bg-white'}`}>
+                <div key={trx.id} className={`p-3 space-y-2 ${trx.status === 'Void' ? 'opacity-60 bg-slate-50/50' : 'bg-white'}`}>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold text-slate-400">#{idx + 1}</span>
-                      <span className="font-extrabold text-sm text-primary">{trx.orderNumber}</span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] font-bold text-slate-400">#{idx + 1}</span>
+                      <span className="font-extrabold text-xs text-primary truncate">{trx.orderNumber}</span>
                     </div>
                     {trx.status === 'Void' ? (
-                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 font-bold">VOID</span>
+                      <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 font-bold shrink-0">VOID</span>
                     ) : trx.status === 'Paid' ? (
-                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold">LUNAS</span>
+                      <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold shrink-0">LUNAS</span>
                     ) : (
-                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold">PENDING</span>
+                      <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-bold shrink-0">PENDING</span>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
                     <div>
-                      <span className="text-[11px] text-slate-400 block">Waktu:</span>
-                      <span className="font-medium text-slate-700">{formatDate(trx.createdAt)}</span>
+                      <span className="text-[10px] text-slate-400 block">Waktu:</span>
+                      <span className="font-medium text-slate-700 text-[11px] block">{formatDate(trx.createdAt)}</span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-slate-400 block">Pelanggan:</span>
-                      <span className="font-bold text-slate-800 truncate block">{trx.customerName || 'Tamu'}</span>
+                      <span className="text-[10px] text-slate-400 block">Pelanggan:</span>
+                      <span className="font-bold text-slate-800 text-[11px] truncate block">{trx.customerName || 'Pelanggan Umum'}</span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-slate-400 block">Kasir / Metode:</span>
-                      <span className="font-medium text-slate-700">{trx.user?.name || '-'} • <span className="text-slate-500">{trx.paymentMethod || '-'}</span></span>
+                      <span className="text-[10px] text-slate-400 block">Kasir / Metode:</span>
+                      <span className="font-medium text-slate-700 text-[11px] block truncate">{trx.user?.name || '-'} • <span className="text-slate-500">{trx.paymentMethod || '-'}</span></span>
                     </div>
                     <div>
-                      <span className="text-[11px] text-slate-400 block">Total:</span>
-                      <span className="font-black text-sm text-slate-900">{formatCurrency(trx.total)}</span>
+                      <span className="text-[10px] text-slate-400 block">Total:</span>
+                      <span className="font-black text-xs text-slate-900 block">{formatCurrency(trx.total)}</span>
                     </div>
                   </div>
 
                   {/* Actions Footer */}
-                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50">
+                  <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-50">
                     <button 
-                      className="px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold text-[11px] flex items-center gap-1 transition-colors"
                       onClick={() => setSelectedDetailOrder(trx)}
                     >
-                      <Eye size={14} /> Rincian
+                      <Eye size={13} /> Rincian
                     </button>
                     <button 
-                      className={`px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs flex items-center gap-1.5 transition-colors ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      className={`px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[11px] flex items-center gap-1 transition-colors ${printLoading === trx.id ? 'opacity-60 cursor-not-allowed' : ''}`}
                       onClick={() => handleDirectPrint(trx.id)}
                       disabled={printLoading === trx.id}
                     >
-                      <Zap size={14} className={printLoading === trx.id ? 'animate-pulse' : ''} /> Cetak Struk
+                      <Zap size={13} className={printLoading === trx.id ? 'animate-pulse' : ''} /> Cetak Struk
                     </button>
                     {trx.status !== 'Void' && posContext?.user?.permissions?.canVoid && (
                       <button 
-                        className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                        className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-[11px] flex items-center gap-1 transition-colors"
                         onClick={() => handleVoid(trx.id, trx.orderNumber)}
                       >
-                        <XCircle size={14} /> Void
+                        <XCircle size={13} /> Void
                       </button>
                     )}
                   </div>

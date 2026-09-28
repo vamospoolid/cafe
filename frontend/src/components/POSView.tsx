@@ -15,6 +15,7 @@ import { toast } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
 import { isNativePlatform, startNativeBarcodeScan } from '../utils/barcodeScannerNative';
 import useSocket from '../hooks/useSocket';
+import { formatTableTitle, formatTableBadge } from '../utils/tableUtils';
 
 export interface CartItem {
   product: any;
@@ -874,7 +875,7 @@ export const POSView = () => {
                       <div className="flex items-center gap-1.5 font-bold text-indigo-900 truncate">
                         <span className="text-sm">🔗</span>
                         <span className="truncate">
-                          Gabung: {tables.filter(t => selectedTableIds.includes(t.id)).map(t => `#${t.tableNo}`).join(' + ')}
+                          Gabung: {tables.filter(t => selectedTableIds.includes(t.id)).map(t => formatTableTitle(t.tableNo)).join(' + ')}
                         </span>
                       </div>
                       <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-sm">
@@ -894,6 +895,7 @@ export const POSView = () => {
                             key={t.id}
                             type="button"
                             onClick={() => toggleTableSelection(t.id)}
+                            title={formatTableTitle(t.tableNo)}
                             className={`py-1.5 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center relative ${
                               isSelected
                                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 ring-2 ring-indigo-400 scale-[1.03]'
@@ -907,7 +909,7 @@ export const POSView = () => {
                                 {selectIndex}
                               </span>
                             )}
-                            <span>#{t.tableNo}</span>
+                            <span className="truncate max-w-full font-black">{formatTableBadge(t.tableNo)}</span>
                             <span className={`text-[9px] font-medium ${isSelected ? 'text-indigo-100' : isOccupied ? 'text-amber-700' : 'text-slate-400'}`}>
                               {isOccupied ? 'Terisi' : `${t.capacity}p`}
                             </span>
@@ -1113,7 +1115,7 @@ export const POSView = () => {
                       <div className="flex items-center gap-1.5 font-bold text-indigo-900 truncate">
                         <span className="text-sm">🔗</span>
                         <span className="truncate">
-                          Gabung: {tables.filter(t => selectedTableIds.includes(t.id)).map(t => `#${t.tableNo}`).join(' + ')}
+                          Gabung: {tables.filter(t => selectedTableIds.includes(t.id)).map(t => formatTableTitle(t.tableNo)).join(' + ')}
                         </span>
                       </div>
                       <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-sm">
@@ -1133,6 +1135,7 @@ export const POSView = () => {
                             key={t.id}
                             type="button"
                             onClick={() => toggleTableSelection(t.id)}
+                            title={formatTableTitle(t.tableNo)}
                             className={`py-1 px-1 rounded-lg text-xs font-black transition-all flex flex-col items-center justify-center relative ${
                               isSelected
                                 ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-400'
@@ -1146,7 +1149,7 @@ export const POSView = () => {
                                 {selectIndex}
                               </span>
                             )}
-                            <span>#{t.tableNo}</span>
+                            <span className="truncate max-w-full font-black">{formatTableBadge(t.tableNo)}</span>
                             <span className={`text-[8px] font-medium ${isSelected ? 'text-indigo-100' : isOccupied ? 'text-amber-700' : 'text-slate-400'}`}>
                               {isOccupied ? 'Terisi' : `${t.capacity}p`}
                             </span>

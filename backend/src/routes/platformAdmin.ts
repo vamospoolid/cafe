@@ -24,20 +24,31 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
     ] = await Promise.all([
       prisma.tenant.findMany({
         include: {
+          plan: true,
           subscriptions: {
             include: { plan: true },
             orderBy: { createdAt: 'desc' },
             take: 1
           },
-          outlets: true,
+          outlets: {
+            orderBy: { createdAt: 'asc' }
+          },
+          memberships: {
+            include: {
+              user: true,
+              role: true
+            }
+          },
           _count: {
             select: {
               memberships: true,
               orders: true,
-              outlets: true
+              outlets: true,
+              products: true
             }
           }
-        }
+        },
+        orderBy: { createdAt: 'desc' }
       }),
       prisma.outlet.count().catch(() => 0),
       prisma.user.count().catch(() => 0),
@@ -48,12 +59,13 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
         orderBy: { createdAt: 'desc' }
       }),
       prisma.order.aggregate({
+        where: { status: { notIn: ['CANCELLED', 'VOID'] } },
         _sum: { total: true },
         _count: { id: true }
       }).catch(() => ({ _sum: { total: 0 }, _count: { id: 0 } }))
     ]);
 
-    // Calculate MRR (Monthly Recurring Revenue)
+    // Calculate MRR & Subscription metrics
     let mrr = 0;
     let activeSubscriptionsCount = 0;
     let trialTenantsCount = 0;
@@ -79,14 +91,115 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
       }
     }
 
+    const now = new Date();
+    const renewalRadar: any[] = [];
+    const upsellRadar: any[] = [];
+    const tenantGMVList: any[] = [];
+
     for (const t of tenants) {
       if (t.status === 'ACTIVE') activeTenantsCount++;
       else if (t.status === 'TRIAL') trialTenantsCount++;
       else if (t.status === 'SUSPENDED') suspendedTenantsCount++;
 
       const currentSub = t.subscriptions[0];
-      const planCode = currentSub?.plan?.code || 'STARTER';
+      const plan = currentSub?.plan || t.plan;
+      const planCode = plan?.code || 'STARTER';
+      const planName = plan?.name || 'Paket Starter UMKM';
       planDistribution[planCode] = (planDistribution[planCode] || 0) + 1;
+
+      const ownerMember = t.memberships.find(m => m.role?.name === 'OWNER' || m.role?.name === 'Admin') || t.memberships[0];
+      const outletPhone = t.outlets[0]?.phone;
+      const phone = t.phone || outletPhone || '';
+      let waNumber = phone.replace(/[^0-9]/g, '');
+      if (waNumber.startsWith('0')) waNumber = '62' + waNumber.slice(1);
+
+      const ownerName = t.ownerName || ownerMember?.user?.name || ownerMember?.user?.username || 'Owner';
+
+      // 1. Renewal Radar (Expiring in <= 7 days or already expired)
+      const expiryDate = currentSub?.currentPeriodEnd || t.trialEndsAt;
+      if (expiryDate) {
+        const diffMs = new Date(expiryDate).getTime() - now.getTime();
+        const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        if (daysLeft <= 7) {
+          renewalRadar.push({
+            id: t.id,
+            name: t.name,
+            slug: t.slug,
+            ownerName,
+            phone,
+            waNumber: waNumber || null,
+            email: t.email,
+            status: t.status,
+            planName,
+            planCode,
+            priceMonthly: plan?.priceMonthly || 99000,
+            expiryDate,
+            daysLeft,
+            isPastDue: daysLeft <= 0,
+            isTrial: t.status === 'TRIAL'
+          });
+        }
+      }
+
+      // 2. Upsell Radar (High Quota Saturation >= 80% or Full)
+      const maxOutlets = plan?.maxOutlets ?? 1;
+      const maxUsers = plan?.maxUsers ?? 3;
+      const maxProducts = plan?.maxProducts ?? 100;
+
+      const usedOutlets = t._count.outlets;
+      const usedUsers = t._count.memberships;
+      const usedProducts = t._count.products;
+
+      const isOutletFull = usedOutlets >= maxOutlets;
+      const isUserFull = usedUsers >= maxUsers;
+      const isProductHigh = usedProducts >= maxProducts * 0.8;
+
+      if (isOutletFull || isUserFull || isProductHigh) {
+        let suggestedPlan = 'GROWTH';
+        let reason = '';
+        if (planCode === 'STARTER') {
+          suggestedPlan = 'GROWTH (3 Cabang & 15 Staf)';
+          reason = isOutletFull ? `Cabang telah mencapai kuota maksimal (${usedOutlets}/${maxOutlets})` : `Akun staf telah penuh (${usedUsers}/${maxUsers})`;
+        } else if (planCode === 'GROWTH') {
+          suggestedPlan = 'BUSINESS (10 Cabang & Unlimited Menu)';
+          reason = isOutletFull ? `Cabang telah penuh (${usedOutlets}/${maxOutlets})` : `Staf mendekati kapasitas (${usedUsers}/${maxUsers})`;
+        } else {
+          suggestedPlan = 'ENTERPRISE (Custom Solution)';
+          reason = 'Penggunaan sumber daya skala enterprise';
+        }
+
+        upsellRadar.push({
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          ownerName,
+          phone,
+          waNumber: waNumber || null,
+          currentPlan: planName,
+          currentPlanCode: planCode,
+          suggestedPlan,
+          reason,
+          utilization: {
+            outlets: `${usedOutlets} / ${maxOutlets}`,
+            users: `${usedUsers} / ${maxUsers}`,
+            products: `${usedProducts} / ${maxProducts}`
+          }
+        });
+      }
+
+      // 3. Top GMV Merchants Telemetry
+      tenantGMVList.push({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        ownerName,
+        phone,
+        waNumber: waNumber || null,
+        planName,
+        ordersCount: t._count.orders,
+        outletsCount: t._count.outlets,
+        createdAt: t.createdAt
+      });
     }
 
     // Invoices breakdown
@@ -100,6 +213,8 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
       }
     }
 
+    const arpu = activeSubscriptionsCount > 0 ? Math.round(mrr / activeSubscriptionsCount) : 0;
+
     return res.json({
       metrics: {
         totalTenants: tenants.length,
@@ -112,11 +227,15 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
         totalGMVAllTime: orders._sum?.total || 0,
         mrr,
         arr: mrr * 12,
+        arpu,
         totalCollectedRevenue,
         pendingInvoicesCount,
         activeSubscriptionsCount
       },
       planDistribution,
+      renewalRadar: renewalRadar.sort((a, b) => a.daysLeft - b.daysLeft),
+      upsellRadar: upsellRadar.slice(0, 10),
+      topMerchants: tenantGMVList.sort((a, b) => b.ordersCount - a.ordersCount).slice(0, 5),
       recentTenants: tenants.slice(0, 5).map(t => ({
         id: t.id,
         name: t.name,
@@ -126,7 +245,7 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
         outletsCount: t._count.outlets,
         usersCount: t._count.memberships,
         ordersCount: t._count.orders,
-        plan: t.subscriptions[0]?.plan?.name || 'Starter Plan'
+        plan: t.subscriptions[0]?.plan?.name || t.plan?.name || 'Paket Starter'
       }))
     });
   } catch (error: any) {

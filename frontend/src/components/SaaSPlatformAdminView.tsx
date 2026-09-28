@@ -26,7 +26,16 @@ import {
   Clock,
   ArrowUpRight,
   TrendingUp,
-  FileText
+  FileText,
+  AlertTriangle,
+  Flame,
+  Zap,
+  Crown,
+  BellRing,
+  Wallet,
+  Target,
+  BarChart3,
+  Award
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -67,7 +76,7 @@ interface TenantItem {
 
 export const SaaSPlatformAdminView: React.FC = () => {
   const posContext = useContext(POSContext);
-  const [activeTab, setActiveTab] = useState<'overview' | 'tenants' | 'invoices' | 'plans'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'renewal' | 'upsell' | 'tenants' | 'invoices' | 'plans'>('overview');
   const [loading, setLoading] = useState<boolean>(true);
   const [overviewData, setOverviewData] = useState<any>(null);
   const [tenants, setTenants] = useState<TenantItem[]>([]);
@@ -79,7 +88,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
 
   // Modals state
   const [selectedTenantForWA, setSelectedTenantForWA] = useState<TenantItem | null>(null);
-  const [waTemplateType, setWaTemplateType] = useState<'welcome' | 'renewal' | 'support' | 'custom'>('welcome');
+  const [waTemplateType, setWaTemplateType] = useState<'welcome' | 'renewal' | 'upsell' | 'support' | 'custom'>('welcome');
   const [waCustomMessage, setWaCustomMessage] = useState<string>('');
 
   const [selectedTenantForPlan, setSelectedTenantForPlan] = useState<TenantItem | null>(null);
@@ -305,13 +314,13 @@ export const SaaSPlatformAdminView: React.FC = () => {
   };
 
   // Open WhatsApp Modal
-  const openWhatsAppModal = (tenant: TenantItem) => {
+  const openWhatsAppModal = (tenant: TenantItem, defaultType: 'welcome' | 'renewal' | 'upsell' | 'support' = 'welcome') => {
     setSelectedTenantForWA(tenant);
-    setWaTemplateType('welcome');
-    updateWhatsAppMessage(tenant, 'welcome');
+    setWaTemplateType(defaultType);
+    updateWhatsAppMessage(tenant, defaultType);
   };
 
-  const updateWhatsAppMessage = (tenant: TenantItem, type: 'welcome' | 'renewal' | 'support' | 'custom') => {
+  const updateWhatsAppMessage = (tenant: TenantItem, type: 'welcome' | 'renewal' | 'upsell' | 'support' | 'custom') => {
     const owner = tenant.ownerName || tenant.owner?.name || 'Kak';
     const biz = tenant.name;
     const plan = tenant.subscription?.planName || 'Paket CodePOS';
@@ -321,7 +330,9 @@ export const SaaSPlatformAdminView: React.FC = () => {
     if (type === 'welcome') {
       msg = `Halo Kak ${owner}, terima kasih telah mendaftar di CodePOS untuk *${biz}* (${subdomain})! 🚀\n\nAkun Anda telah aktif di *${plan}*. Apakah ada bantuan yang dibutuhkan untuk setup menu, meja, atau printer kasir hari ini?`;
     } else if (type === 'renewal') {
-      msg = `Halo Kak ${owner} dari *${biz}*,\n\nKami menginfokan bahwa masa aktif paket *${plan}* Anda akan segera berakhir. Silakan lakukan perpanjangan agar operasional kasir dan laporan omzet tetap berjalan lancar tanpa kendala. 🙏`;
+      msg = `Halo Kak ${owner} dari *${biz}*,\n\nKami menginfokan bahwa masa aktif paket *${plan}* Anda akan segera berakhir. Silakan lakukan perpanjangan agar operasional kasir dan laporan omzet tetap berjalan lancar tanpa kendala. Rekening BCA: 8830-1928-11 an CodePOS Platform. Terima kasih! 🙏`;
+    } else if (type === 'upsell') {
+      msg = `Halo Kak ${owner} dari *${biz}*,\n\nSelamat atas perkembangan bisnis Anda! Kami melihat kuota cabang / staf kasir di akun Anda telah mendekati kapasitas maksimal. Kami merekomendasikan upgrade ke *Paket Growth / Enterprise* untuk membuka fitur multi-cabang, analisis bahan baku (yield), dan kuota staf tanpa batas. Boleh kami bantu proses upgradenya? 😊`;
     } else if (type === 'support') {
       msg = `Halo Kak ${owner} dari *${biz}*,\n\nKami dari tim Support Platform CodePOS ingin menanyakan bagaimana operasional kasir Anda hari ini? Jika ada kendala teknis atau saran fitur baru, kami siap membantu.`;
     }
@@ -377,44 +388,47 @@ export const SaaSPlatformAdminView: React.FC = () => {
   });
 
   const m = overviewData?.metrics || {};
+  const renewalRadar = overviewData?.renewalRadar || [];
+  const upsellRadar = overviewData?.upsellRadar || [];
+  const topMerchants = overviewData?.topMerchants || [];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto pb-32">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto pb-32 animate-fade-in">
       
       {/* ─── 1. TOP HEADER BANNER ─────────────────────────────────────────── */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 text-white shadow-2xl border border-indigo-500/20 relative overflow-hidden">
+      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white shadow-2xl border border-indigo-500/20 relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div>
             <div className="flex items-center gap-2 text-indigo-400 text-xs font-black tracking-widest uppercase mb-1.5">
-              <Sparkles size={16} /> SaaS Platform Executive &amp; Financial Center
+              <Crown size={16} className="text-amber-400" /> SaaS Platform Executive Command Center
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Platform Master Command
+              Platform Owner Control
             </h2>
-            <p className="text-xs text-slate-300 mt-1">
-              Kontrol keuangan platform SaaS, CRM kontak WhatsApp pemilik kafe, manajemen paket, dan telemetri multi-tenant.
+            <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+              Pusat kendali master finansial SaaS, penagihan proaktif H-7, radar peluang upsell kuota, dan direktori CRM WhatsApp seluruh kafe.
             </p>
           </div>
 
           <button
             onClick={fetchPlatformData}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition-all border border-white/10 self-start sm:self-auto cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold transition-all border border-white/10 self-start sm:self-auto cursor-pointer shadow-sm"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Refresh Data
+            Refresh Telemetri
           </button>
         </div>
 
-        {/* ─── Master Revenue & Tenant Metrics ─── */}
+        {/* ─── 4 Primary Master Revenue & Tenant Metrics ─── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mt-6 relative z-10">
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
             <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
               <TrendingUp size={12} className="text-emerald-400" /> MRR (Monthly Recurring)
             </div>
             <div className="text-xl sm:text-2xl font-black text-emerald-400 mt-1">{formatCurrency(m.mrr || 0)}</div>
-            <div className="text-[10px] font-semibold text-slate-400 mt-0.5">ARR: {formatCurrency(m.arr || 0)}</div>
+            <div className="text-[10px] font-semibold text-slate-400 mt-0.5">ARR: {formatCurrency(m.arr || 0)} • ARPU: {formatCurrency(m.arpu || 0)}</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
@@ -427,10 +441,10 @@ export const SaaSPlatformAdminView: React.FC = () => {
 
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
             <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-              <Layers size={12} className="text-cyan-400" /> Total Transaksi POS
+              <Layers size={12} className="text-cyan-400" /> Volume GMV Transaksi POS
             </div>
-            <div className="text-xl sm:text-2xl font-black text-cyan-300 mt-1">{m.totalOrdersAllTime || 0} Pesanan</div>
-            <div className="text-[10px] font-semibold text-slate-400 mt-0.5">GMV: {formatCurrency(m.totalGMVAllTime || 0)}</div>
+            <div className="text-xl sm:text-2xl font-black text-cyan-300 mt-1">{formatCurrency(m.totalGMVAllTime || 0)}</div>
+            <div className="text-[10px] font-semibold text-slate-400 mt-0.5">{m.totalOrdersAllTime || 0} Total Pesanan Diproses</div>
           </div>
 
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
@@ -447,8 +461,10 @@ export const SaaSPlatformAdminView: React.FC = () => {
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200">
         {[
           { id: 'overview', label: 'Ringkasan & Finansial', icon: Building2 },
-          { id: 'tenants', label: `Direktori Tenant CRM (${tenants.length})`, icon: Store },
-          { id: 'invoices', label: `Verifikasi Pembayaran (${invoices.filter(i => i.status === 'UNPAID').length})`, icon: CreditCard },
+          { id: 'renewal', label: `Radar Perpanjangan H-7 (${renewalRadar.length})`, icon: BellRing, badge: renewalRadar.length > 0 ? 'bg-amber-500' : undefined },
+          { id: 'upsell', label: `Radar Peluang Upsell (${upsellRadar.length})`, icon: Flame, badge: upsellRadar.length > 0 ? 'bg-orange-500' : undefined },
+          { id: 'tenants', label: `Direktori CRM (${tenants.length})`, icon: Store },
+          { id: 'invoices', label: `Verifikasi Tagihan (${invoices.filter(i => i.status === 'UNPAID').length})`, icon: CreditCard },
           { id: 'plans', label: 'Master Paket & Harga', icon: Sliders }
         ].map(tab => {
           const Icon = tab.icon;
@@ -465,98 +481,312 @@ export const SaaSPlatformAdminView: React.FC = () => {
             >
               <Icon size={16} />
               <span>{tab.label}</span>
+              {tab.badge && (
+                <span className={`w-2 h-2 rounded-full ${tab.badge} animate-ping`} />
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* ─── TAB 1: OVERVIEW & TELEMETRY ──────────────────────────────────── */}
+      {/* ─── TAB 1: EXECUTIVE OVERVIEW & REVENUE BREAKDOWN ─────────────────── */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-          
-          {/* Plan Distribution */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-              <Layers size={16} className="text-indigo-600" /> Distribusi Paket Langganan
-            </h3>
-            <div className="space-y-3">
-              {[
-                { code: 'STARTER', label: 'Starter Plan (1 Cabang)', color: 'bg-slate-500' },
-                { code: 'GROWTH', label: 'Growth Plan (3 Cabang)', color: 'bg-indigo-600' },
-                { code: 'BUSINESS', label: 'Business Plan (10 Cabang)', color: 'bg-purple-600' },
-                { code: 'ENTERPRISE', label: 'Enterprise Plan', color: 'bg-amber-500' }
-              ].map(p => {
-                const count = overviewData?.planDistribution?.[p.code] || 0;
-                const total = m.totalTenants || 1;
-                const percent = Math.round((count / total) * 100);
-                return (
-                  <div key={p.code} className="space-y-1">
-                    <div className="flex justify-between text-xs font-bold text-slate-700">
-                      <span>{p.label}</span>
-                      <span>{count} Tenant ({percent}%)</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                      <div className={`h-full ${p.color} rounded-full transition-all`} style={{ width: `${percent}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Recent Registered Tenants */}
-          <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex justify-between items-center">
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Plan Distribution */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
               <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                <Store size={16} className="text-indigo-600" /> Pendaftaran Tenant Terbaru
+                <Layers size={16} className="text-indigo-600" /> Distribusi Paket Langganan
               </h3>
-              <button onClick={() => setActiveTab('tenants')} className="text-xs font-bold text-indigo-600 hover:underline cursor-pointer">
-                Buka Direktori Lengkap &rarr;
-              </button>
+              <div className="space-y-3">
+                {[
+                  { code: 'STARTER', label: 'Starter Plan (1 Cabang)', color: 'bg-slate-500' },
+                  { code: 'GROWTH', label: 'Growth Plan (3 Cabang)', color: 'bg-indigo-600' },
+                  { code: 'BUSINESS', label: 'Business Plan (10 Cabang)', color: 'bg-purple-600' },
+                  { code: 'ENTERPRISE', label: 'Enterprise Plan', color: 'bg-amber-500' }
+                ].map(p => {
+                  const count = overviewData?.planDistribution?.[p.code] || 0;
+                  const total = m.totalTenants || 1;
+                  const percent = Math.round((count / total) * 100);
+                  return (
+                    <div key={p.code} className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold text-slate-700">
+                        <span>{p.label}</span>
+                        <span>{count} Tenant ({percent}%)</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div className={`h-full ${p.color} rounded-full transition-all`} style={{ width: `${percent}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-400 uppercase font-black text-[10px]">
-                    <th className="py-2.5 px-3">Nama Usaha</th>
-                    <th className="py-2.5 px-3">Subdomain</th>
-                    <th className="py-2.5 px-3">Paket</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {overviewData?.recentTenants?.map((t: any) => (
-                    <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-3 font-bold text-slate-800">{t.name}</td>
-                      <td className="py-3 px-3 font-mono text-indigo-600">{t.slug}.codenusa.id</td>
-                      <td className="py-3 px-3 font-semibold text-slate-600">{t.plan}</td>
-                      <td className="py-3 px-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          t.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                        }`}>
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => handleImpersonateTenant(t.id, t.name)}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
-                        >
-                          <LogIn size={12} /> Masuk
-                        </button>
-                      </td>
+            {/* Top Merchants by GMV / Transaction Volume */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                  <Award size={16} className="text-amber-500" /> Top Kafe Teraktif (Volume Transaksi POS)
+                </h3>
+                <span className="text-[11px] text-slate-400 font-semibold">Paling Produktif</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 uppercase font-black text-[10px]">
+                      <th className="py-2.5 px-3">Nama Kafe</th>
+                      <th className="py-2.5 px-3">Pemilik (Owner)</th>
+                      <th className="py-2.5 px-3">Paket</th>
+                      <th className="py-2.5 px-3 text-center">Total Transaksi POS</th>
+                      <th className="py-2.5 px-3 text-right">Aksi</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {topMerchants.map((tm: any, idx: number) => (
+                      <tr key={tm.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-indigo-50 text-indigo-700 font-black text-[10px] flex items-center justify-center">
+                              #{idx + 1}
+                            </span>
+                            <span>{tm.name}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono ml-6.5">{tm.slug}.codenusa.id</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-semibold text-slate-800">{tm.ownerName}</div>
+                          <div className="text-[10px] text-slate-400 font-mono">{tm.phone || '-'}</div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold text-[10px]">
+                            {tm.planName}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center font-black text-slate-900">
+                          {tm.ordersCount} Pesanan
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => handleImpersonateTenant(tm.id, tm.name)}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <LogIn size={12} /> Masuk
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── TAB 2: TENANT MANAGEMENT & CRM DIRECTORY ─────────────────────── */}
+      {/* ─── TAB 2: PROACTIVE RENEWAL RADAR (H-7 s/d H-1) ──────────────────── */}
+      {activeTab === 'renewal' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5 animate-fade-in">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+            <div>
+              <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                <BellRing size={18} className="text-amber-500" /> Radar Penagihan Proaktif (Jatuh Tempo &le; 7 Hari)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Daftar tenant yang masa aktif paket/trialnya akan habis dalam 7 hari ke depan. Kirimkan pesan tagihan WhatsApp 1-klik sebelum akun terkunci.
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 uppercase font-black text-[10px]">
+                  <th className="py-3 px-3">Nama Kafe / Subdomain</th>
+                  <th className="py-3 px-3">Kontak Owner</th>
+                  <th className="py-3 px-3">Paket Langganan</th>
+                  <th className="py-3 px-3">Estimasi Tagihan</th>
+                  <th className="py-3 px-3">Hitung Mundur Masa Aktif</th>
+                  <th className="py-3 px-3 text-right">Aksi Penagihan WhatsApp</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {renewalRadar.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                      🎉 Bagus! Tidak ada tenant yang jatuh tempo dalam 7 hari ke depan.
+                    </td>
+                  </tr>
+                ) : (
+                  renewalRadar.map((r: any) => {
+                    const tenantObj = tenants.find(t => t.id === r.id) || {
+                      id: r.id,
+                      name: r.name,
+                      slug: r.slug,
+                      ownerName: r.ownerName,
+                      phone: r.phone,
+                      waNumber: r.waNumber,
+                      email: r.email,
+                      status: r.status,
+                      subscription: { planName: r.planName, planCode: r.planCode, id: null, status: r.status }
+                    } as any;
+
+                    return (
+                      <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3.5 px-3">
+                          <div className="font-bold text-sm text-slate-900">{r.name}</div>
+                          <div className="text-[11px] font-mono text-indigo-600">{r.slug}.codenusa.id</div>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <div className="font-semibold text-slate-900">{r.ownerName}</div>
+                          <div className="font-mono text-[11px] text-slate-500">{r.phone || 'Tidak ada no HP'}</div>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px]">
+                            {r.planName}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 font-black text-slate-900">
+                          {formatCurrency(r.priceMonthly)} / Bln
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                            r.daysLeft <= 0 
+                              ? 'bg-rose-100 text-rose-800' 
+                              : r.daysLeft <= 3 
+                              ? 'bg-amber-100 text-amber-800' 
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {r.daysLeft <= 0 ? '🔴 Jatuh Tempo Hari Ini' : `⚠️ Sisa ${r.daysLeft} Hari`}
+                          </span>
+                          <div className="text-[10px] text-slate-400 mt-1">
+                            Sampai {new Date(r.expiryDate).toLocaleDateString('id-ID')}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => openWhatsAppModal(tenantObj, 'renewal')}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                            >
+                              <MessageSquare size={13} /> Kirim Tagihan WA
+                            </button>
+
+                            <button
+                              onClick={() => handleExtendTrial(r.id, 14)}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition-all"
+                              title="Perpanjang masa aktif +14 Hari"
+                            >
+                              +14 Hari
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TAB 3: UPSELL & QUOTA SATURATION RADAR ───────────────────────── */}
+      {activeTab === 'upsell' && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5 animate-fade-in">
+          <div>
+            <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+              <Flame size={18} className="text-orange-500" /> Radar Peluang Upsell Kuota (Kapasitas &ge; 80%)
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Daftar kafe yang kuota cabang, staf, atau menunya telah penuh. Hubungi pemilik untuk menawarkan upgrade ke paket yang lebih tinggi.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 uppercase font-black text-[10px]">
+                  <th className="py-3 px-3">Kafe &amp; Owner</th>
+                  <th className="py-3 px-3">Paket Saat Ini</th>
+                  <th className="py-3 px-3">Status Kejenuhan Kuota</th>
+                  <th className="py-3 px-3">Rekomendasi Paket Upgrade</th>
+                  <th className="py-3 px-3 text-right">Aksi Penawaran Upgrade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {upsellRadar.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-400 font-semibold">
+                      Belum ada tenant dengan kejenuhan kuota di atas 80%.
+                    </td>
+                  </tr>
+                ) : (
+                  upsellRadar.map((u: any) => {
+                    const tenantObj = tenants.find(t => t.id === u.id) || {
+                      id: u.id,
+                      name: u.name,
+                      slug: u.slug,
+                      ownerName: u.ownerName,
+                      phone: u.phone,
+                      waNumber: u.waNumber,
+                      subscription: { planName: u.currentPlan, planCode: u.currentPlanCode, id: null, status: 'ACTIVE' }
+                    } as any;
+
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3.5 px-3">
+                          <div className="font-bold text-sm text-slate-900">{u.name}</div>
+                          <div className="text-xs text-slate-600 font-semibold">{u.ownerName} ({u.phone || '-'})</div>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-bold text-[11px]">
+                            {u.currentPlan}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <div className="text-[11px] font-bold text-amber-700">
+                            {u.reason}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            Cabang: {u.utilization.outlets} • Staf: {u.utilization.users} • Menu: {u.utilization.products}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className="px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200 text-orange-800 font-black text-[11px] flex items-center gap-1 w-fit">
+                            <Sparkles size={12} className="text-orange-600" /> {u.suggestedPlan}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => openWhatsAppModal(tenantObj, 'upsell')}
+                              className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                            >
+                              <MessageSquare size={13} /> Tawarkan via WA
+                            </button>
+
+                            <button
+                              onClick={() => openChangePlan(tenantObj)}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer transition-all"
+                            >
+                              Ubah Paket
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TAB 4: TENANT MANAGEMENT & CRM DIRECTORY ─────────────────────── */}
       {activeTab === 'tenants' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5 animate-fade-in">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
@@ -750,7 +980,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
         </div>
       )}
 
-      {/* ─── TAB 3: INVOICE APPROVAL & VERIFICATION ────────────────────────── */}
+      {/* ─── TAB 5: INVOICE APPROVAL & VERIFICATION ────────────────────────── */}
       {activeTab === 'invoices' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5 animate-fade-in">
           <div>
@@ -828,7 +1058,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
         </div>
       )}
 
-      {/* ─── TAB 4: GLOBAL PLANS & ADD-ONS ─────────────────────────────────── */}
+      {/* ─── TAB 6: GLOBAL PLANS & PRICING ─────────────────────────────────── */}
       {activeTab === 'plans' && (
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm animate-fade-in">
           <SaaSPlanManager />
@@ -874,10 +1104,11 @@ export const SaaSPlatformAdminView: React.FC = () => {
             {/* Template Buttons */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700">Pilih Template Pesan:</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { type: 'welcome', label: '🚀 Selamat Datang' },
-                  { type: 'renewal', label: '💳 Perpanjangan' },
+                  { type: 'renewal', label: '💳 Tagihan H-7' },
+                  { type: 'upsell', label: '🔥 Promo Upgrade' },
                   { type: 'support', label: '🛠️ Support Teknis' }
                 ].map(t => (
                   <button
@@ -887,7 +1118,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
                       setWaTemplateType(t.type as any);
                       updateWhatsAppMessage(selectedTenantForWA, t.type as any);
                     }}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                       waTemplateType === t.type 
                         ? 'bg-emerald-600 text-white shadow-xs' 
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'

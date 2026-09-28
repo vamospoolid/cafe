@@ -1,17 +1,56 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { 
-  X, DollarSign, Tag, FileText, Sparkles, Layers, Package, 
-  ArrowDownRight, ArrowUpRight, RotateCcw, Building2, Check 
+  X, 
+  Droplet, 
+  Snowflake, 
+  Flame, 
+  Zap, 
+  Coffee, 
+  ShoppingBag, 
+  ShoppingCart, 
+  Truck, 
+  Camera, 
+  Upload, 
+  Check, 
+  Layers, 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle,
+  Box,
+  Utensils,
+  Users,
+  Wallet,
+  DollarSign,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ShieldCheck,
+  Building2
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { toast } from '../utils/alert';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface CashFlowModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: any) => void;
+  initialType?: 'Pengeluaran' | 'Pemasukan';
+  initialPocket?: 'OPERATIONAL' | 'DRAWER';
 }
 
 export const EXPENSE_CATEGORIES = [
+  {
+    id: 'Operasional Cafe',
+    name: 'Operasional Cafe (OPEX)',
+    subcategories: [
+      'Gas LPG & Es Batu Rutin',
+      'Listrik, Air & Internet / WiFi',
+      'Sabun Cuci, Plastik Sampah & Kebersihan',
+      'Bensin & Transport Operasional',
+      'Sewa Tempat & Izin Usaha',
+      'Operasional Lainnya'
+    ]
+  },
   {
     id: 'Bahan Makanan',
     name: 'Bahan Makanan (Food Ingredients)',
@@ -47,17 +86,6 @@ export const EXPENSE_CATEGORIES = [
     ]
   },
   {
-    id: 'Operasional Cafe',
-    name: 'Operasional Cafe (OPEX)',
-    subcategories: [
-      'Gas LPG & Es Batu Rutin',
-      'Listrik, Air & Internet / WiFi',
-      'Sabun Cuci, Plastik Sampah & Kebersihan',
-      'Sewa Tempat & Izin Usaha',
-      'Operasional Lainnya'
-    ]
-  },
-  {
     id: 'SDM & Karyawan',
     name: 'SDM & Tenaga Kerja',
     subcategories: [
@@ -84,8 +112,9 @@ export const INFLOW_CATEGORIES = [
     id: 'Modal & Injeksi',
     name: 'Modal & Injeksi Dana',
     subcategories: [
+      'Tambahan Modal Kas Kecil / Petty Cash Top-up',
       'Setoran Modal Awal',
-      'Tambahan Modal Kas Kecil'
+      'Injeksi Dana Operasional Owner'
     ]
   },
   {
@@ -95,493 +124,740 @@ export const INFLOW_CATEGORIES = [
       'Pendapatan Sewa Tempat / Space Event',
       'Bagi Hasil / Konsinyasi Produk Luar',
       'Penjualan Aset Bekas / Kardus',
+      'Sisa Pengembalian Belanja Operasional',
       'Pendapatan Lain-lain'
     ]
   }
 ];
 
-// Helper to convert number to Indonesian words (Terbilang)
-const angkaTerbilang = (angka: number): string => {
-  if (isNaN(angka) || angka === 0) return '';
-  const bilangan = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
-  
-  if (angka < 12) return bilangan[angka];
-  if (angka < 20) return `${angkaTerbilang(angka - 10)} Belas`;
-  if (angka < 100) return `${angkaTerbilang(Math.floor(angka / 10))} Puluh ${angkaTerbilang(angka % 10)}`.trim();
-  if (angka < 200) return `Seratus ${angkaTerbilang(angka - 100)}`.trim();
-  if (angka < 1000) return `${angkaTerbilang(Math.floor(angka / 100))} Ratus ${angkaTerbilang(angka % 100)}`.trim();
-  if (angka < 2000) return `Seribu ${angkaTerbilang(angka - 1000)}`.trim();
-  if (angka < 1000000) return `${angkaTerbilang(Math.floor(angka / 1000))} Ribu ${angkaTerbilang(angka % 1000)}`.trim();
-  if (angka < 1000000000) return `${angkaTerbilang(Math.floor(angka / 1000000))} Juta ${angkaTerbilang(angka % 1000000)}`.trim();
-  if (angka < 1000000000000) return `${angkaTerbilang(Math.floor(angka / 1000000000))} Miliar ${angkaTerbilang(angka % 1000000000)}`.trim();
-  return '';
-};
+const PRESET_EXPENSES = [
+  {
+    label: 'Air Galon',
+    icon: Droplet,
+    category: 'Operasional Cafe',
+    subCategory: 'Listrik, Air & Internet / WiFi',
+    desc: 'Beli Air Galon Dapur / Bar',
+    suggestedAmount: 20000
+  },
+  {
+    label: 'Es Batu Kristal',
+    icon: Snowflake,
+    category: 'Operasional Cafe',
+    subCategory: 'Gas LPG & Es Batu Rutin',
+    desc: 'Beli Es Batu Kristal Konsumsi',
+    suggestedAmount: 15000
+  },
+  {
+    label: 'Gas LPG Dapur',
+    icon: Flame,
+    category: 'Operasional Cafe',
+    subCategory: 'Gas LPG & Es Batu Rutin',
+    desc: 'Beli Gas LPG 3kg / 12kg Dapur',
+    suggestedAmount: 24000
+  },
+  {
+    label: 'Token Listrik',
+    icon: Zap,
+    category: 'Operasional Cafe',
+    subCategory: 'Listrik, Air & Internet / WiFi',
+    desc: 'Isi Ulang Token Listrik Darurat Toko',
+    suggestedAmount: 100000
+  },
+  {
+    label: 'Susu UHT / Fresh',
+    icon: Coffee,
+    category: 'Bahan Minuman',
+    subCategory: 'Susu & Dairy (Fresh Milk, UHT, Keju)',
+    desc: 'Beli Darurat Susu UHT / Fresh Milk',
+    suggestedAmount: 22000
+  },
+  {
+    label: 'Plastik Kresek / Cup',
+    icon: ShoppingBag,
+    category: 'Kemasan & Packaging',
+    subCategory: 'Kotak Makanan & Paper Bag / Kantong Plastik',
+    desc: 'Beli Kantong Kresek / Cup Takeaway',
+    suggestedAmount: 35000
+  },
+  {
+    label: 'Sabun & Spons',
+    icon: ShoppingCart,
+    category: 'Operasional Cafe',
+    subCategory: 'Sabun Cuci, Plastik Sampah & Kebersihan',
+    desc: 'Beli Sabun Cuci Piring & Spons Dapur',
+    suggestedAmount: 25000
+  },
+  {
+    label: 'Bensin Operasional',
+    icon: Truck,
+    category: 'Operasional Cafe',
+    subCategory: 'Bensin & Transport Operasional',
+    desc: 'Uang Bensin Belanja Pasar / Operasional',
+    suggestedAmount: 20000
+  }
+];
 
-const CashFlowModal: React.FC<CashFlowModalProps> = ({ isOpen, onClose, onSave }) => {
-  const posContext = useContext(POSContext);
-  const [formData, setFormData] = useState({
-    type: 'Pengeluaran',
+const PRESET_INFLOWS = [
+  {
+    label: 'Top-up Petty Cash Rp 500Rb',
+    amount: 500000,
+    category: 'Modal & Injeksi',
+    subCategory: 'Tambahan Modal Kas Kecil / Petty Cash Top-up',
+    desc: 'Top-up Kas Operasional Toko dari Owner'
+  },
+  {
+    label: 'Top-up Petty Cash Rp 1 Jt',
+    amount: 1000000,
+    category: 'Modal & Injeksi',
+    subCategory: 'Tambahan Modal Kas Kecil / Petty Cash Top-up',
+    desc: 'Top-up Kas Operasional Toko dari Owner'
+  },
+  {
+    label: 'Top-up Mingguan Rp 2 Jt',
+    amount: 2000000,
+    category: 'Modal & Injeksi',
+    subCategory: 'Tambahan Modal Kas Kecil / Petty Cash Top-up',
+    desc: 'Injeksi Dana Operasional Mingguan Kafe'
+  },
+  {
+    label: 'Sisa Kembalian Belanja',
     amount: 0,
-    description: ''
-  });
-  const [displayAmount, setDisplayAmount] = useState('');
-  const [mainCategory, setMainCategory] = useState('Bahan Makanan');
-  const [subCategory, setSubCategory] = useState('');
-  const [ingredients, setIngredients] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [selectedIngredient, setSelectedIngredient] = useState<any | null>(null);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+    category: 'Pendapatan Non-POS',
+    subCategory: 'Sisa Pengembalian Belanja Operasional',
+    desc: 'Pengembalian sisa uang belanja operasional toko'
+  }
+];
+
+const CashFlowModal: React.FC<CashFlowModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  initialType = 'Pengeluaran',
+  initialPocket = 'OPERATIONAL'
+}) => {
+  const posContext = useContext(POSContext);
+  const user = posContext?.user;
+  const isOwnerOrAdmin = user?.role === 'Admin' || user?.role === 'Owner' || (user as any)?.isPlatformAdmin;
+
+  const [type, setType] = useState<'Pengeluaran' | 'Pemasukan'>(initialType);
+  const [pocket, setPocket] = useState<'OPERATIONAL' | 'DRAWER'>(initialPocket);
+  const [mainCategory, setMainCategory] = useState<string>('Operasional Cafe');
+  const [subCategory, setSubCategory] = useState<string>('Listrik, Air & Internet / WiFi');
+  const [amount, setAmount] = useState<number>(0);
+  const [displayAmount, setDisplayAmount] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [autoStock, setAutoStock] = useState<boolean>(false);
+  const [receiptUrl, setReceiptUrl] = useState<string>('');
+  const [uploadingReceipt, setUploadingReceipt] = useState<boolean>(false);
+  const [status, setStatus] = useState<'PENDING' | 'APPROVED'>('APPROVED');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (isOpen && posContext?.token) {
-      // Fetch Ingredients
-      fetch('/api/ingredients', {
-        headers: { Authorization: `Bearer ${posContext.token}` }
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data)) setIngredients(data);
-        })
-        .catch(err => console.error('Failed to load ingredients in CashFlowModal', err));
+    if (isOpen) {
+      setType(initialType);
+      setPocket(initialPocket);
+      setAmount(0);
+      setDisplayAmount('');
+      setDescription('');
+      setAutoStock(false);
+      setReceiptUrl('');
 
-      // Fetch Suppliers
-      fetch('/api/suppliers', {
-        headers: { Authorization: `Bearer ${posContext.token}` }
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data)) setSuppliers(data);
-        })
-        .catch(err => console.error('Failed to load suppliers in CashFlowModal', err));
+      if (initialType === 'Pemasukan') {
+        setStatus('APPROVED'); // Pemasukan langsung approved menambah saldo
+        setMainCategory('Modal & Injeksi');
+        setSubCategory('Tambahan Modal Kas Kecil / Petty Cash Top-up');
+      } else {
+        setStatus(isOwnerOrAdmin ? 'APPROVED' : 'PENDING');
+        setMainCategory('Operasional Cafe');
+        setSubCategory('Listrik, Air & Internet / WiFi');
+      }
     }
-  }, [isOpen, posContext?.token]);
+  }, [isOpen, initialType, initialPocket, isOwnerOrAdmin]);
 
-  // Reset subcategory when main category or type changes
-  useEffect(() => {
-    const currentList = formData.type === 'Pengeluaran' ? EXPENSE_CATEGORIES : INFLOW_CATEGORIES;
-    const currentCatObj = currentList.find(c => c.id === mainCategory);
-    if (currentCatObj && currentCatObj.subcategories.length > 0) {
-      setSubCategory(currentCatObj.subcategories[0]);
+  // Handle type change dynamically
+  const handleTypeSwitch = (newType: 'Pengeluaran' | 'Pemasukan') => {
+    setType(newType);
+    if (newType === 'Pemasukan') {
+      setStatus('APPROVED'); // Pemasukan langsung approved
+      setMainCategory('Modal & Injeksi');
+      setSubCategory('Tambahan Modal Kas Kecil / Petty Cash Top-up');
+      setDescription('');
     } else {
-      setSubCategory('');
+      setStatus(isOwnerOrAdmin ? 'APPROVED' : 'PENDING');
+      setMainCategory('Operasional Cafe');
+      setSubCategory('Listrik, Air & Internet / WiFi');
+      setDescription('');
     }
-  }, [mainCategory, formData.type]);
+  };
+
+  // Update subcategories when main category changes
+  useEffect(() => {
+    const list = type === 'Pengeluaran' ? EXPENSE_CATEGORIES : INFLOW_CATEGORIES;
+    const found = list.find(c => c.id === mainCategory);
+    if (found && found.subcategories.length > 0) {
+      if (!found.subcategories.includes(subCategory)) {
+        setSubCategory(found.subcategories[0]);
+      }
+    }
+  }, [mainCategory, type]);
 
   if (!isOpen) return null;
 
-  const handleTypeChange = (newType: string) => {
-    setFormData(prev => ({ ...prev, type: newType }));
-    if (newType === 'Pengeluaran') {
-      setMainCategory(EXPENSE_CATEGORIES[0].id);
-    } else {
-      setMainCategory(INFLOW_CATEGORIES[0].id);
-    }
-    setSelectedIngredient(null);
-    setSelectedSupplierId('');
-  };
-
-  const updateDescription = (ingName: string, stockInfo: string, supplierId: string) => {
-    let supPrefix = '';
-    if (supplierId) {
-      const sup = suppliers.find(s => s.id === Number(supplierId));
-      if (sup) supPrefix = `[Supplier: ${sup.name}] `;
-    } else if (ingName) {
-      supPrefix = `[Belanja Langsung / Retail] `;
-    }
-
-    if (ingName) {
-      setFormData(prev => ({
-        ...prev,
-        description: `${supPrefix}Beli Bahan Baku: ${ingName} (${stockInfo})`
-      }));
-    } else if (supplierId) {
-      const sup = suppliers.find(s => s.id === Number(supplierId));
-      setFormData(prev => ({
-        ...prev,
-        description: `[Supplier: ${sup?.name}] Pembelanjaan kebutuhan cafe`
-      }));
+  const handleApplyExpensePreset = (preset: typeof PRESET_EXPENSES[0]) => {
+    setType('Pengeluaran');
+    setMainCategory(preset.category);
+    setSubCategory(preset.subCategory);
+    setDescription(preset.desc);
+    if (preset.suggestedAmount && amount === 0) {
+      setAmount(preset.suggestedAmount);
+      setDisplayAmount(preset.suggestedAmount.toLocaleString('id-ID'));
     }
   };
 
-  const handleIngredientSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const ingId = e.target.value;
-    if (!ingId) {
-      setSelectedIngredient(null);
-      return;
-    }
-
-    const ing = ingredients.find(i => i.id === Number(ingId));
-    if (ing) {
-      setSelectedIngredient(ing);
-      // Auto suggest main category
-      if (ing.category === 'DRINK') {
-        setMainCategory('Bahan Minuman');
-      } else if (ing.category === 'PACKAGING') {
-        setMainCategory('Kemasan & Packaging');
-      } else {
-        setMainCategory('Bahan Makanan');
-      }
-
-      // Auto-select linked supplier if available
-      const linkedSupId = ing.supplierId ? String(ing.supplierId) : '';
-      setSelectedSupplierId(linkedSupId);
-
-      // Pre-fill description
-      updateDescription(ing.name, `Stok saat ini: ${ing.stock} ${ing.unit}`, linkedSupId);
-    }
-  };
-
-  const handleSupplierChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const supId = e.target.value;
-    setSelectedSupplierId(supId);
-    if (selectedIngredient) {
-      updateDescription(selectedIngredient.name, `Stok saat ini: ${selectedIngredient.stock} ${selectedIngredient.unit}`, supId);
-    } else if (supId) {
-      updateDescription('', '', supId);
+  const handleApplyInflowPreset = (preset: typeof PRESET_INFLOWS[0]) => {
+    setType('Pemasukan');
+    setMainCategory(preset.category);
+    setSubCategory(preset.subCategory);
+    setDescription(preset.desc);
+    if (preset.amount > 0) {
+      setAmount(preset.amount);
+      setDisplayAmount(preset.amount.toLocaleString('id-ID'));
     }
   };
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawVal = e.target.value.replace(/\D/g, '');
-    const num = Number(rawVal) || 0;
-    setFormData(prev => ({ ...prev, amount: num }));
+    const raw = e.target.value.replace(/\D/g, '');
+    const num = Number(raw) || 0;
+    setAmount(num);
     setDisplayAmount(num > 0 ? num.toLocaleString('id-ID') : '');
   };
 
-  const addAmount = (increment: number) => {
-    const newAmount = (formData.amount || 0) + increment;
-    setFormData(prev => ({ ...prev, amount: newAmount }));
-    setDisplayAmount(newAmount.toLocaleString('id-ID'));
+  const addAmount = (addVal: number) => {
+    const newTotal = amount + addVal;
+    setAmount(newTotal);
+    setDisplayAmount(newTotal.toLocaleString('id-ID'));
   };
 
-  const setExactAmount = (amount: number) => {
-    setFormData(prev => ({ ...prev, amount }));
-    setDisplayAmount(amount > 0 ? amount.toLocaleString('id-ID') : '');
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingReceipt(true);
+    try {
+      // Otomatis kompresi gambar struk nota ke format WebP (max 1200px, 80% quality)
+      // Foto HP 3-5MB seketika menjadi ~150KB tanpa kehilangan kejelasan teks nota
+      const optimizedFile = await compressImageFile(file, {
+        maxWidth: 1200,
+        maxHeight: 1200,
+        quality: 0.8,
+        format: 'image/webp'
+      });
+
+      const formData = new FormData();
+      formData.append('image', optimizedFile);
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${posContext?.token}` },
+        body: formData
+      });
+      const data = await res.json();
+      const uploadedUrl = data.imageUrl || data.url;
+      if (res.ok && uploadedUrl) {
+        setReceiptUrl(uploadedUrl);
+        toast('Foto nota berhasil diunggah (teroptimasi WebP)', 'success');
+      } else {
+        toast(data.error || 'Gagal mengunggah foto', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi kesalahan saat mengunggah foto', 'error');
+    } finally {
+      setUploadingReceipt(false);
+    }
   };
 
-  const resetAmount = () => {
-    setFormData(prev => ({ ...prev, amount: 0 }));
-    setDisplayAmount('');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.amount || formData.amount <= 0) {
-      alert('Nominal harus lebih dari 0');
+    if (!amount || amount <= 0) {
+      toast('Nominal transaksi harus lebih dari 0', 'warning');
+      return;
+    }
+    if (!description.trim()) {
+      toast('Rincian & keterangan wajib diisi', 'warning');
       return;
     }
 
-    setLoading(true);
-    const categoryString = subCategory ? `${mainCategory} - ${subCategory}` : mainCategory;
-
-    await onSave({
-      type: formData.type,
-      category: categoryString,
-      amount: formData.amount,
-      description: formData.description
+    onSave({
+      type,
+      pocket,
+      category: mainCategory,
+      subCategory,
+      amount,
+      description: description.trim(),
+      receiptUrl,
+      autoStock: type === 'Pengeluaran' ? autoStock : false,
+      status: type === 'Pemasukan' ? 'APPROVED' : (isOwnerOrAdmin ? status : 'PENDING')
     });
-
-    setLoading(false);
-    setFormData({
-      type: 'Pengeluaran',
-      amount: 0,
-      description: ''
-    });
-    setDisplayAmount('');
-    setMainCategory('Bahan Makanan');
-    setSelectedIngredient(null);
-    setSelectedSupplierId('');
   };
 
-  const activeCategories = formData.type === 'Pengeluaran' ? EXPENSE_CATEGORIES : INFLOW_CATEGORIES;
-  const currentCategoryObj = activeCategories.find(c => c.id === mainCategory);
-  const terbilangText = formData.amount > 0 ? `${angkaTerbilang(formData.amount)} Rupiah` : '';
+  const isExpense = type === 'Pengeluaran';
+  const categoriesList = isExpense ? EXPENSE_CATEGORIES : INFLOW_CATEGORIES;
+  const currentCatObj = categoriesList.find(c => c.id === mainCategory);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm md:p-4 overflow-y-auto">
-      {/* Container: Full Screen Seamless Page View on Mobile (< md), Centered Modal Box on Desktop (>= md) */}
-      <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:rounded-3xl shadow-2xl flex flex-col md:overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div 
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white w-full sm:max-w-md max-h-[92vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col animate-in slide-in-from-bottom sm:zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-gradient-to-r from-slate-50 to-indigo-50/50 border-b border-gray-200 shrink-0">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white rounded-t-3xl flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
-              <DollarSign size={22} />
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-xs text-white ${
+              isExpense ? 'bg-indigo-600' : 'bg-emerald-600'
+            }`}>
+              {isExpense ? <Wallet size={20} /> : <DollarSign size={20} />}
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-gray-900">Catat Transaksi Arus Kas</h2>
-              <p className="text-xs text-gray-500">Pencatatan pembelanjaan bahan baku, operasional, & kas</p>
+              <h2 className="text-sm sm:text-base font-black text-slate-800 leading-tight">
+                {isExpense ? 'Catat Pengeluaran Kas Operasional' : 'Isi Kas Operasional (Petty Cash)'}
+              </h2>
+              <p className="text-[11px] text-slate-400 font-medium">
+                {isExpense 
+                  ? 'Pencatatan pembelanjaan toko (galon, gas, listrik, bahan)' 
+                  : 'Penambahan saldo kas kecil toko untuk kebutuhan harian'}
+              </p>
             </div>
           </div>
           <button 
             type="button"
-            className="w-8 h-8 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center transition-colors" 
-            onClick={onClose} 
-            disabled={loading}
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-all"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
-        
-        {/* Form Body - Full Screen scrollable on mobile */}
-        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto max-h-[calc(100vh-140px)] md:max-h-[72vh] pb-32 md:pb-6">
-            {/* Jenis Transaksi Toggle */}
+
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+
+          {/* 1. Kantong Dana Selector (Pemisahan Tegas Kas Operasional vs Laci Kasir) */}
+          <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1.5">
+              Pilihan Kantong Dana:
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPocket('OPERATIONAL')}
+                className={`py-2 px-2.5 rounded-xl text-left border transition-all ${
+                  pocket === 'OPERATIONAL'
+                    ? 'bg-amber-500 text-white border-amber-600 shadow-2xs font-bold'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50/50'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-black">
+                  <Wallet size={13} />
+                  <span>Kas Operasional</span>
+                </div>
+                <div className={`text-[10px] mt-0.5 leading-tight ${
+                  pocket === 'OPERATIONAL' ? 'text-amber-100' : 'text-slate-400'
+                }`}>
+                  Di luar laci (Galon, Gas, dll)
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPocket('DRAWER')}
+                className={`py-2 px-2.5 rounded-xl text-left border transition-all ${
+                  pocket === 'DRAWER'
+                    ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs font-bold'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50/50'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-black">
+                  <DollarSign size={13} />
+                  <span>Laci Kasir (Sales)</span>
+                </div>
+                <div className={`text-[10px] mt-0.5 leading-tight ${
+                  pocket === 'DRAWER' ? 'text-emerald-100' : 'text-slate-400'
+                }`}>
+                  Omset POS & Modal Shift
+                </div>
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
+              <ShieldCheck size={12} className="text-emerald-600 flex-shrink-0" />
+              <span>
+                {pocket === 'OPERATIONAL'
+                  ? 'Kas Operasional tidak tercampur dengan omset transaksi kasir POS.'
+                  : 'Laci Kasir khusus menghitung omset transaksi penjualan kasir.'}
+              </span>
+            </p>
+          </div>
+
+          {/* 2. Type Toggle: Pengeluaran (Out) vs Pemasukan (In) */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => handleTypeSwitch('Pengeluaran')}
+              className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${
+                isExpense
+                  ? 'bg-rose-50 border-rose-300 text-rose-700 shadow-2xs'
+                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <ArrowUpRight size={15} />
+              <span>Pengeluaran (Out)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTypeSwitch('Pemasukan')}
+              className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${
+                !isExpense
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-2xs'
+                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <ArrowDownLeft size={15} />
+              <span>Isi Kas / Setor (In)</span>
+            </button>
+          </div>
+
+          {/* 3. Preset 1-Klik Sesuai Tipe */}
+          {isExpense ? (
+            <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black text-amber-900 flex items-center gap-1.5">
+                  ✨ Kebutuhan Rutin Kafe (Preset 1-Klik):
+                </span>
+                <span className="text-[9px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+                  Auto-Kategori & Keterangan
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {PRESET_EXPENSES.map((item, idx) => {
+                  const IconComponent = item.icon;
+                  const isSelected = description === item.desc;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleApplyExpensePreset(item)}
+                      className={`p-2 rounded-xl text-left transition-all flex items-center gap-2 border active:scale-95 ${
+                        isSelected
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-2xs font-bold'
+                          : 'bg-white hover:bg-amber-50 text-slate-700 border-amber-150 shadow-2xs'
+                      }`}
+                    >
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        <IconComponent size={13} />
+                      </div>
+                      <span className="text-xs font-semibold leading-tight truncate">
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-black text-emerald-900 flex items-center gap-1.5">
+                  💼 Preset Isi Kas Operasional:
+                </span>
+                <span className="text-[9px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                  Top-Up Cepat
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {PRESET_INFLOWS.map((item, idx) => {
+                  const isSelected = description === item.desc;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleApplyInflowPreset(item)}
+                      className={`p-2.5 rounded-xl text-left transition-all border active:scale-95 ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs font-bold'
+                          : 'bg-white hover:bg-emerald-50 text-slate-700 border-emerald-200 shadow-2xs'
+                      }`}
+                    >
+                      <div className="text-xs font-bold leading-tight truncate">
+                        {item.label}
+                      </div>
+                      <div className={`text-[10px] mt-0.5 truncate ${
+                        isSelected ? 'text-emerald-100' : 'text-slate-400'
+                      }`}>
+                        {item.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 4. Checkbox: Tambah otomatis ke stok bahan baku (Hanya Pengeluaran) */}
+          {isExpense && (
+            <label className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer select-none">
+              <input 
+                type="checkbox" 
+                checked={autoStock} 
+                onChange={(e) => setAutoStock(e.target.checked)}
+                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+              />
+              <div className="text-xs text-slate-700 font-semibold flex items-center gap-1.5">
+                <Box size={14} className="text-indigo-600" />
+                <span>Tambah otomatis ke stok bahan baku dapur?</span>
+              </div>
+            </label>
+          )}
+
+          {/* 5. Kategori Utama & Sub-Kategori */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                Jenis Transaksi <span className="text-rose-500">*</span>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                KATEGORI UTAMA *
               </label>
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleTypeChange('Pengeluaran')}
-                  className={`py-3 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 border transition-all ${
-                    formData.type === 'Pengeluaran'
-                      ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-sm ring-2 ring-rose-200 font-extrabold'
-                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <ArrowUpRight size={18} className={formData.type === 'Pengeluaran' ? 'text-rose-600' : 'text-gray-400'} />
-                  <span>Pengeluaran (Out)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTypeChange('Pemasukan')}
-                  className={`py-3 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 border transition-all ${
-                    formData.type === 'Pemasukan'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm ring-2 ring-emerald-200 font-extrabold'
-                      : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  <ArrowDownRight size={18} className={formData.type === 'Pemasukan' ? 'text-emerald-600' : 'text-gray-400'} />
-                  <span>Pemasukan (In)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Smart Procurement Box (Auto-fill Master Bahan Baku + Integrasi Supplier) */}
-            {formData.type === 'Pengeluaran' && (
-              <div className="p-3.5 sm:p-4 bg-gradient-to-r from-indigo-50/90 to-purple-50/90 border border-indigo-100 rounded-2xl space-y-3 shadow-inner">
-                {/* Auto-fill Bahan Baku */}
-                <div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-indigo-950 mb-1.5">
-                    <Sparkles size={14} className="text-indigo-600" />
-                    Pilih Dari Master Bahan Baku (Opsional)
-                  </label>
-                  <select
-                    className="w-full bg-white border border-indigo-200 text-gray-800 text-xs font-medium rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
-                    value={selectedIngredient?.id || ''}
-                    onChange={handleIngredientSelect}
-                  >
-                    <option value="">-- Pilih bahan baku untuk auto-fill deskripsi & supplier --</option>
-                    {ingredients.map(ing => (
-                      <option key={ing.id} value={ing.id}>
-                        {ing.name} (Stok: {ing.stock} {ing.unit} | Rp {ing.buyPrice?.toLocaleString('id-ID')}) {ing.supplier?.name ? `• [${ing.supplier.name}]` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Supplier / Vendor Selector */}
-                <div>
-                  <label className="flex items-center gap-2 text-xs font-bold text-indigo-950 mb-1.5">
-                    <Building2 size={14} className="text-indigo-600" />
-                    Supplier / Vendor Pembelian (Opsional)
-                  </label>
-                  <select
-                    className="w-full bg-white border border-indigo-200 text-gray-800 text-xs font-semibold rounded-xl px-3.5 py-2.5 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
-                    value={selectedSupplierId}
-                    onChange={handleSupplierChange}
-                  >
-                    <option value="">-- Tanpa Supplier / Belanja Langsung (Pasar / Retail) --</option>
-                    {suppliers.map(sup => (
-                      <option key={sup.id} value={sup.id}>
-                        🏢 {sup.name} {sup.phone ? `(${sup.phone})` : ''} {sup.contact ? `• PIC: ${sup.contact}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* 2-Tier Hierarchical Categories */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-3.5">
-              {/* Kategori Utama */}
-              <div>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  <Layers size={14} className="text-indigo-600" />
-                  Kategori Utama <span className="text-rose-500">*</span>
-                </label>
-                <select 
-                  className="w-full bg-slate-50 border border-gray-300 text-gray-800 text-sm font-semibold rounded-xl px-3.5 py-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm cursor-pointer" 
-                  value={mainCategory}
-                  onChange={(e) => setMainCategory(e.target.value)}
-                  required
-                >
-                  {activeCategories.map(cat => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Sub-Kategori Spesifik */}
-              <div>
-                <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                  <Tag size={14} className="text-indigo-600" />
-                  Sub-Kategori Spesifik <span className="text-rose-500">*</span>
-                </label>
-                <select 
-                  className="w-full bg-slate-50 border border-gray-300 text-gray-800 text-sm font-semibold rounded-xl px-3.5 py-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm cursor-pointer" 
-                  value={subCategory}
-                  onChange={(e) => setSubCategory(e.target.value)}
-                  required
-                >
-                  {currentCategoryObj?.subcategories.map(sub => (
-                    <option key={sub} value={sub}>
-                      {sub}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Nominal Transaksi - Currency Input */}
-            <div className="bg-slate-50/80 p-3.5 sm:p-4 rounded-2xl border border-gray-200/80 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-1.5 text-xs font-bold text-gray-800 uppercase tracking-wider">
-                  <DollarSign size={14} className="text-indigo-600" />
-                  Nominal Transaksi (Rp) <span className="text-rose-500">*</span>
-                </label>
-                {formData.amount > 0 && (
-                  <button
-                    type="button"
-                    onClick={resetAmount}
-                    className="text-xs text-gray-500 hover:text-rose-600 flex items-center gap-1 font-semibold transition-colors"
-                  >
-                    <RotateCcw size={12} /> Reset
-                  </button>
-                )}
-              </div>
-
-              {/* Input Group */}
-              <div className="flex rounded-2xl shadow-sm border-2 border-indigo-200/80 focus-within:border-indigo-600 focus-within:ring-4 focus-within:ring-indigo-500/10 overflow-hidden bg-white transition-all">
-                <div className="bg-indigo-600 text-white px-3.5 sm:px-4 py-2.5 sm:py-3 flex items-center font-black text-base sm:text-lg select-none">
-                  Rp
-                </div>
-                <input 
-                  type="text" 
-                  inputMode="numeric"
-                  name="amount"
-                  className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 outline-none font-black text-xl sm:text-2xl text-gray-900 tracking-wide placeholder-gray-300" 
-                  placeholder="0"
-                  value={displayAmount}
-                  onChange={handleAmountChange}
-                  required
-                />
-              </div>
-
-              {/* Live Terbilang Preview */}
-              {formData.amount > 0 ? (
-                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2 animate-in fade-in">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0"></div>
-                  <div>
-                    <div className="text-sm font-bold text-emerald-800">
-                      Rp {formData.amount.toLocaleString('id-ID')}
-                    </div>
-                    <div className="text-xs font-semibold text-emerald-600 italic">
-                      {terbilangText}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[11px] text-gray-400 italic">
-                  Ketik nominal pengeluaran / pemasukan
-                </div>
-              )}
-
-              {/* Quick Preset Buttons */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[11px] font-bold text-gray-500 mr-1">Cepat:</span>
-                {[
-                  { label: '+10 Rb', val: 10000 },
-                  { label: '+50 Rb', val: 50000 },
-                  { label: '+100 Rb', val: 100000 },
-                  { label: '+500 Rb', val: 500000 },
-                  { label: '+1 Jt', val: 1000000 },
-                  { label: '+5 Jt', val: 5000000 },
-                ].map(p => (
-                  <button
-                    key={p.val}
-                    type="button"
-                    onClick={() => addAmount(p.val)}
-                    className="px-2.5 py-1 text-xs font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 hover:border-indigo-400 rounded-lg shadow-sm transition-all active:scale-95"
-                  >
-                    {p.label}
-                  </button>
+              <select
+                value={mainCategory}
+                onChange={(e) => setMainCategory(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+              >
+                {categoriesList.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
-
-                {/* Auto fill master price button */}
-                {selectedIngredient?.buyPrice > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setExactAmount(selectedIngredient.buyPrice)}
-                    className="px-2.5 py-1 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg shadow-sm transition-all flex items-center gap-1"
-                  >
-                    <Sparkles size={12} className="text-amber-600" />
-                    Rp {selectedIngredient.buyPrice.toLocaleString('id-ID')}
-                  </button>
-                )}
-              </div>
+              </select>
             </div>
 
-            {/* Catatan / Keterangan Rinci */}
             <div>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                <FileText size={14} className="text-indigo-600" />
-                Rincian & Keterangan <span className="text-rose-500">*</span>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                SUB-KATEGORI SPESIFIK *
               </label>
-              <textarea 
-                name="description"
-                className="w-full bg-slate-50 border border-gray-300 text-gray-800 text-sm rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all" 
-                rows={2}
-                placeholder="Contoh: Beli Ayam Fillet 5kg di Pasar, Nota terlampir"
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                required
-              ></textarea>
+              <select
+                value={subCategory}
+                onChange={(e) => setSubCategory(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+              >
+                {currentCatObj?.subcategories.map((sub, i) => (
+                  <option key={i} value={sub}>{sub}</option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Footer - Fixed at bottom on Mobile, Modal footer on Desktop */}
-          <div className="flex items-center justify-end gap-3 px-5 sm:px-6 py-3.5 sm:py-4 bg-gray-50 border-t border-gray-200 shrink-0">
-            <button 
-              type="button" 
-              className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold text-sm hover:bg-gray-100 transition-colors" 
-              onClick={onClose} 
-              disabled={loading}
+          {/* 6. Nominal Transaksi (Rp) */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              NOMINAL {isExpense ? 'PENGELUARAN' : 'DANA MASUK'} (RP) *
+            </label>
+            <div className="relative flex items-center">
+              <span className="absolute left-3 font-black text-slate-400 text-sm">
+                Rp
+              </span>
+              <input 
+                type="text"
+                value={displayAmount}
+                onChange={handleAmountChange}
+                placeholder="0"
+                className="w-full pl-11 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-base font-black text-slate-900 outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+              />
+            </div>
+            
+            {/* Quick Increment Pills */}
+            <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 scrollbar-none">
+              {(isExpense 
+                ? [10000, 20000, 50000, 100000, 500000] 
+                : [50000, 100000, 200000, 500000, 1000000]
+              ).map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => addAmount(val)}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border active:scale-95 transition-all whitespace-nowrap ${
+                    isExpense
+                      ? 'bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 border-indigo-150'
+                      : 'bg-emerald-50/70 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                  }`}
+                >
+                  +{val >= 1000000 ? `${val / 1000000} Jt` : `${val / 1000} Rb`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 7. Rincian & Keterangan */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              {isExpense ? 'RINCIAN & KETERANGAN BELANJA *' : 'RINCIAN & KETERANGAN DANA MASUK *'}
+            </label>
+            <input 
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={isExpense 
+                ? "Contoh: Beli 2 Galon Aqua Dapur / Token Listrik Darurat" 
+                : "Contoh: Top-up saldo kas operasional harian toko dari Owner"}
+              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-600"
+            />
+          </div>
+
+          {/* 8. Lampiran Foto */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5">
+                <Camera size={13} className={isExpense ? 'text-indigo-600' : 'text-emerald-600'} /> 
+                <span>{isExpense ? 'Lampiran Foto Struk / Nota Fisik' : 'Foto Bukti Transfer / Setoran Kas'}</span>
+              </label>
+              <span className="text-[10px] text-slate-400">Opsional</span>
+            </div>
+
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              accept="image/*" 
+              capture="environment"
+              onChange={handleFileUpload} 
+              className="hidden" 
+            />
+
+            {receiptUrl ? (
+              <div className="relative rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 p-2 flex items-center gap-3">
+                <img src={receiptUrl} alt="Bukti" className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                    <CheckCircle2 size={13} /> Foto Bukti Terlampir
+                  </span>
+                  <p className="text-[10px] text-slate-400 truncate mt-0.5">{receiptUrl}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReceiptUrl('')}
+                  className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all text-xs font-bold"
+                >
+                  Hapus
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={uploadingReceipt}
+                onClick={() => fileInputRef.current?.click()}
+                className={`w-full py-3 px-4 border-2 border-dashed rounded-2xl flex items-center justify-center gap-2 text-xs font-bold transition-all active:scale-[0.99] ${
+                  isExpense
+                    ? 'border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 text-indigo-700'
+                    : 'border-emerald-200 hover:border-emerald-400 bg-emerald-50/30 text-emerald-800'
+                }`}
+              >
+                <Camera size={16} />
+                <span>{uploadingReceipt ? 'Mengunggah foto...' : isExpense ? 'Foto Struk Belanja / Kamera HP' : 'Foto Bukti Setor / Transfer'}</span>
+              </button>
+            )}
+          </div>
+
+          {/* 9. Status Pengajuan / Penyetujuan */}
+          {isExpense ? (
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1.5">
+                Status Pengajuan Pengeluaran:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStatus('PENDING')}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    status === 'PENDING'
+                      ? 'bg-amber-500 border-amber-600 text-white shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>⌛ Masuk Antrean Approval</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!isOwnerOrAdmin}
+                  onClick={() => {
+                    if (isOwnerOrAdmin) setStatus('APPROVED');
+                  }}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    !isOwnerOrAdmin 
+                      ? 'opacity-40 cursor-not-allowed bg-slate-50 border-slate-200 text-slate-400'
+                      : status === 'APPROVED'
+                        ? 'bg-emerald-600 border-emerald-700 text-white shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                  title={!isOwnerOrAdmin ? 'Hanya Owner / Admin yang dapat langsung menyetujui' : ''}
+                >
+                  <Check size={14} /> Langsung Disetujui
+                </button>
+              </div>
+              {!isOwnerOrAdmin && (
+                <p className="text-[10px] text-slate-400 mt-1 italic">
+                  * Pengeluaran kas oleh kasir memerlukan persetujuan Owner.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <span className="text-xs font-black text-emerald-900 block leading-tight">
+                  Langsung Menambah Saldo Kas
+                </span>
+                <span className="text-[10px] text-emerald-700 leading-tight">
+                  Dana masuk langsung menambah saldo {pocket === 'OPERATIONAL' ? 'Kas Operasional Toko' : 'Laci Kasir'} tanpa perlu antrean approval.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 10. Footer Action Buttons */}
+          <div className="pt-2 flex gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold transition-all active:scale-95"
             >
               Batal
             </button>
-            <button 
-              type="submit" 
-              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2 active:scale-95" 
-              disabled={loading}
+            <button
+              type="submit"
+              className={`flex-1 py-3 px-4 rounded-xl text-white text-xs font-black shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 ${
+                !isExpense
+                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                  : status === 'PENDING'
+                    ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
+                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
+              }`}
             >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Menyimpan...</span>
-                </>
-              ) : (
-                <>
-                  <Check size={16} />
-                  <span>Simpan Transaksi</span>
-                </>
-              )}
+              <Check size={16} />
+              <span>
+                {!isExpense 
+                  ? 'Simpan & Tambah Kas' 
+                  : status === 'PENDING' 
+                    ? 'Ajukan Pengeluaran ke Owner' 
+                    : 'Simpan Pengeluaran'}
+              </span>
             </button>
           </div>
+
         </form>
       </div>
     </div>

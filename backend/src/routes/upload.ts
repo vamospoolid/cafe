@@ -118,6 +118,7 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response) => {
     res.status(200).json({
       message: 'Gambar berhasil diunggah dengan aman ke penyimpanan terisolasi.',
       imageUrl,
+      url: imageUrl,
       filename: file.filename,
       sizeBytes: file.size
     });

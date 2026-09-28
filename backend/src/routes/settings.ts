@@ -70,6 +70,7 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     if (updateData.ingredientTrackingEnabled !== undefined) updateData.ingredientTrackingEnabled = Boolean(updateData.ingredientTrackingEnabled);
     if (updateData.enableKitchenAuditMode !== undefined) updateData.enableKitchenAuditMode = Boolean(updateData.enableKitchenAuditMode);
     if (updateData.enableStaffMealTracking !== undefined) updateData.enableStaffMealTracking = Boolean(updateData.enableStaffMealTracking);
+    if (updateData.enableBlindClose !== undefined) updateData.enableBlindClose = Boolean(updateData.enableBlindClose);
     
     if (updateData.enableKDS !== undefined) updateData.enableKDS = Boolean(updateData.enableKDS);
     if (updateData.autoCompleteKDSOnPay !== undefined) updateData.autoCompleteKDSOnPay = Boolean(updateData.autoCompleteKDSOnPay);

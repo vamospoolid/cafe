@@ -12,6 +12,7 @@ import { toast, confirmAlert } from '../utils/alert';
 import { exportFinancialPDF, exportProfitSharingPDF, exportDailyBonusPDF } from '../utils/pdfGenerator';
 import { exportProfitSharingExcel, exportDailyBonusExcel, exportPettyCashExcel, exportSalesReportExcel, exportInventoryValuationExcel } from '../utils/excelGenerator';
 import { getTodayStr, getYesterdayStr, getLast7DaysRange, getLast30DaysRange, getThisMonthRange, getLastMonthRange, getMonthRange, formatLocalDate } from '../utils/dateUtils';
+import { AiMenuOptimizerModal } from './AiMenuOptimizerModal';
 
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'this_month' | 'last_month' | 'month_30' | 'custom';
 type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory' | 'accounting' | 'profit_sharing' | 'daily_bonus';
@@ -19,6 +20,9 @@ type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory
 export const ReportView: React.FC = () => {
   const posContext = useContext(POSContext);
   const token = posContext?.token;
+
+  // AI Menu Advisor Modal State
+  const [showAiMenuModal, setShowAiMenuModal] = useState(false);
 
   // Date Filters: Default to today
   const [quickFilter, setQuickFilter] = useState<QuickFilterType>('today');
@@ -40,6 +44,14 @@ export const ReportView: React.FC = () => {
   // PDF Export Modal State
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  const enableProfitSharing = posContext?.settings?.enableProfitSharing ?? true;
+
+  useEffect(() => {
+    if (posContext?.settings?.enableProfitSharing === false && activeTab === 'profit_sharing') {
+      setActiveTab('dashboard');
+    }
+  }, [posContext?.settings?.enableProfitSharing, activeTab]);
 
   // Product Report Search & Sorting
   const [productSearch, setProductSearch] = useState('');
@@ -201,7 +213,7 @@ export const ReportView: React.FC = () => {
         }
         await exportProfitSharingPDF(
           profitSharingData,
-          posContext?.settings || { storeName: 'MUKI RAMEN' },
+          posContext?.settings || { storeName: 'KAFE & RESTORAN' },
           { startDate, endDate },
           posContext?.user?.username || 'Admin'
         );
@@ -216,7 +228,7 @@ export const ReportView: React.FC = () => {
         }
         await exportDailyBonusPDF(
           dailyBonusData,
-          posContext?.settings || { storeName: 'MUKI RAMEN' },
+          posContext?.settings || { storeName: 'KAFE & RESTORAN' },
           { startDate, endDate },
           posContext?.user?.username || 'Admin'
         );
@@ -277,7 +289,7 @@ export const ReportView: React.FC = () => {
 
       await exportFinancialPDF(
         type,
-        posContext?.settings || { storeName: 'MUKI RAMEN' },
+        posContext?.settings || { storeName: 'KAFE & RESTORAN' },
         dataToPass,
         startDate,
         endDate,
@@ -298,19 +310,19 @@ export const ReportView: React.FC = () => {
     try {
       if (activeTab === 'profit_sharing') {
         if (!profitSharingData || !profitSharingData.summary) return toast('Tidak ada data bagi hasil untuk diekspor', 'warning');
-        exportProfitSharingExcel(profitSharingData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        exportProfitSharingExcel(profitSharingData, posContext?.settings || { storeName: 'KAFE & RESTORAN' }, { startDate, endDate });
         toast('✓ Spreadsheet Excel Bagi Hasil berhasil diunduh!', 'success');
       } else if (activeTab === 'daily_bonus') {
         if (!dailyBonusData || !dailyBonusData.days || dailyBonusData.days.length === 0) return toast('Tidak ada data bonus untuk diekspor', 'warning');
-        exportDailyBonusExcel(dailyBonusData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        exportDailyBonusExcel(dailyBonusData, posContext?.settings || { storeName: 'KAFE & RESTORAN' }, { startDate, endDate });
         toast('✓ Spreadsheet Excel Matriks Bonus berhasil diunduh!', 'success');
       } else if (activeTab === 'inventory') {
         if (!inventoryData || !inventoryData.inventory) return toast('Tidak ada data inventaris untuk diekspor', 'warning');
-        exportInventoryValuationExcel(inventoryData, posContext?.settings || { storeName: 'MUKI RAMEN' });
+        exportInventoryValuationExcel(inventoryData, posContext?.settings || { storeName: 'KAFE & RESTORAN' });
         toast('✓ Spreadsheet Excel Valuasi Stok berhasil diunduh!', 'success');
       } else {
         if (!reportData || !reportData.summary) return toast('Tidak ada data penjualan untuk diekspor', 'warning');
-        exportSalesReportExcel(reportData, posContext?.settings || { storeName: 'MUKI RAMEN' }, { startDate, endDate });
+        exportSalesReportExcel(reportData, posContext?.settings || { storeName: 'KAFE & RESTORAN' }, { startDate, endDate });
         toast('✓ Spreadsheet Excel Laporan Penjualan berhasil diunduh!', 'success');
       }
     } catch (err: any) {
@@ -388,7 +400,7 @@ export const ReportView: React.FC = () => {
           <div className="hidden sm:block">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-1 bg-purple-50 text-indigo-700 rounded-lg text-xs font-extrabold">
-                {posContext?.settings?.storeName || 'MUKI RAMEN'}
+                {posContext?.settings?.storeName || 'KAFE & RESTORAN'}
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900 m-0">
                 Laporan & Analisis Bisnis
@@ -449,7 +461,7 @@ export const ReportView: React.FC = () => {
               <button
                 key={f.id}
                 onClick={() => handleQuickFilter(f.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all shrink-0 whitespace-nowrap cursor-pointer ${
                   quickFilter === f.id
                     ? 'bg-white text-indigo-700 shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
@@ -461,70 +473,75 @@ export const ReportView: React.FC = () => {
           </div>
 
           {/* Date Picker Range & Month Selector */}
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2 w-full xl:w-auto">
             {/* Quick Month Picker */}
-            <div className="flex items-center gap-1.5 bg-indigo-50/70 border border-indigo-200/80 px-2.5 py-1.5 rounded-xl shrink-0" title="Pilih Bulan Spesifik">
-              <span className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-wider">Bulan:</span>
+            <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-indigo-50/70 border border-indigo-200/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shrink-0" title="Pilih Bulan Spesifik">
+              <span className="text-[9.5px] sm:text-[10px] font-extrabold text-indigo-700 uppercase tracking-wider shrink-0">Bulan:</span>
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => handleMonthPickerChange(e.target.value)}
-                className="bg-transparent text-xs font-black text-indigo-950 outline-none cursor-pointer"
+                className="bg-transparent text-[11px] sm:text-xs font-black text-indigo-950 outline-none cursor-pointer w-full sm:w-auto"
               />
             </div>
 
-            {/* Custom Date Range */}
-            <div className="flex-1 sm:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-              <Calendar size={14} className="text-slate-400 shrink-0" />
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setQuickFilter('custom');
-                }}
-                className="w-full border-none bg-transparent text-xs font-bold text-slate-800 outline-none"
-              />
-            </div>
-            <span className="text-xs text-slate-400 font-bold shrink-0">s/d</span>
-            <div className="flex-1 sm:flex-initial flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-              <Calendar size={14} className="text-slate-400 shrink-0" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setQuickFilter('custom');
-                }}
-                className="w-full border-none bg-transparent text-xs font-bold text-slate-800 outline-none"
-              />
+            {/* Custom Date Range (50/50 on mobile, inline on desktop) */}
+            <div className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0">
+              <div className="flex-1 flex items-center gap-1 bg-slate-50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-slate-200 min-w-0">
+                <Calendar size={13} className="text-slate-400 shrink-0" />
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setQuickFilter('custom');
+                  }}
+                  className="w-full border-none bg-transparent text-[11px] sm:text-xs font-bold text-slate-800 outline-none min-w-0"
+                />
+              </div>
+              <span className="text-[10px] sm:text-xs text-slate-400 font-bold shrink-0">s/d</span>
+              <div className="flex-1 flex items-center gap-1 bg-slate-50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-slate-200 min-w-0">
+                <Calendar size={13} className="text-slate-400 shrink-0" />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setQuickFilter('custom');
+                  }}
+                  className="w-full border-none bg-transparent text-[11px] sm:text-xs font-bold text-slate-800 outline-none min-w-0"
+                />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          2. NAVIGASI 7 TAB UTAMA LAPORAN
+          2. NAVIGASI TAB UTAMA LAPORAN
       ────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-1.5 shrink-0">
+      <div className={`bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-sm grid grid-cols-2 sm:grid-cols-3 ${enableProfitSharing ? 'lg:grid-cols-7' : 'lg:grid-cols-6'} gap-1.5 shrink-0`}>
         {[
           { 
             id: 'dashboard', 
             title: 'Ringkasan Eksekutif', 
+            mobileTitle: 'Ringkasan',
             subtitle: 'Grafik & KPI Utama', 
             icon: BarChart3,
             badge: null
           },
-          { 
+          ...(enableProfitSharing ? [{ 
             id: 'profit_sharing', 
             title: 'Bagi Hasil (80:20)', 
+            mobileTitle: 'Bagi Hasil',
             subtitle: 'Ramen vs Minuman & Owner', 
             icon: Percent,
             badge: profitSharingData?.summary ? `Rp ${Math.round((profitSharingData.summary.grandTotalNetProfit || 0) / 1000)}k` : null
-          },
+          }] : []),
           { 
             id: 'daily_bonus', 
             title: 'Bonus & Absensi', 
+            mobileTitle: 'Bonus & Absensi',
             subtitle: 'Reward Omzet Full Time', 
             icon: Award,
             badge: dailyBonusData?.days ? `${dailyBonusData.days.length} Hari` : null
@@ -532,6 +549,7 @@ export const ReportView: React.FC = () => {
           { 
             id: 'products', 
             title: 'Penjualan Menu', 
+            mobileTitle: 'Penjualan Menu',
             subtitle: 'Best Seller & Laba', 
             icon: Utensils, 
             badge: totalQtySold > 0 ? `${totalQtySold} Porsi` : null
@@ -539,6 +557,7 @@ export const ReportView: React.FC = () => {
           { 
             id: 'shifts_transactions', 
             title: 'Shift & Kasir', 
+            mobileTitle: 'Shift & Kasir',
             subtitle: 'Audit Kas & Invoice', 
             icon: Users,
             badge: (reportData.shifts?.length || 0) > 0 ? `${reportData.shifts?.length} Shift` : null
@@ -546,6 +565,7 @@ export const ReportView: React.FC = () => {
           { 
             id: 'inventory', 
             title: 'Mutasi & Stok', 
+            mobileTitle: 'Mutasi Stok',
             subtitle: 'Valuasi HPP & Kritis', 
             icon: Boxes,
             badge: (inventoryData.inventory?.length || 0) > 0 ? `${inventoryData.inventory?.length} Bahan` : null
@@ -553,6 +573,7 @@ export const ReportView: React.FC = () => {
           { 
             id: 'accounting', 
             title: 'Keuangan (P&L)', 
+            mobileTitle: 'Keuangan (P&L)',
             subtitle: 'Laba Rugi & Arus Kas', 
             icon: Receipt,
             badge: null
@@ -564,61 +585,39 @@ export const ReportView: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '.75rem',
-                padding: '.75rem 1rem',
-                background: isSelected 
-                  ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' 
-                  : '#f8fafc',
-                color: isSelected ? '#ffffff' : '#334155',
-                border: isSelected ? '1px solid #7c3aed' : '1px solid #e2e8f0',
-                borderRadius: '.85rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-                textAlign: 'left',
-                boxShadow: isSelected ? '0 4px 12px rgba(124, 58, 237, 0.25)' : 'none',
-              }}
+              className={`flex items-center gap-2 sm:gap-2.5 p-2 sm:p-2.5 lg:p-3 rounded-xl sm:rounded-2xl transition-all cursor-pointer text-left border ${
+                isSelected 
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-600 shadow-md shadow-indigo-500/20' 
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/80'
+              }`}
             >
               <div 
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '.65rem',
-                  background: isSelected ? 'rgba(255,255,255,0.2)' : '#ede9fe',
-                  color: isSelected ? '#ffffff' : '#7c3aed',
-                  flexShrink: 0
-                }}
+                className={`w-7 h-7 sm:w-8 sm:h-8 lg:w-9 lg:h-9 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-purple-100/70 text-indigo-700'
+                }`}
               >
-                <Icon size={18} />
+                <Icon size={15} className="sm:w-4 sm:h-4 lg:w-[18px] lg:h-[18px]" />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.25rem' }}>
-                  <span style={{ fontWeight: 800, fontSize: '.85rem', color: isSelected ? '#ffffff' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {tab.title}
+              <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-black text-[11px] sm:text-xs lg:text-[13px] leading-tight truncate">
+                    <span className="sm:hidden">{tab.mobileTitle || tab.title}</span>
+                    <span className="hidden sm:inline">{tab.title}</span>
                   </span>
                   {tab.badge && (
                     <span 
-                      style={{ 
-                        fontSize: '.62rem', 
-                        padding: '.12rem .4rem', 
-                        background: isSelected ? 'rgba(255,255,255,0.25)' : '#ede9fe', 
-                        color: isSelected ? '#ffffff' : '#7c3aed', 
-                        borderRadius: '9999px', 
-                        fontWeight: 800,
-                        whiteSpace: 'nowrap'
-                      }}
+                      className={`text-[8.5px] sm:text-[9.5px] px-1.5 py-0.2 sm:py-0.5 rounded-full font-black shrink-0 whitespace-nowrap ${
+                        isSelected ? 'bg-white/25 text-white' : 'bg-purple-100 text-indigo-700'
+                      }`}
                     >
                       {tab.badge}
                     </span>
                   )}
                 </div>
-                <span style={{ fontSize: '.7rem', fontWeight: 500, color: isSelected ? 'rgba(255,255,255,0.85)' : '#64748b', marginTop: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span className={`hidden sm:block text-[10px] lg:text-[11px] font-medium leading-tight truncate mt-0.5 ${
+                  isSelected ? 'text-white/80' : 'text-slate-400'
+                }`}>
                   {tab.subtitle}
                 </span>
               </div>
@@ -691,197 +690,200 @@ export const ReportView: React.FC = () => {
 
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {/* Top 4 KPI Metrics with Margins & HPP Ratio */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem' }}>
+            {/* Top 4 KPI Metrics with Margins & HPP Ratio (Symmetric 2-col Mobile Grid) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
               
               {/* Card 1: Total Omzet Gross */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Total Omzet (Gross)</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
-                    <DollarSign size={18} />
+              <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[85px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9.5px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Total Omzet</span>
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+                    <DollarSign size={14} className="sm:w-4 sm:h-4" />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', marginTop: '.35rem' }}>
-                  {formatCurrency(totalRev)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#64748b', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #f1f5f9' }}>
-                  <span>{reportData.summary?.transactionsCount || 0} Total Transaksi</span>
-                  <span style={{ fontWeight: 800, color: '#7c3aed', background: '#f5f3ff', padding: '.1rem .4rem', borderRadius: '.35rem' }}>100% Basis</span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-tight truncate">
+                    {formatCurrency(totalRev)}
+                  </div>
+                  <div className="text-[9.5px] sm:text-xs text-slate-500 font-medium truncate mt-0.5 flex items-center justify-between">
+                    <span>{reportData.summary?.transactionsCount || 0} Transaksi</span>
+                    <span className="font-bold text-purple-700 bg-purple-50 px-1 py-0.2 rounded text-[8.5px] sm:text-[9.5px]">Basis 100%</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Card 2: Laba Bersih Operasional + Net Margin % */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #bbf7d0', boxShadow: '0 2px 4px rgba(16,185,129,0.06)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '.03em' }}>Laba Bersih Operasional</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a' }}>
-                    <TrendingUp size={18} />
+              {/* Card 2: Laba Bersih Operasional */}
+              <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-emerald-200/80 shadow-xs flex flex-col justify-between min-h-[85px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9.5px] sm:text-xs font-bold text-emerald-800 uppercase tracking-wider truncate">Laba Bersih</span>
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <TrendingUp size={14} className="sm:w-4 sm:h-4" />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#16a34a', marginTop: '.35rem' }}>
-                  {formatCurrency(netProf)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#166534', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #dcfce7' }}>
-                  <span>Setelah HPP & Biaya Kas</span>
-                  <span style={{ fontWeight: 900, color: '#15803d', background: '#dcfce7', padding: '.12rem .5rem', borderRadius: '.35rem', border: '1px solid #86efac' }}>
-                    Margin Bersih {netMarginPct}%
-                  </span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-emerald-600 tracking-tight leading-tight truncate">
+                    {formatCurrency(netProf)}
+                  </div>
+                  <div className="text-[9.5px] sm:text-xs text-emerald-700 font-semibold truncate mt-0.5 flex items-center justify-between">
+                    <span className="truncate">Setelah HPP & Kas</span>
+                    <span className="bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200 text-[8.5px] sm:text-[9.5px]">Margin {netMarginPct}%</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Card 3: Total HPP Bahan Baku + HPP Ratio % */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #fecdd3', boxShadow: '0 2px 4px rgba(239,68,68,0.04)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Total HPP Bahan Baku</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444' }}>
-                    <ShoppingBag size={18} />
+              {/* Card 3: Total HPP Bahan Baku */}
+              <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-rose-200/80 shadow-xs flex flex-col justify-between min-h-[85px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9.5px] sm:text-xs font-bold text-rose-800 uppercase tracking-wider truncate">HPP Bahan</span>
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <ShoppingBag size={14} className="sm:w-4 sm:h-4" />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', marginTop: '.35rem' }}>
-                  {formatCurrency(totalHpp)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#991b1b', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #fee2e2' }}>
-                  <span>Biaya Bahan Terpakai</span>
-                  <span style={{ fontWeight: 800, color: '#b91c1c', background: '#fee2e2', padding: '.12rem .5rem', borderRadius: '.35rem' }}>
-                    Rasio HPP {hppRatioPct}%
-                  </span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-rose-600 tracking-tight leading-tight truncate">
+                    {formatCurrency(totalHpp)}
+                  </div>
+                  <div className="text-[9.5px] sm:text-xs text-rose-700 font-semibold truncate mt-0.5 flex items-center justify-between">
+                    <span className="truncate">Biaya Bahan</span>
+                    <span className="bg-rose-50 px-1 py-0.2 rounded border border-rose-200 text-[8.5px] sm:text-[9.5px]">Rasio {hppRatioPct}%</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Card 4: Laba Kotor & Gross Margin % */}
-              <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.03em' }}>Laba Kotor (Gross Profit)</span>
-                  <div style={{ width: 34, height: 34, borderRadius: '.6rem', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
-                    <Percent size={18} />
+              {/* Card 4: Laba Kotor Menu */}
+              <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[85px] sm:min-h-[110px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9.5px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Laba Kotor</span>
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+                    <Percent size={14} className="sm:w-4 sm:h-4" />
                   </div>
                 </div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0284c7', marginTop: '.35rem' }}>
-                  {formatCurrency(grossProf)}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.72rem', color: '#0369a1', marginTop: '.35rem', paddingTop: '.35rem', borderTop: '1px dashed #f1f5f9' }}>
-                  <span>Omzet - HPP Bahan</span>
-                  <span style={{ fontWeight: 900, color: '#0284c7', background: '#e0f2fe', padding: '.12rem .5rem', borderRadius: '.35rem' }}>
-                    Gross Margin {grossMarginPct}%
-                  </span>
+                <div>
+                  <div className="text-sm sm:text-xl lg:text-2xl font-black text-sky-600 tracking-tight leading-tight truncate">
+                    {formatCurrency(grossProf)}
+                  </div>
+                  <div className="text-[9.5px] sm:text-xs text-sky-700 font-semibold truncate mt-0.5 flex items-center justify-between">
+                    <span className="truncate">Omzet - HPP</span>
+                    <span className="bg-sky-50 px-1 py-0.2 rounded border border-sky-200 text-[8.5px] sm:text-[9.5px]">Margin {grossMarginPct}%</span>
+                  </div>
                 </div>
               </div>
+
             </div>
 
             {/* ─────────────────────────────────────────────────────────────
-                SECTION BARU: ANALISIS OMZET & MARGIN MAKANAN VS MINUMAN
+                SECTION: ANALISIS OMZET & MARGIN MAKANAN VS MINUMAN
             ────────────────────────────────────────────────────────────── */}
-            <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.5rem' }}>
+            <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-3 sm:p-5 flex flex-col gap-2.5 sm:gap-4 shadow-xs">
+              <div className="flex justify-between items-center flex-wrap gap-1 sm:gap-2">
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
-                    <Sparkles size={17} color="#7c3aed" />
-                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Sparkles size={16} className="text-purple-600 shrink-0" />
+                    <h3 className="text-xs sm:text-base font-black text-slate-900 leading-tight">
                       Laporan Omzet & Margin: Makanan vs Minuman
                     </h3>
                   </div>
-                  <span style={{ fontSize: '.75rem', color: '#64748b' }}>
+                  <span className="text-[10px] sm:text-xs text-slate-500 leading-relaxed block mt-0.5">
                     Perbandingan kontribusi omzet penjualan, porsi terjual, HPP bahan, dan persentase margin laba bersih per kategori
                   </span>
                 </div>
               </div>
 
               {/* Visual Contribution Ratio Bar */}
-              <div style={{ background: '#f8fafc', padding: '.85rem 1rem', borderRadius: '.85rem', border: '1px solid #f1f5f9' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', fontWeight: 800, marginBottom: '.45rem' }}>
-                  <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '.3rem' }}>
-                    <Utensils size={13} /> Makanan: {catBreakdown.food.percentage}% ({formatCurrency(catBreakdown.food.revenue)})
+              <div className="bg-slate-50 p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-100">
+                <div className="flex justify-between text-[10px] sm:text-xs font-bold mb-1.5">
+                  <span className="text-amber-700 flex items-center gap-1">
+                    <Utensils size={12} /> Makanan: {catBreakdown.food.percentage}% ({formatCurrency(catBreakdown.food.revenue)})
                   </span>
-                  <span style={{ color: '#0891b2', display: 'flex', alignItems: 'center', gap: '.3rem' }}>
-                    <Coffee size={13} /> Minuman: {catBreakdown.drink.percentage}% ({formatCurrency(catBreakdown.drink.revenue)})
+                  <span className="text-cyan-700 flex items-center gap-1">
+                    <Coffee size={12} /> Minuman: {catBreakdown.drink.percentage}% ({formatCurrency(catBreakdown.drink.revenue)})
                   </span>
                 </div>
-                <div style={{ width: '100%', height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden', display: 'flex' }}>
-                  <div style={{ width: `${Math.max(0, catBreakdown.food.percentage)}%`, background: 'linear-gradient(90deg, #f59e0b, #d97706)', transition: 'width 0.4s ease' }} title={`Makanan: ${catBreakdown.food.percentage}%`} />
-                  <div style={{ width: `${Math.max(0, catBreakdown.drink.percentage)}%`, background: 'linear-gradient(90deg, #06b6d4, #0891b2)', transition: 'width 0.4s ease' }} title={`Minuman: ${catBreakdown.drink.percentage}%`} />
+                <div className="w-full h-2 sm:h-2.5 bg-slate-200 rounded-full overflow-hidden flex">
+                  <div style={{ width: `${Math.max(0, catBreakdown.food.percentage)}%` }} className="bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300" title={`Makanan: ${catBreakdown.food.percentage}%`} />
+                  <div style={{ width: `${Math.max(0, catBreakdown.drink.percentage)}%` }} className="bg-gradient-to-r from-cyan-400 to-cyan-500 transition-all duration-300" title={`Minuman: ${catBreakdown.drink.percentage}%`} />
                 </div>
               </div>
 
               {/* Side-by-Side Comparison Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-4">
                 
                 {/* 1. Makanan Card */}
-                <div style={{ background: '#fffbeb', borderRadius: '1rem', border: '1px solid #fde68a', padding: '1.15rem', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Utensils size={18} />
+                <div className="bg-amber-50/70 rounded-xl sm:rounded-2xl border border-amber-200/80 p-3 sm:p-4 flex flex-col gap-2 sm:gap-2.5">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                        <Utensils size={15} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 900, fontSize: '.95rem', color: '#92400e' }}>Kategori Makanan (Food)</div>
-                        <div style={{ fontSize: '.7rem', color: '#b45309' }}>Ramen, Nasi, Bento & Snack</div>
+                        <div className="font-black text-xs sm:text-sm text-amber-950 leading-tight">Kategori Makanan (Food)</div>
+                        <div className="text-[10px] sm:text-xs text-amber-700/80">Ramen, Nasi, Bento & Snack</div>
                       </div>
                     </div>
-                    <span style={{ fontSize: '.75rem', fontWeight: 900, color: '#b45309', background: '#fef3c7', padding: '.2rem .5rem', borderRadius: '.4rem', border: '1px solid #fde68a' }}>
+                    <span className="text-[10px] sm:text-xs font-black text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md border border-amber-200">
                       Porsi: {catBreakdown.food.qty}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '.25rem' }}>
+                  <div className="flex justify-between items-baseline pt-1">
                     <div>
-                      <div style={{ fontSize: '.7rem', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Total Omzet Makanan</div>
-                      <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#78350f' }}>{formatCurrency(catBreakdown.food.revenue)}</div>
+                      <div className="text-[9.5px] sm:text-[11px] text-amber-800 font-bold uppercase">Total Omzet Makanan</div>
+                      <div className="text-base sm:text-xl lg:text-2xl font-black text-amber-950 leading-tight">{formatCurrency(catBreakdown.food.revenue)}</div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '.7rem', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Laba Kotor</div>
-                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#16a34a' }}>{formatCurrency(catBreakdown.food.profit)}</div>
+                    <div className="text-right">
+                      <div className="text-[9.5px] sm:text-[11px] text-amber-800 font-bold uppercase">Laba Kotor</div>
+                      <div className="text-sm sm:text-lg lg:text-xl font-black text-emerald-600 leading-tight">{formatCurrency(catBreakdown.food.profit)}</div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.5rem', background: 'white', padding: '.65rem .85rem', borderRadius: '.65rem', border: '1px solid #fde68a' }}>
+                  <div className="grid grid-cols-2 gap-2 bg-white p-2 sm:p-2.5 rounded-lg sm:rounded-xl border border-amber-200/70 text-[10px] sm:text-xs">
                     <div>
-                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>HPP Bahan Makanan:</span>
-                      <strong style={{ fontSize: '.82rem', color: '#dc2626' }}>{formatCurrency(catBreakdown.food.cost)}</strong>
+                      <span className="text-[9.5px] sm:text-[10.5px] text-slate-400 block">HPP Bahan Makanan:</span>
+                      <strong className="text-xs sm:text-sm text-rose-600 font-black">{formatCurrency(catBreakdown.food.cost)}</strong>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>Margin Laba Makanan:</span>
-                      <strong style={{ fontSize: '.85rem', color: '#d97706', fontWeight: 900 }}>{catBreakdown.food.margin}%</strong>
+                    <div className="text-right">
+                      <span className="text-[9.5px] sm:text-[10.5px] text-slate-400 block">Margin Laba Makanan:</span>
+                      <strong className="text-xs sm:text-sm text-amber-600 font-black">{catBreakdown.food.margin}%</strong>
                     </div>
                   </div>
                 </div>
 
                 {/* 2. Minuman Card */}
-                <div style={{ background: '#ecfeff', borderRadius: '1rem', border: '1px solid #a5f3fc', padding: '1.15rem', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '.45rem' }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#cffafe', color: '#0891b2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Coffee size={18} />
+                <div className="bg-cyan-50/70 rounded-xl sm:rounded-2xl border border-cyan-200/80 p-3 sm:p-4 flex flex-col gap-2 sm:gap-2.5">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
+                        <Coffee size={15} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 900, fontSize: '.95rem', color: '#155e75' }}>Kategori Minuman (Beverages)</div>
-                        <div style={{ fontSize: '.7rem', color: '#0e7490' }}>Kopi, Teh, Jus & Mocktail</div>
+                        <div className="font-black text-xs sm:text-sm text-cyan-950 leading-tight">Kategori Minuman (Beverages)</div>
+                        <div className="text-[10px] sm:text-xs text-cyan-700/80">Kopi, Teh, Jus & Mocktail</div>
                       </div>
                     </div>
-                    <span style={{ fontSize: '.75rem', fontWeight: 900, color: '#0e7490', background: '#cffafe', padding: '.2rem .5rem', borderRadius: '.4rem', border: '1px solid #a5f3fc' }}>
+                    <span className="text-[10px] sm:text-xs font-black text-cyan-800 bg-cyan-100/90 px-2 py-0.5 rounded-md border border-cyan-200">
                       Cup: {catBreakdown.drink.qty}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: '.25rem' }}>
+                  <div className="flex justify-between items-baseline pt-1">
                     <div>
-                      <div style={{ fontSize: '.7rem', color: '#155e75', fontWeight: 700, textTransform: 'uppercase' }}>Total Omzet Minuman</div>
-                      <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#164e63' }}>{formatCurrency(catBreakdown.drink.revenue)}</div>
+                      <div className="text-[9.5px] sm:text-[11px] text-cyan-800 font-bold uppercase">Total Omzet Minuman</div>
+                      <div className="text-base sm:text-xl lg:text-2xl font-black text-cyan-950 leading-tight">{formatCurrency(catBreakdown.drink.revenue)}</div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '.7rem', color: '#155e75', fontWeight: 700, textTransform: 'uppercase' }}>Laba Kotor</div>
-                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#16a34a' }}>{formatCurrency(catBreakdown.drink.profit)}</div>
+                    <div className="text-right">
+                      <div className="text-[9.5px] sm:text-[11px] text-cyan-800 font-bold uppercase">Laba Kotor</div>
+                      <div className="text-sm sm:text-lg lg:text-xl font-black text-emerald-600 leading-tight">{formatCurrency(catBreakdown.drink.profit)}</div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.5rem', background: 'white', padding: '.65rem .85rem', borderRadius: '.65rem', border: '1px solid #a5f3fc' }}>
+                  <div className="grid grid-cols-2 gap-2 bg-white p-2 sm:p-2.5 rounded-lg sm:rounded-xl border border-cyan-200/70 text-[10px] sm:text-xs">
                     <div>
-                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>HPP Bahan Minuman:</span>
-                      <strong style={{ fontSize: '.82rem', color: '#dc2626' }}>{formatCurrency(catBreakdown.drink.cost)}</strong>
+                      <span className="text-[9.5px] sm:text-[10.5px] text-slate-400 block">HPP Bahan Minuman:</span>
+                      <strong className="text-xs sm:text-sm text-rose-600 font-black">{formatCurrency(catBreakdown.drink.cost)}</strong>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '.68rem', color: '#64748b', display: 'block' }}>Margin Laba Minuman:</span>
-                      <strong style={{ fontSize: '.85rem', color: '#0891b2', fontWeight: 900 }}>{catBreakdown.drink.margin}%</strong>
+                    <div className="text-right">
+                      <span className="text-[9.5px] sm:text-[10.5px] text-slate-400 block">Margin Laba Minuman:</span>
+                      <strong className="text-xs sm:text-sm text-cyan-700 font-black">{catBreakdown.drink.margin}%</strong>
                     </div>
                   </div>
                 </div>
@@ -1038,67 +1040,75 @@ export const ReportView: React.FC = () => {
           TAB 2: LAPORAN PENJUALAN MENU & BEST SELLER
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'products' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div className="flex flex-col gap-3.5 sm:gap-5">
           
           {/* Top 3 Best Sellers Podium Cards */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', marginBottom: '.75rem' }}>
-              <Sparkles size={18} color="#f59e0b" />
-              <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}>Top 3 Menu Terlaris (Best Seller)</h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5 sm:mb-3">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Sparkles size={16} className="text-amber-500 shrink-0" />
+                <h3 className="font-black text-sm sm:text-base text-slate-900">Top 3 Menu Terlaris (Best Seller)</h3>
+              </div>
+              <button
+                onClick={() => setShowAiMenuModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-[11px] sm:text-xs shadow-md shadow-purple-900/20 hover:opacity-95 transition-all flex items-center justify-center gap-1.5 w-fit"
+              >
+                <Sparkles size={13} className="text-yellow-300" /> AI Menu & Profit Advisor
+              </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5">
               {topSellers.map((seller: any, idx: number) => {
-                const badgeColor = idx === 0 ? '#fbbf24' : (idx === 1 ? '#94a3b8' : '#cd7f32');
+                const badgeBorder = idx === 0 ? 'border-amber-400' : (idx === 1 ? 'border-slate-300' : 'border-amber-700/40');
+                const badgeBg = idx === 0 ? 'bg-amber-50 text-amber-800' : (idx === 1 ? 'bg-slate-50 text-slate-700' : 'bg-orange-50 text-orange-800');
                 const badgeText = idx === 0 ? '🥇 #1 Terlaris' : (idx === 1 ? '🥈 #2 Terlaris' : '🥉 #3 Terlaris');
 
                 return (
                   <div
                     key={seller.name}
-                    style={{
-                      background: 'white', borderRadius: '1.25rem', border: `2px solid ${idx === 0 ? '#fbbf24' : '#e2e8f0'}`,
-                      padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '.75rem',
-                      boxShadow: idx === 0 ? '0 8px 20px -4px rgba(251,191,36,0.25)' : '0 2px 4px rgba(0,0,0,0.02)',
-                      position: 'relative'
-                    }}
+                    className={`bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col justify-between gap-2 sm:gap-3 border ${
+                      idx === 0 ? 'border-amber-400 shadow-sm shadow-amber-200/50' : 'border-slate-200/80 shadow-xs'
+                    }`}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ padding: '.25rem .6rem', background: idx === 0 ? '#fffbeb' : '#f8fafc', color: idx === 0 ? '#b45309' : '#475569', borderRadius: '.5rem', fontSize: '.75rem', fontWeight: 900, border: `1px solid ${badgeColor}` }}>
-                        {badgeText}
-                      </span>
-                      <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
-                        {seller.category}
-                      </span>
-                    </div>
-
                     <div>
-                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#0f172a' }}>{seller.name}</h4>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '.35rem' }}>
-                        <span style={{ fontSize: '1.35rem', fontWeight: 900, color: '#7c3aed' }}>
-                          {seller.qty} <span style={{ fontSize: '.8rem', fontWeight: 600, color: '#64748b' }}>porsi</span>
+                      <div className="flex justify-between items-center gap-1">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-black border ${badgeBg} ${badgeBorder}`}>
+                          {badgeText}
                         </span>
-                        <span style={{ fontSize: '.85rem', fontWeight: 800, color: '#10b981' }}>
-                          {formatCurrency(seller.revenue)}
+                        <span className="text-[10px] sm:text-xs font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                          {seller.category}
                         </span>
+                      </div>
+
+                      <div className="mt-1.5 sm:mt-2">
+                        <h4 className="font-black text-slate-900 text-xs sm:text-sm truncate">{seller.name}</h4>
+                        <div className="flex justify-between items-baseline mt-1">
+                          <span className="text-sm sm:text-lg font-black text-indigo-600">
+                            {seller.qty} <span className="text-[10px] sm:text-xs font-normal text-slate-500">porsi</span>
+                          </span>
+                          <span className="text-xs sm:text-sm font-black text-emerald-600">
+                            {formatCurrency(seller.revenue)}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', background: '#f8fafc', padding: '.5rem .75rem', borderRadius: '.5rem', border: '1px solid #f1f5f9' }}>
-                      <span style={{ color: '#64748b' }}>Laba Kotor: <strong>{formatCurrency(seller.profit)}</strong></span>
-                      <span style={{ color: '#7c3aed', fontWeight: 800 }}>Margin: {seller.margin}%</span>
+                    <div className="flex justify-between items-center text-[10px] sm:text-xs bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                      <span className="text-slate-500">Laba Kotor: <strong className="text-slate-700">{formatCurrency(seller.profit)}</strong></span>
+                      <span className="text-indigo-700 font-black">Margin: {seller.margin}%</span>
                     </div>
                   </div>
                 );
               })}
               {topSellers.length === 0 && (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', background: 'white', borderRadius: '1rem', gridColumn: 'span 3' }}>
+                <div className="p-6 text-center text-slate-400 bg-white rounded-xl col-span-3 text-xs">
                   Belum ada transaksi penjualan menu.
                 </div>
               )}
             </div>
           </div>
 
-          {/* Summary & Category Sub-Recap Cards */}
+          {/* Summary & Category Sub-Recap Cards - 2 cols on mobile (2x2), 4 cols on desktop */}
           {(() => {
             let fRev = 0, fCost = 0, fQty = 0;
             let dRev = 0, dCost = 0, dQty = 0;
@@ -1122,102 +1132,108 @@ export const ReportView: React.FC = () => {
             const dMargin = dRev > 0 ? Math.round((dProfit / dRev) * 100) : 0;
 
             return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '.875rem' }}>
-                <div style={{ background: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#64748b' }}>Total Porsi Terjual</span>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', marginTop: '.2rem' }}>{totalQtySold} Porsi</div>
-                  <div style={{ fontSize: '.7rem', color: '#64748b', marginTop: '.2rem' }}>Rata-rata Margin: <strong style={{ color: '#7c3aed' }}>{avgMargin}%</strong></div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
+                {/* Total Porsi */}
+                <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                  <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Total Porsi Terjual</span>
+                  <div className="text-sm sm:text-2xl font-black text-slate-900 mt-0.5 sm:mt-1 tracking-tight truncate">{totalQtySold} Porsi</div>
+                  <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">
+                    Rata-rata Margin: <strong className="text-indigo-600">{avgMargin}%</strong>
+                  </div>
                 </div>
 
                 {/* Sub-Card Makanan */}
-                <div style={{ background: '#fffbeb', borderRadius: '1rem', padding: '1rem', border: '1px solid #fde68a' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '.72rem', fontWeight: 800, color: '#92400e', display: 'flex', alignItems: 'center', gap: '.25rem' }}>
-                      <Utensils size={13} /> Omzet Makanan
+                <div className="bg-amber-50/70 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-amber-200/80 shadow-xs flex flex-col justify-between">
+                  <div className="flex justify-between items-center gap-1">
+                    <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-amber-800 tracking-wider flex items-center gap-1 truncate">
+                      <Utensils size={11} className="shrink-0" /> Makanan
                     </span>
-                    <span style={{ fontSize: '.68rem', fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '.1rem .35rem', borderRadius: '.3rem' }}>
+                    <span className="text-[8.5px] sm:text-[10px] font-black text-amber-700 bg-amber-200/60 px-1.5 py-0.5 rounded shrink-0">
                       Margin {fMargin}%
                     </span>
                   </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#78350f', marginTop: '.2rem' }}>{formatCurrency(fRev)}</div>
-                  <div style={{ fontSize: '.7rem', color: '#b45309', marginTop: '.2rem' }}>{fQty} porsi • Laba {formatCurrency(fProfit)}</div>
+                  <div className="text-sm sm:text-2xl font-black text-amber-950 mt-0.5 sm:mt-1 tracking-tight truncate">{formatCurrency(fRev)}</div>
+                  <div className="text-[9px] sm:text-xs text-amber-800 mt-0.5 truncate">{fQty} porsi • Laba {formatCurrency(fProfit)}</div>
                 </div>
 
                 {/* Sub-Card Minuman */}
-                <div style={{ background: '#ecfeff', borderRadius: '1rem', padding: '1rem', border: '1px solid #a5f3fc' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '.72rem', fontWeight: 800, color: '#155e75', display: 'flex', alignItems: 'center', gap: '.25rem' }}>
-                      <Coffee size={13} /> Omzet Minuman
+                <div className="bg-cyan-50/70 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-cyan-200/80 shadow-xs flex flex-col justify-between">
+                  <div className="flex justify-between items-center gap-1">
+                    <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-cyan-800 tracking-wider flex items-center gap-1 truncate">
+                      <Coffee size={11} className="shrink-0" /> Minuman
                     </span>
-                    <span style={{ fontSize: '.68rem', fontWeight: 800, color: '#0891b2', background: '#cffafe', padding: '.1rem .35rem', borderRadius: '.3rem' }}>
+                    <span className="text-[8.5px] sm:text-[10px] font-black text-cyan-700 bg-cyan-200/60 px-1.5 py-0.5 rounded shrink-0">
                       Margin {dMargin}%
                     </span>
                   </div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#164e63', marginTop: '.2rem' }}>{formatCurrency(dRev)}</div>
-                  <div style={{ fontSize: '.7rem', color: '#0e7490', marginTop: '.2rem' }}>{dQty} cup • Laba {formatCurrency(dProfit)}</div>
+                  <div className="text-sm sm:text-2xl font-black text-cyan-950 mt-0.5 sm:mt-1 tracking-tight truncate">{formatCurrency(dRev)}</div>
+                  <div className="text-[9px] sm:text-xs text-cyan-800 mt-0.5 truncate">{dQty} cup • Laba {formatCurrency(dProfit)}</div>
                 </div>
 
-                <div style={{ background: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#64748b' }}>Total Laba Kotor Menu</span>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#10b981', marginTop: '.2rem' }}>{formatCurrency(totalMenuProfit)}</div>
-                  <div style={{ fontSize: '.7rem', color: '#64748b', marginTop: '.2rem' }}>Total Omzet: {formatCurrency(totalMenuRevenue)}</div>
+                {/* Total Laba Menu */}
+                <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                  <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Laba Kotor Menu</span>
+                  <div className="text-sm sm:text-2xl font-black text-emerald-600 mt-0.5 sm:mt-1 tracking-tight truncate">{formatCurrency(totalMenuProfit)}</div>
+                  <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">Total Omzet: {formatCurrency(totalMenuRevenue)}</div>
                 </div>
               </div>
             );
           })()}
 
           {/* Search, Filter & Sort Bar */}
-          <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '.85rem' }}>
-            <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ flex: 1, minWidth: '220px', background: '#f8fafc', borderRadius: '.75rem', padding: '.55rem .85rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-                <Search size={15} color="#94a3b8" />
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 p-2.5 sm:p-3.5 flex flex-col gap-2 sm:gap-2.5 shadow-xs">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="flex-1 bg-slate-50 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 border border-slate-200/80 flex items-center gap-2">
+                <Search size={14} className="text-slate-400 shrink-0" />
                 <input
                   type="text"
                   placeholder="Cari nama menu..."
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
-                  style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '.85rem', color: '#0f172a', width: '100%' }}
+                  className="border-none bg-transparent outline-none text-xs text-slate-900 w-full placeholder:text-slate-400"
                 />
               </div>
 
               {/* Sort Controls */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', fontSize: '.8rem', color: '#64748b' }}>
-                <SlidersHorizontal size={15} />
-                <span>Urutkan:</span>
-                <select
-                  value={productSortKey}
-                  onChange={(e) => setProductSortKey(e.target.value as any)}
-                  style={{ padding: '.45rem .75rem', borderRadius: '.5rem', border: '1px solid #cbd5e1', fontSize: '.78rem', fontWeight: 700, background: 'white', outline: 'none' }}
-                >
-                  <option value="qty">Porsi Terjual</option>
-                  <option value="revenue">Omzet Kotor</option>
-                  <option value="profit">Keuntungan</option>
-                  <option value="margin">Margin %</option>
-                </select>
-                <select
-                  value={productSortOrder}
-                  onChange={(e) => setProductSortOrder(e.target.value as any)}
-                  style={{ padding: '.45rem .75rem', borderRadius: '.5rem', border: '1px solid #cbd5e1', fontSize: '.78rem', fontWeight: 700, background: 'white', outline: 'none' }}
-                >
-                  <option value="desc">Tertinggi</option>
-                  <option value="asc">Terendah</option>
-                </select>
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 justify-between sm:justify-start">
+                <div className="flex items-center gap-1 text-[11px] sm:text-xs shrink-0">
+                  <SlidersHorizontal size={13} />
+                  <span>Urut:</span>
+                </div>
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <select
+                    value={productSortKey}
+                    onChange={(e) => setProductSortKey(e.target.value as any)}
+                    className="flex-1 sm:flex-none px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] sm:text-xs font-bold bg-white text-slate-700 outline-none"
+                  >
+                    <option value="qty">Porsi</option>
+                    <option value="revenue">Omzet</option>
+                    <option value="profit">Keuntungan</option>
+                    <option value="margin">Margin %</option>
+                  </select>
+                  <select
+                    value={productSortOrder}
+                    onChange={(e) => setProductSortOrder(e.target.value as any)}
+                    className="px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] sm:text-xs font-bold bg-white text-slate-700 outline-none"
+                  >
+                    <option value="desc">Tertinggi</option>
+                    <option value="asc">Terendah</option>
+                  </select>
+                </div>
               </div>
             </div>
 
             {/* Category Filter Pills */}
-            <div style={{ display: 'flex', gap: '.35rem', overflowX: 'auto', paddingBottom: '.25rem' }}>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
               {productCategories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setProductCategoryFilter(cat)}
-                  style={{
-                    padding: '.4rem .85rem', borderRadius: '.5rem', border: '1px solid',
-                    borderColor: productCategoryFilter === cat ? '#7c3aed' : '#e2e8f0',
-                    background: productCategoryFilter === cat ? '#f5f3ff' : 'white',
-                    color: productCategoryFilter === cat ? '#7c3aed' : '#64748b',
-                    fontWeight: 700, fontSize: '.75rem', cursor: 'pointer', whiteSpace: 'nowrap'
-                  }}
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-[11px] sm:text-xs font-bold whitespace-nowrap transition-all ${
+                    productCategoryFilter === cat
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
                 >
                   {cat}
                 </button>
@@ -1225,68 +1241,147 @@ export const ReportView: React.FC = () => {
             </div>
           </div>
 
-          {/* Products Sales Table */}
+          {/* Products Sales Table & Mobile Cards */}
           <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                  {['RANK', 'NAMA MENU', 'KATEGORI', 'TERJUAL (QTY)', 'KONTRIBUSI OMZET', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN (%)'].map((h) => (
-                    <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((prod: any, idx: number) => {
-                  const percentOfTotal = totalMenuRevenue > 0 ? ((prod.revenue || 0) / totalMenuRevenue) * 100 : 0;
-                  return (
-                    <tr key={prod.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#94a3b8', fontSize: '.8rem' }}>
-                        #{idx + 1}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.875rem' }}>
-                        {prod.name}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
-                          {prod.category}
-                        </span>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.9rem' }}>
-                        {prod.qty} <span style={{ fontSize: '.75rem', fontWeight: 500, color: '#64748b' }}>porsi</span>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{formatCurrency(prod.revenue)}</div>
-                        <div style={{ width: 100, height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
-                          <div style={{ width: `${Math.min(percentOfTotal, 100)}%`, height: '100%', background: '#7c3aed' }} />
-                        </div>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', color: '#dc2626', fontWeight: 700, fontSize: '.85rem' }}>
-                        {formatCurrency(prod.cost)}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', color: '#10b981', fontWeight: 800, fontSize: '.85rem' }}>
-                        {formatCurrency(prod.profit)}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{
-                          padding: '.2rem .5rem', borderRadius: '.35rem', fontWeight: 800, fontSize: '.75rem',
-                          background: prod.margin >= 60 ? '#f0fdf4' : (prod.margin >= 40 ? '#f5f3ff' : '#fffbeb'),
-                          color: prod.margin >= 60 ? '#166534' : (prod.margin >= 40 ? '#7c3aed' : '#b45309')
-                        }}>
-                          {prod.margin}%
-                        </span>
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    {['RANK', 'NAMA MENU', 'KATEGORI', 'TERJUAL (QTY)', 'KONTRIBUSI OMZET', 'TOTAL HPP', 'KEUNTUNGAN', 'MARGIN (%)'].map((h) => (
+                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.map((prod: any, idx: number) => {
+                    const percentOfTotal = totalMenuRevenue > 0 ? ((prod.revenue || 0) / totalMenuRevenue) * 100 : 0;
+                    return (
+                      <tr key={prod.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#94a3b8', fontSize: '.8rem' }}>
+                          #{idx + 1}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.875rem' }}>
+                          {prod.name}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{ fontSize: '.72rem', fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
+                            {prod.category}
+                          </span>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.9rem' }}>
+                          {prod.qty} <span style={{ fontSize: '.75rem', fontWeight: 500, color: '#64748b' }}>porsi</span>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{formatCurrency(prod.revenue)}</div>
+                          <div style={{ width: 100, height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(percentOfTotal, 100)}%`, height: '100%', background: '#7c3aed' }} />
+                          </div>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', color: '#dc2626', fontWeight: 700, fontSize: '.85rem' }}>
+                          {formatCurrency(prod.cost)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', color: '#10b981', fontWeight: 800, fontSize: '.85rem' }}>
+                          {formatCurrency(prod.profit)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{
+                            padding: '.2rem .5rem', borderRadius: '.35rem', fontWeight: 800, fontSize: '.75rem',
+                            background: prod.margin >= 60 ? '#f0fdf4' : (prod.margin >= 40 ? '#f5f3ff' : '#fffbeb'),
+                            color: prod.margin >= 60 ? '#166534' : (prod.margin >= 40 ? '#7c3aed' : '#b45309')
+                          }}>
+                            {prod.margin}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredProducts.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                        Tidak ada data penjualan menu untuk filter yang dipilih.
                       </td>
                     </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View (< 768px) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredProducts.length === 0 ? (
+                <div className="p-8 text-center flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                    <Utensils size={22} />
+                  </div>
+                  <h4 className="text-xs font-black text-slate-800">Belum Ada Data Penjualan Menu</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada penjualan menu untuk filter atau tanggal yang dipilih.</p>
+                </div>
+              ) : (
+                filteredProducts.map((prod: any, idx: number) => {
+                  const percentOfTotal = totalMenuRevenue > 0 ? ((prod.revenue || 0) / totalMenuRevenue) * 100 : 0;
+                  const rankClass = idx === 0 
+                    ? 'bg-amber-500 text-white shadow-xs' 
+                    : (idx === 1 
+                      ? 'bg-slate-500 text-white' 
+                      : (idx === 2 
+                        ? 'bg-amber-700 text-white' 
+                        : 'bg-slate-100 text-slate-600'));
+
+                  return (
+                    <div key={prod.name} className="p-4 space-y-3 bg-white hover:bg-slate-50/70 transition-all">
+                      {/* Top Row: Rank, Menu Name, Category, Margin */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <span className={`w-7 h-7 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${rankClass}`}>
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-black text-slate-900 leading-tight">
+                              {prod.name}
+                            </h4>
+                            <span className="inline-block text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100/80 px-2 py-0.2 rounded-md mt-1">
+                              {prod.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Margin Badge */}
+                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                          prod.margin >= 60 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : (prod.margin >= 40 
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+                              : 'bg-amber-50 text-amber-700 border-amber-200')
+                        }`}>
+                          Margin {prod.margin}%
+                        </span>
+                      </div>
+
+                      {/* 3-Col Metric Grid */}
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Terjual</span>
+                          <span className="font-black text-slate-900 block mt-0.5">{prod.qty} <span className="text-[10px] font-normal text-slate-500">porsi</span></span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Omzet</span>
+                          <span className="font-bold text-slate-900 block mt-0.5 truncate">{formatCurrency(prod.revenue)}</span>
+                          <div className="w-full h-1 bg-slate-200 rounded-full mt-1.5 overflow-hidden">
+                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${Math.min(percentOfTotal, 100)}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold uppercase text-slate-400 block">Keuntungan</span>
+                          <span className="font-black text-emerald-600 block mt-0.5 truncate">{formatCurrency(prod.profit)}</span>
+                          <span className="text-[9px] text-slate-400 block truncate">HPP: {formatCurrency(prod.cost)}</span>
+                        </div>
+                      </div>
+                    </div>
                   );
-                })}
-                {filteredProducts.length === 0 && (
-                  <tr>
-                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                      Tidak ada data penjualan menu untuk filter yang dipilih.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1297,32 +1392,24 @@ export const ReportView: React.FC = () => {
       {activeTab === 'shifts_transactions' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* Sub-toggle: Shifts vs Transactions */}
-          <div style={{ display: 'flex', gap: '.4rem', background: 'white', padding: '.4rem', borderRadius: '1rem', border: '1px solid #e2e8f0', width: 'fit-content', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="flex flex-col sm:flex-row w-full sm:w-fit gap-1.5 p-1.5 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
             <button
               onClick={() => setShiftTxSubTab('shifts')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.45rem',
-                padding: '.55rem 1.15rem', borderRadius: '.65rem', border: 'none',
-                background: shiftTxSubTab === 'shifts' ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
-                color: shiftTxSubTab === 'shifts' ? 'white' : '#475569',
-                fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
-                boxShadow: shiftTxSubTab === 'shifts' ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
-                transition: 'all 0.15s'
-              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all ${
+                shiftTxSubTab === 'shifts'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
             >
               <User size={15} /> Rekapitulasi Shift Kasir ({reportData.shifts?.length || 0})
             </button>
             <button
               onClick={() => setShiftTxSubTab('transactions')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '.45rem',
-                padding: '.55rem 1.15rem', borderRadius: '.65rem', border: 'none',
-                background: shiftTxSubTab === 'transactions' ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
-                color: shiftTxSubTab === 'transactions' ? 'white' : '#475569',
-                fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
-                boxShadow: shiftTxSubTab === 'transactions' ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
-                transition: 'all 0.15s'
-              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black transition-all ${
+                shiftTxSubTab === 'transactions'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
             >
               <FileText size={15} /> Riwayat Invoice Transaksi ({transactionsData.length})
             </button>
@@ -1330,109 +1417,233 @@ export const ReportView: React.FC = () => {
 
           {shiftTxSubTab === 'shifts' ? (
             <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                    {['WAKTU TUTUP SHIFT', 'NAMA KASIR', 'SALDO AWAL LACI', 'TOTAL OMZET KAS', 'SALDO FISIK LACI', 'SELISIH KAS (AUDIT)', 'STATUS'].map((h) => (
-                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(reportData.shifts || []).map((s: any) => {
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      {['WAKTU TUTUP SHIFT', 'NAMA KASIR', 'SALDO AWAL LACI', 'TOTAL OMZET KAS', 'SALDO FISIK LACI', 'SELISIH KAS (AUDIT)', 'STATUS'].map((h) => (
+                        <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reportData.shifts || []).map((s: any) => {
+                      const isBalanced = (s.selisih || 0) === 0;
+                      const isShort = (s.selisih || 0) < 0;
+                      return (
+                        <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                            {s.waktuTutup ? new Date(s.waktuTutup).toLocaleString('id-ID') : 'Masih Berjalan'}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.85rem' }}>
+                            {s.user?.name || s.user?.username || 'Kasir'}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.82rem' }}>
+                            {formatCurrency(s.saldoAwal)}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                            {formatCurrency(s.saldoSistem || 0)}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>
+                            {formatCurrency(s.saldoFisikLaci || 0)}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 900, fontSize: '.85rem', color: isBalanced ? '#10b981' : (isShort ? '#ef4444' : '#f59e0b') }}>
+                            {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem' }}>
+                            <span style={{
+                              padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
+                              background: isBalanced ? '#f0fdf4' : (isShort ? '#fee2e2' : '#fffbeb'),
+                              color: isBalanced ? '#166534' : (isShort ? '#991b1b' : '#b45309')
+                            }}>
+                              {isBalanced ? '✅ Seimbang' : (isShort ? '❌ Minus (Shortage)' : '⚠️ Lebih (Overage)')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {(reportData.shifts || []).length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                          Belum ada shift kasir yang tercatat pada periode ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View (< 768px) */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {(reportData.shifts || []).length === 0 ? (
+                  <div className="p-8 text-center flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                      <Users size={22} />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-800">Belum Ada Shift Kasir</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada shift kasir yang tercatat pada periode ini.</p>
+                  </div>
+                ) : (
+                  (reportData.shifts || []).map((s: any) => {
                     const isBalanced = (s.selisih || 0) === 0;
                     const isShort = (s.selisih || 0) < 0;
                     return (
-                      <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
-                          {s.waktuTutup ? new Date(s.waktuTutup).toLocaleString('id-ID') : 'Masih Berjalan'}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.85rem' }}>
-                          {s.user?.name || s.user?.username || 'Kasir'}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.82rem' }}>
-                          {formatCurrency(s.saldoAwal)}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
-                          {formatCurrency(s.saldoSistem || 0)}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>
-                          {formatCurrency(s.saldoFisikLaci || 0)}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, fontSize: '.85rem', color: isBalanced ? '#10b981' : (isShort ? '#ef4444' : '#f59e0b') }}>
-                          {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem' }}>
-                          <span style={{
-                            padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
-                            background: isBalanced ? '#f0fdf4' : (isShort ? '#fee2e2' : '#fffbeb'),
-                            color: isBalanced ? '#166534' : (isShort ? '#991b1b' : '#b45309')
-                          }}>
-                            {isBalanced ? '✅ Seimbang' : (isShort ? '❌ Minus (Shortage)' : '⚠️ Lebih (Overage)')}
+                      <div key={s.id} className="p-4 space-y-3 bg-white hover:bg-slate-50/70 transition-all">
+                        {/* Top: Kasir name, time, status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-purple-50 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+                              <User size={16} />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-black text-slate-900 leading-tight">
+                                {s.user?.name || s.user?.username || 'Kasir'}
+                              </h4>
+                              <span className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
+                                <Clock size={11} />
+                                {s.waktuTutup ? new Date(s.waktuTutup).toLocaleString('id-ID') : 'Sedang Berjalan'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            isBalanced 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : (isShort 
+                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                : 'bg-amber-50 text-amber-700 border-amber-200')
+                          }`}>
+                            {isBalanced ? '✅ Pas' : (isShort ? '❌ Minus' : '⚠️ Lebih')}
                           </span>
-                        </td>
-                      </tr>
+                        </div>
+
+                        {/* 4-Grid Financial Audit Box */}
+                        <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Saldo Awal</span>
+                            <span className="font-bold text-slate-700 block mt-0.5">{formatCurrency(s.saldoAwal)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Omzet Sistem</span>
+                            <span className="font-bold text-slate-900 block mt-0.5">{formatCurrency(s.saldoSistem || 0)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Fisik Laci</span>
+                            <span className="font-bold text-slate-900 block mt-0.5">{formatCurrency(s.saldoFisikLaci || 0)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Selisih Audit</span>
+                            <span className={`font-black block mt-0.5 ${isBalanced ? 'text-emerald-600' : (isShort ? 'text-rose-600' : 'text-amber-600')}`}>
+                              {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     );
-                  })}
-                  {(reportData.shifts || []).length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                        Belum ada shift kasir yang tercatat pada periode ini.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  })
+                )}
+              </div>
             </div>
           ) : (
             <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                    {['NO. ORDER', 'WAKTU', 'PELANGGAN', 'TIPE ORDER', 'METODE BAYAR', 'TOTAL BAYAR', 'STATUS'].map((h) => (
-                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      {['NO. ORDER', 'WAKTU', 'PELANGGAN', 'TIPE ORDER', 'METODE BAYAR', 'TOTAL BAYAR', 'STATUS'].map((h) => (
+                        <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactionsData.slice(0, 100).map((tx: any) => (
+                      <tr key={tx.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.82rem' }}>
+                          {tx.orderNumber || `#${tx.id}`}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.78rem' }}>
+                          {new Date(tx.createdAt).toLocaleString('id-ID')}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
+                          {tx.customerName || 'Pelanggan Umum'}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{ fontSize: '.72rem', fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
+                            {tx.orderType || 'Dine In'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0284c7', fontSize: '.82rem' }}>
+                          {tx.paymentMethod || 'Tunai'}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.85rem' }}>
+                          {formatCurrency(tx.total)}
+                        </td>
+                        <td style={{ padding: '.85rem 1rem' }}>
+                          <span style={{ fontSize: '.7rem', fontWeight: 800, background: '#f0fdf4', color: '#166534', padding: '.2rem .5rem', borderRadius: '.35rem' }}>
+                            Lunas
+                          </span>
+                        </td>
+                      </tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactionsData.slice(0, 100).map((tx: any) => (
-                    <tr key={tx.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#7c3aed', fontSize: '.82rem' }}>
-                        {tx.orderNumber || `#${tx.id}`}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.78rem' }}>
-                        {new Date(tx.createdAt).toLocaleString('id-ID')}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0f172a', fontSize: '.82rem' }}>
-                        {tx.customerName || 'Pelanggan Umum'}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{ fontSize: '.72rem', fontWeight: 700, background: '#f1f5f9', color: '#475569', padding: '.15rem .45rem', borderRadius: '.35rem' }}>
-                          {tx.orderType || 'Dine In'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 700, color: '#0284c7', fontSize: '.82rem' }}>
-                        {tx.paymentMethod || 'Tunai'}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: '#0f172a', fontSize: '.85rem' }}>
-                        {formatCurrency(tx.total)}
-                      </td>
-                      <td style={{ padding: '.85rem 1rem' }}>
-                        <span style={{ fontSize: '.7rem', fontWeight: 800, background: '#f0fdf4', color: '#166534', padding: '.2rem .5rem', borderRadius: '.35rem' }}>
+                    {transactionsData.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                          Belum ada riwayat transaksi pada rentang tanggal ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View (< 768px) */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {transactionsData.length === 0 ? (
+                  <div className="p-8 text-center flex flex-col items-center justify-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                      <Receipt size={22} />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-800">Belum Ada Transaksi</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada riwayat transaksi pada rentang tanggal ini.</p>
+                  </div>
+                ) : (
+                  transactionsData.slice(0, 100).map((tx: any) => (
+                    <div key={tx.id} className="p-4 space-y-2.5 bg-white hover:bg-slate-50/70 transition-all">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-mono font-black text-xs text-indigo-700 block">
+                            {tx.orderNumber || `#${tx.id}`}
+                          </span>
+                          <span className="text-[11px] text-slate-400 block mt-0.5">
+                            {new Date(tx.createdAt).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           Lunas
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {transactionsData.length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                        Belum ada riwayat transaksi pada rentang tanggal ini.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-800">{tx.customerName || 'Pelanggan Umum'}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                            {tx.orderType || 'Dine In'}
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded border border-sky-100">
+                            {tx.paymentMethod || 'Tunai'}
+                          </span>
+                        </div>
+                        <span className="font-black text-slate-900 text-sm">
+                          {formatCurrency(tx.total)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1442,112 +1653,194 @@ export const ReportView: React.FC = () => {
           TAB 4: LAPORAN MUTASI & VALUASI STOK
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'inventory' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* KPI Summary Header Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-            <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total Valuasi Aset Stok</span>
-                <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
-                  <Boxes size={18} />
+        <div className="flex flex-col gap-3.5 sm:gap-5">
+          {/* KPI Summary Header Cards - 2 cols on mobile, 2 cols on desktop */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-3.5">
+            <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+              <div className="flex justify-between items-center gap-1">
+                <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Valuasi Aset Stok</span>
+                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <Boxes size={13} className="sm:w-[18px] sm:h-[18px]" />
                 </div>
               </div>
-              <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', marginTop: '.35rem' }}>
+              <div className="text-sm sm:text-2xl font-black text-slate-900 mt-1 tracking-tight truncate">
                 {formatCurrency(inventoryData.summary?.totalAssetValuation)}
               </div>
-              <div style={{ fontSize: '.72rem', color: '#64748b', marginTop: '.2rem' }}>
-                Total nilai rupiah seluruh persediaan bahan baku
+              <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">
+                Total persediaan bahan baku
               </div>
             </div>
 
-            <div style={{ background: 'white', borderRadius: '1.25rem', padding: '1.25rem', border: '1px solid #fee2e2', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' }}>Bahan Mendekati Kritis</span>
-                <div style={{ width: 32, height: 32, borderRadius: '.5rem', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
-                  <AlertTriangle size={18} />
+            <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-rose-200 shadow-xs flex flex-col justify-between">
+              <div className="flex justify-between items-center gap-1">
+                <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-rose-600 tracking-wider truncate">Bahan Kritis</span>
+                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={13} className="sm:w-[18px] sm:h-[18px]" />
                 </div>
               </div>
-              <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#dc2626', marginTop: '.35rem' }}>
+              <div className="text-sm sm:text-2xl font-black text-rose-600 mt-1 tracking-tight truncate">
                 {inventoryData.summary?.criticalItemsCount || 0} Bahan
               </div>
-              <div style={{ fontSize: '.72rem', color: '#b91c1c', marginTop: '.2rem' }}>
-                Segera restock sebelum operasional dapur terganggu
+              <div className="text-[9px] sm:text-xs text-rose-600/80 mt-0.5 truncate">
+                Segera restock sebelum habis
               </div>
             </div>
           </div>
 
           {/* Search Box Bar */}
-          <div style={{ background: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', padding: '.75rem 1rem', display: 'flex', alignItems: 'center', gap: '.65rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <Search size={16} color="#64748b" />
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 px-2.5 sm:px-4 py-1.5 sm:py-2.5 flex items-center gap-2 shadow-xs">
+            <Search size={14} className="text-slate-400 shrink-0" />
             <input
               type="text"
-              placeholder="Cari nama bahan baku (misal: Ayam, Kaldu, Shoyu, Nori)..."
+              placeholder="Cari nama bahan baku (Ayam, Kaldu, Shoyu, Nori)..."
               value={inventorySearch}
               onChange={(e) => setInventorySearch(e.target.value)}
-              style={{
-                border: 'none', outline: 'none', background: 'transparent',
-                width: '100%', fontSize: '.85rem', fontWeight: 600, color: '#0f172a'
-              }}
+              className="w-full border-none outline-none bg-transparent text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal"
             />
             {inventorySearch && (
               <button
                 onClick={() => setInventorySearch('')}
-                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0 }}
+                className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
               >
-                <X size={15} />
+                <X size={14} />
               </button>
             )}
           </div>
 
-          {/* Inventory Table */}
-          <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.02)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                  {['NAMA BAHAN BAKU', 'SATUAN', 'STOK AWAL', 'MASUK (RESTOCK/PO)', 'KELUAR (PRODUKSI)', 'STOK AKHIR', 'STATUS', 'NILAI ASET'].map((h) => (
-                    <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(inventoryData.inventory || [])
-                  .filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
-                  .map((item: any) => {
-                    const isCritical = item.stockAkhir <= item.minStock;
-                    return (
-                      <tr key={item.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{item.name}</td>
-                        <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.8rem' }}>{item.unit}</td>
-                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem' }}>{item.stockAwal?.toLocaleString('id-ID')}</td>
-                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#10b981', fontWeight: 700 }}>+{item.masuk?.toLocaleString('id-ID')}</td>
-                        <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#ef4444', fontWeight: 700 }}>-{item.keluarProduksi?.toLocaleString('id-ID')}</td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: isCritical ? '#dc2626' : '#0f172a', fontSize: '.85rem' }}>
-                          {item.stockAkhir?.toLocaleString('id-ID')}
-                        </td>
-                        <td style={{ padding: '.85rem 1rem' }}>
-                          <span style={{
-                            padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
-                            background: isCritical ? '#fee2e2' : '#f0fdf4',
-                            color: isCritical ? '#991b1b' : '#166534'
-                          }}>
-                            {isCritical ? '⚠️ Kritis' : '🟢 Aman'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#10b981', fontSize: '.85rem' }}>
-                          {formatCurrency(item.totalValuation)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                {(inventoryData.inventory || []).filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase())).length === 0 && (
-                  <tr>
-                    <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                      Tidak ada bahan baku yang sesuai pencarian.
-                    </td>
+          {/* Inventory Table & Mobile Cards */}
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                    {['NAMA BAHAN BAKU', 'SATUAN', 'STOK AWAL', 'MASUK (RESTOCK/PO)', 'KELUAR (PRODUKSI)', 'STOK AKHIR', 'STATUS', 'NILAI ASET'].map((h) => (
+                      <th key={h} style={{ padding: '.85rem 1rem', textAlign: 'left', fontSize: '.68rem', fontWeight: 800, color: '#64748b' }}>{h}</th>
+                    ))}
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(inventoryData.inventory || [])
+                    .filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                    .map((item: any) => {
+                      const isCritical = item.stockAkhir <= item.minStock;
+                      return (
+                        <tr key={item.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>{item.name}</td>
+                          <td style={{ padding: '.85rem 1rem', color: '#64748b', fontSize: '.8rem' }}>{item.unit}</td>
+                          <td style={{ padding: '.85rem 1rem', fontSize: '.82rem' }}>{item.stockAwal?.toLocaleString('id-ID')}</td>
+                          <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#10b981', fontWeight: 700 }}>+{item.masuk?.toLocaleString('id-ID')}</td>
+                          <td style={{ padding: '.85rem 1rem', fontSize: '.82rem', color: '#ef4444', fontWeight: 700 }}>-{item.keluarProduksi?.toLocaleString('id-ID')}</td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 900, color: isCritical ? '#dc2626' : '#0f172a', fontSize: '.85rem' }}>
+                            {item.stockAkhir?.toLocaleString('id-ID')}
+                          </td>
+                          <td style={{ padding: '.85rem 1rem' }}>
+                            <span style={{
+                              padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
+                              background: isCritical ? '#fee2e2' : '#f0fdf4',
+                              color: isCritical ? '#991b1b' : '#166534'
+                            }}>
+                              {isCritical ? '⚠️ Kritis' : '🟢 Aman'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#10b981', fontSize: '.85rem' }}>
+                            {formatCurrency(item.totalValuation)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {(inventoryData.inventory || []).filter((item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase())).length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
+                        Tidak ada bahan baku yang sesuai pencarian.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View (< 768px) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {(() => {
+                const filteredItems = (inventoryData.inventory || []).filter(
+                  (item: any) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase())
+                );
+                if (filteredItems.length === 0) {
+                  return (
+                    <div className="p-8 text-center flex flex-col items-center justify-center">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mb-2.5">
+                        <Boxes size={22} />
+                      </div>
+                      <h4 className="text-xs font-black text-slate-800">Tidak Ada Bahan Baku</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Tidak ada data stok yang sesuai dengan pencarian.</p>
+                    </div>
+                  );
+                }
+                return filteredItems.map((item: any) => {
+                  const isCritical = item.stockAkhir <= item.minStock;
+                  return (
+                    <div key={item.name} className="p-3 space-y-2 bg-white hover:bg-slate-50/70 transition-all">
+                      {/* Top: Name, Unit, Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-black text-slate-900 leading-tight truncate">
+                            {item.name}
+                          </h4>
+                          <span className="inline-block text-[9.5px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mt-0.5">
+                            Satuan: {item.unit}
+                          </span>
+                        </div>
+
+                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-[9.5px] font-extrabold border ${
+                          isCritical
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {isCritical ? '⚠️ Kritis' : '🟢 Aman'}
+                        </span>
+                      </div>
+
+                      {/* 4-Col Stock Movement Grid */}
+                      <div className="grid grid-cols-4 gap-1 bg-slate-50 p-2 rounded-lg border border-slate-100 text-center">
+                        <div className="p-1">
+                          <span className="text-[8.5px] font-bold uppercase text-slate-400 block">Awal</span>
+                          <span className="font-bold text-slate-700 text-xs block mt-0.5">
+                            {item.stockAwal?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="p-1">
+                          <span className="text-[8.5px] font-bold uppercase text-slate-400 block">Masuk</span>
+                          <span className="font-bold text-emerald-600 text-xs block mt-0.5">
+                            +{item.masuk?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="p-1">
+                          <span className="text-[8.5px] font-bold uppercase text-slate-400 block">Keluar</span>
+                          <span className="font-bold text-rose-600 text-xs block mt-0.5">
+                            -{item.keluarProduksi?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="p-1 bg-white rounded border border-slate-200/80 shadow-2xs">
+                          <span className="text-[8.5px] font-black uppercase text-indigo-700 block">Sisa Akhir</span>
+                          <span className={`font-black text-xs block mt-0.5 ${isCritical ? 'text-rose-600' : 'text-slate-900'}`}>
+                            {item.stockAkhir?.toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bottom: Asset Valuation */}
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
+                        <span className="font-semibold text-slate-500">Nilai Aset Persediaan:</span>
+                        <span className="font-black text-emerald-600">
+                          {formatCurrency(item.totalValuation)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}
@@ -1556,55 +1849,52 @@ export const ReportView: React.FC = () => {
           TAB 5: KEUANGAN & LABA RUGI (P&L)
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'accounting' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'center' }}>
+        <div className="flex flex-col gap-3.5 sm:gap-5 items-center w-full">
           {/* Sub-tabs: P&L, Cashflow, Ledger */}
-          <div style={{ display: 'flex', gap: '.4rem', background: 'white', padding: '.4rem', borderRadius: '1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+          <div className="grid grid-cols-3 gap-1 sm:flex sm:gap-2 bg-white p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs w-full max-w-[780px]">
             {[
-              { id: 'pl', label: '📊 Laporan Laba Rugi (P&L)' },
-              { id: 'cashflow', label: '💵 Laporan Arus Kas' },
-              { id: 'ledger', label: '📖 Buku Jurnal Umum' }
+              { id: 'pl', label: 'Laba Rugi (P&L)', icon: '📊' },
+              { id: 'cashflow', label: 'Arus Kas', icon: '💵' },
+              { id: 'ledger', label: 'Jurnal Umum', icon: '📖' }
             ].map((st) => (
               <button
                 key={st.id}
                 onClick={() => setAccountingSubTab(st.id as any)}
-                style={{
-                  padding: '.55rem 1.25rem', borderRadius: '.65rem', border: 'none',
-                  background: accountingSubTab === st.id ? 'linear-gradient(135deg, #7c3aed, #6366f1)' : '#f8fafc',
-                  color: accountingSubTab === st.id ? 'white' : '#475569',
-                  fontWeight: 800, fontSize: '.82rem', cursor: 'pointer',
-                  boxShadow: accountingSubTab === st.id ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
-                  transition: 'all 0.15s'
-                }}
+                className={`px-2 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-center text-xs sm:text-sm font-black transition-all truncate ${
+                  accountingSubTab === st.id
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+                }`}
               >
-                {st.label}
+                <span className="truncate">{st.icon} {st.label}</span>
               </button>
             ))}
           </div>
 
           {/* Paper Style Financial Report Container */}
-          <div style={{ background: 'white', borderRadius: '1.25rem', border: '1px solid #e2e8f0', padding: '2rem', width: '100%', maxWidth: '780px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-3.5 sm:p-8 w-full max-w-[780px] shadow-sm">
             {accountingSubTab === 'pl' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
-                  <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#7c3aed' }}>LAPORAN LABA RUGI OPERASIONAL</h4>
-                  <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
+              <div className="flex flex-col gap-3.5 sm:gap-5">
+                <div className="text-center border-b-2 border-slate-900 pb-3 sm:pb-4">
+                  <h3 className="font-black text-sm sm:text-lg text-slate-900">{posContext?.settings?.storeName || 'KAFE & RESTORAN'}</h3>
+                  <h4 className="font-black text-xs sm:text-base text-indigo-700 mt-0.5">LAPORAN LABA RUGI OPERASIONAL</h4>
+                  <span className="text-[10px] sm:text-xs text-slate-500">Periode: {startDate} s/d {endDate}</span>
                 </div>
 
                 {/* 1. Pendapatan */}
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                  <div className="font-extrabold text-xs sm:text-sm text-slate-800 border-b border-slate-200 pb-1.5 mb-2">
                     1. PENDAPATAN OPERASIONAL
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0' }}>
+                  <div className="flex justify-between text-xs sm:text-sm py-1 text-slate-700">
                     <span>Penjualan Bersih Kasir</span>
-                    <span style={{ fontWeight: 700 }}>{formatCurrency(accountingData.profitLoss?.salesRevenue)}</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(accountingData.profitLoss?.salesRevenue)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0' }}>
+                  <div className="flex justify-between text-xs sm:text-sm py-1 text-slate-700">
                     <span>Pendapatan Lain-lain (Petty Cash Masuk)</span>
-                    <span style={{ fontWeight: 700 }}>{formatCurrency(accountingData.profitLoss?.otherRevenue)}</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(accountingData.profitLoss?.otherRevenue)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#7c3aed', borderTop: '1px dashed #e2e8f0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                  <div className="flex justify-between text-xs sm:text-sm font-black text-indigo-700 border-t border-dashed border-slate-200 pt-1.5 mt-1">
                     <span>Total Pendapatan Operasional</span>
                     <span>{formatCurrency(accountingData.profitLoss?.operatingRevenue)}</span>
                   </div>
@@ -1612,42 +1902,42 @@ export const ReportView: React.FC = () => {
 
                 {/* 2. HPP */}
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                  <div className="font-extrabold text-xs sm:text-sm text-slate-800 border-b border-slate-200 pb-1.5 mb-2">
                     2. HARGA POKOK PENJUALAN (HPP)
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0', color: '#dc2626' }}>
+                  <div className="flex justify-between text-xs sm:text-sm py-1 text-rose-600">
                     <span>Beban Pokok Persediaan Bahan Baku (HPP)</span>
-                    <span style={{ fontWeight: 700 }}>-{formatCurrency(accountingData.profitLoss?.cogs)}</span>
+                    <span className="font-bold">-{formatCurrency(accountingData.profitLoss?.cogs)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#dc2626', borderTop: '1px dashed #e2e8f0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                  <div className="flex justify-between text-xs sm:text-sm font-black text-rose-600 border-t border-dashed border-slate-200 pt-1.5 mt-1">
                     <span>Total Beban HPP</span>
                     <span>-{formatCurrency(accountingData.profitLoss?.cogs)}</span>
                   </div>
                 </div>
 
                 {/* Laba Kotor */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.95rem', fontWeight: 900, background: '#f8fafc', padding: '.75rem 1rem', borderRadius: '.5rem', border: '1px solid #e2e8f0' }}>
-                  <span>LABA KOTOR (GROSS PROFIT)</span>
-                  <span style={{ color: '#10b981' }}>{formatCurrency(accountingData.profitLoss?.grossProfit)}</span>
+                <div className="flex justify-between items-center text-xs sm:text-sm font-black bg-slate-50 p-2.5 sm:p-3.5 rounded-xl border border-slate-200">
+                  <span className="text-slate-800">LABA KOTOR (GROSS PROFIT)</span>
+                  <span className="text-emerald-600">{formatCurrency(accountingData.profitLoss?.grossProfit)}</span>
                 </div>
 
                 {/* 3. Beban OPEX */}
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                  <div className="font-extrabold text-xs sm:text-sm text-slate-800 border-b border-slate-200 pb-1.5 mb-2">
                     3. BEBAN OPERASIONAL (OPEX)
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0', color: '#dc2626' }}>
+                  <div className="flex justify-between text-xs sm:text-sm py-1 text-rose-600">
                     <span>Beban Kas Operasional & Petty Cash Keluar</span>
-                    <span style={{ fontWeight: 700 }}>-{formatCurrency(accountingData.profitLoss?.opexAmount)}</span>
+                    <span className="font-bold">-{formatCurrency(accountingData.profitLoss?.opexAmount)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#dc2626', borderTop: '1px dashed #e2e8f0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                  <div className="flex justify-between text-xs sm:text-sm font-black text-rose-600 border-t border-dashed border-slate-200 pt-1.5 mt-1">
                     <span>Total Beban Operasional</span>
                     <span>-{formatCurrency(accountingData.profitLoss?.operatingExpenses)}</span>
                   </div>
                 </div>
 
                 {/* Laba Bersih */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 900, background: '#f0fdf4', padding: '1rem', borderRadius: '.75rem', border: '2px solid #bbf7d0', color: '#166534' }}>
+                <div className="flex justify-between items-center text-xs sm:text-base font-black bg-emerald-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 border-emerald-200 text-emerald-800">
                   <span>LABA BERSIH OPERASIONAL (NET INCOME)</span>
                   <span>{formatCurrency(accountingData.profitLoss?.netIncome)}</span>
                 </div>
@@ -1655,42 +1945,42 @@ export const ReportView: React.FC = () => {
             )}
 
             {accountingSubTab === 'cashflow' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
-                  <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#10b981' }}>LAPORAN ARUS KAS (CASH FLOW)</h4>
-                  <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
+              <div className="flex flex-col gap-3.5 sm:gap-5">
+                <div className="text-center border-b-2 border-slate-900 pb-3 sm:pb-4">
+                  <h3 className="font-black text-sm sm:text-lg text-slate-900">{posContext?.settings?.storeName || 'KAFE & RESTORAN'}</h3>
+                  <h4 className="font-black text-xs sm:text-base text-emerald-700 mt-0.5">LAPORAN ARUS KAS (CASH FLOW)</h4>
+                  <span className="text-[10px] sm:text-xs text-slate-500">Periode: {startDate} s/d {endDate}</span>
                 </div>
 
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#166534', borderBottom: '1px solid #bbf7d0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                  <div className="font-extrabold text-xs sm:text-sm text-emerald-800 border-b border-emerald-200 pb-1.5 mb-2">
                     ARUS KAS MASUK (INFLOW)
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0' }}>
+                  <div className="flex justify-between text-xs sm:text-sm py-1 text-slate-700">
                     <span>Penerimaan Kas Penjualan Kasir</span>
-                    <span style={{ fontWeight: 700 }}>{formatCurrency(accountingData.cashFlow?.inflow?.salesReceipts)}</span>
+                    <span className="font-bold text-slate-900">{formatCurrency(accountingData.cashFlow?.inflow?.salesReceipts)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#166534', borderTop: '1px dashed #bbf7d0', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                  <div className="flex justify-between text-xs sm:text-sm font-black text-emerald-700 border-t border-dashed border-emerald-200 pt-1.5 mt-1">
                     <span>Total Kas Masuk</span>
                     <span>{formatCurrency(accountingData.cashFlow?.inflow?.total)}</span>
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '.85rem', color: '#b91c1c', borderBottom: '1px solid #fecdd3', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
+                  <div className="font-extrabold text-xs sm:text-sm text-rose-800 border-b border-rose-200 pb-1.5 mb-2">
                     ARUS KAS KELUAR (OUTFLOW)
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '.25rem 0', color: '#dc2626' }}>
+                  <div className="flex justify-between text-xs sm:text-sm py-1 text-rose-600">
                     <span>Pengeluaran Petty Cash & Operasional</span>
-                    <span style={{ fontWeight: 700 }}>-{formatCurrency(accountingData.cashFlow?.outflow?.opexPayments)}</span>
+                    <span className="font-bold">-{formatCurrency(accountingData.cashFlow?.outflow?.opexPayments)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', fontWeight: 800, color: '#dc2626', borderTop: '1px dashed #fecdd3', paddingTop: '.35rem', marginTop: '.25rem' }}>
+                  <div className="flex justify-between text-xs sm:text-sm font-black text-rose-600 border-t border-dashed border-rose-200 pt-1.5 mt-1">
                     <span>Total Kas Keluar</span>
                     <span>-{formatCurrency(accountingData.cashFlow?.outflow?.total)}</span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 900, background: '#f0fdf4', padding: '1rem', borderRadius: '.75rem', border: '2px solid #bbf7d0', color: '#166534' }}>
+                <div className="flex justify-between items-center text-xs sm:text-base font-black bg-emerald-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 border-emerald-200 text-emerald-800">
                   <span>KENAIKAN / (PENURUNAN) KAS BERSIH</span>
                   <span>{formatCurrency(accountingData.cashFlow?.netCashFlow)}</span>
                 </div>
@@ -1698,26 +1988,35 @@ export const ReportView: React.FC = () => {
             )}
 
             {accountingSubTab === 'ledger' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ textAlign: 'center', borderBottom: '2px solid #0f172a', paddingBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</h3>
-                  <h4 style={{ margin: '.2rem 0', fontWeight: 800, fontSize: '1rem', color: '#0284c7' }}>BUKU JURNAL UMUM (DOUBLE ENTRY)</h4>
-                  <span style={{ fontSize: '.8rem', color: '#64748b' }}>Periode: {startDate} s/d {endDate}</span>
+              <div className="flex flex-col gap-3 sm:gap-4">
+                <div className="text-center border-b-2 border-slate-900 pb-3 sm:pb-4">
+                  <h3 className="font-black text-sm sm:text-lg text-slate-900">{posContext?.settings?.storeName || 'KAFE & RESTORAN'}</h3>
+                  <h4 className="font-black text-xs sm:text-base text-indigo-700 mt-0.5">BUKU JURNAL UMUM (DOUBLE ENTRY)</h4>
+                  <span className="text-[10px] sm:text-xs text-slate-500">Periode: {startDate} s/d {endDate}</span>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem', maxHeight: 450, overflowY: 'auto' }}>
+                <div className="flex flex-col gap-2.5 max-h-[500px] overflow-y-auto pr-0.5">
                   {(accountingData.journals || []).slice(0, 30).map((j: any, idx: number) => (
-                    <div key={idx} style={{ background: '#f8fafc', borderRadius: '.75rem', border: '1px solid #e2e8f0', padding: '.85rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', fontWeight: 700, color: '#64748b', borderBottom: '1px solid #e2e8f0', paddingBottom: '.35rem', marginBottom: '.5rem' }}>
-                        <span>{new Date(j.date).toLocaleString('id-ID')} • Ref: {j.reference}</span>
-                        <span style={{ color: '#0f172a' }}>{j.description}</span>
+                    <div key={idx} className="bg-slate-50/80 rounded-xl sm:rounded-2xl border border-slate-200/80 p-2.5 sm:p-3.5">
+                      {/* Top Row: Date, Ref, Description (Clean Wrapping) */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 mb-2 border-b border-slate-200 text-[11px] sm:text-xs">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-500">{new Date(j.date).toLocaleString('id-ID')}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px]">
+                            Ref: {j.reference}
+                          </span>
+                        </div>
+                        <span className="font-bold text-slate-800 truncate">{j.description}</span>
                       </div>
+
+                      {/* Journal Lines */}
                       {j.lines?.map((line: any, lidx: number) => (
-                        <div key={lidx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.8rem', padding: '.15rem 0' }}>
-                          <span style={{ paddingLeft: line.credit > 0 ? '1.5rem' : '0', color: line.credit > 0 ? '#64748b' : '#0f172a', fontWeight: line.credit > 0 ? 500 : 700 }}>
+                        <div key={lidx} className="flex items-center justify-between text-xs py-1">
+                          <span className={`text-[11px] sm:text-xs truncate ${line.credit > 0 ? 'pl-3 sm:pl-6 text-slate-500 font-medium' : 'text-slate-900 font-bold'}`}>
                             {line.account}
                           </span>
-                          <span style={{ fontWeight: 800 }}>
+                          <span className={`text-xs font-black shrink-0 ${line.credit > 0 ? 'text-slate-700' : 'text-indigo-900'}`}>
                             {line.debit > 0 ? formatCurrency(line.debit) : formatCurrency(line.credit)}
                           </span>
                         </div>
@@ -1725,7 +2024,7 @@ export const ReportView: React.FC = () => {
                     </div>
                   ))}
                   {(accountingData.journals || []).length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Belum ada catatan jurnal pada periode ini.</div>
+                    <div className="text-center py-8 text-slate-400 text-xs">Belum ada catatan jurnal pada periode ini.</div>
                   )}
                 </div>
               </div>
@@ -1753,124 +2052,124 @@ export const ReportView: React.FC = () => {
         }
 
         return (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3.5 sm:gap-5">
             {/* Header Strategy Banner */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white p-5 rounded-3xl shadow-lg border border-indigo-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
-                  <Percent size={24} />
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-lg border border-indigo-900/50 flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex items-start gap-2.5 sm:gap-3.5">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
+                  <Percent className="w-4 h-4 sm:w-6 sm:h-6" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Sistem Bagi Hasil Usaha (Profit Sharing)
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Bagi Hasil Usaha
                     </span>
-                    <span className="text-xs text-slate-300">
-                      Mode OPEX: <strong className="text-amber-300 uppercase">{ps.opexMode === 'SHARED_BEFORE_SPLIT' ? 'Dipotong Laba Bersama' : ps.opexMode === 'SPLIT_50_50' ? 'Dibagi 50:50' : 'Ditanggung Owner'}</strong>
+                    <span className="text-[10.5px] sm:text-xs text-slate-300">
+                      Mode OPEX: <strong className="text-amber-300 uppercase">{ps.opexMode === 'SHARED_BEFORE_SPLIT' ? 'Dipotong Bersama' : ps.opexMode === 'SPLIT_50_50' ? 'Bagi 50:50' : 'Owner'}</strong>
                     </span>
                   </div>
-                  <h3 className="text-lg font-black text-white mt-1">
-                    Rekapitulasi Pembagian Keuntungan MUKI RAMEN & DRINK
+                  <h3 className="text-sm sm:text-lg font-black text-white mt-1 leading-snug truncate">
+                    Rekapitulasi Bagi Hasil {posContext?.settings?.storeName || 'Restoran & Bar'}
                   </h3>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Formula: Laba Bersih Per Divisi = Omzet - Belanja Bahan
+                  <p className="text-[10px] sm:text-xs text-slate-300 mt-0.5 line-clamp-1 sm:line-clamp-none">
+                    Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Formula: Laba Bersih = Omzet - Belanja Bahan
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto items-center">
                 <button
                   onClick={() => handleGeneratePdf('profit_sharing')}
                   disabled={exportingPdf}
-                  className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold text-white transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-[11px] sm:text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5"
                 >
-                  <Printer size={14} /> PDF Bagi Hasil
+                  <Printer size={13} className="shrink-0" /> PDF Bagi Hasil
                 </button>
                 <button
                   onClick={handleExportExcel}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-xs font-bold text-white shadow-md shadow-emerald-900/30 transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-[11px] sm:text-xs font-bold text-white shadow-md shadow-emerald-900/30 transition-all flex items-center justify-center gap-1.5"
                 >
-                  <FileSpreadsheet size={14} /> Export Excel (.xlsx)
+                  <FileSpreadsheet size={13} className="shrink-0" /> Export Excel
                 </button>
               </div>
             </div>
 
-            {/* 5 Top KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {/* 5 Top KPI Cards - 2 cols on mobile with centered net profit, 5 cols on desktop */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3.5">
               {/* Omzet Gabungan */}
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Omzet Gabungan</span>
-                  <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                    <TrendingUp size={15} />
+              <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-center gap-1">
+                  <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Total Omzet</span>
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <TrendingUp size={13} />
                   </div>
                 </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-slate-900">{formatCurrency(ps.grandTotalRevenue)}</div>
-                  <div className="text-[11px] text-slate-500 mt-1 flex justify-between">
-                    <span>Ramen: {formatCurrency(ps.food.revenue)}</span>
-                    <span>Drink: {formatCurrency(ps.drink.revenue)}</span>
+                <div className="mt-1.5 sm:mt-2">
+                  <div className="text-xs sm:text-lg lg:text-xl font-black text-slate-900 tracking-tight truncate">{formatCurrency(ps.grandTotalRevenue)}</div>
+                  <div className="text-[9px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 flex flex-col sm:flex-row sm:justify-between gap-0.5">
+                    <span className="truncate">Ramen: {formatCurrency(ps.food.revenue)}</span>
+                    <span className="truncate">Drink: {formatCurrency(ps.drink.revenue)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Belanja & OPEX */}
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Pengeluaran</span>
-                  <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
-                    <ArrowDownRight size={15} />
+              <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-center gap-1">
+                  <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Pengeluaran</span>
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <ArrowDownRight size={13} />
                   </div>
                 </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-rose-600">{formatCurrency(ps.grandTotalExpense)}</div>
-                  <div className="text-[11px] text-slate-500 mt-1">
+                <div className="mt-1.5 sm:mt-2">
+                  <div className="text-xs sm:text-lg lg:text-xl font-black text-rose-600 tracking-tight truncate">{formatCurrency(ps.grandTotalExpense)}</div>
+                  <div className="text-[9px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 truncate">
                     Bahan: {formatCurrency(ps.food.expense + ps.drink.expense)} | OPEX: {formatCurrency(ps.sharedOpexTotal)}
                   </div>
                 </div>
               </div>
 
-              {/* Laba Bersih Total */}
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Laba Bersih Bersama</span>
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                    <DollarSign size={15} />
+              {/* Laba Bersih Total (Span 2 cols on mobile, 1 col on desktop) */}
+              <div className="col-span-2 lg:col-span-1 bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-center gap-1">
+                  <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Laba Bersih Bersama</span>
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <DollarSign size={13} />
                   </div>
                 </div>
-                <div className="mt-2">
-                  <div className={`text-xl font-black ${ps.grandTotalNetProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <div className="mt-1.5 sm:mt-2">
+                  <div className={`text-sm sm:text-lg lg:text-xl font-black tracking-tight ${ps.grandTotalNetProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {formatCurrency(ps.grandTotalNetProfit)}
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-1">
-                    Margin: {ps.grandTotalRevenue > 0 ? Math.round((ps.grandTotalNetProfit / ps.grandTotalRevenue) * 100) : 0}% dari Omzet
+                  <div className="text-[9.5px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1">
+                    Margin Bersih: {ps.grandTotalRevenue > 0 ? Math.round((ps.grandTotalNetProfit / ps.grandTotalRevenue) * 100) : 0}% dari Total Omzet
                   </div>
                 </div>
               </div>
 
               {/* Hak Bagian Owner */}
-              <div className="bg-gradient-to-br from-indigo-500 to-purple-700 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-black uppercase text-indigo-100 tracking-wider">Hak Bagian Owner</span>
-                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">Laba Bersih</span>
+              <div className="bg-gradient-to-br from-indigo-500 to-purple-700 text-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+                <div className="flex justify-between items-center gap-1">
+                  <span className="text-[9.5px] sm:text-[11px] font-black uppercase text-indigo-100 tracking-wider truncate">Hak Owner</span>
+                  <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[8.5px] sm:text-[10px] font-black shrink-0">Laba Bersih</span>
                 </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-white">{formatCurrency(ps.totalOwnerShare)}</div>
-                  <div className="text-[11px] text-indigo-100/90 mt-1">
-                    Dari Ramen: {formatCurrency(ps.food.ownerShare)} + Drink: {formatCurrency(ps.drink.ownerShare)}
+                <div className="mt-1.5 sm:mt-2">
+                  <div className="text-xs sm:text-lg lg:text-xl font-black text-white tracking-tight truncate">{formatCurrency(ps.totalOwnerShare)}</div>
+                  <div className="text-[9px] sm:text-[11px] text-indigo-100/90 mt-0.5 sm:mt-1 truncate">
+                    Makanan: {formatCurrency(ps.food.ownerShare)} + Drink: {formatCurrency(ps.drink.ownerShare)}
                   </div>
                 </div>
               </div>
 
               {/* Hak Bagian Tim PJ */}
-              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl p-4 shadow-md flex flex-col justify-between">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-black uppercase text-emerald-100 tracking-wider">Hak Bagian Tim PJ</span>
-                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-black">Tim Operasional</span>
+              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md flex flex-col justify-between">
+                <div className="flex justify-between items-center gap-1">
+                  <span className="text-[9.5px] sm:text-[11px] font-black uppercase text-emerald-100 tracking-wider truncate">Hak Tim PJ</span>
+                  <span className="px-1.5 py-0.5 bg-white/20 rounded-full text-[8.5px] sm:text-[10px] font-black shrink-0">Operasional</span>
                 </div>
-                <div className="mt-2">
-                  <div className="text-xl font-black text-white">{formatCurrency(ps.totalPjShare)}</div>
-                  <div className="text-[11px] text-emerald-100/90 mt-1">
+                <div className="mt-1.5 sm:mt-2">
+                  <div className="text-xs sm:text-lg lg:text-xl font-black text-white tracking-tight truncate">{formatCurrency(ps.totalPjShare)}</div>
+                  <div className="text-[9px] sm:text-[11px] text-emerald-100/90 mt-0.5 sm:mt-1 truncate">
                     PJ Ramen: {formatCurrency(ps.food.pjShare)} | PJ Drink: {formatCurrency(ps.drink.pjShare)}
                   </div>
                 </div>
@@ -1878,144 +2177,144 @@ export const ReportView: React.FC = () => {
             </div>
 
             {/* Division Comparison Breakdown Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Divisi 1: Muki Ramen */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              {/* Divisi 1: Makanan */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black">
+                  <div className="flex items-center justify-between pb-2.5 sm:pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-sm sm:text-base shrink-0">
                         🍜
                       </div>
-                      <div>
-                        <h4 className="font-black text-slate-900 text-base">Divisi MUKI RAMEN (Makanan)</h4>
-                        <span className="text-xs text-slate-400">Penanggung Jawab: Bagi Hasil {ps.food.profitSharingPct}%</span>
+                      <div className="min-w-0">
+                        <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">Divisi Makanan (Kitchen)</h4>
+                        <span className="text-[10px] sm:text-xs text-slate-400 block truncate">Penanggung Jawab: Bagi Hasil {ps.food.profitSharingPct}%</span>
                       </div>
                     </div>
-                    <span className="px-3 py-1 rounded-full text-xs font-black bg-orange-50 text-orange-700 border border-orange-200">
-                      Food Division
+                    <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-black bg-orange-50 text-orange-700 border border-orange-200 shrink-0">
+                      Food
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 my-4">
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="text-[11px] text-slate-500 font-bold block">Omzet Ramen</span>
-                      <span className="text-base font-black text-slate-800">{formatCurrency(ps.food.revenue)}</span>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 my-2.5 sm:my-4">
+                    <div className="p-2 sm:p-3 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100">
+                      <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet Ramen</span>
+                      <span className="text-xs sm:text-base font-black text-slate-800 tracking-tight block truncate">{formatCurrency(ps.food.revenue)}</span>
                     </div>
-                    <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                      <span className="text-[11px] text-rose-600 font-bold block">Belanja Bahan Ramen</span>
-                      <span className="text-base font-black text-rose-700">-{formatCurrency(ps.food.expense)}</span>
+                    <div className="p-2 sm:p-3 bg-rose-50/50 rounded-lg sm:rounded-xl border border-rose-100">
+                      <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Bahan Ramen</span>
+                      <span className="text-xs sm:text-base font-black text-rose-700 tracking-tight block truncate">-{formatCurrency(ps.food.expense)}</span>
                     </div>
                   </div>
 
-                  <div className="p-3.5 bg-slate-100/70 rounded-2xl flex justify-between items-center mb-4">
-                    <span className="text-xs font-bold text-slate-700">Laba Bersih Divisi Ramen</span>
-                    <span className="text-base font-black text-indigo-900">{formatCurrency(ps.food.finalNet)}</span>
+                  <div className="p-2.5 sm:p-3.5 bg-slate-100/70 rounded-xl sm:rounded-2xl flex justify-between items-center mb-2.5 sm:mb-4">
+                    <span className="text-[11px] sm:text-xs font-bold text-slate-700">Laba Bersih Makanan</span>
+                    <span className="text-xs sm:text-base font-black text-indigo-900">{formatCurrency(ps.food.finalNet)}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
-                  <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-2.5 sm:pt-3 border-t border-slate-100">
+                  <div className="p-2 sm:p-3 bg-indigo-50/70 rounded-lg sm:rounded-xl border border-indigo-100">
                     <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-bold text-indigo-700">Owner ({ps.food.ownerPct}%)</span>
-                      <span className="text-[10px] bg-indigo-200/60 text-indigo-800 px-1.5 py-0.5 rounded font-bold">Owner</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-indigo-700 truncate">Owner ({ps.food.ownerPct}%)</span>
+                      <span className="text-[9px] sm:text-[10px] bg-indigo-200/60 text-indigo-800 px-1 sm:px-1.5 py-0.5 rounded font-bold shrink-0">Owner</span>
                     </div>
-                    <div className="text-base font-black text-indigo-900 mt-1">{formatCurrency(ps.food.ownerShare)}</div>
+                    <div className="text-xs sm:text-base font-black text-indigo-900 mt-1 truncate">{formatCurrency(ps.food.ownerShare)}</div>
                   </div>
-                  <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
+                  <div className="p-2 sm:p-3 bg-emerald-50/70 rounded-lg sm:rounded-xl border border-emerald-100">
                     <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-bold text-emerald-700">PJ Ramen ({ps.food.profitSharingPct}%)</span>
-                      <span className="text-[10px] bg-emerald-200/60 text-emerald-800 px-1.5 py-0.5 rounded font-bold">PJ Tim</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 truncate">PJ Makanan ({ps.food.profitSharingPct}%)</span>
+                      <span className="text-[9px] sm:text-[10px] bg-emerald-200/60 text-emerald-800 px-1 sm:px-1.5 py-0.5 rounded font-bold shrink-0">PJ Tim</span>
                     </div>
-                    <div className="text-base font-black text-emerald-900 mt-1">{formatCurrency(ps.food.pjShare)}</div>
+                    <div className="text-xs sm:text-base font-black text-emerald-900 mt-1 truncate">{formatCurrency(ps.food.pjShare)}</div>
                   </div>
                 </div>
               </div>
 
-              {/* Divisi 2: Muki Drink */}
-              <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              {/* Divisi 2: Minuman */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
                 <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center font-black">
+                  <div className="flex items-center justify-between pb-2.5 sm:pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center font-black text-sm sm:text-base shrink-0">
                         🍹
                       </div>
-                      <div>
-                        <h4 className="font-black text-slate-900 text-base">Divisi MUKI DRINK (Minuman)</h4>
-                        <span className="text-xs text-slate-400">Penanggung Jawab: Bagi Hasil {ps.drink.profitSharingPct}%</span>
+                      <div className="min-w-0">
+                        <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">Divisi Minuman (Bar)</h4>
+                        <span className="text-[10px] sm:text-xs text-slate-400 block truncate">Penanggung Jawab: Bagi Hasil {ps.drink.profitSharingPct}%</span>
                       </div>
                     </div>
-                    <span className="px-3 py-1 rounded-full text-xs font-black bg-cyan-50 text-cyan-700 border border-cyan-200">
-                      Drink Division
+                    <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-black bg-cyan-50 text-cyan-700 border border-cyan-200 shrink-0">
+                      Drink
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 my-4">
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="text-[11px] text-slate-500 font-bold block">Omzet Minuman</span>
-                      <span className="text-base font-black text-slate-800">{formatCurrency(ps.drink.revenue)}</span>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 my-2.5 sm:my-4">
+                    <div className="p-2 sm:p-3 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100">
+                      <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet Minuman</span>
+                      <span className="text-xs sm:text-base font-black text-slate-800 tracking-tight block truncate">{formatCurrency(ps.drink.revenue)}</span>
                     </div>
-                    <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                      <span className="text-[11px] text-rose-600 font-bold block">Belanja Bahan Minuman</span>
-                      <span className="text-base font-black text-rose-700">-{formatCurrency(ps.drink.expense)}</span>
+                    <div className="p-2 sm:p-3 bg-rose-50/50 rounded-lg sm:rounded-xl border border-rose-100">
+                      <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Bahan Minuman</span>
+                      <span className="text-xs sm:text-base font-black text-rose-700 tracking-tight block truncate">-{formatCurrency(ps.drink.expense)}</span>
                     </div>
                   </div>
 
-                  <div className="p-3.5 bg-slate-100/70 rounded-2xl flex justify-between items-center mb-4">
-                    <span className="text-xs font-bold text-slate-700">Laba Bersih Divisi Minuman</span>
-                    <span className="text-base font-black text-cyan-900">{formatCurrency(ps.drink.finalNet)}</span>
+                  <div className="p-2.5 sm:p-3.5 bg-slate-100/70 rounded-xl sm:rounded-2xl flex justify-between items-center mb-2.5 sm:mb-4">
+                    <span className="text-[11px] sm:text-xs font-bold text-slate-700">Laba Bersih Minuman</span>
+                    <span className="text-xs sm:text-base font-black text-cyan-900">{formatCurrency(ps.drink.finalNet)}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
-                  <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-2.5 sm:pt-3 border-t border-slate-100">
+                  <div className="p-2 sm:p-3 bg-indigo-50/70 rounded-lg sm:rounded-xl border border-indigo-100">
                     <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-bold text-indigo-700">Owner ({ps.drink.ownerPct}%)</span>
-                      <span className="text-[10px] bg-indigo-200/60 text-indigo-800 px-1.5 py-0.5 rounded font-bold">Owner</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-indigo-700 truncate">Owner ({ps.drink.ownerPct}%)</span>
+                      <span className="text-[9px] sm:text-[10px] bg-indigo-200/60 text-indigo-800 px-1 sm:px-1.5 py-0.5 rounded font-bold shrink-0">Owner</span>
                     </div>
-                    <div className="text-base font-black text-indigo-900 mt-1">{formatCurrency(ps.drink.ownerShare)}</div>
+                    <div className="text-xs sm:text-base font-black text-indigo-900 mt-1 truncate">{formatCurrency(ps.drink.ownerShare)}</div>
                   </div>
-                  <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
+                  <div className="p-2 sm:p-3 bg-emerald-50/70 rounded-lg sm:rounded-xl border border-emerald-100">
                     <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-bold text-emerald-700">PJ Drink ({ps.drink.profitSharingPct}%)</span>
-                      <span className="text-[10px] bg-emerald-200/60 text-emerald-800 px-1.5 py-0.5 rounded font-bold">PJ Tim</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 truncate">PJ Drink ({ps.drink.profitSharingPct}%)</span>
+                      <span className="text-[9px] sm:text-[10px] bg-emerald-200/60 text-emerald-800 px-1 sm:px-1.5 py-0.5 rounded font-bold shrink-0">PJ Tim</span>
                     </div>
-                    <div className="text-base font-black text-emerald-900 mt-1">{formatCurrency(ps.drink.pjShare)}</div>
+                    <div className="text-xs sm:text-base font-black text-emerald-900 mt-1 truncate">{formatCurrency(ps.drink.pjShare)}</div>
                   </div>
                 </div>
               </div>
 
               {/* Divisi 3: Produk Netral / Retail (Air Mineral & Toko) */}
               {ps.other && (ps.other.revenue > 0 || ps.other.expense > 0) && (
-                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between lg:col-span-2">
+                <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between lg:col-span-2">
                   <div>
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-black">
+                    <div className="flex items-center justify-between pb-2.5 sm:pb-3 border-b border-slate-100">
+                      <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-black text-sm sm:text-base shrink-0">
                           💧
                         </div>
-                        <div>
-                          <h4 className="font-black text-slate-900 text-base">Produk Netral / Retail (Air Mineral & Toko)</h4>
-                          <span className="text-xs text-slate-400">Komoditas Netral: 100% Hak Owner / Kas Toko (Tanpa Bagi Hasil PJ)</span>
+                        <div className="min-w-0">
+                          <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">Produk Netral / Retail (Air Mineral & Toko)</h4>
+                          <span className="text-[10px] sm:text-xs text-slate-400 block truncate">100% Hak Owner / Kas Toko (Tanpa Bagi Hasil PJ)</span>
                         </div>
                       </div>
-                      <span className="px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200">
-                        100% Owner
+                      <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-black bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                        Owner
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4">
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                        <span className="text-[11px] text-slate-500 font-bold block">Omzet Air Mineral / Retail</span>
-                        <span className="text-base font-black text-slate-800">{formatCurrency(ps.other.revenue)}</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 my-2.5 sm:my-4">
+                      <div className="p-2 sm:p-3 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100">
+                        <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet Air Mineral / Retail</span>
+                        <span className="text-xs sm:text-base font-black text-slate-800 tracking-tight block truncate">{formatCurrency(ps.other.revenue)}</span>
                       </div>
-                      <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-100">
-                        <span className="text-[11px] text-rose-600 font-bold block">Belanja Modal / HPP Dus</span>
-                        <span className="text-base font-black text-rose-700">-{formatCurrency(ps.other.expense)}</span>
+                      <div className="p-2 sm:p-3 bg-rose-50/50 rounded-lg sm:rounded-xl border border-rose-100">
+                        <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Modal / HPP Dus</span>
+                        <span className="text-xs sm:text-base font-black text-rose-700 tracking-tight block truncate">-{formatCurrency(ps.other.expense)}</span>
                       </div>
-                      <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100">
-                        <span className="text-[11px] text-indigo-700 font-bold block">Laba Bersih Masuk ke Owner (100%)</span>
-                        <span className="text-base font-black text-indigo-900">{formatCurrency(ps.other.finalNet)}</span>
+                      <div className="p-2 sm:p-3 bg-indigo-50/70 rounded-lg sm:rounded-xl border border-indigo-100">
+                        <span className="text-[10px] sm:text-[11px] text-indigo-700 font-bold block truncate">Laba Bersih Masuk ke Owner (100%)</span>
+                        <span className="text-xs sm:text-base font-black text-indigo-900 tracking-tight block truncate">{formatCurrency(ps.other.finalNet)}</span>
                       </div>
                     </div>
                   </div>
@@ -2024,13 +2323,13 @@ export const ReportView: React.FC = () => {
             </div>
 
             {/* Daily Breakdown Table */}
-            <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <h4 className="font-black text-slate-900 text-base">Tabel Rincian Harian Bagi Hasil</h4>
-                  <p className="text-xs text-slate-500">Omzet, Belanja Bahan & Alokasi Bagi Hasil Per Hari</p>
+                  <h4 className="font-black text-slate-900 text-sm sm:text-base">Tabel Rincian Harian Bagi Hasil</h4>
+                  <p className="text-[10px] sm:text-xs text-slate-500">Omzet, Belanja Bahan & Alokasi Bagi Hasil Per Hari</p>
                 </div>
-                <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-lg font-bold">
+                <span className="text-[10px] sm:text-xs bg-slate-100 text-slate-600 px-2.5 sm:px-3 py-1 rounded-lg font-bold w-fit">
                   {daily.length} Hari Transaksi
                 </span>
               </div>
@@ -2118,106 +2417,116 @@ export const ReportView: React.FC = () => {
         const daysHitTier = days.filter((d: any) => Boolean(d.matchedTier || d.tierReached)).length;
 
         return (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3.5 sm:gap-5">
             {/* Header Banner */}
-            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white p-5 rounded-3xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white shrink-0">
-                  <Award size={24} />
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex items-start gap-2.5 sm:gap-3.5">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white shrink-0">
+                  <Award className="w-4 h-4 sm:w-6 sm:h-6" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white border border-white/30">
-                      Reward Target Omzet Harian
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-white/20 text-white border border-white/30">
+                      Reward Target Omzet
                     </span>
-                    <span className="text-xs text-amber-100">
+                    <span className="text-[10.5px] sm:text-xs text-amber-100">
                       Khusus Crew <strong>Full-Time</strong> (Hadir / Terlambat)
                     </span>
                   </div>
-                  <h3 className="text-lg font-black text-white mt-1">
-                    Matriks Kehadiran & Akumulasi Bonus Omzet Harian
+                  <h3 className="text-sm sm:text-lg font-black text-white mt-1 leading-snug truncate">
+                    Matriks Kehadiran & Bonus Omzet Harian
                   </h3>
-                  <p className="text-xs text-amber-100 mt-0.5">
+                  <p className="text-[10px] sm:text-xs text-amber-100 mt-0.5 line-clamp-1 sm:line-clamp-none">
                     Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Staf DW: Tag DW (Rp 0 Bonus)
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto items-center">
                 <button
                   onClick={() => handleGeneratePdf('daily_bonus')}
                   disabled={exportingPdf}
-                  className="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-xs font-bold text-white transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-[11px] sm:text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5"
                 >
-                  <Printer size={14} /> PDF Matriks Bonus
+                  <Printer size={13} className="shrink-0" /> PDF Matriks
                 </button>
                 <button
                   onClick={handleExportExcel}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white shadow-md shadow-emerald-950/30 transition-all flex items-center gap-1.5"
+                  className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-[11px] sm:text-xs font-bold text-white shadow-md shadow-emerald-950/30 transition-all flex items-center justify-center gap-1.5"
                 >
-                  <FileSpreadsheet size={14} /> Export Excel (.xlsx)
+                  <FileSpreadsheet size={13} className="shrink-0" /> Export Excel
                 </button>
               </div>
             </div>
 
             {/* Tier Levels Legend */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col gap-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <Flame size={14} className="text-amber-500" /> Skema Range Tier Target Omzet Harian
+            <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col gap-2 sm:gap-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1">
+                <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Flame size={13} className="text-amber-500 shrink-0" /> Skema Range Tier Target Omzet Harian
                 </span>
-                <span className="text-[11px] text-slate-400 font-medium">Diatur pada Menu Settings &gt; Bagi Hasil & Bonus</span>
+                <span className="text-[9.5px] sm:text-[11px] text-slate-400 font-medium">Diatur pada Menu Settings &gt; Bagi Hasil & Bonus</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                {tiers.map((t: any, idx: number) => (
-                  <div key={idx} className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-200/70 flex flex-col">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black uppercase text-amber-800">Tier {t?.tier ?? (idx + 1)}</span>
-                      <span className="text-[10px] font-extrabold text-amber-600">≥ {formatCurrency(t?.minOmzet || 0)}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-2">
+                {tiers.map((t: any, idx: number) => {
+                  const isOddLast = idx === tiers.length - 1 && tiers.length % 2 !== 0;
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-2 sm:p-2.5 bg-amber-50/60 rounded-lg sm:rounded-xl border border-amber-200/70 flex flex-col justify-between ${
+                        isOddLast ? 'col-span-2 sm:col-span-1' : ''
+                      }`}
+                    >
+                      <div className="flex justify-between items-center gap-1">
+                        <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-amber-800">Tier {t?.tier ?? (idx + 1)}</span>
+                        <span className="text-[9.5px] sm:text-[10px] font-extrabold text-amber-600 truncate">≥ {formatCurrency(t?.minOmzet || 0)}</span>
+                      </div>
+                      <div className="text-xs sm:text-sm font-black text-amber-900 mt-1 truncate">
+                        +{formatCurrency(t?.bonus || t?.bonusPerStaff || 0)} <span className="text-[9px] sm:text-[10px] font-normal text-amber-700">/ crew</span>
+                      </div>
                     </div>
-                    <span className="text-sm font-black text-amber-900 mt-1">+{formatCurrency(t?.bonus || t?.bonusPerStaff || 0)} <span className="text-[10px] font-normal text-amber-700">/ crew</span></span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* 4 Summary Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
-                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Hari Dihitung</span>
-                <div className="text-2xl font-black text-slate-900 mt-1">{days.length} Hari</div>
-                <div className="text-xs text-slate-500 mt-0.5">Rentang {startDate} s/d {endDate}</div>
+            {/* 4 Summary Metric Cards - 2 cols on mobile (2x2), 4 cols on desktop */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
+              <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Total Hari Dihitung</span>
+                <div className="text-sm sm:text-2xl font-black text-slate-900 mt-0.5 sm:mt-1 tracking-tight truncate">{days.length} Hari</div>
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">Rentang {startDate} s/d {endDate}</div>
               </div>
 
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
-                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Hari Capai Target</span>
-                <div className="text-2xl font-black text-emerald-600 mt-1">{daysHitTier} Hari</div>
-                <div className="text-xs text-slate-500 mt-0.5">
+              <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Hari Capai Target</span>
+                <div className="text-sm sm:text-2xl font-black text-emerald-600 mt-0.5 sm:mt-1 tracking-tight truncate">{daysHitTier} Hari</div>
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">
                   {days.length > 0 ? Math.round((daysHitTier / days.length) * 100) : 0}% Target Tercapai
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
-                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Total Bonus Terdistribusi</span>
-                <div className="text-2xl font-black text-amber-600 mt-1">{formatCurrency(totalBonusAll)}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Untuk semua staf Full-Time</div>
+              <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Bonus Terdistribusi</span>
+                <div className="text-sm sm:text-2xl font-black text-amber-600 mt-0.5 sm:mt-1 tracking-tight truncate">{formatCurrency(totalBonusAll)}</div>
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">Semua staf Full-Time</div>
               </div>
 
-              <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm">
-                <span className="text-[11px] font-extrabold uppercase text-slate-400 tracking-wider">Rata-rata Bonus / Hari</span>
-                <div className="text-2xl font-black text-indigo-600 mt-1">
+              <div className="bg-white rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <span className="text-[9.5px] sm:text-[11px] font-extrabold uppercase text-slate-400 tracking-wider truncate">Rata-rata Bonus / Hari</span>
+                <div className="text-sm sm:text-2xl font-black text-indigo-600 mt-0.5 sm:mt-1 tracking-tight truncate">
                   {formatCurrency(daysHitTier > 0 ? Math.round(totalBonusAll / daysHitTier) : 0)}
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">Pada hari tercapai target</div>
+                <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 truncate">Pada hari tembus target</div>
               </div>
             </div>
 
             {/* Matriks Harian Bonus Staf */}
-            <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col gap-2.5 sm:gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
                 <div>
-                  <h4 className="font-black text-slate-900 text-base">Matriks Harian Kehadiran & Bonus Per Karyawan</h4>
-                  <p className="text-xs text-slate-500">Persis format lembar matriks owner: Status Hadir/Libur & Nominal Bonus</p>
+                  <h4 className="font-black text-slate-900 text-sm sm:text-base">Matriks Harian Kehadiran & Bonus Per Karyawan</h4>
+                  <p className="text-[10px] sm:text-xs text-slate-500">Persis format lembar matriks owner: Status Hadir/Libur & Nominal Bonus</p>
                 </div>
               </div>
 
@@ -2320,20 +2629,20 @@ export const ReportView: React.FC = () => {
             </div>
 
             {/* Employee Ranking & Summary Cards */}
-            <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col gap-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col gap-2.5 sm:gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
                 <div>
-                  <h4 className="font-black text-slate-900 text-base">Rekapitulasi Gaji, Bonus & Potongan Kasbon</h4>
-                  <p className="text-xs text-slate-500">Perhitungan take-home bonus setelah otomatisasi potongan kasbon karyawan</p>
+                  <h4 className="font-black text-slate-900 text-sm sm:text-base">Rekapitulasi Gaji, Bonus & Potongan Kasbon</h4>
+                  <p className="text-[10px] sm:text-xs text-slate-500">Perhitungan take-home bonus setelah otomatisasi potongan kasbon karyawan</p>
                 </div>
                 {dailyBonusData?.totalKasbonOutstandingAll > 0 && (
-                  <span className="text-xs px-3 py-1 bg-rose-50 border border-rose-200 text-rose-700 font-bold rounded-xl">
+                  <span className="text-[10px] sm:text-xs px-2.5 sm:px-3 py-1 bg-rose-50 border border-rose-200 text-rose-700 font-bold rounded-xl w-fit">
                     Total Kasbon Menggantung: {formatCurrency(dailyBonusData.totalKasbonOutstandingAll)}
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5">
                 {employeeSummaries.map((e: any, idx: number) => {
                   const isFT = e.employmentType === 'FULL_TIME';
                   const totalBonus = e.totalBonus ?? e.totalBonusAmount ?? 0;
@@ -2341,26 +2650,26 @@ export const ReportView: React.FC = () => {
                   const takeHome = Math.max(0, totalBonus - kasbonAmt);
 
                   return (
-                    <div key={idx} className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between space-y-3">
+                    <div key={idx} className="p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/50 flex flex-col justify-between space-y-2.5 sm:space-y-3">
                       <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs border border-indigo-200">
+                        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs border border-indigo-200 shrink-0">
                             {(e.name || e.username || 'U').slice(0, 2).toUpperCase()}
                           </div>
-                          <div>
-                            <div className="font-black text-slate-900 text-sm">{e.name || e.username}</div>
-                            <span className="text-[10px] text-slate-500 font-bold uppercase">
+                          <div className="min-w-0">
+                            <div className="font-black text-slate-900 text-xs sm:text-sm truncate">{e.name || e.username}</div>
+                            <span className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase block truncate">
                               {isFT ? 'Full Time' : e.employmentType === 'DAILY_WORKER' ? 'Daily Worker' : 'Part Time'}
                             </span>
                           </div>
                         </div>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${isFT ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
+                        <span className={`px-2 sm:px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shrink-0 ${isFT ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
                           {e.presentCount ?? e.totalPresentDays ?? 0} Hadir
                         </span>
                       </div>
 
                       {/* Financial Breakdown */}
-                      <div className="bg-white p-3 rounded-xl border border-slate-200/80 text-xs space-y-1.5">
+                      <div className="bg-white p-2.5 sm:p-3 rounded-lg sm:rounded-xl border border-slate-200/80 text-[11px] sm:text-xs space-y-1 sm:space-y-1.5">
                         <div className="flex justify-between items-center text-slate-600">
                           <span>Bonus Omzet:</span>
                           <span className="font-black text-amber-700">{formatCurrency(totalBonus)}</span>
@@ -2375,9 +2684,9 @@ export const ReportView: React.FC = () => {
                           </div>
                         )}
 
-                        <div className="pt-1.5 border-t border-slate-100 flex justify-between items-center font-black">
+                        <div className="pt-1 sm:pt-1.5 border-t border-slate-100 flex justify-between items-center font-black">
                           <span className="text-slate-800">Take Home Bonus:</span>
-                          <span className="text-sm text-indigo-700">{formatCurrency(takeHome)}</span>
+                          <span className="text-xs sm:text-sm text-indigo-700">{formatCurrency(takeHome)}</span>
                         </div>
                       </div>
 
@@ -2386,9 +2695,9 @@ export const ReportView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleSettleKasbon(e.userId || e.id, e.name || e.username, kasbonAmt)}
-                          className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                          className="w-full py-1.5 sm:py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-[0.98]"
                         >
-                          <CheckCircle2 size={14} /> Potong & Lunasi Kasbon
+                          <CheckCircle2 size={13} /> Potong & Lunasi Kasbon
                         </button>
                       )}
                     </div>
@@ -2422,7 +2731,7 @@ export const ReportView: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '.6rem' }}>
               {[
-                { type: 'profit_sharing', title: '💰 Laporan Rekapitulasi Bagi Hasil (80:20)', desc: 'Pembagian laba bersih Owner vs PJ Ramen & PJ Drink setelah beban operasional' },
+                ...(enableProfitSharing ? [{ type: 'profit_sharing', title: '💰 Laporan Rekapitulasi Bagi Hasil (80:20)', desc: 'Pembagian laba bersih Owner vs PJ Ramen & PJ Drink setelah beban operasional' }] : []),
                 { type: 'daily_bonus', title: '🏆 Matriks Bonus Omzet Harian & Rekap Staf', desc: 'Matriks kehadiran karyawan Full-Time vs Daily Worker & pencapaian bonus tier omzet harian' },
                 { type: 'products', title: '🍜 Laporan Penjualan Menu & Margin (Best Seller)', desc: 'Ranking menu terlaris, kuantitas terjual, total omzet, HPP, laba dan margin' },
                 { type: 'pl', title: '📊 Laporan Laba Rugi (Profit & Loss)', desc: 'Format standar akuntansi: Pendapatan, HPP, OPEX, dan Laba Bersih' },
@@ -2466,6 +2775,13 @@ export const ReportView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* AI MENU & PROFIT ADVISOR MODAL */}
+      <AiMenuOptimizerModal
+        isOpen={showAiMenuModal}
+        onClose={() => setShowAiMenuModal(false)}
+        token={token}
+      />
     </div>
   );
 };

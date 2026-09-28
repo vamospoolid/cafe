@@ -4,6 +4,7 @@ import {
   Crown, Sparkles, Check, ArrowRight, UserPlus, AlertCircle
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { toast } from '../utils/alert';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -87,7 +88,7 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, onSelect
     setShowAddMember(false);
   };
 
-  const handleProceed = () => {
+  const handleProceed = async () => {
     const guestName = searchQuery.trim() || 'Pelanggan Umum';
 
     if (selectedCustomer) {
@@ -105,16 +106,49 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, onSelect
       }
 
       onSelect(data);
+      onClose();
     } else {
-      // Guest / Non-member or New Member
+      const cleanPhone = newPhone.trim();
+      if (cleanPhone) {
+        // Otomatis simpan ke CRM seketika begitu no WhatsApp diinput
+        try {
+          const res = await fetch('/api/customers', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${posContext?.token}`
+            },
+            body: JSON.stringify({
+              name: guestName,
+              phone: cleanPhone
+            })
+          });
+          const cust = await res.json();
+          if (res.ok && cust && cust.id) {
+            toast(cust.alreadyExists ? `Member "${cust.name}" berhasil dihubungkan ke CRM!` : `✨ Member baru "${cust.name}" otomatis tersimpan di CRM!`, 'success');
+            onSelect({
+              id: cust.id,
+              name: cust.name,
+              phone: cust.phone,
+              points: cust.points || 0,
+              tier: cust.tier || 'Bronze'
+            });
+            onClose();
+            return;
+          }
+        } catch (err) {
+          console.error('Auto register customer failed:', err);
+        }
+      }
+
+      // Guest biasa tanpa nomor WhatsApp
       const data: any = {
         name: guestName,
-        phone: newPhone.trim() || undefined
+        phone: cleanPhone || undefined
       };
       onSelect(data);
+      onClose();
     }
-
-    onClose();
   };
 
   if (!isOpen) return null;

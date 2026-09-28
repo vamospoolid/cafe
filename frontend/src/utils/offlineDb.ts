@@ -191,6 +191,16 @@ class OfflineDB {
       request.onerror = () => reject(request.error);
     });
   }
+
+  public async getPendingOrders(): Promise<OfflineOrder[]> {
+    return this.getOfflineQueue();
+  }
+
+  public async getCachedTables(): Promise<any[]> {
+    return this.getTables();
+  }
 }
 
 export const offlineDB = new OfflineDB();
+export const offlineDb = offlineDB;
+

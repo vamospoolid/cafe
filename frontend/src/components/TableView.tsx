@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Map, List, LayoutGrid, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard, X, Info, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Map, List, LayoutGrid, Armchair, Clock, Users, Coffee, Lock, Play, Scissors, Check, CreditCard, X, Info, RefreshCw, Zap, Sparkles } from 'lucide-react';
 import TableModal from './TableModal';
 import CheckoutModal from './CheckoutModal';
 import OpenShiftModal from './OpenShiftModal';
@@ -10,11 +10,26 @@ import { POSContext } from '../context/POSContext';
 import useSocket from '../hooks/useSocket';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
+import { offlineDb } from '../db/offlineDb';
+
+import { formatTableTitle, formatTableBadge } from '../utils/tableUtils';
+
 const TableView = () => {
   const navigate = useNavigate();
+
   const [tables, setTables] = useState<any[]>([]);
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'grid' | 'map' | 'list'>(window.innerWidth < 768 ? 'grid' : 'map');
+  const [offlinePendingTableIds, setOfflinePendingTableIds] = useState<Set<number>>(new Set());
+  const [viewMode, setViewMode] = useState<'grid' | 'map' | 'list'>(() => {
+    const saved = localStorage.getItem('codepos_table_view_mode');
+    if (saved === 'grid' || saved === 'map' || saved === 'list') return saved;
+    return window.innerWidth < 768 ? 'grid' : 'map';
+  });
+
+  const handleViewModeChange = (mode: 'grid' | 'map' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('codepos_table_view_mode', mode);
+  };
   const [selectedArea, setSelectedArea] = useState<string>('Semua');
   const [loading, setLoading] = useState(true);
 
@@ -48,9 +63,73 @@ const TableView = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragStart = useRef({ mouseX: 0, mouseY: 0, posX: 0, posY: 0 });
 
+  // Menghitung posisi awal otomatis yang rapi dan terpisah (Anti-Menumpuk di pojok 10,10)
+  const computeTablePosition = (table: any, index: number, total: number) => {
+    // Jika meja sudah memiliki posisi kustom tersimpan, gunakan itu
+    if (typeof table.posX === 'number' && typeof table.posY === 'number' && (table.posX > 0 || table.posY > 0)) {
+      return { posX: table.posX, posY: table.posY };
+    }
+
+    // Jika belum disetting (default null/0), hitung posisi grid berjarak proporsional
+    const cols = Math.min(4, Math.max(2, total <= 4 ? total : Math.ceil(Math.sqrt(total * 1.4))));
+    const colIdx = index % cols;
+    const rowIdx = Math.floor(index / cols);
+
+    const colWidth = cols > 1 ? (78 / (cols - 1)) : 0;
+    const posX = Math.round(8 + (colIdx * colWidth));
+    const posY = Math.round(10 + (rowIdx * 28));
+
+    return { posX: Math.min(84, posX), posY: Math.min(80, posY) };
+  };
+
   const startEditMode = () => {
     setIsEditMode(true);
-    setTempPositions(tables.map(t => ({ id: t.id, posX: t.posX || 10, posY: t.posY || 10 })));
+    setTempPositions(tables.map((t, idx) => {
+      const pos = computeTablePosition(t, idx, tables.length);
+      return { id: t.id, posX: pos.posX, posY: pos.posY };
+    }));
+  };
+
+  // 1-Klik Rapikan Posisi Otomatis (Grid Rapi atau Bentuk U)
+  const handleAutoArrange = (preset: 'grid' | 'u-shape' = 'grid') => {
+    if (!isEditMode) setIsEditMode(true);
+    const total = tables.length;
+    if (total === 0) return;
+
+    let newPositions: { id: number; posX: number; posY: number }[] = [];
+
+    if (preset === 'grid') {
+      const cols = Math.min(4, Math.max(2, total <= 4 ? total : Math.ceil(Math.sqrt(total * 1.4))));
+      newPositions = tables.map((t, idx) => {
+        const colIdx = idx % cols;
+        const rowIdx = Math.floor(idx / cols);
+        const colWidth = cols > 1 ? (78 / (cols - 1)) : 0;
+        const posX = Math.round(8 + (colIdx * colWidth));
+        const posY = Math.round(10 + (rowIdx * 28));
+        return { id: t.id, posX: Math.min(84, posX), posY: Math.min(80, posY) };
+      });
+    } else {
+      // Bentuk U mengitari ruangan
+      newPositions = tables.map((t, idx) => {
+        const step = idx / Math.max(1, total - 1);
+        let posX = 8;
+        let posY = 10;
+        if (step < 0.33) {
+          posX = 8;
+          posY = 10 + Math.round((step / 0.33) * 65);
+        } else if (step < 0.66) {
+          posX = 8 + Math.round(((step - 0.33) / 0.33) * 76);
+          posY = 75;
+        } else {
+          posX = 84;
+          posY = 75 - Math.round(((step - 0.66) / 0.34) * 65);
+        }
+        return { id: t.id, posX: Math.min(84, posX), posY: Math.min(80, posY) };
+      });
+    }
+
+    setTempPositions(newPositions);
+    toast(`Posisi meja dirapikan dengan susunan ${preset === 'grid' ? 'Grid' : 'Bentuk U'}! Klik "Simpan Posisi" untuk menyimpan.`, 'success');
   };
 
   const handleCancelLayout = () => {
@@ -100,6 +179,21 @@ const TableView = () => {
     };
   };
 
+  const handleTouchStart = (e: React.TouchEvent, tableId: number) => {
+    if (!isEditMode || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const tablePos = tempPositions.find(p => p.id === tableId);
+    if (!tablePos) return;
+
+    setDraggedId(tableId);
+    dragStart.current = {
+      mouseX: touch.clientX,
+      mouseY: touch.clientY,
+      posX: tablePos.posX,
+      posY: tablePos.posY
+    };
+  };
+
   const handleMouseMove = (e: MouseEvent) => {
     if (draggedId === null || !canvasRef.current) return;
     
@@ -120,7 +214,31 @@ const TableView = () => {
     setTempPositions(prev => prev.map(p => p.id === draggedId ? { ...p, posX: newPosX, posY: newPosY } : p));
   };
 
+  const handleTouchMove = (e: TouchEvent) => {
+    if (draggedId === null || !canvasRef.current || e.touches.length === 0) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const deltaX = touch.clientX - dragStart.current.mouseX;
+    const deltaY = touch.clientY - dragStart.current.mouseY;
+
+    const pctDeltaX = (deltaX / rect.width) * 100;
+    const pctDeltaY = (deltaY / rect.height) * 100;
+
+    let newPosX = Math.max(1, Math.min(88, dragStart.current.posX + pctDeltaX));
+    let newPosY = Math.max(1, Math.min(88, dragStart.current.posY + pctDeltaY));
+
+    newPosX = Math.round(newPosX / 2) * 2;
+    newPosY = Math.round(newPosY / 2) * 2;
+
+    setTempPositions(prev => prev.map(p => p.id === draggedId ? { ...p, posX: newPosX, posY: newPosY } : p));
+  };
+
   const handleMouseUp = () => {
+    setDraggedId(null);
+  };
+
+  const handleTouchEnd = () => {
     setDraggedId(null);
   };
 
@@ -128,10 +246,14 @@ const TableView = () => {
     if (draggedId !== null) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchmove', handleTouchMove, { passive: false });
+      window.addEventListener('touchend', handleTouchEnd);
     }
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
     };
   }, [draggedId]);
 
@@ -142,14 +264,32 @@ const TableView = () => {
 
   const fetchData = async () => {
     try {
+      // Periksa pending orders di database offline lokal
+      try {
+        const pending = await offlineDb.getPendingOrders();
+        const pendingIds = new Set(pending.filter(p => p.tableId).map(p => Number(p.tableId)));
+        setOfflinePendingTableIds(pendingIds);
+      } catch (dbErr) {
+        console.warn('Error reading offlineDb in TableView:', dbErr);
+      }
+
       const [resTables, resOrders] = await Promise.all([
         fetch('/api/tables', { headers: { Authorization: `Bearer ${posContext?.token}` } }),
         fetch('/api/orders?active=true', { headers: { Authorization: `Bearer ${posContext?.token}` } })
       ]);
-      if (resTables.ok) setTables(await resTables.json());
+      if (resTables.ok) {
+        setTables(await resTables.json());
+      } else {
+        const cached = await offlineDb.getCachedTables();
+        if (cached && cached.length > 0) setTables(cached);
+      }
       if (resOrders.ok) setActiveOrders(await resOrders.json());
     } catch (err) {
-      console.error('Failed to fetch data', err);
+      console.warn('Network error or offline mode in TableView, loading from cache:', err);
+      try {
+        const cached = await offlineDb.getCachedTables();
+        if (cached && cached.length > 0) setTables(cached);
+      } catch (_) {}
     } finally {
       setLoading(false);
     }
@@ -458,38 +598,118 @@ const TableView = () => {
   return (
     <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
       {/* HEADER / ACTION TOOLBAR */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 shrink-0">
-        <div className="hidden sm:block">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 shrink-0">
+        <div>
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800">
             <Armchair className="text-primary" size={24} /> Manajemen Meja & Area
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">Pantau status pesanan, sisa bill meja, dan tata letak secara real-time.</p>
         </div>
-        <button 
-          className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg transition-all py-2.5 px-4 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95" 
-          onClick={() => { setSelectedTable(null); setIsModalOpen(true); }}
-        >
-          <Plus size={16} /> + Tambah Meja
-        </button>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Segmented View Mode Controls */}
+          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/80 shadow-inner flex-1 sm:flex-initial">
+            <button
+              type="button"
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              onClick={() => handleViewModeChange('grid')}
+              title="Tampilan Grid Kartu Meja"
+            >
+              <LayoutGrid size={14} /> <span>Grid</span>
+            </button>
+            <button
+              type="button"
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'map'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              onClick={() => handleViewModeChange('map')}
+              title="Tampilan Denah Visual 2D"
+            >
+              <Map size={14} /> <span>Denah</span>
+            </button>
+            <button
+              type="button"
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'list'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              onClick={() => handleViewModeChange('list')}
+              title="Tampilan Tabel Data"
+            >
+              <List size={14} /> <span>Tabel</span>
+            </button>
+          </div>
+
+          {/* Tambah Meja Button */}
+          <button 
+            type="button"
+            className="btn btn-primary shadow-sm hover:shadow-md transition-all py-2 px-3.5 sm:px-4 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap rounded-2xl shrink-0" 
+            onClick={() => { setSelectedTable(null); setIsModalOpen(true); }}
+          >
+            <Plus size={16} /> <span>Tambah Meja</span>
+          </button>
+        </div>
       </div>
 
       <div className="card flex-initial md:flex-1 flex flex-col p-0 border border-gray-200 shadow-sm rounded-2xl shrink-0 overflow-hidden">
         {isEditMode ? (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-amber-50 border-b border-amber-200 p-3 sm:p-4 w-full justify-between">
-            <span className="text-xs font-bold text-amber-800 flex items-center gap-2">
-              <Info size={16} className="text-amber-600 shrink-0" />
-              <span>Mode Edit Tata Letak: Silakan geser (drag) meja untuk mengatur posisinya sesuai tata letak kafe Anda.</span>
-            </span>
-            <div className="flex gap-2 self-end sm:self-auto shrink-0">
-              <button type="button" className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all" onClick={handleCancelLayout}>Batal</button>
-              <button type="button" className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all" onClick={handleSaveLayout}>Simpan Posisi</button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-200/80 p-3 sm:px-4 sm:py-3 w-full justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span>
+              <span className="text-xs font-bold text-indigo-950">
+                Mode Atur Posisi: Geser meja secara bebas atau gunakan tombol susunan otomatis.
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+              <button 
+                type="button" 
+                className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-indigo-200 bg-white hover:bg-indigo-100 text-indigo-700 font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                onClick={() => handleAutoArrange('grid')}
+                title="1-Klik ratakan semua meja menjadi baris & kolom rapi"
+              >
+                <Zap size={13} className="text-amber-500 fill-amber-500" />
+                <span>Ratakan Grid</span>
+              </button>
+              <button 
+                type="button" 
+                className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-indigo-200 bg-white hover:bg-indigo-100 text-indigo-700 font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                onClick={() => handleAutoArrange('u-shape')}
+                title="1-Klik susun meja mengitari tepi ruangan"
+              >
+                <LayoutGrid size={13} />
+                <span>Bentuk U</span>
+              </button>
+              <button 
+                type="button" 
+                className="px-3.5 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all" 
+                onClick={handleCancelLayout}
+              >
+                Batal
+              </button>
+              <button 
+                type="button" 
+                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all active:scale-95 flex items-center gap-1.5" 
+                onClick={handleSaveLayout}
+              >
+                <Check size={14} />
+                <span>Simpan Posisi</span>
+              </button>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 p-3 sm:p-4 border-b border-gray-200 bg-white">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            {/* Area Classification Tabs (Horizontally scrollable on mobile) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full scrollbar-none">
+          <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-2.5 p-3 sm:px-4 sm:py-3 border-b border-gray-200 bg-white">
+            {/* Area Classification Tabs (Horizontally scrollable with smooth touch, no scrollbar) */}
+            <div 
+              className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar flex-1 min-w-0 pr-2"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
               {areas.map(area => {
                 const count = tables.filter(t => {
                   const tArea = (t.name && t.name.trim() !== '') ? t.name.trim() : 'Area Umum';
@@ -500,61 +720,31 @@ const TableView = () => {
                   <button
                     key={area}
                     onClick={() => setSelectedArea(area)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap flex items-center gap-1.5 ${
                       isActive 
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-100' 
+                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' 
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                     }`}
                   >
-                    {area} <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${isActive ? 'bg-indigo-500 text-indigo-50' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
+                    <span>{area}</span>
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${isActive ? 'bg-indigo-500 text-indigo-50' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
                   </button>
                 );
               })}
             </div>
 
             {/* Status Legends */}
-            <div className="flex flex-wrap gap-2 text-[10px] font-semibold border-t lg:border-t-0 lg:border-l border-slate-150 pt-2 lg:pt-0 lg:pl-3">
-              <span className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Kosong</span>
-              <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div> Diproses</span>
-              <span className="flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Disajikan</span>
+            <div className="flex items-center gap-2 text-[11px] font-semibold shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100 justify-start lg:justify-end">
+              <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/70">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Kosong
+              </span>
+              <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/70">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span> Diproses
+              </span>
+              <span className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/70">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> Disajikan
+              </span>
             </div>
-          </div>
-          
-          {/* View Toggles & Layout Editor Button */}
-          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
-            {viewMode === 'map' && (
-              <button
-                type="button"
-                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all flex items-center gap-1.5"
-                onClick={startEditMode}
-              >
-                <Map size={14} className="text-indigo-600" /> <span className="hidden sm:inline">Atur Posisi Meja</span><span className="sm:hidden">Atur Posisi</span>
-              </button>
-            )}
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
-              <button
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'grid' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setViewMode('grid')}
-                title="Tampilan Grid Kartu Meja"
-              >
-                <LayoutGrid size={14} /> Grid
-              </button>
-              <button
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'map' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setViewMode('map')}
-                title="Tampilan Denah Visual 2D"
-              >
-                <Map size={14} /> Denah
-              </button>
-              <button
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                onClick={() => setViewMode('list')}
-                title="Tampilan Tabel Data"
-              >
-                <List size={14} /> Tabel
-              </button>
-            </div>
-          </div>
           </div>
         )}
 
@@ -595,7 +785,7 @@ const TableView = () => {
                     >
                       {/* Card Header: Table No, Area, Capacity & Status Badge */}
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <div className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center font-black shadow-inner shrink-0 ${
                             !isOccupied 
                               ? 'bg-slate-100 text-slate-800' 
@@ -605,18 +795,29 @@ const TableView = () => {
                               ? 'bg-blue-100 text-blue-800 border border-blue-200' 
                               : 'bg-amber-100 text-amber-800 border border-amber-200'
                           }`}>
-                            <span className="text-sm leading-none">{table.tableNo}</span>
-                            <span className="text-[9px] font-bold opacity-75 mt-0.5">{table.capacity}K</span>
+                            <span className="text-sm font-black leading-none tracking-tight">{formatTableBadge(table.tableNo)}</span>
+                            <span className="text-[9px] font-bold opacity-75 mt-0.5 flex items-center gap-0.5">
+                              <Users size={8} />{table.capacity}
+                            </span>
                           </div>
-                          <div>
-                            <h3 className="font-black text-sm sm:text-base text-slate-900 tracking-tight">Meja {table.tableNo}</h3>
-                            <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
+                          <div className="min-w-0">
+                            <h3 className="font-black text-sm sm:text-base text-slate-900 tracking-tight truncate">
+                              {formatTableTitle(table.tableNo)}
+                            </h3>
+                            <div className="text-[10px] font-semibold text-slate-500 flex items-center gap-1.5 truncate">
                               <span>{table.name || 'Area Umum'}</span>
+                              <span>•</span>
+                              <span>{table.capacity} Kursi</span>
                             </div>
                           </div>
                         </div>
 
-                        <div>
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {(offlinePendingTableIds.has(Number(table.id)) || Boolean(table.offlineOccupied)) && (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-white shadow-sm animate-pulse">
+                              <RefreshCw size={9} className="animate-spin" /> OFFLINE
+                            </span>
+                          )}
                           {!isOccupied ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> KOSONG
@@ -790,110 +991,307 @@ const TableView = () => {
             )}
           </div>
         ) : viewMode === 'list' ? (
-          <div className="p-0 overflow-x-auto bg-white w-full">
-            <table className="data-table w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-50 sticky top-0 shadow-sm text-[11px]">
-                <tr>
-                  <th className="px-4 py-3">NOMOR MEJA</th>
-                  <th className="px-4 py-3">KAPASITAS</th>
-                  <th className="px-4 py-3">STATUS SISTEM</th>
-                  <th className="px-4 py-3">KONDISI SAAT INI</th>
-                  <th className="px-4 py-3">INFO PESANAN</th>
-                  <th className="px-4 py-3 text-right">AKSI</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredTables.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-12 text-gray-400 font-medium">Belum ada data meja di area ini.</td>
-                  </tr>
-                ) : filteredTables.map(table => {
-                  const activeOrder = getTableActiveOrder(table.id);
-                  return (
-                    <tr key={table.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-black text-xl text-slate-800">{table.tableNo}</div>
-                        <div className="text-xs text-muted font-medium">{table.name || 'Tanpa keterangan'}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5 font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full w-max">
-                          <Users size={14} /> {table.capacity} Kursi
+          <div className="p-0 bg-white w-full">
+            {filteredTables.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 font-medium">Belum ada data meja di area ini.</div>
+            ) : (
+              <>
+                {/* ── DESKTOP TABLE VIEW (hidden md:block) ── */}
+                <div className="hidden md:block overflow-x-auto w-full">
+                  <table className="data-table w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-50 sticky top-0 shadow-xs text-[11px]">
+                      <tr>
+                        <th className="px-4 py-3">NOMOR MEJA</th>
+                        <th className="px-4 py-3">KAPASITAS</th>
+                        <th className="px-4 py-3">STATUS SISTEM</th>
+                        <th className="px-4 py-3">KONDISI SAAT INI</th>
+                        <th className="px-4 py-3">INFO PESANAN</th>
+                        <th className="px-4 py-3 text-right">AKSI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredTables.map(table => {
+                        const activeOrder = getTableActiveOrder(table.id);
+                        return (
+                          <tr key={table.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="font-black text-xl text-slate-800">{table.tableNo}</div>
+                              <div className="text-xs text-muted font-medium">{table.name || 'Tanpa keterangan'}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-1.5 font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full w-max">
+                                <Users size={14} /> {table.capacity} Kursi
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`badge ${table.status === 'Aktif' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                                {table.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {activeOrder ? (
+                                <span className={`badge font-bold animate-pulse ${
+                                  activeOrder.kdsStatus === 'Served'
+                                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                    : 'bg-amber-100 text-amber-700 border border-amber-200'
+                                }`}>
+                                  {activeOrder.kdsStatus === 'Served' ? 'SUDAH DISAJIKAN' : 'DIPROSES'}
+                                </span>
+                              ) : (
+                                <span className="badge bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold">KOSONG</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {activeOrder ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-bold text-sm text-slate-800">{activeOrder.customerName}</span>
+                                  <span className="text-xs font-semibold text-primary">{formatCurrency(activeOrder.total)}</span>
+                                  <span className="text-xs text-muted flex items-center gap-1"><Clock size={12} /> Menunggu: {getWaitTime(activeOrder.createdAt)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-400 italic">-</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex justify-end gap-2">
+                                <button className="p-2 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}><Edit size={16} /></button>
+                                {activeOrder ? (
+                                  <>
+                                    <button
+                                      className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
+                                      onClick={() => {
+                                        setMoveMergeSourceTable(table);
+                                        setIsMoveMergeOpen(true);
+                                      }}
+                                    >
+                                      <RefreshCw size={12} /> Pindah
+                                    </button>
+                                    <button
+                                      className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
+                                      onClick={() => {
+                                        const tableOrders = activeOrders.filter(o => o.tableId === table.id);
+                                        setSplitTableId(table.id);
+                                        setSplitTableName(`Meja ${table.tableNo}`);
+                                        setSplitActiveOrders(tableOrders);
+                                        setIsSplitOpen(true);
+                                      }}
+                                    >
+                                      <Scissors size={12} /> Split
+                                    </button>
+                                    {activeOrder.status === 'Paid' ? (
+                                      <button className="px-3 py-1 rounded-lg text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs" onClick={() => handleClearTable(table.id, table.tableNo)}>Kosongkan</button>
+                                    ) : (
+                                      <button className="px-3 py-1 rounded-lg text-white font-bold bg-primary hover:bg-primary/90 transition-colors text-xs" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <button className="p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" onClick={() => handleDelete(table.id)}><Trash2 size={16} /></button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (< 768px / md:hidden) ── */}
+                <div className="block md:hidden divide-y divide-slate-100 w-full">
+                  {filteredTables.map(table => {
+                    const activeOrder = getTableActiveOrder(table.id);
+                    const tableStatus = getTableStatus(table.id);
+                    const isOccupied = tableStatus !== 'empty';
+                    const isPaid = activeOrder && activeOrder.status === 'Paid';
+                    const isServed = tableStatus === 'served';
+
+                    return (
+                      <div key={table.id} className="p-3.5 bg-white hover:bg-slate-50/80 transition-colors flex flex-col gap-2.5">
+                        {/* Header: Table No, Area, Capacity & Status Badge */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className={`w-11 h-11 rounded-2xl flex flex-col items-center justify-center font-black shadow-xs shrink-0 ${
+                              !isOccupied 
+                                ? 'bg-slate-100 text-slate-800 border border-slate-200/80' 
+                                : isPaid 
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                : isServed 
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200' 
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              <span className="text-sm font-black leading-none tracking-tight">{formatTableBadge(table.tableNo)}</span>
+                              <span className="text-[9px] font-bold opacity-75 mt-0.5 flex items-center gap-0.5">
+                                <Users size={8} />{table.capacity}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="font-black text-sm text-slate-900 truncate">{formatTableTitle(table.tableNo)}</h4>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                                  {table.name || 'Area Umum'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1">
+                                <Users size={12} className="text-slate-400" />
+                                <span>Kapasitas {table.capacity} Kursi</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {(offlinePendingTableIds.has(Number(table.id)) || Boolean(table.offlineOccupied)) && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-white shadow-xs animate-pulse">
+                                <RefreshCw size={9} className="animate-spin" /> OFFLINE
+                              </span>
+                            )}
+                            {!isOccupied ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> KOSONG
+                              </span>
+                            ) : isPaid ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <Check size={11} className="text-emerald-600" /> LUNAS
+                              </span>
+                            ) : isServed ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> DISAJIKAN
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> DIPROSES
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`badge ${table.status === 'Aktif' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
-                          {table.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {activeOrder ? (
-                          <span className={`badge font-bold animate-pulse ${
-                            activeOrder.kdsStatus === 'Served'
-                              ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                              : 'bg-amber-100 text-amber-700 border border-amber-200'
-                          }`}>
-                            {activeOrder.kdsStatus === 'Served' ? 'SUDAH DISAJIKAN' : 'DIPROSES'}
-                          </span>
-                        ) : (
-                          <span className="badge bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold">KOSONG</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {activeOrder ? (
-                          <div className="flex flex-col gap-1">
-                            <span className="font-bold text-sm text-slate-800">{activeOrder.customerName}</span>
-                            <span className="text-xs font-semibold text-primary">{formatCurrency(activeOrder.total)}</span>
-                            <span className="text-xs text-muted flex items-center gap-1"><Clock size={12} /> Menunggu: {getWaitTime(activeOrder.createdAt)}</span>
+
+                        {/* Active Order Details or Empty State */}
+                        {isOccupied && activeOrder ? (
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-slate-800 flex items-center gap-1 truncate max-w-[150px]">
+                                <Users size={12} className="text-slate-400 shrink-0" />
+                                {activeOrder.customerName || 'Tamu Dine-In'}
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1 shrink-0">
+                                <Clock size={11} /> {getWaitTime(activeOrder.createdAt)}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-1 border-t border-slate-200/60">
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                {activeOrder.items?.length || 0} Menu dipesan
+                              </span>
+                              <span className="text-xs font-black text-indigo-700">
+                                {formatCurrency(activeOrder.total)}
+                              </span>
+                            </div>
                           </div>
                         ) : (
-                          <span className="text-sm text-gray-400 italic">-</span>
+                          <div className="py-2 px-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 text-center text-[11px] text-slate-400">
+                            Meja bersih &amp; siap melayani tamu
+                          </div>
                         )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button className="p-2 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}><Edit size={16} /></button>
-                          {activeOrder ? (
-                            <>
+
+                        {/* Actions Row */}
+                        <div className="flex items-center justify-between pt-1 gap-1.5 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                              title="Edit Meja"
+                            >
+                              <Edit size={13} /> Edit
+                            </button>
+
+                            {!isOccupied && (
                               <button
-                                className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
-                                onClick={() => {
-                                  setMoveMergeSourceTable(table);
-                                  setIsMoveMergeOpen(true);
-                                }}
+                                type="button"
+                                onClick={() => handleDelete(table.id)}
+                                className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors active:scale-95 cursor-pointer"
+                                title="Hapus Meja"
                               >
-                                <RefreshCw size={12} /> Pindah
+                                <Trash2 size={14} />
                               </button>
+                            )}
+
+                            {isOccupied && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 border border-indigo-100 active:scale-95 transition-all cursor-pointer"
+                                  onClick={() => {
+                                    setMoveMergeSourceTable(table);
+                                    setIsMoveMergeOpen(true);
+                                  }}
+                                >
+                                  <RefreshCw size={12} /> Pindah
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 border border-indigo-100 active:scale-95 transition-all cursor-pointer"
+                                  onClick={() => {
+                                    const tableOrders = activeOrders.filter(o => o.tableId === table.id);
+                                    setSplitTableId(table.id);
+                                    setSplitTableName(formatTableTitle(table.tableNo));
+                                    setSplitActiveOrders(tableOrders);
+                                    setIsSplitOpen(true);
+                                  }}
+                                >
+                                  <Scissors size={12} /> Split
+                                </button>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Primary action right side */}
+                          <div className="flex items-center gap-1.5">
+                            {!isOccupied ? (
                               <button
-                                className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
-                                onClick={() => {
-                                  const tableOrders = activeOrders.filter(o => o.tableId === table.id);
-                                  setSplitTableId(table.id);
-                                  setSplitTableName(`Meja ${table.tableNo}`);
-                                  setSplitActiveOrders(tableOrders);
-                                  setIsSplitOpen(true);
-                                }}
+                                type="button"
+                                onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
                               >
-                                <Scissors size={12} /> Split
+                                <Plus size={13} /> Buka Pesanan
                               </button>
-                              {activeOrder.status === 'Paid' ? (
-                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs" onClick={() => handleClearTable(table.id, table.tableNo)}>Kosongkan</button>
-                              ) : (
-                                <button className="px-3 py-1 rounded-lg text-white font-bold bg-primary hover:bg-primary/90 transition-colors text-xs" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
-                              )}
-                            </>
-                          ) : (
-                            <button className="p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" onClick={() => handleDelete(table.id)}><Trash2 size={16} /></button>
-                          )}
+                            ) : isPaid ? (
+                              <button
+                                type="button"
+                                onClick={() => handleClearTable(table.id, table.tableNo)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
+                              >
+                                <Check size={13} /> Kosongkan
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                                  className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <Plus size={13} /> + Menu
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-md shadow-indigo-200 active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <CreditCard size={13} /> Bayar
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         ) : (
-          <div className="p-6 bg-slate-100 flex-1 overflow-y-auto min-h-[600px] relative">
+          <div className="p-3 sm:p-5 bg-slate-100/70 flex-1 overflow-y-auto min-h-[600px] relative">
             {filteredTables.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-slate-400 w-full">
                 <Armchair size={48} className="text-slate-355 mb-3" />
@@ -901,40 +1299,78 @@ const TableView = () => {
                 <p className="text-xs text-slate-400 mt-1">Anda bisa menambahkan meja baru ke area ini dengan tombol di atas.</p>
               </div>
             ) : (
-              <div 
-                ref={canvasRef}
-                className="relative w-full h-[580px] bg-slate-150 rounded-2xl overflow-hidden border border-slate-300 shadow-inner"
-                style={{
-                  backgroundImage: 'radial-gradient(#cbd5e1 1.5px, transparent 1.5px)',
-                  backgroundSize: '24px 24px',
-                  backgroundPosition: '-12px -12px',
-                  backgroundColor: '#f1f5f9'
-                }}
-              >
-                {filteredTables.map(table => {
-                  const activeOrder = getTableActiveOrder(table.id);
-                  const tableStatus = getTableStatus(table.id);
-                  const isOccupied = tableStatus !== 'empty';
+              <>
+                {/* Denah Quick Action Bar (Only visible when not in edit mode) */}
+                {!isEditMode && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 mb-3 bg-white p-2.5 sm:px-4 sm:py-2.5 rounded-2xl border border-slate-200/80 shadow-sm">
+                    <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                      <span><strong>Denah Visual 2D:</strong> Tarik atau atur posisi meja sesuai denah fisik kafe Anda.</span>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <button
+                        type="button"
+                        className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                        onClick={startEditMode}
+                        title="Ubah posisi meja dengan menarik posisi meja di denah"
+                      >
+                        <Map size={14} className="text-indigo-600" />
+                        <span>Atur Posisi Meja</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1 active:scale-95"
+                        onClick={() => handleAutoArrange('grid')}
+                        title="1-Klik ratakan semua posisi meja agar tidak menumpuk"
+                      >
+                        <Zap size={13} className="text-amber-500 fill-amber-500" />
+                        <span>Rapikan Otomatis</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                  const tempPos = tempPositions.find(p => p.id === table.id);
-                  const posX = isEditMode && tempPos ? tempPos.posX : (table.posX || 10);
-                  const posY = isEditMode && tempPos ? tempPos.posY : (table.posY || 10);
+                <div 
+                  ref={canvasRef}
+                  className="relative w-full h-[580px] bg-slate-150 rounded-2xl overflow-hidden border border-slate-300 shadow-inner select-none"
+                  style={{
+                    backgroundImage: 'radial-gradient(#cbd5e1 1.5px, transparent 1.5px)',
+                    backgroundSize: '24px 24px',
+                    backgroundPosition: '-12px -12px',
+                    backgroundColor: '#f1f5f9',
+                    touchAction: isEditMode ? 'none' : 'auto'
+                  }}
+                >
+                  {filteredTables.map((table, idx) => {
+                    const activeOrder = getTableActiveOrder(table.id);
+                    const tableStatus = getTableStatus(table.id);
+                    const isOccupied = tableStatus !== 'empty';
 
-                  const cardStyle = {
-                    empty:   'bg-white border-slate-200 text-slate-800 hover:border-indigo-400',
-                    cooking: 'bg-amber-500 border-amber-600 text-white shadow-md shadow-amber-500/20',
-                    served:  'bg-blue-600 border-blue-700 text-white shadow-md shadow-blue-600/20',
-                  }[tableStatus];
+                    const tempPos = tempPositions.find(p => p.id === table.id);
+                    const autoPos = computeTablePosition(table, idx, filteredTables.length);
+                    const posX = isEditMode && tempPos 
+                      ? tempPos.posX 
+                      : (table.posX && table.posX > 0 ? table.posX : autoPos.posX);
+                    const posY = isEditMode && tempPos 
+                      ? tempPos.posY 
+                      : (table.posY && table.posY > 0 ? table.posY : autoPos.posY);
 
-                  const isCircle = table.shape === 'circle';
-                  const isServed = tableStatus === 'served';
-                  const isPaid = activeOrder && activeOrder.status === 'Paid';
+                    const cardStyle = {
+                      empty:   'bg-white border-slate-200 text-slate-800 hover:border-indigo-400',
+                      cooking: 'bg-amber-500 border-amber-600 text-white shadow-md shadow-amber-500/20',
+                      served:  'bg-blue-600 border-blue-700 text-white shadow-md shadow-blue-600/20',
+                    }[tableStatus];
 
-                  return (
-                    <div
-                      key={table.id}
-                      onMouseDown={(e) => handleMouseDown(e, table.id)}
-                      onClick={() => handleTableClick(table)}
+                    const isCircle = table.shape === 'circle';
+                    const isServed = tableStatus === 'served';
+                    const isPaid = activeOrder && activeOrder.status === 'Paid';
+
+                    return (
+                      <div
+                        key={table.id}
+                        onMouseDown={(e) => handleMouseDown(e, table.id)}
+                        onTouchStart={(e) => handleTouchStart(e, table.id)}
+                        onClick={() => handleTableClick(table)}
                       style={{
                         position: 'absolute',
                         left: `${posX}%`,
@@ -951,8 +1387,10 @@ const TableView = () => {
                       } ${cardStyle} ${isEditMode ? 'hover:scale-105 border-indigo-500 ring-4 ring-indigo-200' : 'hover:scale-[1.02] hover:shadow-md'}`}
                     >
                       {/* Nomor Meja & Keterangan */}
-                      <div>
-                        <div className={`font-black text-xl tracking-tight leading-none ${isOccupied ? 'text-white' : 'text-slate-800'}`}>{table.tableNo}</div>
+                      <div className="w-full px-1">
+                        <div className={`font-black text-sm sm:text-base tracking-tight leading-tight truncate mx-auto ${isOccupied ? 'text-white' : 'text-slate-800'}`} title={formatTableTitle(table.tableNo)}>
+                          {formatTableTitle(table.tableNo)}
+                        </div>
                         <div className={`text-[8px] font-bold opacity-75 truncate max-w-[90px] mx-auto mt-0.5 ${isOccupied ? 'text-white/80' : 'text-slate-500'}`}>
                           {table.name || 'Umum'}
                         </div>
@@ -998,6 +1436,7 @@ const TableView = () => {
                   );
                 })}
               </div>
+              </>
             )}
           </div>
         )}

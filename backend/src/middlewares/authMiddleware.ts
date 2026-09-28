@@ -83,6 +83,15 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         activeRole = currentMembership.role.name;
         activeRoleId = currentMembership.role.id;
         permissionsArray = currentMembership.role.permissions.map(rp => rp.permission.key);
+      } else if (userExists.memberships.length > 0) {
+        // Token membawa tenant lama yang tidak cocok dengan membership user aktif, auto-heal ke tenant aktif user
+        const fallbackMembership = userExists.memberships.find(m => m.status === 'ACTIVE') || userExists.memberships[0];
+        activeTenantId = fallbackMembership.tenantId;
+        if (fallbackMembership.role) {
+          activeRole = fallbackMembership.role.name;
+          activeRoleId = fallbackMembership.role.id;
+          permissionsArray = fallbackMembership.role.permissions.map(rp => rp.permission.key);
+        }
       }
     }
 

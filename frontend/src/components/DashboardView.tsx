@@ -1,14 +1,12 @@
 import { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   TrendingUp, 
   DollarSign, 
   Activity, 
-  ShoppingBag, 
   PieChart as PieChartIcon, 
   Clock, 
   AlertTriangle, 
-  ChevronRight, 
-  Layers, 
   Users, 
   RefreshCw, 
   Lightbulb,
@@ -18,7 +16,14 @@ import {
   Utensils,
   CheckCircle2,
   UserCheck,
-  Timer
+  Timer,
+  ShoppingCart,
+  Truck,
+  Package,
+  FileText,
+  Grid,
+  ChefHat,
+  Sparkles
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { POSContext } from '../context/POSContext';
@@ -34,6 +39,10 @@ interface LowStockProduct {
 }
 
 const DashboardView = () => {
+  const navigate = useNavigate();
+  const isBengkel = false;
+  const isRetail = false;
+  const isCafe = true;
   const [summary, setSummary] = useState<any>({
     revenue: 0,
     profit: 0,
@@ -167,127 +176,250 @@ const DashboardView = () => {
               Dashboard Executive
             </h2>
             <p className="text-xs text-slate-500">
-              Pusat kendali operasional, finansial, dapur &amp; kru MUKI RAMEN
+              Pusat kendali operasional, finansial, dapur &amp; kru {posContext?.settings?.storeName || 'Toko'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           {/* Active Shift Indicator Pill */}
           {activeShift ? (
-            <div className="bg-emerald-50 border border-emerald-200/80 text-emerald-800 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Shift Aktif: <strong className="text-emerald-950">{activeShift.user?.name || 'Kasir'}</strong></span>
-              <span className="hidden md:inline text-emerald-600/70 font-semibold">&bull; Modal {formatCurrency(activeShift.saldoAwal)}</span>
+            <div className="bg-emerald-50 border border-emerald-200/80 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Shift: <strong className="text-emerald-950">{activeShift.user?.name || 'Kasir'}</strong></span>
             </div>
           ) : (
             <button
               type="button"
               onClick={() => setIsShiftModalOpen(true)}
-              className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 hover:border-amber-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all active:scale-95 cursor-pointer"
+              className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 hover:border-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
             >
-              <Timer size={14} className="text-amber-600 animate-bounce" />
+              <Timer size={13} className="text-amber-600 animate-bounce" />
               <span>+ Buka Shift Kasir</span>
             </button>
           )}
 
           <button
             onClick={fetchAnalytics}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-50 hover:bg-white text-slate-700 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-xl font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-white text-slate-700 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-xl font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
             title="Muat ulang data terbaru"
           >
-            <RefreshCw size={14} /> <span>Refresh</span>
+            <RefreshCw size={13} /> <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* ─── 2. FOUR BALANCED EXECUTIVE KPI CARDS ─────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ─── 2. QUICK ACTION SHORTCUT HUB (MOBILE ONLY TOOLBAR) ─────────────── */}
+      <div className="md:hidden bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="flex items-center justify-between mb-2.5 px-1">
+          <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <Sparkles size={13} className="text-indigo-600" /> Menu Pintasan Cepat
+          </span>
+          <span className="text-[10px] font-bold text-slate-400">1-Tap Akses</span>
+        </div>
+
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 sm:gap-2.5">
+          {/* 1. Kasir POS */}
+          <button
+            type="button"
+            onClick={() => { posContext?.triggerHaptic(20); navigate('/pos'); }}
+            className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-indigo-50/60 hover:bg-indigo-100/60 border border-indigo-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+              <ShoppingCart size={17} />
+            </div>
+            <span className="text-[10.5px] font-extrabold text-indigo-950 tracking-tight leading-tight line-clamp-1">
+              {isRetail ? 'Kasir Grosir' : 'Kasir POS'}
+            </span>
+            <span className="text-[8.5px] font-semibold text-indigo-600/80 leading-none">Transaksi</span>
+          </button>
+
+          {/* 2. Shift Kasir */}
+          <button
+            type="button"
+            onClick={() => { posContext?.triggerHaptic(15); setIsShiftModalOpen(true); }}
+            className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-amber-50/60 hover:bg-amber-100/60 border border-amber-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+              <Timer size={17} />
+            </div>
+            <span className="text-[10.5px] font-extrabold text-amber-950 tracking-tight leading-tight line-clamp-1">
+              Shift Kasir
+            </span>
+            <span className="text-[8.5px] font-semibold text-amber-700/80 leading-none">
+              {activeShift ? 'Aktif' : 'Buka Shift'}
+            </span>
+          </button>
+
+          {/* 3. Vertikal Spesifik: Surat Jalan (Retail) atau Meja (Cafe) */}
+          {isRetail ? (
+            <button
+              type="button"
+              onClick={() => { posContext?.triggerHaptic(15); navigate('/retail/surat-jalan'); }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-purple-50/60 hover:bg-purple-100/60 border border-purple-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+                <Truck size={17} />
+              </div>
+              <span className="text-[10.5px] font-extrabold text-purple-950 tracking-tight leading-tight line-clamp-1">
+                Surat Jalan
+              </span>
+              <span className="text-[8.5px] font-semibold text-purple-600/80 leading-none">Armada Toko</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { posContext?.triggerHaptic(15); navigate('/meja'); }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-emerald-50/60 hover:bg-emerald-100/60 border border-emerald-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+                <Grid size={17} />
+              </div>
+              <span className="text-[10.5px] font-extrabold text-emerald-950 tracking-tight leading-tight line-clamp-1">
+                Denah Meja
+              </span>
+              <span className="text-[8.5px] font-semibold text-emerald-600/80 leading-none">Dine-In</span>
+            </button>
+          )}
+
+          {/* 4. Katalog Produk & Stok */}
+          <button
+            type="button"
+            onClick={() => { posContext?.triggerHaptic(15); navigate('/produk'); }}
+            className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-blue-50/60 hover:bg-blue-100/60 border border-blue-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+              <Package size={17} />
+            </div>
+            <span className="text-[10.5px] font-extrabold text-blue-950 tracking-tight leading-tight line-clamp-1">
+              Katalog Stok
+            </span>
+            <span className="text-[8.5px] font-semibold text-blue-600/80 leading-none">Data Barang</span>
+          </button>
+
+          {/* 5. Arus Kas / Petty Cash */}
+          <button
+            type="button"
+            onClick={() => { posContext?.triggerHaptic(15); navigate('/kas'); }}
+            className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-rose-50/60 hover:bg-rose-100/60 border border-rose-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+              <Wallet size={17} />
+            </div>
+            <span className="text-[10.5px] font-extrabold text-rose-950 tracking-tight leading-tight line-clamp-1">
+              Arus Kas
+            </span>
+            <span className="text-[8.5px] font-semibold text-rose-600/80 leading-none">Buku Kas</span>
+          </button>
+
+          {/* 6. Laporan Keuangan */}
+          <button
+            type="button"
+            onClick={() => { posContext?.triggerHaptic(15); navigate('/laporan'); }}
+            className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 transition-all active:scale-95 cursor-pointer text-center group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-slate-800 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+              <FileText size={17} />
+            </div>
+            <span className="text-[10.5px] font-extrabold text-slate-900 tracking-tight leading-tight line-clamp-1">
+              Laporan
+            </span>
+            <span className="text-[8.5px] font-semibold text-slate-500 leading-none">Rekap Harian</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── 3. FOUR SYSTEMATIC & SYMMETRIC KPI CARDS (2-COL MOBILE GRID) ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         
         {/* 1. Pendapatan Kotor (Revenue) */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
-          <div className="flex justify-between items-start mb-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black border border-indigo-100">
-              <DollarSign size={20} />
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group min-h-[105px] sm:min-h-[130px]">
+          <div className="flex justify-between items-start mb-1.5">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black border border-indigo-100 shrink-0">
+              <DollarSign size={16} className="sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50/80 px-2.5 py-1 rounded-full border border-indigo-100">
-              {summary.transactions} Transaksi
+            <span className="text-[9px] sm:text-[10px] font-bold text-indigo-700 bg-indigo-50/90 px-1.5 sm:px-2 py-0.5 rounded-full border border-indigo-100 truncate max-w-[90px]">
+              {summary.transactions} Struk
             </span>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Pendapatan Kotor</div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            <div className="text-[9.5px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Pendapatan Kotor
+            </div>
+            <div className="text-sm sm:text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-tight my-0.5 truncate">
               {formatCurrency(summary.revenue)}
             </div>
-            <div className="text-[11px] font-semibold text-slate-400 mt-1.5 flex items-center gap-1">
-              <span>Rerata struk:</span>
-              <strong className="text-slate-700">{formatCurrency(avgTicket)}</strong>
+            <div className="text-[9.5px] sm:text-xs font-semibold text-slate-400 truncate">
+              Rerata: <strong className="text-slate-700 font-bold">{formatCurrency(avgTicket)}</strong>
             </div>
           </div>
         </div>
 
         {/* 2. Estimasi Laba Bersih */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
-          <div className="flex justify-between items-start mb-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black border border-emerald-100">
-              <TrendingUp size={20} />
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group min-h-[105px] sm:min-h-[130px]">
+          <div className="flex justify-between items-start mb-1.5">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black border border-emerald-100 shrink-0">
+              <TrendingUp size={16} className="sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-full border border-emerald-100">
+            <span className="text-[9px] sm:text-[10px] font-bold text-emerald-700 bg-emerald-50/90 px-1.5 sm:px-2 py-0.5 rounded-full border border-emerald-100 truncate max-w-[90px]">
               Margin {summary.revenue > 0 ? Math.round((summary.profit / summary.revenue) * 100) : 0}%
             </span>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Estimasi Laba Bersih (HPP)</div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-600 tracking-tight">
+            <div className="text-[9.5px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Estimasi Laba Bersih
+            </div>
+            <div className="text-sm sm:text-xl lg:text-2xl font-black text-emerald-600 tracking-tight leading-tight my-0.5 truncate">
               {formatCurrency(summary.profit)}
             </div>
-            <div className="text-[11px] font-semibold text-slate-400 mt-1.5 flex items-center gap-1">
-              <span>Biaya HPP:</span>
-              <strong className="text-slate-700">{formatCurrency(Math.max(0, (summary.revenue || 0) - (summary.profit || 0)))}</strong>
+            <div className="text-[9.5px] sm:text-xs font-semibold text-slate-400 truncate">
+              HPP: <strong className="text-slate-700 font-bold">{formatCurrency(Math.max(0, (summary.revenue || 0) - (summary.profit || 0)))}</strong>
             </div>
           </div>
         </div>
 
         {/* 3. Kas Fisik di Laci POS (Cash) */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
-          <div className="flex justify-between items-start mb-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black border border-amber-100">
-              <Wallet size={20} />
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group min-h-[105px] sm:min-h-[130px]">
+          <div className="flex justify-between items-start mb-1.5">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-black border border-amber-100 shrink-0">
+              <Wallet size={16} className="sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[11px] font-bold text-amber-800 bg-amber-50/80 px-2.5 py-1 rounded-full border border-amber-200">
-              Fisik di Laci
+            <span className="text-[9px] sm:text-[10px] font-bold text-amber-800 bg-amber-50/90 px-1.5 sm:px-2 py-0.5 rounded-full border border-amber-200 truncate max-w-[90px]">
+              Fisik Laci
             </span>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Uang Kas Fisik POS</div>
-            <div className="text-2xl sm:text-3xl font-black text-amber-700 tracking-tight">
+            <div className="text-[9.5px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Uang Kas Fisik
+            </div>
+            <div className="text-sm sm:text-xl lg:text-2xl font-black text-amber-700 tracking-tight leading-tight my-0.5 truncate">
               {formatCurrency(cashAmount)}
             </div>
-            <div className="text-[11px] font-semibold text-slate-400 mt-1.5 flex items-center gap-1">
-              <span>Porsi omzet:</span>
-              <strong className="text-slate-700">{summary.revenue > 0 ? Math.round((cashAmount / summary.revenue) * 100) : 0}%</strong>
+            <div className="text-[9.5px] sm:text-xs font-semibold text-slate-400 truncate">
+              Porsi: <strong className="text-slate-700 font-bold">{summary.revenue > 0 ? Math.round((cashAmount / summary.revenue) * 100) : 0}%</strong>
             </div>
           </div>
         </div>
 
         {/* 4. Non-Tunai / QRIS / Digital */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group">
-          <div className="flex justify-between items-start mb-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black border border-blue-100">
-              <QrCode size={20} />
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between relative overflow-hidden group min-h-[105px] sm:min-h-[130px]">
+          <div className="flex justify-between items-start mb-1.5">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black border border-blue-100 shrink-0">
+              <QrCode size={16} className="sm:w-5 sm:h-5" />
             </div>
-            <span className="text-[11px] font-bold text-blue-800 bg-blue-50/80 px-2.5 py-1 rounded-full border border-blue-200">
-              Bank / Settlement
+            <span className="text-[9px] sm:text-[10px] font-bold text-blue-800 bg-blue-50/90 px-1.5 sm:px-2 py-0.5 rounded-full border border-blue-200 truncate max-w-[90px]">
+              Non-Tunai
             </span>
           </div>
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Non-Tunai &amp; Digital</div>
-            <div className="text-2xl sm:text-3xl font-black text-blue-700 tracking-tight">
+            <div className="text-[9.5px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Digital / Transfer
+            </div>
+            <div className="text-sm sm:text-xl lg:text-2xl font-black text-blue-700 tracking-tight leading-tight my-0.5 truncate">
               {formatCurrency(digitalAmount)}
             </div>
-            <div className="text-[11px] font-semibold text-slate-400 mt-1.5 flex items-center gap-1">
-              <span>Porsi omzet:</span>
-              <strong className="text-slate-700">{summary.revenue > 0 ? Math.round((digitalAmount / summary.revenue) * 100) : 0}%</strong>
+            <div className="text-[9.5px] sm:text-xs font-semibold text-slate-400 truncate">
+              Porsi: <strong className="text-slate-700 font-bold">{summary.revenue > 0 ? Math.round((digitalAmount / summary.revenue) * 100) : 0}%</strong>
             </div>
           </div>
         </div>

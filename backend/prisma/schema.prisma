@@ -651,21 +651,32 @@ model OrderItem {
 }
 
 model CashFlow {
-  id          Int      @id @default(autoincrement())
-  tenantId    String?
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  outletId    String?
-  outlet      Outlet?  @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  type        String // Pemasukan, Pengeluaran
-  category    String
-  amount      Float
-  description String
-  user        User     @relation(fields: [userId], references: [id])
-  userId      Int
-  date        DateTime @default(now())
+  id              Int       @id @default(autoincrement())
+  tenantId        String?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId        String?
+  outlet          Outlet?   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  pocket          String    @default("OPERATIONAL") // "OPERATIONAL" (Petty Cash) | "DRAWER" (Laci Kasir)
+  type            String    // Pemasukan, Pengeluaran
+  category        String
+  subCategory     String?
+  amount          Float
+  description     String
+  receiptUrl      String?
+  status          String    @default("APPROVED") // "PENDING", "APPROVED", "REJECTED"
+  rejectionReason String?
+  approvedById    Int?
+  approvedByName  String?
+  approvedAt      DateTime?
+  autoStock       Boolean   @default(false)
+  user            User      @relation(fields: [userId], references: [id])
+  userId          Int
+  date            DateTime  @default(now())
 
   @@index([tenantId])
   @@index([outletId])
+  @@index([pocket])
+  @@index([status])
   @@index([tenantId, date])
   @@index([tenantId, type])
   @@index([userId])
@@ -737,6 +748,7 @@ model Settings {
   // Kontrol Dapur & Audit Opsional
   enableKitchenAuditMode    Boolean @default(false)
   enableStaffMealTracking   Boolean @default(true)
+  enableBlindClose          Boolean @default(true) // Blind Cash Drawer Count saat tutup shift
 
   // Konfigurasi Printer Kasir 80mm
   printerIp          String  @default("")
@@ -795,21 +807,24 @@ model Settings {
 }
 
 model Shift {
-  id              Int       @id @default(autoincrement())
-  tenantId        String?
-  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  outletId        String?
-  outlet          Outlet?   @relation(fields: [outletId], references: [id], onDelete: Cascade)
-  userId          Int
-  user            User      @relation(fields: [userId], references: [id])
-  waktuBuka       DateTime  @default(now())
-  waktuTutup      DateTime?
-  saldoAwal       Float
-  saldoSistem     Float?
-  saldoElektronik Float?
-  saldoFisikLaci  Float?
-  selisih         Float?
-  status          String    @default("Open") // Open, Closed
+  id                Int       @id @default(autoincrement())
+  tenantId          String?
+  tenant            Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId          String?
+  outlet            Outlet?   @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  userId            Int
+  user              User      @relation(fields: [userId], references: [id])
+  waktuBuka         DateTime  @default(now())
+  waktuTutup        DateTime?
+  saldoAwal         Float
+  saldoSistem       Float?
+  saldoElektronik   Float?
+  saldoFisikLaci    Float?
+  selisih           Float?
+  cashDenominations String?   // JSON pecahan uang e.g. {"100000": 10, "50000": 5}
+  isBlindCount      Boolean   @default(true) // Ditutup dengan mode blind count
+  catatan           String?
+  status            String    @default("Open") // Open, Closed
 
   @@index([tenantId])
   @@index([outletId])

@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
-import { 
-  Package, Plus, Search, RotateCcw, Edit, Copy, Trash2, 
-  AlertTriangle, CheckCircle, XCircle, Wallet, Grid, List, Layers, Tag 
-} from 'lucide-react';
-import ProductModal from './ProductModal';
-import { CategoryModal } from './CategoryModal';
-import { POSContext } from '../context/POSContext';
-import { toast, confirmAlert } from '../utils/alert';
+﻿import React, { useState, useEffect, useContext, useMemo } from "react";
+import {
+  Package, Plus, Search, Edit, Trash2,
+  AlertTriangle, CheckCircle, XCircle, Wallet,
+  Grid, List, LayoutList, Barcode, Camera,
+  Sparkles, ChevronRight, Layers, RotateCcw
+} from "lucide-react";
+import ProductModal from "./ProductModal";
+import { CategoryModal } from "./CategoryModal";
+import { POSContext } from "../context/POSContext";
+import { toast, confirmAlert } from "../utils/alert";
+
+type ViewMode = "ringkas" | "tabel" | "grid";
 
 const ProductView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,469 +19,464 @@ const ProductView = () => {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
-  const [filterSubCategory, setFilterSubCategory] = useState('');
-  const [filterStock, setFilterStock] = useState('Semua');
+  const [viewMode, setViewMode] = useState<ViewMode>("ringkas");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterStock, setFilterStock] = useState("Semua");
 
   const posContext = useContext(POSContext);
-
-  const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
+  const fmt = (val: number) => `Rp ${(val || 0).toLocaleString("id-ID")}`;
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch('/api/products', {
-        headers: { Authorization: `Bearer ${posContext?.token}` }
-      });
+      const res = await fetch("/api/products", { headers: { Authorization: `Bearer ${posContext?.token}` } });
       const data = await res.json();
       if (res.ok) setProducts(data);
-    } catch (err) {
-      console.error('Failed to fetch products', err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/categories', {
-        headers: { Authorization: `Bearer ${posContext?.token}` }
-      });
+      const res = await fetch("/api/categories", { headers: { Authorization: `Bearer ${posContext?.token}` } });
       const data = await res.json();
       if (res.ok) setCategories(data);
-    } catch (err) {
-      console.error('Failed to fetch categories', err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   useEffect(() => {
     if (posContext?.token) {
-      fetchProducts();
-      fetchCategories();
-      setLoading(false);
+      Promise.all([fetchProducts(), fetchCategories()]).finally(() => setLoading(false));
     }
   }, [posContext?.token]);
 
-  const openAddModal = () => {
-    setSelectedProduct(null);
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (product: any) => {
-    setSelectedProduct(product);
-    setIsModalOpen(true);
-  };
+  const openAddModal = () => { setSelectedProduct(null); setIsModalOpen(true); };
+  const openEditModal = (p: any) => { setSelectedProduct(p); setIsModalOpen(true); };
 
   const handleDelete = async (id: number) => {
-    const result = await confirmAlert('Hapus Produk?', 'Apakah Anda yakin ingin menghapus produk ini?');
+    const result = await confirmAlert("Hapus Produk?", "Apakah Anda yakin ingin menghapus produk ini?");
     if (!result.isConfirmed) return;
     try {
-      const res = await fetch(`/api/products/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${posContext?.token}` }
-      });
-      if (res.ok) {
-        fetchProducts();
-        toast('Produk berhasil dihapus', 'success');
-      } else {
-        toast('Gagal menghapus produk', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      toast('Terjadi kesalahan server', 'error');
-    }
+      const res = await fetch(`/api/products/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${posContext?.token}` } });
+      if (res.ok) { fetchProducts(); toast("Produk berhasil dihapus", "success"); }
+      else toast("Gagal menghapus produk", "error");
+    } catch { toast("Terjadi kesalahan server", "error"); }
   };
 
   const handleSave = async (data: any) => {
     const isEdit = !!selectedProduct;
-    const url = isEdit 
-      ? `/api/products/${selectedProduct.id}`
-      : '/api/products';
-    
     try {
-      const res = await fetch(url, {
-        method: isEdit ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${posContext?.token}`
-        },
+      const res = await fetch(isEdit ? `/api/products/${selectedProduct.id}` : "/api/products", {
+        method: isEdit ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${posContext?.token}` },
         body: JSON.stringify(data)
       });
-      if (res.ok) {
-        setIsModalOpen(false);
-        fetchProducts();
-        toast('Produk berhasil disimpan!', 'success');
-      } else {
-        const err = await res.json();
-        toast(`Error: ${err.error}`, 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      toast('Terjadi kesalahan saat menyimpan produk', 'error');
-    }
+      if (res.ok) { setIsModalOpen(false); fetchProducts(); toast("Produk berhasil disimpan!", "success"); }
+      else { const err = await res.json(); toast(`Error: ${err.error}`, "error"); }
+    } catch { toast("Terjadi kesalahan saat menyimpan produk", "error"); }
   };
 
-  const resetFilters = () => {
-    setSearchQuery('');
-    setFilterCategory('');
-    setFilterSubCategory('');
-    setFilterStock('Semua');
-  };
+  const resetFilters = () => { setSearchQuery(""); setFilterCategory(""); setFilterStock("Semua"); };
 
-  // Get active subcategories based on selected category filter
-  const activeSubCategories = useMemo(() => {
-    if (!filterCategory) return [];
-    const cat = categories.find(c => String(c.id) === String(filterCategory));
-    return cat?.subCategories || [];
-  }, [filterCategory, categories]);
-
-  // Filtered products list
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      // Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchName = p.name?.toLowerCase().includes(q);
-        const matchBarcode = p.barcode?.toLowerCase().includes(q);
-        if (!matchName && !matchBarcode) return false;
+        if (!p.name?.toLowerCase().includes(q) && !p.barcode?.toLowerCase().includes(q)) return false;
       }
-
-      // Category filter
-      if (filterCategory && String(p.categoryId) !== String(filterCategory)) {
-        return false;
-      }
-
-      // Sub-category filter
-      if (filterSubCategory && String(p.subCategoryId) !== String(filterSubCategory)) {
-        return false;
-      }
-
-      // Stock filter
-      if (filterStock === 'Stok Aman' && p.stock <= p.minStock) return false;
-      if (filterStock === 'Stok Menipis' && (p.stock <= 0 || p.stock > p.minStock)) return false;
-      if (filterStock === 'Habis' && p.stock > 0) return false;
-
+      if (filterCategory && String(p.categoryId) !== String(filterCategory)) return false;
+      if (filterStock === "Stok Aman" && p.stock <= p.minStock) return false;
+      if (filterStock === "Stok Menipis" && (p.stock <= 0 || p.stock > p.minStock)) return false;
+      if (filterStock === "Habis" && p.stock > 0) return false;
       return true;
     });
-  }, [products, searchQuery, filterCategory, filterSubCategory, filterStock]);
+  }, [products, searchQuery, filterCategory, filterStock]);
 
   const totalValue = products.reduce((sum, p) => sum + (p.buyPrice * p.stock), 0);
   const outOfStockCount = products.filter(p => p.stock <= 0 || p.isSoldOut).length;
   const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= p.minStock && !p.isSoldOut).length;
-  const activeCount = products.filter(p => p.status === 'Aktif').length;
+  const activeCount = products.filter(p => p.status === "Aktif").length;
+
+  const getStockBadge = (p: any) => {
+    if (p.stock <= 0 || p.isSoldOut) return { label: "0 pcs", cls: "bg-red-100 text-red-600 border-red-200" };
+    if (p.stock <= p.minStock) return { label: `${p.stock} pcs`, cls: "bg-amber-100 text-amber-700 border-amber-200" };
+    return { label: `${p.stock} pcs`, cls: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+  };
 
   return (
-    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-5">
-      
-      {/* HEADER ACTION TOOLBAR */}
-      <div className="flex flex-wrap justify-between items-center gap-2.5 sm:gap-4 shrink-0">
-        <div className="hidden sm:block">
-          <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800">
-            <Package className="text-primary" size={24} /> Manajemen Produk
-          </h2>
-          <p className="text-muted text-xs mt-0.5">Kelola katalog produk, harga jual, stok, dan klasifikasi kategori</p>
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button 
-            className="flex-1 sm:flex-none btn bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs py-2.5 px-3.5 rounded-xl transition-all active:scale-95"
-            onClick={() => setIsCategoryModalOpen(true)}
-          >
-            <Layers size={15} className="text-indigo-600" /> Kelola Kategori
-          </button>
-          <button 
-            className="flex-1 sm:flex-none btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-1.5 font-bold text-xs py-2.5 px-4 rounded-xl transition-all active:scale-95" 
+    <div className="flex flex-col gap-0 pb-28 md:pb-6 bg-slate-50 min-h-screen">
+
+      {/* PAGE HEADER */}
+      <div className="bg-white px-4 pt-4 pb-3 border-b border-slate-100">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md shadow-violet-500/20 shrink-0">
+              <Package size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-base font-extrabold text-slate-800 leading-tight">Manajemen Produk</h1>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">Kelola harga jual, stok &amp; klasifikasi kategori</p>
+            </div>
+          </div>
+          <button
             onClick={openAddModal}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md shadow-violet-500/25 active:scale-95 transition-all shrink-0"
           >
-            <Plus size={15} /> + Tambah Produk
+            <Plus size={15} /> Tambah
+          </button>
+        </div>
+
+        {/* Quick Action Chips */}
+        <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar pb-1">
+          <button className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-sm active:scale-95 transition-all">
+            <Sparkles size={12} /> AI Profit Advisor
+          </button>
+          <button className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-600 shadow-sm active:scale-95 transition-all">
+            <Barcode size={12} /> Cetak Barcode
+          </button>
+          <button
+            onClick={() => setIsCategoryModalOpen(true)}
+            className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-600 shadow-sm active:scale-95 transition-all"
+          >
+            <Layers size={12} /> Kategori
+          </button>
+          <button
+            onClick={resetFilters}
+            className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-600 shadow-sm active:scale-95 transition-all"
+          >
+            <RotateCcw size={12} /> Reset Filter
           </button>
         </div>
       </div>
 
-      {/* SUMMARY STAT CARDS (Compact 2-col on Mobile, 5-col on Desktop) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3.5 shrink-0">
-        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
-          <div>
-            <div className="text-lg sm:text-2xl font-black text-slate-800">{products.length}</div>
-            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Total Produk</div>
-          </div>
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
-            <Package size={18} />
-          </div>
-        </div>
+      <div className="px-4 py-4 flex flex-col gap-4">
 
-        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-rose-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
-          <div>
-            <div className="text-lg sm:text-2xl font-black text-rose-600">{outOfStockCount}</div>
-            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Stok Habis (0)</div>
-          </div>
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500">
-            <XCircle size={18} />
-          </div>
-        </div>
-        
-        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-amber-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
-          <div>
-            <div className="text-lg sm:text-2xl font-black text-amber-600">{lowStockCount}</div>
-            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Stok Menipis</div>
-          </div>
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
-            <AlertTriangle size={18} />
-          </div>
-        </div>
-
-        <div className="card flex items-center justify-between p-3 sm:p-4 border-l-4 border-emerald-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
-          <div>
-            <div className="text-lg sm:text-2xl font-black text-emerald-600">{activeCount}</div>
-            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Produk Aktif</div>
-          </div>
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <CheckCircle size={18} />
-          </div>
-        </div>
-
-        <div className="col-span-2 sm:col-span-1 card flex items-center justify-between p-3 sm:p-4 border-l-4 border-indigo-500 shadow-sm hover:shadow-md transition-shadow bg-white rounded-xl">
-          <div>
-            <div className="text-base sm:text-xl font-black text-indigo-700">{formatCurrency(totalValue)}</div>
-            <div className="text-[10px] sm:text-xs font-semibold text-slate-500">Nilai Stok (HPP)</div>
-          </div>
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500">
-            <Wallet size={18} />
-          </div>
-        </div>
-      </div>
-
-      {/* FILTER & DATA SECTION */}
-      <div className="card flex-1 flex flex-col p-0 border border-gray-200 shadow-sm bg-white rounded-2xl shrink-0">
-        
-        {/* FILTER BAR */}
-        <div className="p-4 border-b border-gray-200 bg-white flex flex-wrap gap-3 items-center justify-between">
-          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
-            {/* Search Input */}
-            <div className="relative min-w-[200px] flex-1">
-              <Search size={16} className="absolute left-3.5 top-3 text-muted" />
-              <input 
-                type="text" 
-                className="form-control !pl-9.5 text-xs py-2 rounded-xl" 
-                placeholder="Cari nama produk / barcode..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+        {/* STATS CARDS 2x2 */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white rounded-2xl p-3.5 flex items-center justify-between shadow-sm border border-slate-100/80">
+            <div>
+              <div className="text-2xl font-black text-slate-800">{products.length}</div>
+              <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Total Produk</div>
             </div>
-
-            {/* Category Filter */}
-            <div className="min-w-[160px]">
-              <select 
-                className="form-control text-xs py-2 rounded-xl"
-                value={filterCategory}
-                onChange={(e) => {
-                  setFilterCategory(e.target.value);
-                  setFilterSubCategory('');
-                }}
-              >
-                <option value="">Semua Kategori</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+              <Package size={20} className="text-violet-600" />
             </div>
-
-            {/* Sub-Category Filter (Shows when category has subcategories) */}
-            {activeSubCategories.length > 0 && (
-              <div className="min-w-[160px] animate-fade-in">
-                <select 
-                  className="form-control text-xs py-2 rounded-xl border-indigo-200 bg-indigo-50/40 text-indigo-900"
-                  value={filterSubCategory}
-                  onChange={(e) => setFilterSubCategory(e.target.value)}
-                >
-                  <option value="">Semua Sub-Kategori</option>
-                  {activeSubCategories.map((sc: any) => (
-                    <option key={sc.id} value={sc.id}>{sc.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Stock Filter */}
-            <div className="min-w-[130px]">
-              <select 
-                className="form-control text-xs py-2 rounded-xl"
-                value={filterStock}
-                onChange={(e) => setFilterStock(e.target.value)}
-              >
-                <option value="Semua">Semua Stok</option>
-                <option value="Stok Aman">Stok Aman</option>
-                <option value="Stok Menipis">Stok Menipis</option>
-                <option value="Habis">Habis</option>
-              </select>
-            </div>
-
-            {/* Reset Button */}
-            {(searchQuery || filterCategory || filterSubCategory || filterStock !== 'Semua') && (
-              <button 
-                className="btn bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs py-2 px-3 rounded-xl flex items-center gap-1.5 transition-colors"
-                onClick={resetFilters}
-                title="Reset Semua Filter"
-              >
-                <RotateCcw size={14} /> Reset
-              </button>
-            )}
           </div>
+
+          <div className="bg-white rounded-2xl p-3.5 flex items-center justify-between shadow-sm border border-slate-100/80">
+            <div>
+              <div className="text-2xl font-black text-slate-800">{activeCount}</div>
+              <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Produk Aktif</div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <CheckCircle size={20} className="text-emerald-600" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-3.5 flex items-center justify-between shadow-sm border border-slate-100/80">
+            <div>
+              <div className="text-2xl font-black text-slate-800">{lowStockCount}</div>
+              <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Stok Menipis</div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+              <AlertTriangle size={20} className="text-amber-500" />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-3.5 flex items-center justify-between shadow-sm border border-slate-100/80">
+            <div>
+              <div className="text-2xl font-black text-slate-800">{outOfStockCount}</div>
+              <div className="text-[11px] font-semibold text-slate-400 mt-0.5">Stok Habis</div>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+              <XCircle size={20} className="text-red-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* NILAI STOK HPP */}
+        <div className="bg-white rounded-2xl p-4 flex items-center justify-between shadow-sm border border-slate-100/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+              <Wallet size={20} className="text-indigo-600" />
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-slate-400">Nilai Stok (HPP)</div>
+              <div className="text-lg font-black text-indigo-700 mt-0.5">{fmt(totalValue)}</div>
+            </div>
+          </div>
+          <button className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-xl active:scale-95 transition-all">
+            Nilai HPP
+          </button>
+        </div>
+
+        {/* SEARCH BAR */}
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-center gap-2 bg-white rounded-2xl px-4 py-2.5 shadow-sm border border-slate-200">
+            <Search size={16} className="text-slate-400 shrink-0" />
+            <input
+              type="text"
+              className="flex-1 bg-transparent text-sm text-slate-700 placeholder-slate-400 outline-none font-medium"
+              placeholder="Scan barcode atau ketik nama produk..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button className="w-11 h-11 rounded-2xl bg-violet-600 hover:bg-violet-700 flex items-center justify-center shadow-md shadow-violet-500/25 active:scale-95 transition-all shrink-0">
+            <Camera size={18} className="text-white" />
+          </button>
+        </div>
+
+        {/* FILTER ROW */}
+        <div className="flex items-center gap-2">
+          <select
+            className="flex-1 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 px-3 py-2.5 shadow-sm outline-none"
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+          >
+            <option value="">Semua Ka...</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+
+          <select
+            className="flex-1 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 px-3 py-2.5 shadow-sm outline-none"
+            value={filterStock}
+            onChange={(e) => setFilterStock(e.target.value)}
+          >
+            <option value="Semua">Semua Sto...</option>
+            <option value="Stok Aman">Stok Aman</option>
+            <option value="Stok Menipis">Stok Menipis</option>
+            <option value="Habis">Habis</option>
+          </select>
 
           {/* View Mode Toggle */}
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-            <button 
-              className={`flex items-center justify-center p-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors ${viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-              onClick={() => setViewMode('grid')}
-              title="Tampilan Grid (Kartu)"
+          <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm shrink-0">
+            <button
+              onClick={() => setViewMode("ringkas")}
+              className={`flex items-center gap-1 px-2.5 py-2 text-[11px] font-bold transition-all ${viewMode === "ringkas" ? "bg-violet-600 text-white" : "text-slate-500"}`}
             >
-              <Grid size={15} className="mr-1" /> Grid
+              <LayoutList size={13} /> <span className="hidden sm:inline">Ringkas</span>
             </button>
-            <button 
-              className={`flex items-center justify-center p-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors ${viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-              onClick={() => setViewMode('list')}
-              title="Tampilan List (Tabel)"
+            <button
+              onClick={() => setViewMode("tabel")}
+              className={`flex items-center gap-1 px-2.5 py-2 text-[11px] font-bold transition-all ${viewMode === "tabel" ? "bg-violet-600 text-white" : "text-slate-500"}`}
             >
-              <List size={15} className="mr-1" /> Tabel
+              <List size={13} /> <span className="hidden sm:inline">Tabel</span>
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`flex items-center gap-1 px-2.5 py-2 text-[11px] font-bold transition-all ${viewMode === "grid" ? "bg-violet-600 text-white" : "text-slate-500"}`}
+            >
+              <Grid size={13} /> <span className="hidden sm:inline">Grid</span>
             </button>
           </div>
         </div>
 
-        {/* CONTENT SECTION */}
-        <div className="flex-1 overflow-y-auto bg-slate-50">
-          {loading ? (
-            <div className="p-12 flex flex-col items-center justify-center text-gray-400">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-              <p className="font-semibold text-xs">Memuat produk...</p>
+        {/* PRODUCT COUNT */}
+        <div className="text-[11px] font-semibold text-slate-400 -mt-1">
+          Menampilkan <span className="text-violet-600 font-bold">{filteredProducts.length}</span> dari {products.length} produk
+        </div>
+
+        {/* LOADING */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-10 h-10 rounded-full border-[3px] border-violet-200 border-t-violet-600 animate-spin" />
+            <p className="text-xs font-semibold text-slate-400">Memuat produk...</p>
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+              <Package size={28} className="text-slate-300" />
             </div>
-          ) : viewMode === 'grid' ? (
-            <div className="p-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
-              {filteredProducts.length === 0 ? (
-                <div className="col-span-full text-center py-16 text-slate-400 font-medium text-xs">
-                  Tidak ada produk yang cocok dengan filter pencarian.
+            <p className="text-sm font-bold text-slate-400">Tidak ada produk ditemukan</p>
+            <p className="text-xs text-slate-300">Coba ubah filter pencarian</p>
+          </div>
+
+        ) : viewMode === "ringkas" ? (
+          /* RINGKAS VIEW */
+          <div className="flex flex-col gap-3">
+            {filteredProducts.map((prod) => {
+              const stock = getStockBadge(prod);
+              return (
+                <div key={prod.id} className="bg-white rounded-2xl shadow-sm border border-slate-100/80 overflow-hidden active:scale-[0.99] transition-all">
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200/60">
+                      {prod.imageUrl ? (
+                        <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package size={22} className="text-slate-300" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="font-bold text-slate-800 text-sm leading-tight truncate">{prod.name}</span>
+                        {prod.status === "Aktif" && (
+                          <span className="shrink-0 text-[9px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded-full">Aktif</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium mb-1 flex-wrap">
+                        <span className="font-bold text-slate-500">{prod.barcode || `SKU-${prod.id}`}</span>
+                        {prod.category && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span>{prod.category.name}</span>
+                            {prod.subCategory && (
+                              <>
+                                <ChevronRight size={10} className="text-slate-300 shrink-0" />
+                                <span>{prod.subCategory.name}</span>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div className="text-xs font-black text-violet-700">Ecer: {fmt(prod.sellPrice)}</div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1">
+                        <button
+                          className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 active:bg-violet-100 transition-colors"
+                          title="Barcode"
+                        >
+                          <Barcode size={13} />
+                        </button>
+                        <button
+                          className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 active:bg-violet-100 transition-colors"
+                          onClick={() => openEditModal(prod)}
+                          title="Edit"
+                        >
+                          <Edit size={13} />
+                        </button>
+                        <button
+                          className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 active:bg-rose-100 transition-colors"
+                          onClick={() => handleDelete(prod.id)}
+                          title="Hapus"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${stock.cls}`}>
+                        {stock.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 border-t border-slate-100 px-3 py-1.5 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-medium">HPP: {fmt(prod.buyPrice)}</span>
+                    <span className="text-[10px] font-bold text-emerald-600">
+                      Margin: {prod.buyPrice > 0 ? Math.round(((prod.sellPrice - prod.buyPrice) / prod.buyPrice) * 100) : 0}%
+                    </span>
+                  </div>
                 </div>
-              ) : filteredProducts.map((prod) => (
-                <div key={prod.id} className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-slate-100 flex flex-col group">
+              );
+            })}
+          </div>
+
+        ) : viewMode === "grid" ? (
+          /* GRID VIEW */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {filteredProducts.map((prod) => {
+              const stock = getStockBadge(prod);
+              return (
+                <div key={prod.id} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col group active:scale-[0.98] transition-all">
                   <div className="relative aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
                     {prod.imageUrl ? (
                       <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                     ) : (
                       <Package size={36} className="text-slate-300" />
                     )}
-                    {prod.stock <= prod.minStock && (
-                      <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                        STOK {prod.stock}
-                      </div>
-                    )}
+                    <span className={`absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${stock.cls}`}>
+                      {stock.label}
+                    </span>
                   </div>
-                  <div className="p-3.5 flex flex-col flex-1">
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 mb-1 truncate">
-                      <Tag size={11} className="shrink-0" />
-                      <span className="truncate">{prod.category?.name || 'Tanpa Kategori'}</span>
-                      {prod.subCategory && (
-                        <span className="text-slate-400 font-normal truncate">
-                          &gt; {prod.subCategory.name}
-                        </span>
-                      )}
-                    </div>
+                  <div className="p-3 flex flex-col flex-1">
+                    <div className="text-[10px] text-violet-600 font-bold truncate mb-0.5">{prod.category?.name || "Tanpa Kategori"}</div>
                     <h3 className="font-bold text-slate-800 text-xs leading-tight mb-2 line-clamp-2 flex-1">{prod.name}</h3>
-                    <div className="text-sm font-black text-primary mb-2.5">{formatCurrency(prod.sellPrice)}</div>
-                    <div className="flex gap-1 mt-auto border-t border-slate-100 pt-2.5">
-                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" title="Edit" onClick={() => openEditModal(prod)}><Edit size={13}/></button>
-                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Hapus" onClick={() => handleDelete(prod.id)}><Trash2 size={13}/></button>
+                    <div className="text-sm font-black text-violet-700 mb-2">{fmt(prod.sellPrice)}</div>
+                    <div className="flex gap-1 border-t border-slate-100 pt-2">
+                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-violet-600 bg-violet-50 hover:bg-violet-100 transition-colors" onClick={() => openEditModal(prod)}><Edit size={13} /></button>
+                      <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-rose-500 bg-rose-50 hover:bg-rose-100 transition-colors" onClick={() => handleDelete(prod.id)}><Trash2 size={13} /></button>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="table-responsive p-0 bg-white">
-              <table className="data-table w-full text-left border-collapse">
-                <thead className="bg-slate-50 sticky top-0 shadow-sm z-10 text-[11px] uppercase tracking-wider text-slate-600">
+              );
+            })}
+          </div>
+
+        ) : (
+          /* TABEL VIEW */
+          <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="px-5 py-3.5">GAMBAR</th>
-                    <th className="px-5 py-3.5">BARCODE</th>
-                    <th className="px-5 py-3.5">NAMA PRODUK</th>
-                    <th className="px-5 py-3.5">KATEGORI & SUB-KATEGORI</th>
-                    <th className="px-5 py-3.5">HARGA</th>
-                    <th className="px-5 py-3.5">STOK</th>
-                    <th className="px-5 py-3.5">STATUS</th>
-                    <th className="px-5 py-3.5 text-right">AKSI</th>
+                    <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-bold">Produk</th>
+                    <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-bold">Kategori</th>
+                    <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-bold">Harga</th>
+                    <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-bold">Stok</th>
+                    <th className="px-4 py-3 text-[10px] uppercase tracking-wider text-slate-500 font-bold">Status</th>
+                    <th className="px-4 py-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-bold">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 text-xs">
-                  {filteredProducts.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="text-center py-16 text-slate-400 font-medium">
-                        Tidak ada produk yang cocok dengan kriteria filter.
-                      </td>
-                    </tr>
-                  ) : filteredProducts.map((prod) => (
-                    <tr key={prod.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-5 py-2.5">
-                        <div className="w-12 h-12 bg-slate-100 rounded-xl overflow-hidden flex items-center justify-center border border-slate-200">
-                          {prod.imageUrl ? (
-                            <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <Package size={18} className="text-slate-400" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-2.5 font-mono text-xs text-slate-500">{prod.barcode || '-'}</td>
-                      <td className="px-5 py-2.5">
-                        <div className="font-bold text-slate-800 text-sm">{prod.name}</div>
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
-                            {prod.category?.name || '-'}
+                <tbody className="divide-y divide-slate-100">
+                  {filteredProducts.map((prod) => {
+                    const stock = getStockBadge(prod);
+                    return (
+                      <tr key={prod.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200/60">
+                              {prod.imageUrl ? (
+                                <img src={prod.imageUrl} alt={prod.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center"><Package size={16} className="text-slate-300" /></div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-800">{prod.name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{prod.barcode || "-"}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded-lg border border-violet-100">
+                            {prod.category?.name || "-"}
                           </span>
                           {prod.subCategory && (
-                            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 flex items-center gap-1">
-                              &gt; {prod.subCategory.name}
-                            </span>
+                            <div className="text-[10px] text-slate-400 mt-0.5">&gt; {prod.subCategory.name}</div>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <div className="text-[11px] text-muted font-medium">Beli: {formatCurrency(prod.buyPrice)}</div>
-                        <div className="text-xs font-black text-primary mt-0.5">Jual: {formatCurrency(prod.sellPrice)}</div>
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <div className={`font-black text-sm ${prod.stock <= prod.minStock ? 'text-red-500' : 'text-emerald-600'}`}>
-                          {prod.stock} <span className="text-[10px] font-semibold">pcs</span>
-                        </div>
-                        <div className="text-[10px] text-muted font-medium mt-0.5">Min: {prod.minStock}</div>
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${prod.status === 'Aktif' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                          {prod.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-2.5 text-right">
-                        <div className="flex justify-end gap-1.5">
-                          <button className="p-1.5 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" title="Edit" onClick={() => openEditModal(prod)}><Edit size={14}/></button>
-                          <button className="p-1.5 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" title="Hapus" onClick={() => handleDelete(prod.id)}><Trash2 size={14}/></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-[10px] text-slate-400">HPP: {fmt(prod.buyPrice)}</div>
+                          <div className="font-black text-violet-700">{fmt(prod.sellPrice)}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${stock.cls}`}>
+                            {stock.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${prod.status === "Aktif" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-slate-100 text-slate-400 border-slate-200"}`}>
+                            {prod.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <button className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:bg-violet-100 transition-colors" onClick={() => openEditModal(prod)} title="Edit"><Edit size={13} /></button>
+                            <button className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 hover:bg-rose-100 transition-colors" onClick={() => handleDelete(prod.id)} title="Hapus"><Trash2 size={13} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-        
-        {/* FOOTER BAR */}
-        <div className="p-3.5 border-t border-gray-200 bg-white text-xs font-semibold text-slate-500 flex justify-between items-center">
-          <span className="flex items-center gap-1.5">
-            <Package size={14} className="text-slate-400" />
-            <span>Menampilkan {filteredProducts.length} dari {products.length} produk</span>
-          </span>
-          <span>{posContext?.settings?.storeName || 'MUKI RAMEN'} Inventory</span>
-        </div>
+          </div>
+        )}
+
       </div>
 
-      {/* PRODUCT MODAL */}
-      <ProductModal 
+      <ProductModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         initialData={selectedProduct}
@@ -485,19 +484,13 @@ const ProductView = () => {
         onSave={handleSave}
         onManageCategories={() => setIsCategoryModalOpen(true)}
       />
-
-      {/* CATEGORY MANAGEMENT MODAL */}
       <CategoryModal
         isOpen={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
-        onCategoriesUpdated={() => {
-          fetchCategories();
-          fetchProducts();
-        }}
+        onCategoriesUpdated={() => { fetchCategories(); fetchProducts(); }}
       />
     </div>
   );
 };
 
 export default ProductView;
-

@@ -12,8 +12,10 @@ const UserView = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const posContext = useContext(POSContext);
 
-  const canViewEmployees = posContext?.hasPermission('employees.view') || posContext?.user?.role === 'Admin' || posContext?.user?.role === 'OWNER';
-  const canManageEmployees = posContext?.hasPermission('employees.manage') || posContext?.user?.role === 'Admin' || posContext?.user?.role === 'OWNER';
+  const roleLower = (posContext?.user?.role || '').toLowerCase();
+  const isSuperUser = ['admin', 'owner', 'superadmin'].includes(roleLower);
+  const canViewEmployees = (posContext?.hasPermission ? posContext.hasPermission('employees.view') : false) || isSuperUser;
+  const canManageEmployees = (posContext?.hasPermission ? posContext.hasPermission('employees.manage') : false) || isSuperUser;
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -147,8 +149,41 @@ const UserView = () => {
         </div>
       </div>
 
-      {/* STAFF LIST TABLE / CARDS */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      {/* 3 QUICK STATS */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 shrink-0">
+        <div className="p-2.5 sm:p-3.5 bg-white border border-slate-200/80 rounded-xl sm:rounded-2xl shadow-2xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-slate-900 tracking-tight">{users.length}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Total Staf</div>
+          </div>
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-blue-50 text-primary flex items-center justify-center shrink-0">
+            <Users size={15} className="sm:w-5 sm:h-5" />
+          </div>
+        </div>
+        
+        <div className="p-2.5 sm:p-3.5 bg-white border border-slate-200/80 rounded-xl sm:rounded-2xl shadow-2xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-emerald-600 tracking-tight">{users.filter(u => u.status === 'Aktif').length}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Staf Aktif</div>
+          </div>
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <CheckCircle size={15} className="sm:w-5 sm:h-5" />
+          </div>
+        </div>
+
+        <div className="p-2.5 sm:p-3.5 bg-white border border-slate-200/80 rounded-xl sm:rounded-2xl shadow-2xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-indigo-600 tracking-tight">{new Set(users.map(u => u.role)).size}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Jabatan / Role</div>
+          </div>
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <Shield size={15} className="sm:w-5 sm:h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* STAFF LIST TABLE (DESKTOP) & CARDS (MOBILE) */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden flex flex-col">
         {loading ? (
           <div className="p-8 text-center text-slate-400 text-sm">Memuat data staf...</div>
         ) : filteredUsers.length === 0 ? (
@@ -158,93 +193,174 @@ const UserView = () => {
             <p className="text-xs text-slate-400">Coba ubah kata kunci pencarian atau tambahkan staf baru.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm">
-              <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[10px] sm:text-xs">
-                <tr>
-                  <th className="py-3 px-4">Nama / Username</th>
-                  <th className="py-3 px-4">Role &amp; Jabatan</th>
-                  <th className="py-3 px-4">Tipe Kepegawaian</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Izin Fitur Utama</th>
-                  {canManageEmployees && <th className="py-3 px-4 text-right">Aksi</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredUsers.map((u) => {
-                  const empBadge = getEmploymentBadge(u.employmentType);
-                  return (
-                    <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{u.name}</div>
-                        <div className="text-xs text-slate-400 font-mono">@{u.username}</div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] border ${getRoleBadge(u.role)}`}>
+          <>
+            {/* MOBILE CARD VIEW (< md) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredUsers.map((u) => {
+                const empBadge = getEmploymentBadge(u.employmentType);
+                return (
+                  <div key={u.id} className="p-3 sm:p-4 space-y-2.5 bg-white hover:bg-slate-50/50 transition-colors">
+                    {/* Header: Avatar, Name, Username, Role, Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-50 to-primary/10 border border-indigo-100 flex items-center justify-center text-primary font-black text-sm shrink-0 shadow-2xs">
+                          {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 text-sm truncate">{u.name}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">@{u.username}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] border font-bold ${getRoleBadge(u.role)}`}>
                           {u.role}
                         </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] border font-medium ${empBadge.color}`}>
-                          {empBadge.label}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${u.status === 'Aktif' ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          {u.status === 'Aktif' ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${u.status === 'Aktif' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {u.status === 'Aktif' ? <CheckCircle size={12} className="text-emerald-500" /> : <XCircle size={12} className="text-slate-400" />}
                           {u.status}
                         </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {u.permissions?.canVoid && (
-                            <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Void</span>
-                          )}
-                          {u.permissions?.canDiscount && (
-                            <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Diskon</span>
-                          )}
-                          {u.permissions?.canEditMenu && (
-                            <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Menu</span>
-                          )}
-                          {u.permissions?.canViewReports && (
-                            <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Laporan</span>
-                          )}
-                          {u.role === 'OWNER' || u.role === 'Admin' ? (
-                            <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-bold">Akses Penuh</span>
-                          ) : null}
-                        </div>
-                      </td>
-                      {canManageEmployees && (
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => {
-                                setSelectedUser(u);
-                                setIsModalOpen(true);
-                              }}
-                              className="p-1.5 text-slate-500 hover:text-primary hover:bg-slate-100 rounded-lg transition-all"
-                              title="Edit Karyawan"
-                            >
-                              <Edit size={16} />
-                            </button>
-                            {u.role !== 'Admin' && u.role !== 'OWNER' && (
-                              <button
-                                onClick={() => handleDelete(u.id, u.name)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                title="Nonaktifkan"
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                      </div>
+                    </div>
+
+                    {/* Employment Type & Permissions */}
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] border font-medium ${empBadge.color}`}>
+                        {empBadge.label}
+                      </span>
+                      {u.permissions?.canVoid && (
+                        <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Void</span>
+                      )}
+                      {u.permissions?.canDiscount && (
+                        <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Diskon</span>
+                      )}
+                      {u.permissions?.canEditMenu && (
+                        <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Menu</span>
+                      )}
+                      {u.permissions?.canViewReports && (
+                        <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Laporan</span>
+                      )}
+                      {(u.role === 'OWNER' || u.role === 'Admin' || u.role === 'ADMIN') && (
+                        <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-bold">Akses Penuh</span>
+                      )}
+                    </div>
+
+                    {/* Action Buttons for Mobile */}
+                    {canManageEmployees && (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => {
+                            setSelectedUser(u);
+                            setIsModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
+                        >
+                          <Edit size={13} className="text-primary" /> Edit
+                        </button>
+                        {u.role !== 'Admin' && u.role !== 'OWNER' && u.role !== 'ADMIN' && (
+                          <button
+                            onClick={() => handleDelete(u.id, u.name)}
+                            className="px-3 py-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
+                          >
+                            <Trash2 size={13} /> Nonaktifkan
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* DESKTOP TABLE VIEW (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[10px] sm:text-xs">
+                  <tr>
+                    <th className="py-3 px-4">Nama / Username</th>
+                    <th className="py-3 px-4">Role &amp; Jabatan</th>
+                    <th className="py-3 px-4">Tipe Kepegawaian</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Izin Fitur Utama</th>
+                    {canManageEmployees && <th className="py-3 px-4 text-right">Aksi</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {filteredUsers.map((u) => {
+                    const empBadge = getEmploymentBadge(u.employmentType);
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-900">{u.name}</div>
+                          <div className="text-xs text-slate-400 font-mono">@{u.username}</div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] border ${getRoleBadge(u.role)}`}>
+                            {u.role}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[11px] border font-medium ${empBadge.color}`}>
+                            {empBadge.label}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className={`inline-flex items-center gap-1 text-xs font-semibold ${u.status === 'Aktif' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {u.status === 'Aktif' ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                            {u.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {u.permissions?.canVoid && (
+                              <span className="bg-rose-50 text-rose-700 border border-rose-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Void</span>
+                            )}
+                            {u.permissions?.canDiscount && (
+                              <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Diskon</span>
+                            )}
+                            {u.permissions?.canEditMenu && (
+                              <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Menu</span>
+                            )}
+                            {u.permissions?.canViewReports && (
+                              <span className="bg-purple-50 text-purple-700 border border-purple-200 text-[10px] px-1.5 py-0.5 rounded font-medium">Laporan</span>
+                            )}
+                            {(u.role === 'OWNER' || u.role === 'Admin' || u.role === 'ADMIN') && (
+                              <span className="bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-bold">Akses Penuh</span>
                             )}
                           </div>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        {canManageEmployees && (
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => {
+                                  setSelectedUser(u);
+                                  setIsModalOpen(true);
+                                }}
+                                className="p-1.5 text-slate-500 hover:text-primary hover:bg-slate-100 rounded-lg transition-all"
+                                title="Edit Karyawan"
+                              >
+                                <Edit size={16} />
+                              </button>
+                              {u.role !== 'Admin' && u.role !== 'OWNER' && (
+                                <button
+                                  onClick={() => handleDelete(u.id, u.name)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                  title="Nonaktifkan"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

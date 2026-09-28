@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -60,11 +61,19 @@ const ProductModal: React.FC<ProductModalProps> = ({
       return;
     }
 
-    const data = new FormData();
-    data.append('image', file);
-
     setUploading(true);
     try {
+      // Otomatis kompresi gambar menu ke format WebP (max 1000px, quality 0.82)
+      const optimizedFile = await compressImageFile(file, {
+        maxWidth: 1000,
+        maxHeight: 1000,
+        quality: 0.82,
+        format: 'image/webp'
+      });
+
+      const data = new FormData();
+      data.append('image', optimizedFile);
+
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: {
@@ -75,8 +84,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
       const resData = await res.json();
       if (res.ok) {
-        setFormData(prev => ({ ...prev, imageUrl: resData.imageUrl }));
-        toast('Foto berhasil diunggah!', 'success');
+        setFormData(prev => ({ ...prev, imageUrl: resData.imageUrl || resData.url }));
+        toast('Foto produk berhasil diunggah (teroptimasi WebP)!', 'success');
       } else {
         toast(resData.error || 'Gagal mengunggah foto', 'error');
       }
@@ -325,9 +334,27 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         </div>
                       ) : formData.imageUrl ? (
                         <>
-                          <img src={formData.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-white text-xs font-bold bg-black/50 px-3 py-1.5 rounded-xl backdrop-blur-sm">Ganti Foto</span>
+                          <img 
+                            src={formData.imageUrl} 
+                            alt="Preview" 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.warn('Gagal memuat preview gambar:', formData.imageUrl);
+                              (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-white text-xs font-bold bg-black/60 px-3 py-1.5 rounded-xl backdrop-blur-sm shadow">Ganti Foto</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFormData(prev => ({ ...prev, imageUrl: '' }));
+                              }}
+                              className="text-white text-xs font-bold bg-rose-600/90 hover:bg-rose-700 px-3 py-1.5 rounded-xl backdrop-blur-sm shadow flex items-center gap-1"
+                            >
+                              <Trash2 size={13} /> Hapus
+                            </button>
                           </div>
                         </>
                       ) : (

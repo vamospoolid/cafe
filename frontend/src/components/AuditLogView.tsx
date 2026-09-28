@@ -359,7 +359,7 @@ const AuditLogView: React.FC = () => {
               <option value="SETTINGS">SETTINGS (Pengaturan Toko)</option>
               <option value="FINANCE">FINANCE (Kas & Keuangan)</option>
               <option value="INVENTORY">INVENTORY (Stok)</option>
-              <option value="BILLING">BILLING (SaaS & Payment)</option>
+              <option value="BILLING">BILLING (Pembayaran)</option>
             </select>
           </div>
 

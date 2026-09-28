@@ -2437,25 +2437,32 @@ export const exportShiftSettlementPDF = async (
   const nonCashSales = shiftData.nonCashSales || 0;
 
   // Resilient fallback jika shiftData belum di-enrich oleh backend API
+  const isBlindMasked = Boolean(shiftData.isBlindCount && (shiftData.selisih === null || shiftData.selisih === undefined));
+
+  // Resilient fallback jika shiftData belum di-enrich oleh backend API
   const cashSales = shiftData.cashSales !== undefined 
     ? shiftData.cashSales 
     : (shiftData.saldoSistem !== undefined ? Math.max(0, shiftData.saldoSistem - saldoAwal - manualCashIn - cashDebtIncome + manualCashOut) : 0);
 
   const saldoSistem = shiftData.saldoSistem !== undefined ? shiftData.saldoSistem : (saldoAwal + cashSales + cashDebtIncome + manualCashIn - manualCashOut);
   const saldoFisikLaci = shiftData.saldoFisikLaci !== undefined ? shiftData.saldoFisikLaci : 0;
-  const selisih = shiftData.selisih !== undefined ? shiftData.selisih : (saldoFisikLaci - saldoSistem);
+  const selisih = shiftData.selisih !== undefined && shiftData.selisih !== null ? shiftData.selisih : (saldoFisikLaci - saldoSistem);
 
   const tableRows = [
     ['1', 'Modal Awal Kasir (Starting Float Laci)', 'Kas Awal', formatCurrency(saldoAwal)],
-    ['2', 'Total Penjualan Tunai (Cash)', 'Omset Tunai (+)', formatCurrency(cashSales)],
+    ['2', 'Total Penjualan Tunai (Cash)', isBlindMasked ? 'Terkunci' : 'Omset Tunai (+)', isBlindMasked ? 'Disembunyikan' : formatCurrency(cashSales)],
     ['3', 'Total Penjualan Non-Tunai (QRIS / EDC / Transfer)', 'Elektronik (Bank)', formatCurrency(nonCashSales)],
     ['4', `Transaksi Batal / Void (${voidCount} Order)`, 'Info Pengawasan', voidCashTotal > 0 ? formatCurrency(voidCashTotal) : 'Rp 0'],
-    ['5', 'Pemasukan Kas Manual (Petty Cash In)', 'Kas Masuk (+)', formatCurrency(manualCashIn)],
-    ['6', 'Pengeluaran Kas Manual (Petty Cash Out)', 'Kas Keluar (-)', manualCashOut > 0 ? `-${formatCurrency(manualCashOut)}` : 'Rp 0'],
-    ['7', 'Pelunasan Piutang Kas (Debt Collection)', 'Kas Masuk (+)', formatCurrency(cashDebtIncome)],
-    ['8', 'TOTAL SALDO KAS SISTEM (Ekspektasi Uang Laci)', 'Saldo Sistem', formatCurrency(saldoSistem)],
-    ['9', 'UANG KAS FISIK DIHITUNG DI LACI (Actual Cash)', 'Fisik Laci', formatCurrency(saldoFisikLaci)],
-    ['10', 'SELISIH KAS (VARIANCE / DISCREPANCY)', selisih === 0 ? 'STATUS: PAS (BALANCE)' : selisih < 0 ? 'STATUS: KURANG (SHORT)' : 'STATUS: LEBIH (OVER)', formatCurrency(selisih)]
+    ['5', 'Pemasukan Kas Manual (Petty Cash In)', isBlindMasked ? 'Terkunci' : 'Kas Masuk (+)', isBlindMasked ? 'Disembunyikan' : formatCurrency(manualCashIn)],
+    ['6', 'Pengeluaran Kas Manual (Petty Cash Out)', isBlindMasked ? 'Terkunci' : 'Kas Keluar (-)', isBlindMasked ? 'Disembunyikan' : (manualCashOut > 0 ? `-${formatCurrency(manualCashOut)}` : 'Rp 0')],
+    ['7', 'Pelunasan Piutang Kas (Debt Collection)', isBlindMasked ? 'Terkunci' : 'Kas Masuk (+)', isBlindMasked ? 'Disembunyikan' : formatCurrency(cashDebtIncome)],
+    ['8', 'TOTAL SALDO KAS SISTEM (Ekspektasi Uang Laci)', isBlindMasked ? 'Blind Count' : 'Saldo Sistem', isBlindMasked ? 'Disembunyikan (Blind Mode)' : formatCurrency(saldoSistem)],
+    ['9', 'UANG KAS FISIK DIHITUNG DI LACI (Actual Cash)', 'Fisik Laci (Riil)', formatCurrency(saldoFisikLaci)],
+    ['10', 'SELISIH KAS (VARIANCE / DISCREPANCY)', 
+      isBlindMasked 
+        ? 'Verifikasi Server Pusat' 
+        : (selisih === 0 ? 'STATUS: PAS (BALANCE)' : selisih < 0 ? 'STATUS: KURANG (SHORT)' : 'STATUS: LEBIH (OVER)'), 
+      isBlindMasked ? 'Diverifikasi oleh Owner' : formatCurrency(selisih)]
   ];
 
   autoTable(doc, {
@@ -2486,7 +2493,10 @@ export const exportShiftSettlementPDF = async (
           hookData.cell.styles.fontStyle = 'bold';
         }
         if (rowIdx === 9) {
-          if (selisih === 0) {
+          if (isBlindMasked) {
+            hookData.cell.styles.fillColor = [254, 252, 232];
+            hookData.cell.styles.textColor = [133, 77, 14];
+          } else if (selisih === 0) {
             hookData.cell.styles.fillColor = [240, 253, 244];
             hookData.cell.styles.textColor = [22, 101, 52];
           } else if (selisih < 0) {
@@ -2502,10 +2512,90 @@ export const exportShiftSettlementPDF = async (
     }
   });
 
-  const finalY = (doc as any).lastAutoTable?.finalY || 180;
+  let currentY = (doc as any).lastAutoTable?.finalY || 180;
+
+  // ── Optional: Denomination Breakdown Table ──
+  let denomData: Record<string, number> = {};
+  if (shiftData.cashDenominations) {
+    try {
+      denomData = typeof shiftData.cashDenominations === 'string'
+        ? JSON.parse(shiftData.cashDenominations)
+        : shiftData.cashDenominations;
+    } catch { denomData = {}; }
+  }
+
+  const denomEntries = Object.entries(denomData).filter(([, count]) => Number(count) > 0);
+  if (denomEntries.length > 0) {
+    const DENOM_LABELS: Record<string, string> = {
+      '100000': 'Rp 100.000 (Merah)',
+      '50000':  'Rp 50.000 (Biru)',
+      '20000':  'Rp 20.000 (Hijau)',
+      '10000':  'Rp 10.000 (Ungu)',
+      '5000':   'Rp 5.000 (Kuning)',
+      '2000':   'Rp 2.000 (Abu)',
+      '1000':   'Rp 1.000 (Krem)',
+      'coins':  'Uang Koin / Receh'
+    };
+
+    const denomRows = denomEntries.map(([key, count], idx) => {
+      const val = key === 'coins' ? Number(count) : Number(key) * Number(count);
+      return [
+        String(idx + 1),
+        DENOM_LABELS[key] || `Rp ${key}`,
+        key === 'coins' ? '-' : `${count} Lembar`,
+        formatCurrency(val)
+      ];
+    });
+
+    denomRows.push(['', 'TOTAL FISIK TERHITUNG DARI PECAHAN', '', formatCurrency(saldoFisikLaci)]);
+
+    currentY += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text('RINCIAN PECAHAN UANG FISIK (PHYSICAL CASH COUNT)', margin, currentY);
+
+    autoTable(doc, {
+      head: [['No', 'Pecahan Uang', 'Kuantitas', 'Subtotal']],
+      body: denomRows,
+      startY: currentY + 2,
+      margin: { left: margin, right: margin },
+      theme: 'plain',
+      styles: { fontSize: 7.5, cellPadding: 1.8, font: 'helvetica', textColor: [51, 65, 85] },
+      headStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 10 },
+        1: { fontStyle: 'normal' },
+        2: { halign: 'center', fontStyle: 'normal' },
+        3: { halign: 'right', fontStyle: 'bold' }
+      },
+      didParseCell: (hData) => {
+        if (hData.row.index === denomRows.length - 1) {
+          hData.cell.styles.fontStyle = 'bold';
+          hData.cell.styles.fillColor = [240, 253, 244];
+          hData.cell.styles.textColor = [22, 101, 52];
+        }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable?.finalY || currentY + 30;
+  }
+
+  // Catatan Kasir jika ada
+  if (shiftData.catatan) {
+    currentY += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Catatan / Keterangan Kasir:', margin, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(shiftData.catatan), margin, currentY + 4);
+    currentY += 8;
+  }
 
   // Catatan Rekonsiliasi & Tanda Tangan
-  const sigY = finalY + 12;
+  const sigY = Math.max(currentY + 8, 220);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(71, 85, 105);

@@ -110,7 +110,7 @@ const SupplierView: React.FC = () => {
   const totalBahan = suppliers.reduce((s, x) => s + (x._count?.ingredients || 0), 0);
 
   return (
-    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
+    <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3 sm:gap-4">
       {/* HEADER / ACTION TOOLBAR */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
         <div className="hidden sm:block">
@@ -121,177 +121,191 @@ const SupplierView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Cari nama, PIC, nomor WA..."
+              className="w-full pl-9 pr-7 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
           <button
             onClick={openAdd}
-            className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all active:scale-95"
+            className="btn btn-primary text-xs sm:text-sm px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm shadow-primary/25 shrink-0"
           >
-            <Plus size={16} /> + Tambah Supplier
+            <Plus size={16} />
+            <span className="font-bold">Tambah Supplier</span>
           </button>
         </div>
       </div>
 
-      {/* METRICS STATS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 shrink-0">
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Mitra Pemasok</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-2xl sm:text-3xl font-black text-indigo-600">{suppliers.length}</span>
-            <span className="text-xs font-bold text-slate-500">Vendor Aktif</span>
+      {/* 3 METRIC STATS - 3 cols on mobile & desktop */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 shrink-0">
+        <div className="p-2.5 sm:p-3.5 bg-white border border-slate-200/80 rounded-xl sm:rounded-2xl shadow-2xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-indigo-600 tracking-tight">{suppliers.length}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Total Pemasok</div>
+          </div>
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <Building2 size={15} className="sm:w-5 sm:h-5" />
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Total Purchase Order (PO)</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-2xl sm:text-3xl font-black text-blue-600">{totalPO}</span>
-            <span className="text-xs font-bold text-slate-500">Faktur Pemesanan</span>
+        <div className="p-2.5 sm:p-3.5 bg-white border border-slate-200/80 rounded-xl sm:rounded-2xl shadow-2xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-blue-600 tracking-tight">{totalPO}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Faktur PO</div>
+          </div>
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <PackageSearch size={15} className="sm:w-5 sm:h-5" />
           </div>
         </div>
 
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
-          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block">Bahan Baku Tertaut</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-2xl sm:text-3xl font-black text-emerald-600">{totalBahan}</span>
-            <span className="text-xs font-bold text-slate-500">Item Bahan</span>
+        <div className="p-2.5 sm:p-3.5 bg-white border border-slate-200/80 rounded-xl sm:rounded-2xl shadow-2xs flex items-center justify-between">
+          <div className="min-w-0">
+            <div className="text-sm sm:text-2xl font-black text-emerald-600 tracking-tight">{totalBahan}</div>
+            <div className="text-[10px] sm:text-xs font-semibold text-slate-500 truncate">Bahan Tertaut</div>
+          </div>
+          <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <Truck size={15} className="sm:w-5 sm:h-5" />
           </div>
         </div>
       </div>
 
-      {/* SEARCH BAR */}
-      <div className="card p-3 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 shrink-0">
-        <Search size={16} className="text-slate-400 shrink-0 ml-1" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Cari nama supplier, PIC, nomor telepon/WA..."
-          className="w-full text-xs font-medium bg-transparent focus:outline-none placeholder:text-slate-400"
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="text-xs font-bold text-slate-400 hover:text-slate-600 px-1">
-            <X size={16} />
-          </button>
-        )}
-      </div>
+      {/* SUPPLIERS GRID */}
+      {loading ? (
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-8 sm:p-12 text-center text-slate-400">
+          <Truck size={32} className="mx-auto text-indigo-400 animate-pulse mb-2" />
+          <p className="text-xs font-bold">Memuat daftar pemasok...</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-8 sm:p-12 text-center text-slate-400">
+          <Truck size={36} className="mx-auto text-slate-300 mb-2" />
+          <h4 className="text-sm font-bold text-slate-700">Belum Ada Pemasok</h4>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            {search ? 'Tidak ada supplier yang cocok dengan kata kunci pencarian.' : 'Silakan tambahkan supplier baru untuk melacak pemesanan bahan baku.'}
+          </p>
+          {!search && (
+            <button
+              onClick={openAdd}
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-600/20 active:scale-95 transition-all"
+            >
+              <Plus size={15} /> Tambah Supplier Sekarang
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
+          {filtered.map(s => {
+            const cleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
+            const waNumber = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
 
-        {/* SUPPLIERS GRID */}
-        {loading ? (
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center text-slate-400">
-            <Truck size={32} className="mx-auto text-indigo-400 animate-pulse mb-2" />
-            <p className="text-xs font-bold">Memuat daftar pemasok...</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center text-slate-400">
-            <Truck size={36} className="mx-auto text-slate-300 mb-2" />
-            <h4 className="text-sm font-bold text-slate-700">Belum Ada Pemasok</h4>
-            <p className="text-xs text-slate-400 mt-1">
-              {search ? 'Tidak ada supplier yang cocok dengan kata kunci pencarian.' : 'Silakan tambahkan supplier baru untuk melacak pemesanan bahan baku.'}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map(s => {
-              const cleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
-              const waNumber = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
-
-              return (
-                <div
-                  key={s.id}
-                  className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-4"
-                >
-                  <div className="space-y-3">
-                    {/* Header Card */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
-                          <Building2 size={20} />
-                        </div>
-                        <div>
-                          <h3 className="font-black text-sm sm:text-base text-slate-900 leading-tight">{s.name}</h3>
-                          {s.contact && (
-                            <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1 mt-0.5">
-                              <User size={11} className="text-slate-400" /> PIC: {s.contact}
-                            </span>
-                          )}
-                        </div>
+            return (
+              <div
+                key={s.id}
+                className="bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between gap-3"
+              >
+                <div className="space-y-2.5">
+                  {/* Header Card */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs">
+                        <Building2 size={18} />
                       </div>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => openEdit(s)}
-                          className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 flex items-center justify-center transition-all"
-                          title="Edit Supplier"
-                        >
-                          <Edit2 size={13} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(s)}
-                          className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition-all"
-                          title="Hapus Supplier"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-tight truncate">{s.name}</h3>
+                        {s.contact && (
+                          <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1 mt-0.5 truncate">
+                            <User size={11} className="text-slate-400 shrink-0" /> PIC: {s.contact}
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Contacts & Address */}
-                    <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
-                      {s.phone && (
-                        <div className="flex items-center justify-between gap-2 py-0.5">
-                          <span className="flex items-center gap-1.5 text-slate-700 font-bold">
-                            <Phone size={13} className="text-slate-400 shrink-0" />
-                            {s.phone}
-                          </span>
-                          {waNumber && (
-                            <a
-                              href={`https://wa.me/${waNumber}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black flex items-center gap-1 hover:bg-emerald-100 transition-all"
-                            >
-                              <MessageCircle size={10} /> Chat WA
-                            </a>
-                          )}
-                        </div>
-                      )}
-
-                      {s.email && (
-                        <div className="flex items-center gap-1.5 text-slate-600 py-0.5">
-                          <Mail size={13} className="text-slate-400 shrink-0" />
-                          <span className="truncate">{s.email}</span>
-                        </div>
-                      )}
-
-                      {s.address && (
-                        <div className="flex items-start gap-1.5 text-slate-600 py-0.5">
-                          <MapPin size={13} className="text-slate-400 shrink-0 mt-0.5" />
-                          <span className="line-clamp-2 leading-relaxed">{s.address}</span>
-                        </div>
-                      )}
-
-                      {s.notes && (
-                        <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-xl border border-slate-100 mt-1">
-                          "{s.notes}"
-                        </p>
-                      )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => openEdit(s)}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 flex items-center justify-center transition-all active:scale-95"
+                        title="Edit Supplier"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(s)}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition-all active:scale-95"
+                        title="Hapus Supplier"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Footers Stats */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-center">
-                    <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-2">
-                      <span className="text-base font-black text-indigo-700 block">{s._count?.purchaseOrders || 0}</span>
-                      <span className="text-[10px] font-bold text-indigo-500 uppercase">Purchase Order</span>
-                    </div>
-                    <div className="bg-emerald-50/70 border border-emerald-100 rounded-xl p-2">
-                      <span className="text-base font-black text-emerald-700 block">{s._count?.ingredients || 0}</span>
-                      <span className="text-[10px] font-bold text-emerald-500 uppercase">Bahan Baku</span>
-                    </div>
+                  {/* Contacts & Address */}
+                  <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
+                    {s.phone && (
+                      <div className="flex items-center justify-between gap-2 py-0.5">
+                        <span className="flex items-center gap-1.5 text-slate-700 font-bold truncate">
+                          <Phone size={13} className="text-slate-400 shrink-0" />
+                          {s.phone}
+                        </span>
+                        {waNumber && (
+                          <a
+                            href={`https://wa.me/${waNumber}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold flex items-center gap-1 hover:bg-emerald-100 transition-all shrink-0 active:scale-95"
+                          >
+                            <MessageCircle size={11} /> Chat WA
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {s.email && (
+                      <div className="flex items-center gap-1.5 text-slate-600 py-0.5">
+                        <Mail size={13} className="text-slate-400 shrink-0" />
+                        <span className="truncate">{s.email}</span>
+                      </div>
+                    )}
+
+                    {s.address && (
+                      <div className="flex items-start gap-1.5 text-slate-600 py-0.5">
+                        <MapPin size={13} className="text-slate-400 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2 leading-relaxed text-[11px] sm:text-xs">{s.address}</span>
+                      </div>
+                    )}
+
+                    {s.notes && (
+                      <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-xl border border-slate-100 mt-1 line-clamp-2">
+                        "{s.notes}"
+                      </p>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {/* Footers Stats */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-center">
+                  <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg sm:rounded-xl p-1.5 sm:p-2">
+                    <span className="text-sm sm:text-base font-black text-indigo-700 block">{s._count?.purchaseOrders || 0}</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold text-indigo-500 uppercase">Purchase Order</span>
+                  </div>
+                  <div className="bg-emerald-50/70 border border-emerald-100 rounded-lg sm:rounded-xl p-1.5 sm:p-2">
+                    <span className="text-sm sm:text-base font-black text-emerald-700 block">{s._count?.ingredients || 0}</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold text-emerald-500 uppercase">Bahan Baku</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
         {/* MODAL FORM SUPPLIER */}
         {showModal && (

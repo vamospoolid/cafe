@@ -414,8 +414,14 @@ export const AttendanceView: React.FC = () => {
   const totalLateCountMonth = summaries.reduce((acc, s) => acc + (s.stats?.totalTerlambat || 0), 0);
   const totalWorkHoursMonth = summaries.reduce((acc, s) => acc + (s.stats?.totalWorkHours || 0), 0);
 
-  // Role check: Only Admin can view attendance management dashboard
-  if (posContext?.user && posContext.user.role !== 'Admin') {
+  // Role check: Admin, Owner, Manager, Supervisor or users with employee management permission
+  const userRole = (posContext?.user?.role || '').toLowerCase();
+  const isAuthorized = 
+    ['admin', 'owner', 'superadmin', 'manager', 'supervisor'].includes(userRole) ||
+    (posContext?.hasPermission ? posContext.hasPermission('employees.manage') : false) ||
+    Boolean(posContext?.user?.permissions?.canManageStaff);
+
+  if (posContext?.user && !isAuthorized) {
     return (
       <div className="p-8 text-center flex flex-col items-center justify-center gap-3 min-h-[50vh]">
         <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
@@ -438,79 +444,88 @@ export const AttendanceView: React.FC = () => {
           <p className="text-xs text-slate-500 mt-0.5">Monitoring kehadiran real-time via GPS geofencing, foto selfie kamera, dan shift rolling</p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto">
           <a
             href="/staff"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full sm:w-auto btn bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 shadow-sm flex items-center justify-center gap-1.5 py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+            className="w-full sm:w-auto bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 shadow-xs flex items-center justify-center gap-1.5 py-2.5 px-3.5 rounded-xl text-xs font-black transition-all active:scale-95"
           >
-            <Smartphone size={15} /> PWA Staf
+            <Smartphone size={15} className="text-amber-600 shrink-0" /> 
+            <span>PWA Staf</span>
           </a>
 
           <button
-            className="w-full sm:w-auto btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all active:scale-95"
+            className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl text-xs font-black transition-all active:scale-95"
             onClick={() => setIsModalOpen(true)}
           >
-            <Fingerprint size={16} /> Terminal Absensi
+            <Fingerprint size={16} className="shrink-0" /> 
+            <span>Terminal Absensi</span>
           </button>
         </div>
       </div>
 
-        {/* TAB CONTROLS (HORIZONTALLY SCROLLABLE ON MOBILE) */}
-        <div className="overflow-x-auto no-scrollbar pb-1">
-          <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-max min-w-full sm:w-fit">
-            <button
-              onClick={() => setActiveTab('daily')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'daily'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Clock size={15} />
-              <span>Log Harian</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('individual')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'individual'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <User size={15} />
-              <span>Rekapitulasi Bulanan</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('leaves')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'leaves'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileText size={15} />
-              <span>Pengajuan Izin & Sakit</span>
-              {leavesList.filter(l => l.status === 'Pending').length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center shadow-sm">
-                  {leavesList.filter(l => l.status === 'Pending').length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('sop_handover')}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 whitespace-nowrap ${
-                activeTab === 'sop_handover'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Sparkles size={15} />
-              <span>SOP Dapur & Handover</span>
-            </button>
-          </div>
+      {/* ZERO-SCROLL 4-BUTTON GRID CONTROLS */}
+      <div className="w-full">
+        <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-2xl border border-slate-200/80 shadow-inner w-full">
+          <button
+            onClick={() => setActiveTab('daily')}
+            className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'daily'
+                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+          >
+            <Clock size={15} className="shrink-0" />
+            <span className="hidden sm:inline">Log Harian</span>
+            <span className="sm:hidden text-[11px]">Harian</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('individual')}
+            className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'individual'
+                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+          >
+            <User size={15} className="shrink-0" />
+            <span className="hidden sm:inline">Rekap Bulanan</span>
+            <span className="sm:hidden text-[11px]">Rekap</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('leaves')}
+            className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1 relative ${
+              activeTab === 'leaves'
+                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+          >
+            <FileText size={15} className="shrink-0" />
+            <span className="hidden sm:inline">Pengajuan Izin</span>
+            <span className="sm:hidden text-[11px]">Izin</span>
+            {leavesList.filter(l => l.status === 'Pending').length > 0 && (
+              <span className="w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center shadow-xs shrink-0">
+                {leavesList.filter(l => l.status === 'Pending').length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('sop_handover')}
+            className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'sop_handover'
+                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+            }`}
+          >
+            <Sparkles size={15} className="shrink-0" />
+            <span className="hidden sm:inline">SOP & Handover</span>
+            <span className="sm:hidden text-[11px]">SOP</span>
+          </button>
         </div>
+      </div>
 
         {/* ─────────────────────────────────────────────────────────────
             TAB 1: LOG HARIAN ABSENSI
@@ -1310,12 +1325,12 @@ export const AttendanceView: React.FC = () => {
                 <p className="text-xs text-slate-500">Persetujuan atau penolakan permohonan izin karyawan secara online.</p>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+              <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto sm:flex sm:items-center">
                 {(['ALL', 'Pending', 'Approved', 'Rejected'] as const).map(st => (
                   <button
                     key={st}
                     onClick={() => setLeaveStatusFilter(st)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                    className={`py-1.5 px-2 rounded-lg text-xs font-black transition-all text-center ${
                       leaveStatusFilter === st ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >

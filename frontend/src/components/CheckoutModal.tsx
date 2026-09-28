@@ -292,6 +292,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             discount: (currentCustomer?.discountAmount || 0) + manualDiscount, 
             total: finalTotal,
             customerId: currentCustomer?.id || null,
+            customerName: currentCustomer?.name,
+            customerPhone: currentCustomer?.phone,
             pointsUsed: currentCustomer?.pointsUsed || 0,
             dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
             debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined

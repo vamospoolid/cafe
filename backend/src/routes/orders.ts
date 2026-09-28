@@ -739,12 +739,20 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
 
       // 0.5. Cari/Registrasi Customer jika ada phone
+      const tenant = await prisma.tenant.findFirst();
+      const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (tenant ? tenant.id : null);
       let finalCustomerId = customerId ? Number(customerId) : null;
       if (!finalCustomerId && customerPhone) {
-        let cust = await tx.customer.findFirst({ where: { phone: customerPhone } });
+        let cust = await tx.customer.findFirst({
+          where: {
+            phone: customerPhone,
+            ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+          }
+        });
         if (!cust && customerName) {
           cust = await tx.customer.create({
             data: {
+              tenantId,
               name: customerName,
               phone: customerPhone,
               points: 0,
@@ -955,9 +963,38 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       const hasAnyTable = orders.some(o => Boolean(o.tableId));
       const shouldAutoServe = !hasAnyTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
       
+      // Resolusikan Customer jika customerPhone disediakan
+      const tenant = await prisma.tenant.findFirst();
+      const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (tenant ? tenant.id : null);
+      let finalCustomerId = req.body.customerId ? Number(req.body.customerId) : (orders[0]?.customerId || null);
+
+      if (!finalCustomerId && req.body.customerPhone) {
+        const cleanPhone = String(req.body.customerPhone).trim();
+        let cust = await tx.customer.findFirst({
+          where: {
+            phone: cleanPhone,
+            ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+          }
+        });
+        if (!cust && req.body.customerName) {
+          cust = await tx.customer.create({
+            data: {
+              tenantId,
+              name: String(req.body.customerName).trim(),
+              phone: cleanPhone,
+              points: 0,
+              tier: 'Bronze',
+              totalSpent: 0
+            }
+          });
+        }
+        if (cust) {
+          finalCustomerId = cust.id;
+        }
+      }
+
       if (ids.length === 1) {
         const order = orders[0];
-        const finalCustomerId = req.body.customerId ? Number(req.body.customerId) : order.customerId;
         const ptsUsed = Number(req.body.pointsUsed) || Number(req.body.pointsRedeemed) || 0;
 
         // Jika hanya 1 order, update langsung total & discount
@@ -1017,7 +1054,6 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
         const totalDiscountApplied = passedDiscount > 0 ? passedDiscount
           : (passedTotal !== undefined ? Math.max(0, originalTotalSum - passedTotal) : 0);
 
-        const finalCustomerId = req.body.customerId ? Number(req.body.customerId) : orders[0].customerId;
         const ptsUsed = Number(req.body.pointsUsed) || Number(req.body.pointsRedeemed) || 0;
 
         if (finalCustomerId && ptsUsed > 0) {

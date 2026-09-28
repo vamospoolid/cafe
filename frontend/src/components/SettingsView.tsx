@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -20,6 +20,7 @@ import SaaSPlanManager from './SaaSPlanManager';
 
 const SettingsView = () => {
   const [activeTab, setActiveTab] = useState('profil');
+  const [mobileNavMode, setMobileNavMode] = useState<'grid' | 'slider'>('grid');
   const [loading, setLoading] = useState(false);
   const posContext = useContext(POSContext);
   const [testLoading, setTestLoading] = useState(false);
@@ -168,6 +169,7 @@ const SettingsView = () => {
     ingredientTrackingEnabled: false,
     enableKitchenAuditMode: false,
     enableStaffMealTracking: true,
+    enableBlindClose: true,
     warehouseTransferPricing: 'AT_COST',
     warehouseMarkupPercent: 0,
     // Printer Kasir
@@ -348,11 +350,28 @@ const SettingsView = () => {
     }
   };
 
+  const allTabs = [
+    { id: 'profil', label: 'Profil Kafe', icon: Store, category: 'general' },
+    { id: 'struk', label: 'Printer & KDS', icon: Receipt, category: 'operational' },
+    { id: 'pajak', label: 'Pajak & Service', icon: Percent, category: 'financial' },
+    { id: 'bayar', label: 'Metode Bayar', icon: CreditCard, category: 'financial' },
+    { id: 'fitur', label: 'Mode POS', icon: Settings, category: 'operational' },
+    { id: 'bagi_hasil', label: 'Bagi Hasil', icon: Sliders, category: 'financial' },
+    { id: 'crm', label: 'CRM & Member', icon: Award, category: 'operational' },
+    { id: 'inventaris', label: 'Inventaris', icon: PackageSearch, category: 'operational' },
+    { id: 'printer_bt', label: 'Printer BT', icon: Printer, category: 'operational' },
+    { id: 'database', label: 'Database', icon: Database, category: 'system' },
+    { id: 'absensi_gps', label: 'Absensi GPS', icon: MapPin, category: 'system' },
+    { id: 'koneksi_server', label: 'Koneksi', icon: Smartphone, category: 'system' },
+  ];
+  const currentTab = allTabs.find(t => t.id === activeTab) || allTabs[0];
+  const CurrentIcon = currentTab.icon;
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 w-full flex flex-col pb-52 sm:pb-20">
-      {/* Header Action Bar */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 mb-4 sm:mb-6 shrink-0">
-        <div className="hidden sm:block">
+      {/* Desktop Header Action Bar */}
+      <div className="hidden sm:flex justify-between items-center gap-4 mb-6 shrink-0">
+        <div>
           <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-800 tracking-tight">
             <Settings className="text-indigo-600" size={26} /> Pengaturan Sistem
           </h2>
@@ -361,7 +380,7 @@ const SettingsView = () => {
           </p>
         </div>
         <button 
-          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl transition-all font-bold text-xs sm:text-sm active:scale-95 shrink-0 w-full sm:w-auto" 
+          className="btn btn-primary shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 flex items-center justify-center gap-2 px-6 py-3 rounded-xl transition-all font-bold text-sm active:scale-95 shrink-0" 
           onClick={handleSave}
           disabled={loading}
         >
@@ -369,34 +388,125 @@ const SettingsView = () => {
         </button>
       </div>
 
+      {/* Mobile Top App Bar (Sleek Super App Header) */}
+      <div className="lg:hidden mb-3 bg-white p-3 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <CurrentIcon size={16} />
+          </div>
+          <div>
+            <h2 className="text-xs font-black text-slate-800 leading-tight">{currentTab.label}</h2>
+            <p className="text-[10px] text-slate-400">Pengaturan Sistem Kafe</p>
+          </div>
+        </div>
+
+        {/* View Switcher: Grid vs Slider */}
+        <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80">
+          <button
+            type="button"
+            onClick={() => setMobileNavMode('grid')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all ${
+              mobileNavMode === 'grid' 
+                ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/60 font-black' 
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Boxes size={12} />
+            <span>Grid ({allTabs.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileNavMode('slider')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all ${
+              mobileNavMode === 'slider' 
+                ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/60 font-black' 
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Sliders size={12} />
+            <span>Geser</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Navigation Hub: ALL 13 SETTINGS BUTTONS */}
+      {mobileNavMode === 'grid' ? (
+        <div className="lg:hidden mb-4 bg-white p-3 rounded-2xl border border-slate-200/90 shadow-sm animate-fade-in">
+          <div className="flex items-center justify-between mb-2.5 px-0.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+              <Boxes size={12} className="text-indigo-600" />
+              <span>Semua Modul Pengaturan ({allTabs.length} Menu)</span>
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+            {allTabs.map(tab => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all active:scale-95 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/20 border-indigo-600'
+                      : 'bg-slate-50/70 hover:bg-slate-100/90 border-slate-200/70 text-slate-700'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1 transition-all ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-white text-indigo-600 border border-slate-200/60 shadow-xs'
+                  }`}>
+                    <Icon size={16} />
+                  </div>
+                  <span className={`text-[10px] font-bold leading-tight line-clamp-1 ${
+                    isSelected ? 'text-white font-black' : 'text-slate-800'
+                  }`}>
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="lg:hidden mb-4 animate-fade-in">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            {allTabs.map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`shrink-0 flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all border whitespace-nowrap active:scale-95 ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]'
+                      : 'bg-white text-slate-700 hover:text-slate-900 border-slate-200 hover:border-slate-300 shadow-sm'
+                  }`}
+                >
+                  <Icon size={16} className={isActive ? 'text-white' : 'text-slate-400'} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main Layout Container */}
       <div className="flex flex-col lg:flex-row gap-6 w-full items-start mb-6">
-        
-        {/* Navigation Tabs (Scrollable pills on mobile, sidebar on desktop) */}
-        <div className="w-full lg:w-72 shrink-0 flex lg:flex-col overflow-x-auto lg:overflow-visible gap-2 pb-2 lg:pb-0 no-scrollbar">
-          <div className="hidden lg:block text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Kelompok Menu</div>
-          
-          {[
-            { id: 'profil', label: 'Profil Kafe', icon: Store },
-            { id: 'saas_plan', label: 'Paket & Add-on SaaS', icon: Sparkles },
-            { id: 'struk', label: 'Printer & KDS', icon: Receipt },
-            { id: 'pajak', label: 'Pajak & Service', icon: Percent },
-            { id: 'bayar', label: 'Metode Pembayaran', icon: CreditCard },
-            { id: 'fitur', label: 'Mode Operasional POS', icon: Settings },
-            { id: 'bagi_hasil', label: 'Bagi Hasil & Bonus', icon: Sliders },
-            { id: 'crm', label: 'CRM & Member', icon: Award },
-            { id: 'inventaris', label: 'Mode Inventaris', icon: PackageSearch },
-            { id: 'printer_bt', label: 'Printer Bluetooth', icon: Printer },
-            { id: 'database', label: 'Database & Backup', icon: Database },
-            { id: 'absensi_gps', label: 'Absensi & GPS Toko', icon: MapPin },
-            { id: 'koneksi_server', label: 'Koneksi Terminal', icon: Smartphone },
-          ].map(tab => {
+        {/* Desktop Sidebar Navigation Tabs */}
+        <div className="hidden lg:flex w-72 shrink-0 flex-col gap-2">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Kelompok Menu</div>
+          {allTabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`shrink-0 flex items-center gap-2 sm:gap-3 px-3.5 py-2.5 lg:px-4 lg:py-3 rounded-2xl text-left font-bold transition-all text-xs sm:text-sm border whitespace-nowrap lg:whitespace-normal ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left font-bold transition-all text-sm border ${
                   isActive
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border-indigo-600 scale-[1.02]'
                     : 'bg-white text-slate-600 hover:text-slate-900 border-slate-100 hover:border-slate-200 shadow-sm'
@@ -412,10 +522,6 @@ const SettingsView = () => {
         {/* Content Area */}
         <div className="flex-1 w-full bg-white p-4 sm:p-6 lg:p-8 shadow-sm border border-slate-200/80 rounded-3xl min-h-[500px] mb-8 sm:mb-0">
           
-          {activeTab === 'saas_plan' && (
-            <SaaSPlanManager />
-          )}
-
           {activeTab === 'profil' && (
             <div className="space-y-8 animate-fade-in">
               <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
@@ -1045,6 +1151,50 @@ const SettingsView = () => {
                         <div style={{
                           position: 'absolute', top: 3,
                           left: formData.enableDrinkCustomization ? 23 : 3,
+                          width: 18, height: 18, borderRadius: '50%', background: 'white',
+                          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                        }} />
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Blind Cash Drawer Count Toggle Card */}
+                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableBlindClose ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm mt-4`}>
+                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                          <EyeOff size={16} className="text-indigo-600" />
+                          <span>Blind Cash Drawer Count (Hitung Kas Tutup Shift Buta)</span>
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.enableBlindClose ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                          {formData.enableBlindClose ? '✓ AKTIF (STANDAR ANTI-FRAUD)' : 'NONAKTIF'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                        Saat kasir melakukan Tutup Shift, sistem menyembunyikan estimasi omset &amp; saldo kas laci sistem. Kasir wajib menghitung uang fisik secara murni dan objektif. Sistem pusat mendeteksi selisih otomatis untuk laporan Owner.
+                      </p>
+                    </div>
+
+                    <div className="relative mt-1 shrink-0">
+                      <input
+                        type="checkbox"
+                        name="enableBlindClose"
+                        className="sr-only"
+                        checked={formData.enableBlindClose}
+                        onChange={handleChange}
+                      />
+                      <div
+                        style={{
+                          width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                          background: formData.enableBlindClose ? '#4f46e5' : '#cbd5e1',
+                          transition: 'background 0.2s', position: 'relative',
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute', top: 3,
+                          left: formData.enableBlindClose ? 23 : 3,
                           width: 18, height: 18, borderRadius: '50%', background: 'white',
                           transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                         }} />
@@ -2293,6 +2443,30 @@ const SettingsView = () => {
 
         </div>
       </div>
+
+      {/* Mobile Floating Sticky Save Action Bar (Always visible on mobile above bottom navigation bar) */}
+      <div className="fixed bottom-[84px] left-3 right-3 sm:hidden z-30 animate-in slide-in-from-bottom-5 duration-200">
+        <div className="bg-slate-900/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/30">
+              <CurrentIcon size={16} />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-bold text-white leading-tight truncate">{currentTab.label}</span>
+              <span className="text-[10px] text-slate-400 leading-tight">Tekan untuk simpan</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 text-white font-bold text-xs shadow-md shadow-indigo-500/30 flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+          >
+            {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+            <span>{loading ? 'Menyimpan...' : 'Simpan'}</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -2662,7 +2836,7 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
 
   const handleRestart = async () => {
     const result = await confirmAlert(
-      'Restart Server POS SaaS?',
+      'Restart Server POS?',
       'Apakah Anda yakin ingin melakukan restart pada server POS? Koneksi akan terputus sementara selama beberapa detik.'
     );
     if (!result.isConfirmed) return;

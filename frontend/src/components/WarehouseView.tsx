@@ -35,6 +35,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+const useVertical = () => ({ isBengkel: false, isRetail: false, businessType: 'fnb' });
 import { toast, confirmAlert } from '../utils/alert';
 import {
   exportWarehouseStockPDF,
@@ -44,8 +45,101 @@ import {
 import WarehouseSaleModal from './WarehouseSaleModal';
 import WarehouseSaleInvoiceModal from './WarehouseSaleInvoiceModal';
 
+export interface WarehouseVerticalConfig {
+  title: string;
+  subtitle: string;
+  inboundBtnText: string;
+  inboundBtnTooltip: string;
+  transferBtnText: string;
+  transferBtnTooltip: string;
+  salesBtnText: string;
+  kpi1Title: string;
+  kpi2Title: string;
+  kpi3Title: string;
+  kpi4Title: string;
+  tabStockTitle: string;
+  tabTransferTitle: string;
+  tabFinanceTitle: string;
+  itemTerm: string;
+  unitTerm: string;
+  emptyStockMsg: string;
+  searchPlaceholder: string;
+  transferTargetLabel: string;
+}
+
+export const getWarehouseVerticalConfig = (businessType: string): WarehouseVerticalConfig => {
+  if (businessType === 'RETAIL') {
+    return {
+      title: 'Gudang & Inventaris Toko',
+      subtitle: 'Pencatatan aset stok barang, lokasi rak gudang, pasokan kulakan & penjualan grosir B2B',
+      inboundBtnText: 'Kulakan / Belanja Stock',
+      inboundBtnTooltip: 'Catat pasokan barang masuk dari distributor',
+      transferBtnText: 'Pindah ke Display / Etalase',
+      transferBtnTooltip: 'Pindah barang dari gudang ke rak etalase toko',
+      salesBtnText: 'Jual Grosir (B2B)',
+      kpi1Title: 'Aset Fisik di Gudang',
+      kpi2Title: 'Investasi Pasokan Masuk',
+      kpi3Title: 'Realisasi Pindah Etalase',
+      kpi4Title: 'Penjualan Grosir B2B',
+      tabStockTitle: 'Stok Barang & Rak Toko',
+      tabTransferTitle: 'Pindah ke Display / Etalase',
+      tabFinanceTitle: 'Rekonsiliasi Modal & Valuasi',
+      itemTerm: 'Barang / Sembako',
+      unitTerm: 'Dus / Karton',
+      emptyStockMsg: 'Tidak ada produk retail ditemukan.',
+      searchPlaceholder: 'Cari nama barang / sembako...',
+      transferTargetLabel: 'Stok di Display / Etalase'
+    };
+  } else if (businessType === 'BENGKEL') {
+    return {
+      title: 'Gudang & Rak Sparepart',
+      subtitle: 'Pencatatan aset suku cadang, lokasi rak gudang, & pasokan dari distributor sparepart',
+      inboundBtnText: 'Belanja Sparepart',
+      inboundBtnTooltip: 'Catat pasokan sparepart masuk ke gudang',
+      transferBtnText: 'Pengeluaran ke Pit Servis',
+      transferBtnTooltip: 'Ambil sparepart dari rak ke pit servis mekanik',
+      salesBtnText: 'Jual Partai Sparepart',
+      kpi1Title: 'Aset Sparepart di Gudang',
+      kpi2Title: 'Pembelian Pasokan Masuk',
+      kpi3Title: 'Distribusi ke Pit Servis',
+      kpi4Title: 'Penjualan Suku Cadang',
+      tabStockTitle: 'Stok Sparepart & Rak',
+      tabTransferTitle: 'Pengeluaran ke Pit Servis',
+      tabFinanceTitle: 'Rekonsiliasi Modal Sparepart',
+      itemTerm: 'Sparepart / Suku Cadang',
+      unitTerm: 'Pcs / Set',
+      emptyStockMsg: 'Tidak ada suku cadang ditemukan.',
+      searchPlaceholder: 'Cari nama suku cadang / sparepart...',
+      transferTargetLabel: 'Stok di Depo Pit Servis'
+    };
+  }
+  return {
+    title: 'Gudang Persediaan Bahan',
+    subtitle: 'Pencatatan aset stok gudang & distribusi pemakaian bahan ke dapur',
+    inboundBtnText: 'Belanja Masuk',
+    inboundBtnTooltip: 'Catat belanja bahan masuk ke gudang',
+    transferBtnText: 'Kirim ke Dapur',
+    transferBtnTooltip: 'Kirim / ambil bahan dari gudang ke dapur',
+    salesBtnText: 'Jual Grosir (B2B)',
+    kpi1Title: 'Aset Fisik di Gudang',
+    kpi2Title: 'Investasi Pengadaan Pusat',
+    kpi3Title: 'Realisasi Distribusi Outlet',
+    kpi4Title: 'Kewajiban Settlement Cabang',
+    tabStockTitle: 'Stok Bahan Gudang',
+    tabTransferTitle: 'Distribusi ke Dapur Cabang',
+    tabFinanceTitle: 'Rekonsiliasi & Settlement Finansial',
+    itemTerm: 'Bahan Baku',
+    unitTerm: 'Karton / Pack',
+    emptyStockMsg: 'Tidak ada bahan baku ditemukan.',
+    searchPlaceholder: 'Cari nama bahan baku gudang...',
+    transferTargetLabel: 'Stok di Dapur Cabang'
+  };
+};
+
 export default function WarehouseView() {
   const posContext = useContext(POSContext);
+  const { isBengkel, isRetail, businessType } = useVertical();
+  const vConfig = getWarehouseVerticalConfig(businessType);
   const [activeTab, setActiveTab] = useState<'stock' | 'inbound' | 'transfers' | 'finance' | 'sales'>('stock');
 
   // Loading states
@@ -93,7 +187,16 @@ export default function WarehouseView() {
     date: new Date().toISOString().slice(0, 10),
     notes: '',
     items: [
-      { ingredientId: '', itemName: '', purchaseUnit: 'Karton', purchaseQty: 1, conversionRatio: 1, purchasePrice: 0 }
+      {
+        ingredientId: '',
+        itemName: '',
+        purchaseUnit: isRetail || isBengkel ? 'Pcs' : 'Karton',
+        purchaseQty: 1,
+        conversionRatio: 1,
+        purchasePrice: 0,
+        sellingPrice: 0,
+        isWholesalePack: false
+      }
     ]
   });
 
@@ -155,11 +258,11 @@ export default function WarehouseView() {
   // ─── PDF EXPORTS ───────────────────────────────────────────────────────
   const handleExportStockPDF = async () => {
     if (filteredStock.length === 0) {
-      toast('Tidak ada data stok bahan untuk diekspor.', 'warning');
+      toast(`Tidak ada data stok ${vConfig.itemTerm.toLowerCase()} untuk diekspor.`, 'warning');
       return;
     }
     try {
-      await exportWarehouseStockPDF(filteredStock, posContext?.settings || { storeName: 'MUKI RAMEN' }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      await exportWarehouseStockPDF(filteredStock, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
       toast('Laporan Stok & Valuasi Aset Gudang berhasil diunduh!', 'success');
     } catch (e) {
       console.error(e);
@@ -173,7 +276,7 @@ export default function WarehouseView() {
       return;
     }
     try {
-      await exportWarehouseInboundPDF(inbounds, posContext?.settings || { storeName: 'MUKI RAMEN' }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      await exportWarehouseInboundPDF(inbounds, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
       toast('Laporan Rekap Penerimaan Pasokan berhasil diunduh!', 'success');
     } catch (e) {
       console.error(e);
@@ -187,7 +290,7 @@ export default function WarehouseView() {
       return;
     }
     try {
-      await exportWarehouseSettlementPDF(financeData, posContext?.settings || { storeName: 'MUKI RAMEN' }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      await exportWarehouseSettlementPDF(financeData, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
       toast('Laporan Rekonsiliasi & Settlement Modal Owner berhasil diunduh!', 'success');
     } catch (e) {
       console.error(e);
@@ -201,7 +304,16 @@ export default function WarehouseView() {
       ...prev,
       items: [
         ...prev.items,
-        { ingredientId: '', itemName: '', purchaseUnit: 'Karton', purchaseQty: 1, conversionRatio: 1, purchasePrice: 0 }
+        {
+          ingredientId: '',
+          itemName: '',
+          purchaseUnit: isRetail || isBengkel ? 'Pcs' : 'Karton',
+          purchaseQty: 1,
+          conversionRatio: 1,
+          purchasePrice: 0,
+          sellingPrice: 0,
+          isWholesalePack: false
+        }
       ]
     }));
   };
@@ -222,11 +334,34 @@ export default function WarehouseView() {
         const found = stockList.find(s => s.id === Number(val));
         if (found) {
           item.itemName = found.name;
-          item.purchaseUnit = found.purchaseUnit || 'Karton';
-          item.conversionRatio = found.conversionRatio || 1;
-          item.purchasePrice = found.buyPrice ? (found.buyPrice * (found.conversionRatio || 1)) : 0;
+          item.purchaseUnit = found.unit || (isRetail || isBengkel ? 'Pcs' : 'Karton');
+          item.conversionRatio = (isRetail || isBengkel) && !item.isWholesalePack ? 1 : (found.conversionRatio || 1);
+          item.purchasePrice = found.buyPrice ? (found.buyPrice * (item.isWholesalePack ? (item.conversionRatio || 1) : 1)) : 0;
+          item.sellingPrice = found.sellPrice || 0;
         }
       }
+
+      if (field === 'isWholesalePack') {
+        const found = stockList.find(s => s.id === Number(item.ingredientId));
+        if (!val) {
+          // Mode Eceran Langsung
+          item.conversionRatio = 1;
+          item.purchaseUnit = found?.unit || (isRetail || isBengkel ? 'Pcs' : 'Karton');
+          if (found?.buyPrice) {
+            item.purchasePrice = found.buyPrice;
+          }
+        } else {
+          // Mode Kulakan Dus / Partai
+          if (item.conversionRatio <= 1) {
+            item.conversionRatio = 12; // default dus isi 12
+          }
+          item.purchaseUnit = 'Dus';
+          if (found?.buyPrice) {
+            item.purchasePrice = found.buyPrice * item.conversionRatio;
+          }
+        }
+      }
+
       newItems[idx] = item;
       return { ...prev, items: newItems };
     });
@@ -235,7 +370,7 @@ export default function WarehouseView() {
   const submitInbound = async (e: React.FormEvent) => {
     e.preventDefault();
     if (inboundForm.items.length === 0 || !inboundForm.items[0].ingredientId) {
-      toast('Pilih minimal satu bahan baku', 'warning');
+      toast(isRetail ? 'Pilih minimal satu barang dagangan' : isBengkel ? 'Pilih minimal satu suku cadang' : 'Pilih minimal satu bahan baku', 'warning');
       return;
     }
 
@@ -259,7 +394,16 @@ export default function WarehouseView() {
           paymentSource: 'DANA_PRIBADI_OWNER',
           date: new Date().toISOString().slice(0, 10),
           notes: '',
-          items: [{ ingredientId: '', itemName: '', purchaseUnit: 'Karton', purchaseQty: 1, conversionRatio: 1, purchasePrice: 0 }]
+          items: [{
+            ingredientId: '',
+            itemName: '',
+            purchaseUnit: isRetail || isBengkel ? 'Pcs' : 'Karton',
+            purchaseQty: 1,
+            conversionRatio: 1,
+            purchasePrice: 0,
+            sellingPrice: 0,
+            isWholesalePack: false
+          }]
         });
         fetchData();
       } else {
@@ -570,219 +714,395 @@ export default function WarehouseView() {
   return (
     <div className="p-3 sm:p-6 pb-28 sm:pb-16 w-full flex flex-col gap-4">
       {/* Top Header & Title */}
-      <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row justify-between sm:items-center gap-3.5">
+      <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <div>
-          <h2 className="text-lg sm:text-2xl font-black flex items-center gap-2 text-slate-900 leading-tight">
+          <h2 className="text-base sm:text-2xl font-black flex items-center gap-2 text-slate-900 leading-tight">
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Boxes size={20} />
+              <Boxes size={18} />
             </div>
-            <span>Gudang Persediaan Bahan</span>
+            <span>{vConfig.title}</span>
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            Pencatatan aset stok gudang &amp; distribusi pemakaian bahan ke dapur
+          <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">
+            {vConfig.subtitle}
           </p>
         </div>
 
-        {/* Action Buttons Toolbar (Mobile 2-Column Grid / Desktop Row) */}
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Tombol 1: Input Belanja Masuk */}
+        {/* Action Buttons Toolbar: matched with IngredientView styling */}
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+          {/* Tombol 1: Input Belanja Masuk (Primary Gradient) */}
           <button
             type="button"
             onClick={() => setShowInboundModal(true)}
-            className="flex-1 sm:flex-initial py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-            title="Catat belanja bahan masuk ke gudang"
+            className="flex-1 sm:flex-none py-2 px-2.5 sm:py-2.5 sm:px-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl text-[11px] sm:text-xs font-bold shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center"
+            title={vConfig.inboundBtnTooltip}
           >
-            <Plus size={15} />
-            <span>+ Belanja Masuk</span>
+            <Plus size={15} className="shrink-0" />
+            <span className="truncate">{vConfig.inboundBtnText}</span>
           </button>
 
-          {/* Tombol 2: Distribusi ke Dapur */}
+          {/* Tombol 2: Transfer / Distribusi */}
           <button
             type="button"
             onClick={() => setShowTransferModal(true)}
-            className="flex-1 sm:flex-initial py-2.5 px-3.5 bg-indigo-50 hover:bg-indigo-100 active:scale-[0.98] text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-            title="Kirim / ambil bahan dari gudang ke dapur"
+            className="flex-1 sm:flex-none py-2 px-2 sm:py-2.5 sm:px-3 bg-white hover:bg-indigo-50 text-indigo-700 border border-slate-200 hover:border-indigo-200 rounded-xl text-[11px] sm:text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center"
+            title={vConfig.transferBtnTooltip}
           >
-            <ArrowRightLeft size={15} />
-            <span>Kirim ke Dapur</span>
+            <ArrowRightLeft size={13} className="shrink-0 text-indigo-600" />
+            <span className="truncate">{vConfig.transferBtnText}</span>
           </button>
 
           {/* Tombol 3: Jual Grosir (B2B) */}
           <button
             type="button"
             onClick={() => setShowSaleModal(true)}
-            className="col-span-2 sm:col-span-1 py-2 sm:py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 active:scale-[0.98] text-emerald-700 border border-emerald-200 rounded-xl text-xs font-black shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-            title="Penjualan bahan grosir ke luar"
+            className="flex-1 sm:flex-none py-2 px-2 sm:py-2.5 sm:px-3 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 hover:border-emerald-300 rounded-xl text-[11px] sm:text-xs font-bold shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer text-center"
+            title="Penjualan grosir ke luar / partai besar"
           >
-            <TrendingUp size={14} />
-            <span>+ Jual Grosir (B2B)</span>
+            <TrendingUp size={13} className="shrink-0 text-emerald-600" />
+            <span className="truncate">{vConfig.salesBtnText}</span>
+          </button>
+
+          {/* Tombol 4: Refresh Data */}
+          <button
+            type="button"
+            onClick={() => fetchData()}
+            title="Perbarui Data Gudang"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl shadow-xs active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
       {/* KPI Cards Header */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         {/* Total Nilai Aset Gudang */}
-        <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Package size={22} />
+        <div className="bg-white p-3 sm:p-4 shadow-2xs sm:shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Package size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Aset Fisik di Gudang</div>
-            <div className="text-base sm:text-xl font-black text-slate-900">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">{vConfig.kpi1Title}</div>
+            <div className="text-xs sm:text-lg font-black text-slate-900 truncate mt-0.5">
               {formatCurrency(dashboardData?.totalAssetValue || 0)}
             </div>
           </div>
         </div>
 
         {/* Investasi Pengadaan Pusat */}
-        <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <ArrowDownLeft size={22} />
+        <div className="bg-white p-3 sm:p-4 shadow-2xs sm:shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <ArrowDownLeft size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Investasi Pengadaan Pusat</div>
-            <div className="text-base sm:text-xl font-black text-slate-900">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">{vConfig.kpi2Title}</div>
+            <div className="text-xs sm:text-lg font-black text-slate-900 truncate mt-0.5">
               {formatCurrency(dashboardData?.totalCapitalIn || 0)}
             </div>
           </div>
         </div>
 
-        {/* Realisasi Distribusi Outlet */}
-        <div className="card p-4 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-            <ArrowUpRight size={22} />
+        {/* Realisasi Distribusi Outlet / Transfer */}
+        <div className="bg-white p-3 sm:p-4 shadow-2xs sm:shadow-sm border border-slate-200/80 rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <ArrowUpRight size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Realisasi Distribusi Outlet</div>
-            <div className="text-base sm:text-xl font-black text-slate-900">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">{vConfig.kpi3Title}</div>
+            <div className="text-xs sm:text-lg font-black text-slate-900 truncate mt-0.5">
               {formatCurrency(dashboardData?.totalTransferredToResto || 0)}
             </div>
           </div>
         </div>
 
-        {/* Kewajiban Settlement Cabang */}
-        <div className="card p-4 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-md shadow-amber-200 rounded-2xl flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
-            <Wallet size={22} />
+        {/* Kewajiban Settlement / B2B */}
+        <div className="bg-amber-50/70 p-3 sm:p-4 border border-amber-200/80 shadow-2xs sm:shadow-sm rounded-2xl flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500/15 text-amber-700 flex items-center justify-center shrink-0">
+            <Wallet size={17} />
           </div>
-          <div>
-            <div className="text-[10px] text-amber-100 font-bold uppercase tracking-wider">Kewajiban Settlement Cabang</div>
-            <div className="text-base sm:text-xl font-black text-white">
+          <div className="min-w-0">
+            <div className="text-[9px] sm:text-[10px] text-amber-800 font-bold uppercase tracking-wider truncate">{vConfig.kpi4Title}</div>
+            <div className="text-xs sm:text-lg font-black text-amber-950 truncate mt-0.5">
               {formatCurrency(dashboardData?.currentOwnerPayable || 0)}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex border-b border-slate-200 gap-2 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('stock')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'stock'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Layers size={16} /> Stok Bahan Gudang ({filteredStock.length})
-        </button>
+      {/* ── MOBILE 5-TAB SUPER APP ICON HUB (sm:!hidden, matched with IngredientView) ── */}
+      <div className="bento-nav-mobile sm:!hidden bg-white rounded-2xl border border-slate-200/90 p-2 shadow-xs shrink-0">
+        <div className="grid grid-cols-6 gap-1.5">
+          {[
+            {
+              id: 'stock',
+              title: 'Stok Gudang',
+              icon: Layers,
+              badge: filteredStock.length > 0 ? `${filteredStock.length}` : null,
+              pulseBadge: null,
+              color: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+              activeColor: 'from-indigo-600 to-blue-600 text-white shadow-indigo-500/30',
+              colSpan: 'col-span-2'
+            },
+            {
+              id: 'inbound',
+              title: 'Pasokan Masuk',
+              icon: Truck,
+              badge: inbounds.length > 0 ? `${inbounds.length}` : null,
+              pulseBadge: null,
+              color: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+              activeColor: 'from-emerald-600 to-teal-600 text-white shadow-emerald-500/30',
+              colSpan: 'col-span-2'
+            },
+            {
+              id: 'sales',
+              title: 'Jual Grosir',
+              icon: TrendingUp,
+              badge: sales.length > 0 ? `${sales.length}` : null,
+              pulseBadge: null,
+              color: 'text-teal-600 bg-teal-50 border-teal-100',
+              activeColor: 'from-teal-600 to-cyan-600 text-white shadow-teal-500/30',
+              colSpan: 'col-span-2'
+            },
+            {
+              id: 'transfers',
+              title: vConfig.tabTransferTitle || 'Distribusi Cabang',
+              icon: ArrowRightLeft,
+              badge: transfers.length > 0 ? `${transfers.length}` : null,
+              pulseBadge: transfers.filter(t => t.status === 'PENDING').length > 0 ? `${transfers.filter(t => t.status === 'PENDING').length} Baru` : null,
+              color: 'text-purple-600 bg-purple-50 border-purple-100',
+              activeColor: 'from-purple-600 to-indigo-600 text-white shadow-purple-500/30',
+              colSpan: 'col-span-3'
+            },
+            {
+              id: 'finance',
+              title: vConfig.tabFinanceTitle || 'Rekonsiliasi Modal',
+              icon: Coins,
+              badge: 'Audit',
+              pulseBadge: null,
+              color: 'text-amber-600 bg-amber-50 border-amber-100',
+              activeColor: 'from-amber-500 to-orange-600 text-white shadow-amber-500/30',
+              colSpan: 'col-span-3'
+            }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`relative flex flex-col items-center justify-center p-2 rounded-xl text-center transition-all active:scale-95 cursor-pointer ${tab.colSpan} ${
+                  isSelected
+                    ? `bg-gradient-to-br ${tab.activeColor} shadow-md`
+                    : 'bg-slate-50/70 hover:bg-slate-100/90 border border-slate-100 text-slate-700'
+                }`}
+              >
+                {/* Micro Badge */}
+                {tab.pulseBadge ? (
+                  <span className="absolute top-1 right-1 text-[8px] px-1.5 py-0.2 rounded-full font-black tracking-tight bg-rose-500 text-white animate-pulse">
+                    {tab.pulseBadge}
+                  </span>
+                ) : tab.badge ? (
+                  <span className={`absolute top-1 right-1 text-[8px] px-1.5 py-0.2 rounded-full font-black tracking-tight ${
+                    isSelected ? 'bg-white/25 text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {tab.badge}
+                  </span>
+                ) : null}
 
-        <button
-          onClick={() => setActiveTab('inbound')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'inbound'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Truck size={16} /> Penerimaan Pasokan ({inbounds.length})
-        </button>
+                {/* Squircle Icon Box */}
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1 transition-all ${
+                  isSelected ? 'bg-white/20 text-white' : `${tab.color} border`
+                }`}>
+                  <Icon size={16} />
+                </div>
 
-        <button
-          onClick={() => setActiveTab('sales')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'sales'
-              ? 'border-emerald-600 text-emerald-700'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <TrendingUp size={16} /> Penjualan Keluar (B2B) ({sales.length})
-        </button>
-
-        <button
-          onClick={() => setActiveTab('transfers')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'transfers'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <ArrowRightLeft size={16} /> Distribusi ke Dapur Cabang ({transfers.length})
-          {transfers.filter(t => t.status === 'PENDING').length > 0 && (
-            <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black">
-              {transfers.filter(t => t.status === 'PENDING').length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('finance')}
-          className={`py-2.5 px-4 text-xs font-extrabold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'finance'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Coins size={16} /> Rekonsiliasi &amp; Settlement Finansial
-        </button>
+                {/* Micro Label */}
+                <span className={`text-[10px] font-black leading-tight line-clamp-1 ${
+                  isSelected ? 'text-white font-extrabold' : 'text-slate-800'
+                }`}>
+                  {tab.title}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ─── TAB 1: STOK BAHAN GUDANG ─────────────────────────────────────── */}
+      {/* ── DESKTOP & TABLET BENTO GRID (bento-nav-desktop, matched with IngredientView) ── */}
+      <div className="bento-nav-desktop hidden sm:!grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0 bg-white rounded-3xl p-3 sm:p-4 border border-slate-200/90 shadow-sm">
+        {[
+          {
+            id: 'stock',
+            title: vConfig.tabStockTitle || 'Stok Gudang',
+            subtitle: 'Katalog & Valuasi Fisik',
+            icon: Layers,
+            badge: filteredStock.length > 0 ? `${filteredStock.length} Item` : null,
+            pulseBadge: null
+          },
+          {
+            id: 'inbound',
+            title: 'Pasokan Masuk',
+            subtitle: 'Belanja Masuk Supplier',
+            icon: Truck,
+            badge: inbounds.length > 0 ? `${inbounds.length} Masuk` : null,
+            pulseBadge: null
+          },
+          {
+            id: 'sales',
+            title: 'Jual Grosir (B2B)',
+            subtitle: 'Penjualan Pihak Luar',
+            icon: TrendingUp,
+            badge: sales.length > 0 ? `${sales.length} Faktur` : null,
+            pulseBadge: null
+          },
+          {
+            id: 'transfers',
+            title: vConfig.tabTransferTitle || 'Distribusi Cabang',
+            subtitle: 'Pengeluaran ke Unit Dapur',
+            icon: ArrowRightLeft,
+            badge: transfers.length > 0 ? `${transfers.length} Mutasi` : null,
+            pulseBadge: transfers.filter(t => t.status === 'PENDING').length > 0 ? `${transfers.filter(t => t.status === 'PENDING').length} Baru` : null
+          },
+          {
+            id: 'finance',
+            title: vConfig.tabFinanceTitle || 'Rekonsiliasi Modal',
+            subtitle: 'Audit Settlement Owner',
+            icon: Coins,
+            badge: 'Audit',
+            pulseBadge: null
+          }
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isSelected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as any)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '.75rem',
+                padding: '.75rem 1rem',
+                background: isSelected
+                  ? 'linear-gradient(135deg, #4f46e5 0%, #2563eb 100%)'
+                  : '#f8fafc',
+                color: isSelected ? '#ffffff' : '#334155',
+                border: isSelected ? '1px solid #4f46e5' : '1px solid #e2e8f0',
+                borderRadius: '.85rem',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                textAlign: 'left',
+                boxShadow: isSelected ? '0 4px 12px rgba(79, 70, 229, 0.25)' : 'none',
+                width: '100%'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '.65rem',
+                  background: isSelected ? 'rgba(255,255,255,0.2)' : '#e0e7ff',
+                  color: isSelected ? '#ffffff' : '#4f46e5',
+                  flexShrink: 0
+                }}
+              >
+                <Icon size={18} />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.25rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '.85rem', color: isSelected ? '#ffffff' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {tab.title}
+                  </span>
+                  {tab.pulseBadge ? (
+                    <span
+                      style={{
+                        fontSize: '.62rem',
+                        padding: '.12rem .4rem',
+                        background: '#ef4444',
+                        color: '#ffffff',
+                        borderRadius: '9999px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}
+                      className="animate-pulse"
+                    >
+                      {tab.pulseBadge}
+                    </span>
+                  ) : tab.badge ? (
+                    <span
+                      style={{
+                        fontSize: '.62rem',
+                        padding: '.12rem .4rem',
+                        background: isSelected ? 'rgba(255,255,255,0.25)' : '#e0e7ff',
+                        color: isSelected ? '#ffffff' : '#4338ca',
+                        borderRadius: '9999px',
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {tab.badge}
+                    </span>
+                  ) : null}
+                </div>
+                <span style={{ fontSize: '.72rem', color: isSelected ? 'rgba(255,255,255,0.8)' : '#64748b', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tab.subtitle}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ─── TAB 1: STOK BARANG / RAK GUDANG ─────────────────────────────────── */}
       {activeTab === 'stock' && (
         <div className="flex flex-col gap-3">
           {/* Search & Filter Toolbar */}
           <div className="card p-3 bg-white shadow-sm border border-slate-200/80 rounded-2xl flex flex-col sm:flex-row gap-2.5 items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-2.5 items-center flex-1 w-full">
-              <div className="relative flex-1 w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-                <input
-                  type="text"
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  placeholder="Cari nama bahan baku gudang..."
-                  value={searchStock}
-                  onChange={e => setSearchStock(e.target.value)}
-                />
-              </div>
-              <div className="w-full sm:w-48 shrink-0">
-                <select
-                  className="w-full px-3 py-2 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  value={filterCategory}
-                  onChange={e => setFilterCategory(e.target.value)}
-                >
-                  <option value="">Semua Kategori</option>
-                  <option value="FOOD">Makanan (Food)</option>
-                  <option value="DRINK">Minuman (Drink)</option>
-                  <option value="PACKAGING">Packaging / Kemasan</option>
-                </select>
-              </div>
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+              <input
+                type="text"
+                className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                placeholder={vConfig.searchPlaceholder}
+                value={searchStock}
+                onChange={e => setSearchStock(e.target.value)}
+              />
             </div>
 
-            <button
-              onClick={handleExportStockPDF}
-              className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95"
-              title="Download Laporan Rekap Stok & Valuasi Aset Gudang (PDF)"
-            >
-              <FileText size={14} className="text-rose-500" /> Export PDF
-            </button>
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto shrink-0">
+              <select
+                className="w-full sm:w-48 px-3 py-2 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                value={filterCategory}
+                onChange={e => setFilterCategory(e.target.value)}
+              >
+                <option value="">Semua Kategori</option>
+                {Array.from(new Set(stockList.map(s => s.category).filter(Boolean))).map((cat: any) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+
+              <button
+                onClick={handleExportStockPDF}
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95 cursor-pointer"
+                title="Download Laporan Rekap Stok & Valuasi Aset Gudang (PDF)"
+              >
+                <FileText size={14} className="text-rose-500" /> Export PDF
+              </button>
+            </div>
           </div>
 
           {/* Table Container (Desktop) & Card List (Mobile) */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             {loading ? (
-              <div className="p-10 text-center text-slate-400 text-xs font-medium">Memuat stok bahan gudang...</div>
+              <div className="p-10 text-center text-slate-400 text-xs font-medium">Memuat stok {vConfig.itemTerm.toLowerCase()} gudang...</div>
             ) : filteredStock.length === 0 ? (
-              <div className="p-10 text-center text-slate-400 text-xs font-medium">Tidak ada bahan baku ditemukan.</div>
+              <div className="p-10 text-center text-slate-400 text-xs font-medium">{vConfig.emptyStockMsg}</div>
             ) : (
               <>
                 {/* ── DESKTOP TABLE ─────────────────────────────────── */}
@@ -790,12 +1110,14 @@ export default function WarehouseView() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100 text-xs text-slate-400 font-bold uppercase">
-                        <th className="p-3.5">Bahan Baku</th>
+                        <th className="p-3.5">{vConfig.itemTerm}</th>
                         <th className="p-3.5">Kategori</th>
+                        {isBengkel && <th className="p-3.5">Merk</th>}
+                        {(isBengkel || isRetail) && <th className="p-3.5">Lokasi / Rak</th>}
                         <th className="p-3.5">Status</th>
                         <th className="p-3.5">Satuan Konversi</th>
                         <th className="p-3.5 text-right">Stok Fisik Gudang</th>
-                        <th className="p-3.5 text-right">Stok di Dapur Cabang</th>
+                        <th className="p-3.5 text-right">{vConfig.transferTargetLabel}</th>
                         <th className="p-3.5 text-right">Nilai Modal / Aset</th>
                         <th className="p-3.5 text-right">Aksi</th>
                       </tr>
@@ -823,6 +1145,22 @@ export default function WarehouseView() {
                                 {item.category}
                               </span>
                             </td>
+                            {isBengkel && (
+                              <td className="p-3.5 text-slate-600 font-medium">
+                                {item.brand || '-'}
+                              </td>
+                            )}
+                            {(isBengkel || isRetail) && (
+                              <td className="p-3.5">
+                                {item.storageLocation ? (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                    {item.storageLocation}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-[10px]">-</span>
+                                )}
+                              </td>
+                            )}
                             <td className="p-3.5">
                               {isOutOfStock ? (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-600 border border-rose-200 inline-flex items-center gap-1">
@@ -970,24 +1308,24 @@ export default function WarehouseView() {
       {/* ─── TAB 2: INBOUND (BARANG MASUK DARI SUPPLIER) ──────────────────── */}
       {activeTab === 'inbound' && (
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-3">
             <div>
               <h3 className="text-sm font-black text-slate-800">Riwayat Penerimaan Pasokan Masuk Gudang</h3>
-              <p className="text-[11px] text-slate-500">Pencatatan pasokan partai besar / grosir (Kasir MUKI tidak berkurang)</p>
+              <p className="text-[11px] text-slate-500">Pencatatan pasokan partai besar / grosir (Kasir POS tidak berkurang)</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={handleExportInboundPDF}
-                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-1.5 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all"
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 title="Download Laporan Rekap Pasokan Masuk (PDF)"
               >
                 <FileText size={14} className="text-rose-500" /> Export PDF
               </button>
               <button
                 onClick={() => setShowInboundModal(true)}
-                className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+                className="btn btn-primary py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
               >
-                <Plus size={14} /> + Penerimaan Pasokan Masuk
+                <Plus size={14} /> Penerimaan Pasokan
               </button>
             </div>
           </div>
@@ -1139,8 +1477,8 @@ export default function WarehouseView() {
 
       {/* ─── TAB PENJUALAN KELUAR B2B / PIHAK LUAR ─────────────────────────── */}
       {activeTab === 'sales' && (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-3">
             <div>
               <h3 className="text-sm font-black text-slate-800">
                 Riwayat Penjualan Grosir B2B &bull; Pihak Luar &amp; Mitra
@@ -1151,52 +1489,55 @@ export default function WarehouseView() {
             </div>
             <button
               onClick={() => setShowSaleModal(true)}
-              className="btn bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              className="btn bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
             >
-              <TrendingUp size={14} /> + Transaksi Penjualan B2B
+              <TrendingUp size={14} /> Transaksi Penjualan B2B
             </button>
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <Coins size={20} />
+          {/* Quick Metrics Bar: 3-column compact on mobile, 3 cards on desktop */}
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+              <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <Coins size={15} className="sm:hidden" />
+                <Coins size={20} className="hidden sm:block" />
               </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Omzet Penjualan B2B</div>
-                <div className="text-base font-black text-slate-900">
+              <div className="min-w-0">
+                <div className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase truncate">Total Omzet B2B</div>
+                <div className="text-xs sm:text-base font-black text-slate-900 truncate mt-0.5">
                   {formatCurrency(sales.filter(s => !s.isVoided).reduce((sum, s) => sum + s.totalAmount, 0))}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-                <TrendingUp size={20} />
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+              <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                <TrendingUp size={15} className="sm:hidden" />
+                <TrendingUp size={20} className="hidden sm:block" />
               </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase">Akumulasi Laba Kotor Grosir</div>
-                <div className="text-base font-black text-emerald-600">
+              <div className="min-w-0">
+                <div className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase truncate">Laba Kotor</div>
+                <div className="text-xs sm:text-base font-black text-emerald-600 truncate mt-0.5">
                   +{formatCurrency(sales.filter(s => !s.isVoided).reduce((sum, s) => sum + s.grossProfit, 0))}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <Package size={20} />
+            <div className="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 text-center sm:text-left">
+              <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Package size={15} className="sm:hidden" />
+                <Package size={20} className="hidden sm:block" />
               </div>
-              <div>
-                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Faktur Diterbitkan</div>
-                <div className="text-base font-black text-slate-900">
-                  {sales.filter(s => !s.isVoided).length} Faktur Aktif
+              <div className="min-w-0">
+                <div className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase truncate">Faktur Terbit</div>
+                <div className="text-xs sm:text-base font-black text-slate-900 truncate mt-0.5">
+                  {sales.filter(s => !s.isVoided).length} <span className="text-[10px] font-normal text-slate-400 hidden sm:inline">Aktif</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Sales Table */}
+          {/* Sales Table (Desktop) & Card List (Mobile) */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
             {sales.length === 0 ? (
               <div className="p-12 text-center text-slate-400 text-xs font-medium flex flex-col items-center gap-2">
@@ -1206,117 +1547,208 @@ export default function WarehouseView() {
                   onClick={() => setShowSaleModal(true)}
                   className="mt-2 text-emerald-600 font-bold hover:underline"
                 >
-                  + Buat Penjualan Grosir Pertama
+                  Buat Penjualan Grosir Pertama
                 </button>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase">
-                      <th className="p-3.5">No. Faktur B2B</th>
-                      <th className="p-3.5">Tanggal</th>
-                      <th className="p-3.5">Pembeli / Kafe Mitra</th>
-                      <th className="p-3.5">Bahan Yang Dijual</th>
-                      <th className="p-3.5 text-right">Nilai Transaksi</th>
-                      <th className="p-3.5 text-right">Laba Grosir</th>
-                      <th className="p-3.5 text-center">Status</th>
-                      <th className="p-3.5 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {sales.map(s => (
-                      <tr key={s.id} className={`hover:bg-slate-50 transition-colors ${s.isVoided ? 'opacity-50' : ''}`}>
-                        <td className="p-3.5">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-mono font-bold text-indigo-700">{s.invoiceNumber}</span>
-                            {s.isVoided && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
-                                <Ban size={9} /> DIBATALKAN
-                              </span>
+              <>
+                {/* ── DESKTOP TABLE (hidden md:block) ── */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase">
+                        <th className="p-3.5">No. Faktur B2B</th>
+                        <th className="p-3.5">Tanggal</th>
+                        <th className="p-3.5">Pembeli / Kafe Mitra</th>
+                        <th className="p-3.5">Bahan Yang Dijual</th>
+                        <th className="p-3.5 text-right">Nilai Transaksi</th>
+                        <th className="p-3.5 text-right">Laba Grosir</th>
+                        <th className="p-3.5 text-center">Status</th>
+                        <th className="p-3.5 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sales.map(s => (
+                        <tr key={s.id} className={`hover:bg-slate-50 transition-colors ${s.isVoided ? 'opacity-50' : ''}`}>
+                          <td className="p-3.5">
+                            <div className="flex flex-col gap-1">
+                              <span className="font-mono font-bold text-indigo-700">{s.invoiceNumber}</span>
+                              {s.isVoided && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-red-50 text-red-600 border border-red-200 w-fit">
+                                  <Ban size={9} /> DIBATALKAN
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-slate-500 whitespace-nowrap">
+                            {new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="font-bold text-slate-800">{s.customerName}</div>
+                            {s.customerPhone && (
+                              <div className="text-[10px] text-slate-400">{s.customerPhone}</div>
                             )}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="flex flex-col gap-0.5 max-w-xs">
+                              {(s.items || []).map((it: any) => (
+                                <span key={it.id} className="text-[11px] text-slate-700">
+                                  &bull; {it.itemName}: <strong>{it.saleQty} {it.saleUnit}</strong> ({it.baseQty} {it.ingredient?.unit || 'dasar'})
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-right font-black text-slate-900 text-sm whitespace-nowrap">
+                            <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                              {formatCurrency(s.totalAmount)}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right font-black text-emerald-600 text-xs whitespace-nowrap">
+                            <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                              +{formatCurrency(s.grossProfit)}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                              s.isVoided
+                                ? 'bg-red-50 text-red-700 border-red-200'
+                                : s.paymentStatus === 'PAID'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}>
+                              {s.isVoided ? 'Batal (Void)' : s.paymentStatus === 'PAID' ? 'Lunas' : 'Pending'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedSaleForPrint(s);
+                                  setShowSaleInvoiceModal(true);
+                                }}
+                                title="Lihat & Cetak Faktur / Surat Jalan"
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Printer size={12} /> Cetak
+                              </button>
+                              {!s.isVoided && (
+                                <button
+                                  onClick={() => {
+                                    setVoidSaleTarget(s);
+                                    setVoidSaleReason('');
+                                    setShowVoidSaleModal(true);
+                                  }}
+                                  title="Batalkan / Koreksi Penjualan"
+                                  className="p-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors cursor-pointer"
+                                >
+                                  <Ban size={13} />
+                                </button>
+                              )}
+                            </div>
+                            {s.isVoided && s.voidReason && (
+                              <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[160px] ml-auto">
+                                Alasan: {s.voidReason}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── MOBILE CARD LIST (block md:hidden) ── */}
+                <div className="block md:hidden divide-y divide-slate-100">
+                  {sales.map(s => (
+                    <div key={s.id} className={`p-3.5 flex flex-col gap-2.5 bg-white hover:bg-slate-50/80 transition-colors ${s.isVoided ? 'opacity-50' : ''}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-mono font-black text-indigo-700 text-xs">{s.invoiceNumber}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </div>
-                        </td>
-                        <td className="p-3.5 text-slate-500 whitespace-nowrap">
-                          {new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric'
-                          })}
-                        </td>
-                        <td className="p-3.5">
-                          <div className="font-bold text-slate-800">{s.customerName}</div>
-                          {s.customerPhone && (
-                            <div className="text-[10px] text-slate-400">{s.customerPhone}</div>
-                          )}
-                        </td>
-                        <td className="p-3.5">
-                          <div className="flex flex-col gap-0.5 max-w-xs">
-                            {(s.items || []).map((it: any) => (
-                              <span key={it.id} className="text-[11px] text-slate-700">
-                                &bull; {it.itemName}: <strong>{it.saleQty} {it.saleUnit}</strong> ({it.baseQty} {it.ingredient?.unit || 'dasar'})
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-3.5 text-right font-black text-slate-900 text-sm whitespace-nowrap">
-                          <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
-                            {formatCurrency(s.totalAmount)}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right font-black text-emerald-600 text-xs whitespace-nowrap">
-                          <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
-                            +{formatCurrency(s.grossProfit)}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-center whitespace-nowrap">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${
                             s.isVoided
                               ? 'bg-red-50 text-red-700 border-red-200'
                               : s.paymentStatus === 'PAID'
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                               : 'bg-amber-50 text-amber-700 border-amber-200'
                           }`}>
-                            {s.isVoided ? 'Batal (Void)' : s.paymentStatus === 'PAID' ? 'Lunas' : 'Pending'}
+                            {s.isVoided ? 'Batal' : s.paymentStatus === 'PAID' ? 'Lunas' : 'Pending'}
                           </span>
-                        </td>
-                        <td className="p-3.5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
+                        </div>
+                      </div>
+
+                      <div className="text-xs">
+                        <div className="font-bold text-slate-800">{s.customerName}</div>
+                        {s.customerPhone && (
+                          <div className="text-[10px] text-slate-400">{s.customerPhone}</div>
+                        )}
+                      </div>
+
+                      <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex flex-col gap-1">
+                        <div className="text-[10px] text-slate-400 font-bold uppercase">Item Penjualan:</div>
+                        {(s.items || []).map((it: any) => (
+                          <div key={it.id} className="text-xs text-slate-700 flex justify-between">
+                            <span>{it.itemName}</span>
+                            <span className="font-bold">{it.saleQty} {it.saleUnit} <span className="font-normal text-slate-400">({it.baseQty} {it.ingredient?.unit || 'dasar'})</span></span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <div>
+                          <div className="text-xs font-black text-slate-900">
+                            <span className={s.isVoided ? 'line-through text-slate-400' : ''}>
+                              {formatCurrency(s.totalAmount)}
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-bold text-emerald-600">
+                            Laba: +{formatCurrency(s.grossProfit)}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setSelectedSaleForPrint(s);
+                              setShowSaleInvoiceModal(true);
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all"
+                          >
+                            <Printer size={12} /> Cetak
+                          </button>
+                          {!s.isVoided && (
                             <button
                               onClick={() => {
-                                setSelectedSaleForPrint(s);
-                                setShowSaleInvoiceModal(true);
+                                setVoidSaleTarget(s);
+                                setVoidSaleReason('');
+                                setShowVoidSaleModal(true);
                               }}
-                              title="Lihat & Cetak Faktur / Surat Jalan"
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all"
+                              title="Batalkan Penjualan"
                             >
-                              <Printer size={12} /> Cetak
+                              <Ban size={13} />
                             </button>
-                            {!s.isVoided && (
-                              <button
-                                onClick={() => {
-                                  setVoidSaleTarget(s);
-                                  setVoidSaleReason('');
-                                  setShowVoidSaleModal(true);
-                                }}
-                                title="Batalkan / Koreksi Penjualan"
-                                className="p-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                              >
-                                <Ban size={13} />
-                              </button>
-                            )}
-                          </div>
-                          {s.isVoided && s.voidReason && (
-                            <div className="text-[10px] text-red-500 font-normal text-right mt-1 max-w-[160px] ml-auto">
-                              Alasan: {s.voidReason}
-                            </div>
                           )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                      </div>
+
+                      {s.isVoided && s.voidReason && (
+                        <div className="text-[10px] text-red-500 italic bg-red-50 p-1.5 rounded-lg border border-red-100">
+                          Alasan batal: {s.voidReason}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1325,16 +1757,16 @@ export default function WarehouseView() {
       {/* ─── TAB 3: PERMINTAAN & DISTRIBUSI KE DAPUR CABANG ────────────────── */}
       {activeTab === 'transfers' && (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-3">
             <div>
               <h3 className="text-sm font-black text-slate-800">Riwayat Pengajuan &amp; Distribusi Bahan ke Dapur Cabang</h3>
               <p className="text-[11px] text-slate-500">Stok berpindah saat dapur mengonfirmasi penerimaan bahan</p>
             </div>
             <button
               onClick={() => setShowTransferModal(true)}
-              className="btn btn-primary py-1.5 px-3 rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
+              className="btn btn-primary py-2 px-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 w-full sm:w-auto"
             >
-              <Plus size={14} /> + Permintaan Bahan Baru
+              <Plus size={14} /> Permintaan Bahan Baru
             </button>
           </div>
 
@@ -1542,7 +1974,7 @@ export default function WarehouseView() {
             </div>
             <div className="text-xs">
               <div className="font-black text-emerald-950 flex items-center gap-1.5">
-                Proteksi Keuangan: Arus Kas Toko MUKI RAMEN 100% Terpisah &amp; Aman
+                Proteksi Keuangan: Arus Kas Toko {posContext?.settings?.storeName ? `${posContext.settings.storeName} ` : ''}100% Terpisah &amp; Aman
               </div>
               <p className="text-emerald-800 mt-0.5 leading-relaxed">
                 Belanja pasokan dari supplier menggunakan <strong>Dana Talangan Pribadi Owner / Modal Pusat</strong> sehingga kasir harian &amp; laci POS tidak terganggu. Outlet hanya berkewajiban me-reimburse sejumlah bahan yang telah resmi diterima dan dipakai di dapur.
@@ -1561,10 +1993,10 @@ export default function WarehouseView() {
                 Akumulasi nilai bahan baku yang telah didistribusikan ke unit operasional dapur cabang yang belum diselesaikan (settled) kembali ke entitas modal pusat.
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={handleExportSettlementPDF}
-                className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                 title="Download Laporan Rekonsiliasi & Settlement Owner (PDF)"
               >
                 <FileText size={16} className="text-rose-400" /> Export PDF
@@ -1577,9 +2009,9 @@ export default function WarehouseView() {
                   }));
                   setShowReimburseModal(true);
                 }}
-                className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 shrink-0 flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Coins size={16} /> Proses Settlement / Pelunasan
+                <Coins size={16} /> Proses Settlement
               </button>
             </div>
           </div>
@@ -1711,10 +2143,20 @@ export default function WarehouseView() {
                   <span className="p-1.5 rounded-xl bg-indigo-100 text-indigo-700">
                     <Truck size={18} />
                   </span>
-                  <span>Form Penerimaan Pasokan Masuk Gudang Pusat</span>
+                  <span>
+                    {isRetail
+                      ? 'Form Kulakan & Penerimaan Pasokan Barang Toko'
+                      : isBengkel
+                      ? 'Form Penerimaan Suku Cadang Masuk Gudang Spare Part'
+                      : 'Form Penerimaan Pasokan Masuk Gudang Pusat'}
+                  </span>
                 </h1>
                 <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">
-                  Pencatatan pasokan partai besar / grosir ke Central Warehouse (Bahan Baku)
+                  {isRetail
+                    ? 'Pencatatan pasokan kulakan barang dagangan, penyesuaian HPP, dan penetapan harga jual kasir'
+                    : isBengkel
+                    ? 'Pencatatan penerimaan suku cadang & spare parts ke Gudang Spare Part'
+                    : 'Pencatatan pasokan partai besar / grosir ke Central Warehouse (Bahan Baku)'}
                 </p>
               </div>
             </div>
@@ -1835,11 +2277,11 @@ export default function WarehouseView() {
                   <div>
                     {inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' ? (
                       <span>
-                        <strong>Mode Kas Owner / Bank Aktif:</strong> Pembelian belanja bahan ini dicatat sebagai <strong>Aset Persediaan di Gudang</strong>. Uang di laci kasir kasir <u>sama sekali tidak berkurang</u>.
+                        <strong>Mode Kas Owner / Rekening Aktif:</strong> Pembelian {isRetail ? 'kulakan barang' : isBengkel ? 'suku cadang' : 'belanja bahan'} ini dicatat sebagai <strong>Aset Persediaan di Gudang</strong>. Uang di laci kasir <u>sama sekali tidak berkurang</u>.
                       </span>
                     ) : (
                       <span>
-                        <strong>Mode Laci Kasir (Petty Cash):</strong> Pembelian bahan ini langsung memotong kas operasional / kasir shift berjalan.
+                        <strong>Mode Laci Kasir (Petty Cash):</strong> Pembelian {isRetail ? 'kulakan barang' : isBengkel ? 'suku cadang' : 'belanja bahan'} ini langsung memotong kas operasional / kasir shift berjalan.
                       </span>
                     )}
                   </div>
@@ -1854,8 +2296,16 @@ export default function WarehouseView() {
                       <Package size={18} />
                     </span>
                     <div>
-                      <h2 className="font-extrabold text-sm sm:text-base text-slate-800">Daftar Bahan Baku Grosir yang Masuk</h2>
-                      <p className="text-xs text-slate-400">Input kuantitas kemasan grosir, rasio konversi isi, dan harga modal beli dengan kalkulasi HPP otomatis</p>
+                      <h2 className="font-extrabold text-sm sm:text-base text-slate-800">
+                        {isRetail ? 'Daftar Barang Kulakan yang Masuk' : isBengkel ? 'Daftar Suku Cadang yang Masuk' : 'Daftar Bahan Baku Grosir yang Masuk'}
+                      </h2>
+                      <p className="text-xs text-slate-400">
+                        {isRetail
+                          ? 'Input barang kulakan, harga modal beli (HPP), dan tentukan harga jual kasir dengan pantauan margin otomatis'
+                          : isBengkel
+                          ? 'Input suku cadang, kuantitas beli, harga modal, dan harga jual bengkel'
+                          : 'Input kuantitas kemasan grosir, rasio konversi isi, dan harga modal beli dengan kalkulasi HPP otomatis'}
+                      </p>
                     </div>
                   </div>
 
@@ -1864,7 +2314,7 @@ export default function WarehouseView() {
                     onClick={handleAddInboundItem}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all active:scale-95 cursor-pointer"
                   >
-                    <Plus size={15} /> + Tambah Bahan Baku
+                    <Plus size={15} /> <span>{isRetail ? 'Tambah Barang' : isBengkel ? 'Tambah Suku Cadang' : 'Tambah Bahan Baku'}</span>
                   </button>
                 </div>
 
@@ -1879,9 +2329,18 @@ export default function WarehouseView() {
                     const baseTotal = qty * ratio;
                     const subtotal = qty * price;
                     const costPerBaseUnit = ratio > 0 ? (price / ratio) : 0;
-                    const pUnit = it.purchaseUnit || 'Grosir';
+                    const pUnit = it.purchaseUnit || (isRetail || isBengkel ? 'Pcs' : 'Grosir');
 
-                    const presetUnits = ['Karton', 'Dus', 'Pak', 'Karung', 'Jerigen', 'Bal'];
+                    // Dynamic retail / bengkel calculations
+                    const sellPrice = Number(it.sellingPrice) || 0;
+                    const profitPerUnit = sellPrice - costPerBaseUnit;
+                    const marginPercent = sellPrice > 0 ? ((profitPerUnit / sellPrice) * 100) : 0;
+                    const totalEstimatedProfit = profitPerUnit * baseTotal;
+                    const isWholesale = !!it.isWholesalePack;
+
+                    const presetUnits = isBengkel
+                      ? ['Pcs', 'Set', 'Liter', 'Roll', 'Box', 'Pasang']
+                      : ['Dus', 'Karton', 'Pak', 'Karung', 'Bal', 'Renteng'];
 
                     return (
                       <div 
@@ -1899,11 +2358,11 @@ export default function WarehouseView() {
                               {idx + 1}
                             </span>
                             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                              Baris Bahan #{idx + 1}
+                              Baris {isRetail ? 'Barang' : isBengkel ? 'Part' : 'Bahan'} #{idx + 1}
                             </span>
                             {selectedIng && (
                               <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                {selectedIng.category || 'Bahan'}
+                                {selectedIng.category || (isRetail ? 'Barang' : isBengkel ? 'Part' : 'Bahan')}
                               </span>
                             )}
                           </div>
@@ -1930,156 +2389,483 @@ export default function WarehouseView() {
                           </div>
                         </div>
 
-                        {/* Grid Form Fields */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 sm:gap-4 items-start">
-                          {/* Sisi 1: Pemilihan Bahan Baku (4 Kolom) */}
-                          <div className="md:col-span-4 space-y-1.5">
-                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                              Bahan Baku Terdaftar <span className="text-rose-500">*</span>
-                            </label>
-                            <select
-                              className="w-full py-2.5 px-3 text-xs font-bold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
-                              value={it.ingredientId}
-                              onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
-                              required
-                            >
-                              <option value="">-- Pilih Bahan Baku --</option>
-                              {stockList.map(s => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name} ({s.category}) — Satuan Dapur: {s.unit}
-                                </option>
-                              ))}
-                            </select>
-
-                            {selectedIng ? (
-                              <div className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 text-slate-500">
-                                <span>Stok Gudang Fisik:</span>
-                                <strong className="text-slate-800">{selectedIng.warehouseStock} {selectedIng.unit}</strong>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] text-amber-600 italic">Pilih bahan baku untuk mulai menghitung</div>
-                            )}
-                          </div>
-
-                          {/* Sisi 2: Satuan Grosir & Kuantitas Beli (4 Kolom) */}
-                          <div className="md:col-span-4 space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              {/* Satuan Grosir */}
-                              <div>
-                                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                                  Kemasan Grosir
-                                </label>
-                                <input
-                                  type="text"
-                                  className="w-full py-2 px-2.5 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
-                                  placeholder="cth: Karton"
-                                  value={it.purchaseUnit}
-                                  onChange={e => handleInboundItemChange(idx, 'purchaseUnit', e.target.value)}
-                                  required
-                                />
-                              </div>
-
-                              {/* Qty Beli */}
-                              <div>
-                                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                                  Kuantitas (Qty)
-                                </label>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0.01"
-                                  className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
-                                  value={it.purchaseQty}
-                                  onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
-                                  required
-                                />
-                              </div>
+                        {/* Mode Kulakan Switcher for Retail / Bengkel */}
+                        {(isRetail || isBengkel) && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-100/80 p-2 rounded-xl mb-4 border border-slate-200/60">
+                            <span className="text-[11px] font-bold text-slate-600 pl-1 flex items-center gap-1.5">
+                              <Sparkles size={13} className="text-indigo-600" />
+                              Metode Input Pasokan:
+                            </span>
+                            <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200 shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={() => handleInboundItemChange(idx, 'isWholesalePack', false)}
+                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                  !isWholesale
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                }`}
+                              >
+                                <Store size={12} />
+                                Satuan Eceran (Beli & Jual Langsung)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleInboundItemChange(idx, 'isWholesalePack', true)}
+                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                  isWholesale
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                }`}
+                              >
+                                <Package size={12} />
+                                Kulakan Dus / Partai Besar
+                              </button>
                             </div>
+                          </div>
+                        )}
 
-                            {/* Quick Preset Unit Chips */}
-                            <div className="flex items-center gap-1 overflow-x-auto py-0.5 no-scrollbar">
-                              <span className="text-[9px] text-slate-400 font-bold uppercase shrink-0">Cepat:</span>
-                              {presetUnits.map(unit => (
-                                <button
-                                  type="button"
-                                  key={unit}
-                                  onClick={() => handleInboundItemChange(idx, 'purchaseUnit', unit)}
-                                  className={`text-[10px] px-1.5 py-0.5 rounded font-bold border transition-colors shrink-0 ${
-                                    it.purchaseUnit === unit 
-                                      ? 'bg-indigo-600 text-white border-indigo-600' 
-                                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                                  }`}
+                        {/* Grid Form Fields - DYNAMIC PER VERTICAL & MODE */}
+                        {(isRetail || isBengkel) ? (
+                          !isWholesale ? (
+                            /* ─── RETAIL / BENGKEL: MODE ECERAN LANGSUNG ─── */
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 sm:gap-4 items-start">
+                              {/* Kolom 1: Pemilihan Barang (4 Kolom) */}
+                              <div className="md:col-span-4 space-y-1.5">
+                                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                                  {isRetail ? 'Barang Dagangan Terdaftar' : 'Suku Cadang Terdaftar'} <span className="text-rose-500">*</span>
+                                </label>
+                                <select
+                                  className="w-full py-2.5 px-3 text-xs font-bold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                  value={it.ingredientId}
+                                  onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
+                                  required
                                 >
-                                  {unit}
-                                </button>
-                              ))}
-                            </div>
+                                  <option value="">{isRetail ? '-- Pilih Barang Dagangan --' : '-- Pilih Suku Cadang --'}</option>
+                                  {stockList.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name} ({s.category}) {s.sellPrice ? `— Jual: Rp${s.sellPrice.toLocaleString('id-ID')}` : ''}
+                                    </option>
+                                  ))}
+                                </select>
 
-                            {/* Rasio Konversi Isi */}
-                            <div>
-                              <div className="flex justify-between items-center mb-1">
-                                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                                  Isi per 1 {pUnit}
+                                {selectedIng ? (
+                                  <div className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 text-slate-500">
+                                    <span>Stok Gudang: <strong className="text-slate-800">{selectedIng.warehouseStock} {selectedIng.unit}</strong></span>
+                                    <span className="text-[10px] text-indigo-600 font-semibold">Satuan: {baseUnit}</span>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-amber-600 italic">Pilih produk untuk mulai input</div>
+                                )}
+                              </div>
+
+                              {/* Kolom 2: Jumlah Qty & Harga Beli Modal (4 Kolom) */}
+                              <div className="md:col-span-4 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                  {/* Qty Beli Langsung */}
+                                  <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                      Jumlah Beli ({baseUnit})
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0.01"
+                                      className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                      value={it.purchaseQty}
+                                      onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
+                                      required
+                                    />
+                                  </div>
+
+                                  {/* Harga Beli Satuan */}
+                                  <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                      Harga Beli (HPP)
+                                    </label>
+                                    <div className="relative flex items-center">
+                                      <span className="absolute left-2.5 text-[11px] font-bold text-slate-400">Rp</span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        className="w-full py-2 pl-7 pr-2 text-xs font-black text-right bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                        value={it.purchasePrice}
+                                        onChange={e => handleInboundItemChange(idx, 'purchasePrice', Number(e.target.value))}
+                                        required
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="text-[10px] text-slate-500 font-medium px-1 flex justify-between items-center">
+                                  <span>Total Modal Baris:</span>
+                                  <strong className="text-slate-800">{formatCurrency(subtotal)}</strong>
+                                </div>
+                              </div>
+
+                              {/* Kolom 3: Harga Jual Kasir & Live Margin (4 Kolom) */}
+                              <div className="md:col-span-4 space-y-2">
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                    Harga Jual Kasir (per {baseUnit})
+                                  </label>
+                                  <div className="relative flex items-center">
+                                    <span className="absolute left-2.5 text-[11px] font-bold text-slate-400">Rp</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0"
+                                      placeholder="Contoh: 15000"
+                                      className="w-full py-2 pl-7 pr-2 text-xs font-black text-right bg-white rounded-xl border border-slate-200 focus:border-emerald-600 outline-none shadow-2xs"
+                                      value={it.sellingPrice || ''}
+                                      onChange={e => handleInboundItemChange(idx, 'sellingPrice', Number(e.target.value))}
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Visual Feedback: Margin & Profit Box */}
+                                <div className={`rounded-xl border p-2.5 space-y-1.5 shadow-2xs transition-all ${
+                                  profitPerUnit > 0
+                                    ? 'bg-emerald-50/70 border-emerald-200/80'
+                                    : profitPerUnit < 0
+                                      ? 'bg-rose-50/70 border-rose-200/80'
+                                      : 'bg-white border-slate-200'
+                                }`}>
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-600 font-semibold text-[11px]">Margin per {baseUnit}:</span>
+                                    <span className={`font-black text-xs px-2 py-0.5 rounded-md ${
+                                      profitPerUnit > 0
+                                        ? 'text-emerald-700 bg-white border border-emerald-200'
+                                        : profitPerUnit < 0
+                                          ? 'text-rose-700 bg-white border border-rose-200'
+                                          : 'text-slate-600 bg-slate-100'
+                                    }`}>
+                                      {profitPerUnit >= 0 ? '+' : ''}{formatCurrency(profitPerUnit)} ({marginPercent.toFixed(1)}%)
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[11px] pt-1 border-t border-dashed border-slate-200/70">
+                                    <span className="text-slate-500 font-medium">Potensi Keuntungan:</span>
+                                    <span className={`font-black ${profitPerUnit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                                      {totalEstimatedProfit >= 0 ? '+' : ''}{formatCurrency(totalEstimatedProfit)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* ─── RETAIL / BENGKEL: MODE KULAKAN DUS / PARTAI ─── */
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 sm:gap-4 items-start">
+                              {/* Kolom 1: Pemilihan Barang & Kemasan (4 Kolom) */}
+                              <div className="md:col-span-4 space-y-1.5">
+                                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                                  {isRetail ? 'Barang Dagangan Terdaftar' : 'Suku Cadang Terdaftar'} <span className="text-rose-500">*</span>
                                 </label>
-                                <span className="text-[10px] text-slate-400 font-medium">
-                                  (ke Satuan Dapur)
-                                </span>
-                              </div>
-                              <div className="relative flex items-center">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0.001"
-                                  className="w-full py-2 pl-3 pr-16 text-xs font-black bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
-                                  value={it.conversionRatio}
-                                  onChange={e => handleInboundItemChange(idx, 'conversionRatio', Number(e.target.value))}
+                                <select
+                                  className="w-full py-2.5 px-3 text-xs font-bold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                  value={it.ingredientId}
+                                  onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
                                   required
-                                />
-                                <span className="absolute right-3 text-[11px] font-bold text-indigo-600 pointer-events-none">
-                                  {baseUnit}
-                                </span>
+                                >
+                                  <option value="">{isRetail ? '-- Pilih Barang Dagangan --' : '-- Pilih Suku Cadang --'}</option>
+                                  {stockList.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name} ({s.category}) {s.sellPrice ? `— Jual: Rp${s.sellPrice.toLocaleString('id-ID')}` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                                    Label Kemasan Kulakan
+                                  </label>
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      className="w-28 py-1.5 px-2 text-xs font-semibold bg-white rounded-lg border border-slate-200 focus:border-indigo-600 outline-none"
+                                      placeholder="cth: Dus"
+                                      value={it.purchaseUnit}
+                                      onChange={e => handleInboundItemChange(idx, 'purchaseUnit', e.target.value)}
+                                      required
+                                    />
+                                    <div className="flex items-center gap-1 overflow-x-auto py-0.5 no-scrollbar">
+                                      {presetUnits.slice(0, 4).map(unit => (
+                                        <button
+                                          type="button"
+                                          key={unit}
+                                          onClick={() => handleInboundItemChange(idx, 'purchaseUnit', unit)}
+                                          className={`text-[10px] px-2 py-1 rounded font-bold border transition-colors shrink-0 ${
+                                            it.purchaseUnit === unit 
+                                              ? 'bg-indigo-600 text-white border-indigo-600' 
+                                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                          }`}
+                                        >
+                                          {unit}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Kolom 2: Kuantitas & Isi per Dus (4 Kolom) */}
+                              <div className="md:col-span-4 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                      Qty ({pUnit})
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      min="0.01"
+                                      className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                      value={it.purchaseQty}
+                                      onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
+                                      required
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                      Isi per 1 {pUnit}
+                                    </label>
+                                    <div className="relative flex items-center">
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="1"
+                                        className="w-full py-2 pl-2 pr-10 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                        value={it.conversionRatio}
+                                        onChange={e => handleInboundItemChange(idx, 'conversionRatio', Number(e.target.value))}
+                                        required
+                                      />
+                                      <span className="absolute right-2 text-[10px] font-bold text-slate-400">
+                                        {baseUnit}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-2 flex justify-between items-center text-xs">
+                                  <span className="text-slate-600 font-medium text-[11px]">Total Masuk Stok:</span>
+                                  <span className="font-black text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
+                                    +{baseTotal.toLocaleString('id-ID')} {baseUnit}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Kolom 3: Harga Beli Dus, Harga Jual Eceran, Live Margin (4 Kolom) */}
+                              <div className="md:col-span-4 space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                      Beli per 1 {pUnit}
+                                    </label>
+                                    <div className="relative flex items-center">
+                                      <span className="absolute left-2 text-[10px] font-bold text-slate-400">Rp</span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        className="w-full py-2 pl-6 pr-1.5 text-xs font-black text-right bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                        value={it.purchasePrice}
+                                        onChange={e => handleInboundItemChange(idx, 'purchasePrice', Number(e.target.value))}
+                                        required
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                      Jual per {baseUnit}
+                                    </label>
+                                    <div className="relative flex items-center">
+                                      <span className="absolute left-2 text-[10px] font-bold text-slate-400">Rp</span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        placeholder="Jual"
+                                        className="w-full py-2 pl-6 pr-1.5 text-xs font-black text-right bg-white rounded-xl border border-slate-200 focus:border-emerald-600 outline-none shadow-2xs"
+                                        value={it.sellingPrice || ''}
+                                        onChange={e => handleInboundItemChange(idx, 'sellingPrice', Number(e.target.value))}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className={`rounded-xl border p-2 space-y-1 shadow-2xs transition-all ${
+                                  profitPerUnit > 0
+                                    ? 'bg-emerald-50/70 border-emerald-200/80'
+                                    : profitPerUnit < 0
+                                      ? 'bg-rose-50/70 border-rose-200/80'
+                                      : 'bg-white border-slate-200'
+                                }`}>
+                                  <div className="flex justify-between items-center text-[11px]">
+                                    <span className="text-slate-500 font-medium">HPP per {baseUnit}:</span>
+                                    <strong className="text-slate-800">{formatCurrency(costPerBaseUnit)}</strong>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[11px] pt-0.5 border-t border-dashed border-slate-200/70">
+                                    <span className="text-slate-600 font-semibold">Margin / Laba:</span>
+                                    <span className={`font-black ${profitPerUnit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                                      {profitPerUnit >= 0 ? '+' : ''}{formatCurrency(profitPerUnit)} ({marginPercent.toFixed(1)}%)
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-
-                          {/* Sisi 3: Harga Beli & Hasil Konversi (4 Kolom) */}
-                          <div className="md:col-span-4 space-y-2">
-                            {/* Harga Beli Satuan Grosir */}
-                            <div>
-                              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                                Harga Beli per 1 {pUnit}
+                          )
+                        ) : (
+                          /* ─── KAFE: SATUAN GROSIR & KONVERSI BAHAN BAKU DAPUR ─── */
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 sm:gap-4 items-start">
+                            {/* Sisi 1: Pemilihan Bahan Baku (4 Kolom) */}
+                            <div className="md:col-span-4 space-y-1.5">
+                              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                                Bahan Baku Terdaftar <span className="text-rose-500">*</span>
                               </label>
-                              <div className="relative flex items-center">
-                                <span className="absolute left-3 text-xs font-bold text-slate-400">Rp</span>
-                                <input
-                                  type="number"
-                                  step="any"
-                                  min="0"
-                                  className="w-full py-2 pl-8 pr-3 text-xs font-black text-right bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
-                                  value={it.purchasePrice}
-                                  onChange={e => handleInboundItemChange(idx, 'purchasePrice', Number(e.target.value))}
-                                  required
-                                />
+                              <select
+                                className="w-full py-2.5 px-3 text-xs font-bold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                value={it.ingredientId}
+                                onChange={e => handleInboundItemChange(idx, 'ingredientId', e.target.value)}
+                                required
+                              >
+                                <option value="">-- Pilih Bahan Baku --</option>
+                                {stockList.map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} ({s.category}) — Satuan Dapur: {s.unit}
+                                  </option>
+                                ))}
+                              </select>
+
+                              {selectedIng ? (
+                                <div className="flex items-center justify-between text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/60 text-slate-500">
+                                  <span>Stok Gudang Fisik:</span>
+                                  <strong className="text-slate-800">{selectedIng.warehouseStock} {selectedIng.unit}</strong>
+                                </div>
+                              ) : (
+                                <div className="text-[10px] text-amber-600 italic">Pilih bahan baku untuk mulai menghitung</div>
+                              )}
+                            </div>
+
+                            {/* Sisi 2: Satuan Grosir & Kuantitas Beli (4 Kolom) */}
+                            <div className="md:col-span-4 space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                {/* Satuan Grosir */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                    Kemasan Grosir
+                                  </label>
+                                  <input
+                                    type="text"
+                                    className="w-full py-2 px-2.5 text-xs font-semibold bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                    placeholder="cth: Karton"
+                                    value={it.purchaseUnit}
+                                    onChange={e => handleInboundItemChange(idx, 'purchaseUnit', e.target.value)}
+                                    required
+                                  />
+                                </div>
+
+                                {/* Qty Beli */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                    Kuantitas (Qty)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0.01"
+                                    className="w-full py-2 px-2 text-xs font-black text-center bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                    value={it.purchaseQty}
+                                    onChange={e => handleInboundItemChange(idx, 'purchaseQty', Number(e.target.value))}
+                                    required
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Quick Preset Unit Chips */}
+                              <div className="flex items-center gap-1 overflow-x-auto py-0.5 no-scrollbar">
+                                <span className="text-[9px] text-slate-400 font-bold uppercase shrink-0">Cepat:</span>
+                                {presetUnits.map(unit => (
+                                  <button
+                                    type="button"
+                                    key={unit}
+                                    onClick={() => handleInboundItemChange(idx, 'purchaseUnit', unit)}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded font-bold border transition-colors shrink-0 ${
+                                      it.purchaseUnit === unit 
+                                        ? 'bg-indigo-600 text-white border-indigo-600' 
+                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    {unit}
+                                  </button>
+                                ))}
+                              </div>
+
+                              {/* Rasio Konversi Isi */}
+                              <div>
+                                <div className="flex justify-between items-center mb-1">
+                                  <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                                    Isi per 1 {pUnit}
+                                  </label>
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    (ke Satuan Dapur)
+                                  </span>
+                                </div>
+                                <div className="relative flex items-center">
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0.001"
+                                    className="w-full py-2 pl-3 pr-16 text-xs font-black bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                    value={it.conversionRatio}
+                                    onChange={e => handleInboundItemChange(idx, 'conversionRatio', Number(e.target.value))}
+                                    required
+                                  />
+                                  <span className="absolute right-3 text-[11px] font-bold text-indigo-600 pointer-events-none">
+                                    {baseUnit}
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
-                            {/* Visual Feedback Result Box */}
-                            <div className="bg-white rounded-xl border border-indigo-100 p-2.5 space-y-1.5 shadow-2xs">
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="text-slate-500 font-medium">Hasil Masuk Stok:</span>
-                                <span className="font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60">
-                                  +{baseTotal.toLocaleString('id-ID')} {baseUnit}
-                                </span>
+                            {/* Sisi 3: Harga Beli & Hasil Konversi (4 Kolom) */}
+                            <div className="md:col-span-4 space-y-2">
+                              {/* Harga Beli Satuan Grosir */}
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                                  Harga Beli per 1 {pUnit}
+                                </label>
+                                <div className="relative flex items-center">
+                                  <span className="absolute left-3 text-xs font-bold text-slate-400">Rp</span>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    className="w-full py-2 pl-8 pr-3 text-xs font-black text-right bg-white rounded-xl border border-slate-200 focus:border-indigo-600 outline-none shadow-2xs"
+                                    value={it.purchasePrice}
+                                    onChange={e => handleInboundItemChange(idx, 'purchasePrice', Number(e.target.value))}
+                                    required
+                                  />
+                                </div>
                               </div>
-                              <div className="flex justify-between items-center text-xs pt-1 border-t border-dashed border-slate-100">
-                                <span className="text-slate-400 text-[10px] font-medium">HPP Modal per {baseUnit}:</span>
-                                <span className="font-extrabold text-emerald-700 text-[11px]">
-                                  {formatCurrency(costPerBaseUnit)} / {baseUnit}
-                                </span>
+
+                              {/* Visual Feedback Result Box */}
+                              <div className="bg-white rounded-xl border border-indigo-100 p-2.5 space-y-1.5 shadow-2xs">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="text-slate-500 font-medium">Hasil Masuk Stok:</span>
+                                  <span className="font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60">
+                                    +{baseTotal.toLocaleString('id-ID')} {baseUnit}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs pt-1 border-t border-dashed border-slate-100">
+                                  <span className="text-slate-400 text-[10px] font-medium">HPP Modal per {baseUnit}:</span>
+                                  <span className="font-extrabold text-emerald-700 text-[11px]">
+                                    {formatCurrency(costPerBaseUnit)} / {baseUnit}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2093,7 +2879,7 @@ export default function WarehouseView() {
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs transition-all border border-indigo-200 cursor-pointer active:scale-95"
                   >
                     <Plus size={16} />
-                    <span>+ Tambah Baris Bahan Baku Lain</span>
+                    <span>{isRetail ? 'Tambah Baris Barang Lain' : isBengkel ? 'Tambah Baris Suku Cadang Lain' : 'Tambah Baris Bahan Baku Lain'}</span>
                   </button>
                 </div>
               </div>
@@ -2159,7 +2945,7 @@ export default function WarehouseView() {
               </span>
               <span className="hidden sm:inline text-slate-300">&bull;</span>
               <span className="bg-slate-100 px-2.5 py-1 rounded-lg font-semibold">
-                {inboundForm.items.length} Macam Bahan
+                {inboundForm.items.length} {isRetail ? 'Macam Barang' : isBengkel ? 'Macam Part' : 'Macam Bahan'}
               </span>
               <span className={`px-2.5 py-1 rounded-lg font-bold ${
                 inboundForm.paymentSource === 'DANA_PRIBADI_OWNER' 
@@ -2184,7 +2970,7 @@ export default function WarehouseView() {
                 className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-indigo-600/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Save size={16} />
-                <span>Simpan Belanja Masuk Gudang</span>
+                <span>{isRetail ? 'Simpan Pasokan Masuk Gudang' : isBengkel ? 'Simpan Sparepart Masuk' : 'Simpan Belanja Masuk Gudang'}</span>
               </button>
             </div>
           </footer>
@@ -2203,9 +2989,15 @@ export default function WarehouseView() {
                 </div>
                 <div>
                   <h3 className="font-black text-slate-900 text-base">
-                    Distribusi Bahan ke Dapur
+                    {isRetail ? 'Pindah Stok ke Display / Etalase' : isBengkel ? 'Pengeluaran Part ke Pit Servis' : 'Distribusi Bahan ke Dapur'}
                   </h3>
-                  <p className="text-xs text-slate-500 font-medium">Stok gudang berkurang, siap dimasak di dapur</p>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {isRetail
+                      ? 'Pindah stok gudang ke rak display kasir toko'
+                      : isBengkel
+                      ? 'Keluarkan suku cadang dari rak ke pit servis mekanik'
+                      : 'Stok gudang berkurang, siap dimasak di dapur'}
+                  </p>
                 </div>
               </div>
               <button 
@@ -2221,13 +3013,15 @@ export default function WarehouseView() {
             <form onSubmit={submitTransfer} className="flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider">Daftar Bahan Yang Dikeluarkan</span>
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                    {isRetail ? 'Daftar Barang yang Dipindahkan' : isBengkel ? 'Daftar Part yang Dikeluarkan' : 'Daftar Bahan Yang Dikeluarkan'}
+                  </span>
                   <button
                     type="button"
                     onClick={handleAddTransferItem}
                     className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 active:scale-95 transition-all"
                   >
-                    <Plus size={14} /> + Tambah Bahan
+                    <Plus size={14} /> <span>{isRetail ? 'Tambah Barang' : isBengkel ? 'Tambah Part' : 'Tambah Bahan'}</span>
                   </button>
                 </div>
 
@@ -2243,10 +3037,10 @@ export default function WarehouseView() {
                             onChange={e => handleTransferItemChange(idx, 'ingredientId', e.target.value)}
                             required
                           >
-                            <option value="">-- Pilih Bahan Baku --</option>
+                            <option value="">{isRetail ? '-- Pilih Barang Dagangan --' : isBengkel ? '-- Pilih Suku Cadang --' : '-- Pilih Bahan Baku --'}</option>
                             {stockList.map(s => (
                               <option key={s.id} value={s.id}>
-                                {s.name} (Stok Gudang: {s.warehouseStock} {s.unit})
+                                {s.name} (Stok: {s.warehouseStock} {s.unit})
                               </option>
                             ))}
                           </select>
@@ -2299,11 +3093,19 @@ export default function WarehouseView() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Catatan / Keperluan Dapur</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    {isRetail ? 'Catatan / Keterangan Rak Display' : isBengkel ? 'Catatan / Keterangan Pit Servis' : 'Catatan / Keperluan Dapur'}
+                  </label>
                   <input
                     type="text"
                     className="w-full px-3.5 py-2.5 text-xs font-medium bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-indigo-600"
-                    placeholder="Contoh: Persiapan shift siang / restock kuah ramen"
+                    placeholder={
+                      isRetail
+                        ? 'Contoh: Restock rak sembako depan / display promo kasir'
+                        : isBengkel
+                        ? 'Contoh: Pemasangan service paket berkala pit 1'
+                        : 'Contoh: Persiapan shift siang / restock kuah ramen'
+                    }
                     value={transferForm.notes}
                     onChange={e => setTransferForm({ ...transferForm, notes: e.target.value })}
                   />
@@ -2323,7 +3125,7 @@ export default function WarehouseView() {
                   type="submit"
                   className="flex-1 sm:flex-initial px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                 >
-                  <Check size={16} /> Kirim ke Dapur (1-Klik)
+                  <Check size={16} /> <span>{isRetail ? 'Pindah ke Display (1-Klik)' : isBengkel ? 'Keluarkan ke Pit (1-Klik)' : 'Kirim ke Dapur (1-Klik)'}</span>
                 </button>
               </div>
             </form>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { History, Clock, FileText, CheckCircle, Play, Square, Download, RefreshCw, AlertCircle, Timer, AlertTriangle, X, ShieldAlert, Save } from 'lucide-react';
+import { History, Clock, FileText, CheckCircle, Play, Square, Download, RefreshCw, AlertCircle, Timer, AlertTriangle, X, ShieldAlert, Save, EyeOff, Banknote } from 'lucide-react';
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { jsPDF } from 'jspdf';
@@ -13,6 +13,10 @@ const ShiftHistoryView = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'open' | 'close'>('open');
+
+  // Denomination Breakdown Modal State (Owner Audit)
+  const [isDenomModalOpen, setIsDenomModalOpen] = useState(false);
+  const [selectedDenomShift, setSelectedDenomShift] = useState<any | null>(null);
 
   // Force Close State (Admin only)
   const [isForceCloseModalOpen, setIsForceCloseModalOpen] = useState(false);
@@ -89,6 +93,11 @@ const ShiftHistoryView = () => {
   const handleCloseShift = () => {
     setModalMode('close');
     setIsModalOpen(true);
+  };
+
+  const handleOpenDenomModal = (shift: any) => {
+    setSelectedDenomShift(shift);
+    setIsDenomModalOpen(true);
   };
 
   const handleOpenForceCloseModal = async (shift: any) => {
@@ -324,15 +333,22 @@ const ShiftHistoryView = () => {
                         <Clock size={12} className="text-slate-400" /> {formatDate(shift.waktuBuka)} ({formatTime(shift.waktuBuka)} - {shift.waktuTutup ? formatTime(shift.waktuTutup) : 'Aktif'})
                       </div>
                     </div>
-                    {shift.status === 'Closed' ? (
-                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold flex items-center gap-1">
-                        <CheckCircle size={11} /> Selesai
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-bold flex items-center gap-1">
-                        <Play size={11} /> Aktif
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end gap-1">
+                      {shift.status === 'Closed' ? (
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold flex items-center gap-1">
+                          <CheckCircle size={11} /> Selesai
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-bold flex items-center gap-1">
+                          <Play size={11} /> Aktif
+                        </span>
+                      )}
+                      {shift.isBlindCount && shift.status === 'Closed' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 font-black flex items-center gap-0.5">
+                          <EyeOff size={9} /> Blind ✓
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
@@ -361,13 +377,21 @@ const ShiftHistoryView = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-1">
+                  <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
                     {shift.status === 'Open' && (
                       <button
                         className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-all border border-amber-200 flex items-center gap-1.5"
                         onClick={() => handleOpenForceCloseModal(shift)}
                       >
                         <ShieldAlert size={13} /> Force Close
+                      </button>
+                    )}
+                    {shift.status === 'Closed' && shift.cashDenominations && (
+                      <button
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl text-xs font-bold transition-all border border-indigo-200 flex items-center gap-1.5"
+                        onClick={() => handleOpenDenomModal(shift)}
+                      >
+                        <Banknote size={13} /> Pecahan
                       </button>
                     )}
                     <button
@@ -424,15 +448,22 @@ const ShiftHistoryView = () => {
                         ) : '-'}
                       </td>
                       <td>
-                        {shift.status === 'Closed' ? (
-                          <span className="badge bg-green-100 text-green-700 flex items-center gap-1 w-max border border-green-200">
-                            <CheckCircle size={12} /> Selesai
-                          </span>
-                        ) : (
-                          <span className="badge bg-blue-100 text-blue-700 flex items-center gap-1 w-max border border-blue-200">
-                            <Play size={12} /> Aktif
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          {shift.status === 'Closed' ? (
+                            <span className="badge bg-green-100 text-green-700 flex items-center gap-1 w-max border border-green-200">
+                              <CheckCircle size={12} /> Selesai
+                            </span>
+                          ) : (
+                            <span className="badge bg-blue-100 text-blue-700 flex items-center gap-1 w-max border border-blue-200">
+                              <Play size={12} /> Aktif
+                            </span>
+                          )}
+                          {shift.isBlindCount && shift.status === 'Closed' && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 font-black flex items-center gap-0.5 w-max">
+                              <EyeOff size={9} /> Blind Count ✓
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="text-right">
                         <div className="inline-flex items-center gap-1.5">
@@ -443,6 +474,15 @@ const ShiftHistoryView = () => {
                               title="Tutup Paksa Shift (Khusus Admin/Supervisor)"
                             >
                               <ShieldAlert size={12} /> Force Close
+                            </button>
+                          )}
+                          {shift.status === 'Closed' && shift.cashDenominations && (
+                            <button
+                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-all border border-indigo-200 inline-flex items-center gap-1"
+                              onClick={() => handleOpenDenomModal(shift)}
+                              title="Lihat Detail Pecahan Uang Blind Count"
+                            >
+                              <Banknote size={12} /> Pecahan
                             </button>
                           )}
                           <button
@@ -573,6 +613,91 @@ const ShiftHistoryView = () => {
         onSuccess={fetchData}
         mode={modalMode}
       />
+
+      {/* ── DENOMINATION BREAKDOWN MODAL (OWNER AUDIT) ────────────────────────── */}
+      {isDenomModalOpen && selectedDenomShift && (() => {
+        const DENOM_LABELS: Record<string, string> = {
+          '100000': 'Rp 100.000 (Merah)',
+          '50000':  'Rp 50.000 (Biru)',
+          '20000':  'Rp 20.000 (Hijau)',
+          '10000':  'Rp 10.000 (Ungu)',
+          '5000':   'Rp 5.000 (Kuning)',
+          '2000':   'Rp 2.000 (Abu)',
+          '1000':   'Rp 1.000 (Krem)',
+          'coins':  'Uang Koin'
+        };
+
+        let denomData: Record<string, number> = {};
+        try {
+          denomData = typeof selectedDenomShift.cashDenominations === 'string'
+            ? JSON.parse(selectedDenomShift.cashDenominations)
+            : (selectedDenomShift.cashDenominations || {});
+        } catch { denomData = {}; }
+
+        const denomEntries = Object.entries(denomData).filter(([, count]) => Number(count) > 0);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-indigo-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <Banknote size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">Rincian Pecahan Kas Fisik</h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Shift #{selectedDenomShift.id} · {selectedDenomShift.user?.name || 'Kasir'}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsDenomModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white border border-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-2.5">
+                {selectedDenomShift.isBlindCount && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-[11px] text-amber-800 font-semibold flex items-center gap-2">
+                    <EyeOff size={13} className="text-amber-600" />
+                    Data ini direkam via Blind Count — kasir menghitung tanpa melihat saldo sistem.
+                  </div>
+                )}
+
+                {denomEntries.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">Tidak ada rincian pecahan tersimpan.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {denomEntries.map(([key, count]) => {
+                      const nilai = key === 'coins' ? Number(count) : Number(key) * Number(count);
+                      return (
+                        <div key={key} className="flex justify-between items-center text-xs py-1.5 px-2 rounded-lg hover:bg-slate-50">
+                          <span className="text-slate-600 font-medium">{DENOM_LABELS[key] || key}</span>
+                          <div className="text-right">
+                            {key !== 'coins' && <span className="text-slate-400 mr-2">× {count} lembar</span>}
+                            <span className="font-bold text-slate-800">Rp {nilai.toLocaleString('id-ID')}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t border-dashed border-slate-200 pt-2 flex justify-between font-black text-sm text-indigo-700">
+                      <span>Total Fisik Tercatat:</span>
+                      <span>Rp {(selectedDenomShift.saldoFisikLaci || 0).toLocaleString('id-ID')}</span>
+                    </div>
+                    {selectedDenomShift.catatan && (
+                      <div className="bg-slate-50 rounded-xl p-2.5 text-xs text-slate-600 border border-slate-100">
+                        <span className="font-bold text-slate-500 block text-[10px] uppercase mb-1">Catatan Kasir:</span>
+                        {selectedDenomShift.catatan}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

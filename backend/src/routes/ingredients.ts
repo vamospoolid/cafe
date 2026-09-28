@@ -166,12 +166,17 @@ router.get('/production-forecast', authenticateToken, async (req: Request, res: 
         status = 'Menipis';
       }
 
+      const hpp = calculatedHPP > 0 ? calculatedHPP : (prod.buyPrice || 0);
+      const sellPrice = prod.sellPrice || (prod as any).price || 0;
+      const profitMargin = sellPrice > 0 ? Math.round(((sellPrice - hpp) / sellPrice) * 100) : 0;
+
       return {
         productId: prod.id,
         productName: prod.name,
         categoryName: prod.category?.name || 'Tanpa Kategori',
-        sellPrice: prod.sellPrice,
-        buyPrice: calculatedHPP > 0 ? calculatedHPP : prod.buyPrice,
+        sellPrice,
+        buyPrice: hpp,
+        profitMargin,
         imageUrl: prod.imageUrl,
         hasRecipe: true,
         maxPortions,
@@ -365,54 +370,173 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// POST Catat Stock Loss / Waste (Busuk, Rusak, Kadaluarsa, Trimming)
+// POST Catat Stock Loss / Waste (Dual-Mode: Bahan Baku Mentah & Menu / Porsi Jadi)
 router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { ingredientId, qtyLoss, reason, notes } = req.body;
+    const { targetType = 'INGREDIENT', ingredientId, productId, qtyLoss, reason, notes } = req.body;
     const qty = Number(qtyLoss);
-    if (!ingredientId || isNaN(qty) || qty <= 0) {
-      return res.status(400).json({ error: 'Data pencatatan stock loss tidak valid' });
+    if (isNaN(qty) || qty <= 0) {
+      return res.status(400).json({ error: 'Jumlah kuantitas tidak valid' });
     }
     const userId = (req as any).user?.id || null;
     const userName = (req as any).user?.name || 'Staff Dapur';
+    const reasonLabel = reason || 'Busuk / Basi';
+    const noteText = notes ? ` (${notes})` : '';
+    const lossRef = `LOSS-${Date.now().toString().slice(-6)}`;
 
-    const result = await prisma.$transaction(async (tx) => {
-      const ing = await tx.ingredient.findUnique({ where: { id: Number(ingredientId) } });
-      if (!ing) throw new Error('Bahan baku tidak ditemukan');
+    if (targetType === 'PRODUCT') {
+      if (!productId) {
+        return res.status(400).json({ error: 'Pilih menu masakan jadi terlebih dahulu' });
+      }
 
-      const cost = qty * ing.buyPrice;
-      const updated = await tx.ingredient.update({
-        where: { id: ing.id },
-        data: { stock: { decrement: qty } }
-      });
+      const result = await prisma.$transaction(async (tx) => {
+        const prod = await tx.product.findUnique({
+          where: { id: Number(productId) },
+          include: { recipes: { include: { ingredient: true } } }
+        });
+        if (!prod) throw new Error('Menu masakan tidak ditemukan');
 
-      const lossRef = `LOSS-${Date.now().toString().slice(-6)}`;
-      const reasonLabel = reason || 'Busuk / Kadaluarsa';
-      const noteText = notes ? ` (${notes})` : '';
+        let totalCost = 0;
+        const createdLogs: any[] = [];
 
-      const log = await tx.ingredientLog.create({
-        data: {
-          ingredientId: ing.id,
-          change: -qty,
-          cost,
-          type: 'Rusak',
-          reason: reasonLabel,
-          description: `[Stock Loss] ${reasonLabel}${noteText} | Dicatat oleh: ${userName} | Kerugian: Rp ${cost.toLocaleString('id-ID')}`,
-          referenceId: lossRef,
-          userId
+        if (prod.recipes && prod.recipes.length > 0) {
+          for (const r of prod.recipes) {
+            const ingQty = r.qtyPerServing * qty;
+            const ingCost = ingQty * (r.ingredient?.buyPrice || 0);
+            totalCost += ingCost;
+
+            await tx.ingredient.update({
+              where: { id: r.ingredientId },
+              data: { stock: { decrement: ingQty } }
+            });
+
+            const log = await tx.ingredientLog.create({
+              data: {
+                ingredientId: r.ingredientId,
+                change: -ingQty,
+                cost: ingCost,
+                type: 'Rusak',
+                reason: reasonLabel,
+                description: `[Menu Waste: ${prod.name} x${qty} Porsi] ${reasonLabel}${noteText} | Dicatat oleh: ${userName} | Kerugian: Rp ${ingCost.toLocaleString('id-ID')}`,
+                referenceId: lossRef,
+                userId
+              }
+            });
+            createdLogs.push(log);
+          }
+        } else {
+          // If no recipe BOM, use product buyPrice as fallback cost
+          const fallbackCost = qty * (prod.buyPrice || 0);
+          totalCost = fallbackCost;
+          const firstIng = await tx.ingredient.findFirst();
+          if (firstIng) {
+            const log = await tx.ingredientLog.create({
+              data: {
+                ingredientId: firstIng.id,
+                change: 0,
+                cost: fallbackCost,
+                type: 'Rusak',
+                reason: reasonLabel,
+                description: `[Menu Waste: ${prod.name} x${qty} Porsi] ${reasonLabel}${noteText} | Dicatat oleh: ${userName} | Kerugian: Rp ${fallbackCost.toLocaleString('id-ID')}`,
+                referenceId: lossRef,
+                userId
+              }
+            });
+            createdLogs.push(log);
+          }
         }
+
+        return { product: prod, logs: createdLogs, totalCost };
       });
 
-      return { ingredient: updated, log, cost };
-    });
+      await syncMenuSoldOutStatus(prisma);
+      return res.status(201).json({ message: 'Stock loss menu masakan berhasil dicatat', ...result });
+    } else {
+      // INGREDIENT MODE
+      if (!ingredientId) {
+        return res.status(400).json({ error: 'Pilih bahan baku terlebih dahulu' });
+      }
 
-    // Auto-sync real-time sold out menu status across Kasir & QR Dine-In
-    await syncMenuSoldOutStatus(prisma);
+      const result = await prisma.$transaction(async (tx) => {
+        const ing = await tx.ingredient.findUnique({ where: { id: Number(ingredientId) } });
+        if (!ing) throw new Error('Bahan baku tidak ditemukan');
 
-    res.status(201).json({ message: 'Stock loss berhasil dicatat', ...result });
+        const cost = qty * ing.buyPrice;
+        const updated = await tx.ingredient.update({
+          where: { id: ing.id },
+          data: { stock: { decrement: qty } }
+        });
+
+        const log = await tx.ingredientLog.create({
+          data: {
+            ingredientId: ing.id,
+            change: -qty,
+            cost,
+            type: 'Rusak',
+            reason: reasonLabel,
+            description: `[Stock Loss] ${reasonLabel}${noteText} | Dicatat oleh: ${userName} | Kerugian: Rp ${cost.toLocaleString('id-ID')}`,
+            referenceId: lossRef,
+            userId
+          }
+        });
+
+        return { ingredient: updated, log, cost };
+      });
+
+      await syncMenuSoldOutStatus(prisma);
+      return res.status(201).json({ message: 'Stock loss bahan baku berhasil dicatat', ...result });
+    }
   } catch (error: any) {
     console.error('Error logging stock loss:', error);
     res.status(500).json({ error: error.message || 'Gagal mencatat stock loss' });
+  }
+});
+
+// DELETE /loss/:id - Batalkan / Void catatan stock loss dan kembalikan stok
+router.delete('/loss/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const targetLog = await prisma.ingredientLog.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!targetLog) {
+      return res.status(404).json({ error: 'Data log stock loss tidak ditemukan' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Jika merupakan bagian dari batch menu waste yang memiliki referenceId
+      if (targetLog.referenceId && targetLog.referenceId.startsWith('LOSS-')) {
+        const relatedLogs = await tx.ingredientLog.findMany({
+          where: { referenceId: targetLog.referenceId }
+        });
+
+        for (const log of relatedLogs) {
+          if (log.change < 0) {
+            await tx.ingredient.update({
+              where: { id: log.ingredientId },
+              data: { stock: { increment: Math.abs(log.change) } }
+            });
+          }
+          await tx.ingredientLog.delete({ where: { id: log.id } });
+        }
+      } else {
+        // Log tunggal
+        if (targetLog.change < 0) {
+          await tx.ingredient.update({
+            where: { id: targetLog.ingredientId },
+            data: { stock: { increment: Math.abs(targetLog.change) } }
+          });
+        }
+        await tx.ingredientLog.delete({ where: { id: targetLog.id } });
+      }
+    });
+
+    await syncMenuSoldOutStatus(prisma);
+    res.json({ message: 'Catatan stock loss berhasil dibatalkan dan stok dikembalikan.' });
+  } catch (error: any) {
+    console.error('Error voiding stock loss:', error);
+    res.status(500).json({ error: error.message || 'Gagal membatalkan stock loss' });
   }
 });
 
@@ -448,6 +572,39 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
     const totalLossCost = lossLogs.reduce((sum, log) => sum + (log.cost || (Math.abs(log.change) * (log.ingredient?.buyPrice || 0))), 0);
     const totalLossCount = lossLogs.length;
 
+    // Hitung total gross sales periode ini untuk kalkulasi Waste Ratio
+    const orderSales = await prisma.order.aggregate({
+      _sum: { total: true },
+      where: {
+        status: { not: 'Void' },
+        ...(sDate && eDate ? { createdAt: { gte: sDate, lte: eDate } } : {})
+      }
+    });
+    const grossSales = orderSales._sum.total || 0;
+    const wasteRatio = grossSales > 0 ? (totalLossCost / grossSales) * 100 : (totalLossCost > 0 ? 0.05 : 0);
+
+    // Hitung pembagian kerugian Bahan Mentah vs Porsi Masakan Jadi
+    let rawMaterialCost = 0;
+    let finishedDishCost = 0;
+    let failedPortionsCount = 0;
+    let rawIncidentCount = 0;
+
+    lossLogs.forEach(log => {
+      const c = log.cost || (Math.abs(log.change) * (log.ingredient?.buyPrice || 0));
+      if (log.description && log.description.includes('[Menu Waste:')) {
+        finishedDishCost += c;
+        const match = log.description.match(/x(\d+(?:\.\d+)?)\s*Porsi/i);
+        if (match) {
+          failedPortionsCount += parseFloat(match[1]);
+        } else {
+          failedPortionsCount += 1;
+        }
+      } else {
+        rawMaterialCost += c;
+        rawIncidentCount += 1;
+      }
+    });
+
     // Hitung total pemakaian produksi
     const productionLogs = await prisma.ingredientLog.findMany({
       where: {
@@ -473,22 +630,33 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
     });
 
     // Top 5 loss items
-    const itemMap: Record<number, { id: number; name: string; unit: string; totalQty: number; totalCost: number }> = {};
+    const itemMap: Record<string, { id: number | string; name: string; unit: string; totalQty: number; totalCost: number; isMenu: boolean }> = {};
     lossLogs.forEach(log => {
-      const id = log.ingredientId;
+      let itemName = log.ingredient?.name || 'Unknown';
+      let isMenu = false;
+      if (log.description && log.description.includes('[Menu Waste:')) {
+        const mMatch = log.description.match(/\[Menu Waste:\s*([^\]x]+?)(?:\s*x\d+|\s*\])/i);
+        if (mMatch) {
+          itemName = mMatch[1].trim();
+          isMenu = true;
+        }
+      }
+
+      const key = isMenu ? `MENU-${itemName}` : `ING-${log.ingredientId}`;
       const qty = Math.abs(log.change);
       const c = log.cost || (qty * (log.ingredient?.buyPrice || 0));
-      if (!itemMap[id]) {
-        itemMap[id] = {
-          id,
-          name: log.ingredient?.name || 'Unknown',
-          unit: log.ingredient?.unit || '',
+      if (!itemMap[key]) {
+        itemMap[key] = {
+          id: log.ingredientId,
+          name: itemName,
+          unit: isMenu ? 'porsi' : (log.ingredient?.unit || ''),
           totalQty: 0,
-          totalCost: 0
+          totalCost: 0,
+          isMenu
         };
       }
-      itemMap[id].totalQty += qty;
-      itemMap[id].totalCost += c;
+      itemMap[key].totalQty += qty;
+      itemMap[key].totalCost += c;
     });
 
     const topLossItems = Object.values(itemMap).sort((a, b) => b.totalCost - a.totalCost).slice(0, 5);
@@ -497,6 +665,12 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
       summary: {
         totalLossCost,
         totalLossCount,
+        grossSales,
+        wasteRatio: Math.round(wasteRatio * 100) / 100,
+        rawMaterialCost,
+        rawIncidentCount,
+        finishedDishCost,
+        failedPortionsCount: Math.round(failedPortionsCount),
         totalProductionCost,
         lossPercentage: Math.round(lossPercentage * 10) / 10,
         efficiencyPercentage: Math.round(efficiencyPercentage * 10) / 10,
@@ -1146,7 +1320,7 @@ router.get('/stock-movements', authenticateToken, async (req: Request, res: Resp
     const movements = await prisma.ingredientLog.findMany({
       where,
       include: {
-        ingredient: { select: { id: true, name: true, unit: true, buyPrice: true, category: true } },
+        ingredient: { select: { id: true, name: true, unit: true, buyPrice: true, category: true, stock: true } },
         user: { select: { id: true, name: true } }
       },
       orderBy: { createdAt: 'desc' },

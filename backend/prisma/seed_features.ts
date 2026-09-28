@@ -294,17 +294,31 @@ export async function seedFeaturesAndPlans() {
   }
   console.log(`✅ ${SYSTEM_PLANS.length} SaaS Plans berhasil didaftarkan.`);
 
-  // Pasangkan Master Tenant default ke paket ENTERPRISE
-  const defaultTenant = await prisma.tenant.findUnique({
-    where: { slug: 'mukiramen' }
-  });
+  // Pasangkan seluruh tenant yang ada ke paket ENTERPRISE agar semua fitur aktif
+  if (enterprisePlanId) {
+    const allTenants = await prisma.tenant.findMany();
+    for (const t of allTenants) {
+      await prisma.tenant.update({
+        where: { id: t.id },
+        data: { planId: enterprisePlanId }
+      });
+      console.log(`✅ Tenant (${t.name} - ${t.id}) berhasil diasosiasikan dengan Paket ENTERPRISE.`);
+    }
 
-  if (defaultTenant && enterprisePlanId) {
-    await prisma.tenant.update({
-      where: { id: defaultTenant.id },
-      data: { planId: enterprisePlanId }
+    // Buat/pastikan tenant-default-muki juga ada sebagai fallback safety
+    await prisma.tenant.upsert({
+      where: { id: 'tenant-default-muki' },
+      update: { planId: enterprisePlanId },
+      create: {
+        id: 'tenant-default-muki',
+        name: 'MUKI RAMEN - Master',
+        slug: 'mukiramen',
+        status: 'ACTIVE',
+        planId: enterprisePlanId,
+        ownerName: 'Owner Muki'
+      }
     });
-    console.log(`✅ Master Tenant (${defaultTenant.name}) berhasil diasosiasikan dengan Paket ENTERPRISE.`);
+    console.log('✅ Fallback tenant (tenant-default-muki) siap sebagai safety fallback.');
   }
 }
 

@@ -102,6 +102,17 @@ body {
   background: #94a3b8;
 }
 
+/* Utility to completely hide scrollbars while preserving scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
 /* Form Inputs */
 .form-control {
   width: 100%;
@@ -304,8 +315,20 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2rem;
+  padding: 0 1.5rem;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    height: 3.5rem !important;
+    padding: 0 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+  .topbar-actions {
+    gap: 0.35rem !important;
+  }
 }
 
 .page-title {
@@ -1636,4 +1659,23 @@ input:checked + .toggle-slider:before {
     display: none !important;
   }
 }
+
+/* ── Bahan Baku Bento & Pill Tab Responsive Helpers ─────────── */
+@media (min-width: 640px) {
+  .bento-nav-desktop {
+    display: grid !important;
+  }
+  .bento-nav-mobile {
+    display: none !important;
+  }
+}
+@media (max-width: 639.98px) {
+  .bento-nav-desktop {
+    display: none !important;
+  }
+  .bento-nav-mobile {
+    display: block !important;
+  }
+}
+
 

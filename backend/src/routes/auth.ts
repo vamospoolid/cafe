@@ -47,7 +47,7 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
 
   // Jika belum ada membership terdaftar, fallback ke default tenant
   let activeTenantId = activeMembership?.tenantId || 'tenant-default-muki';
-  let activeOutletId = activeMembership?.tenant.outlets[0]?.id || 'outlet-default-muki-01';
+  let activeOutletId = activeMembership?.tenant?.outlets?.[0]?.id || 'outlet-default-muki-01';
   let activeRoleName = activeMembership?.role?.name || user.role;
   let activeRoleId = activeMembership?.roleId || undefined;
 
@@ -106,10 +106,10 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
 
   const { passwordHash, ...safeUser } = user;
 
-  const membershipsList = user.memberships.map(m => ({
+  const membershipsList = (user.memberships || []).map(m => ({
     tenantId: m.tenantId,
-    tenantName: m.tenant.name,
-    tenantSlug: m.tenant.slug,
+    tenantName: m.tenant?.name || 'Muki Ramen',
+    tenantSlug: m.tenant?.slug || 'muki-ramen',
     roleName: m.role?.name || user.role,
     status: m.status
   }));

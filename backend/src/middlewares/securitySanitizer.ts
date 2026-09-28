@@ -45,10 +45,14 @@ export function securitySanitizerMiddleware(req: Request, _res: Response, next: 
       req.body = sanitizeValue(req.body);
     }
     if (req.query && typeof req.query === 'object') {
-      req.query = sanitizeValue(req.query);
+      for (const key of Object.keys(req.query)) {
+        (req.query as any)[key] = sanitizeValue((req.query as any)[key]);
+      }
     }
     if (req.params && typeof req.params === 'object') {
-      req.params = sanitizeValue(req.params);
+      for (const key of Object.keys(req.params)) {
+        (req.params as any)[key] = sanitizeValue((req.params as any)[key]);
+      }
     }
   } catch (err) {
     console.error('[SecuritySanitizer] Error during payload sanitization:', err);
