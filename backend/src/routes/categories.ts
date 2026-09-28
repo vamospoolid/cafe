@@ -1,21 +1,145 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, requirePermission } from '../middlewares/authMiddleware';
+import { AuditLogger } from '../services/AuditLogger';
+import { CATEGORY_PRESETS, applyPresetToTenant } from '../utils/categoryPresets';
+import { emitToTenant } from '../index';
+import { cacheService } from '../services/CacheService';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Get available industry presets (Kafe, Resto, Bakery)
+router.get('/presets', authenticateToken, (req: Request, res: Response) => {
+  res.json(Object.values(CATEGORY_PRESETS));
+});
+
+// Apply industry category preset to tenant
+router.post('/apply-preset', authenticateToken, requirePermission('categories.manage'), async (req: Request, res: Response) => {
+  try {
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    const { presetId, replaceExisting = false } = req.body;
+    const cleanPresetId = String(presetId || '').toUpperCase();
+    const preset = CATEGORY_PRESETS[cleanPresetId];
+    if (!preset) {
+      return res.status(400).json({ 
+        error: `Preset '${presetId}' tidak valid. Pilihan yang tersedia: ${Object.keys(CATEGORY_PRESETS).join(', ')}` 
+      });
+    }
+
+    // Jika replaceExisting dipilih, periksa apakah ada produk aktif
+    if (replaceExisting) {
+      const activeProductsCount = await prisma.product.count({
+        where: { tenantId, deletedAt: null }
+      });
+      if (activeProductsCount > 0) {
+        return res.status(400).json({
+          error: `Tidak dapat menghapus kategori lama karena masih ada ${activeProductsCount} produk aktif. Non-aktifkan opsi 'Ganti Semua Kategori' untuk menambahkan kategori baru tanpa menghapus yang lama.`
+        });
+      }
+    }
+
+    const result = await applyPresetToTenant(prisma, tenantId, cleanPresetId, Boolean(replaceExisting));
+
+    await AuditLogger.log({
+      action: 'CATEGORY_PRESET_APPLIED',
+      resource: 'SETTINGS',
+      description: `Tenant menerapkan preset kategori industri: "${preset.name}". Total ${result.createdCategories} kategori utama ditambahkan.`,
+      newValue: { presetId: preset.id, totalCategories: result.createdCategories, totalSubCategories: result.createdSubCategories },
+      severity: 'INFO'
+    }, req);
+
+    emitToTenant(tenantId, 'categories:updated', { action: 'APPLY_PRESET', presetId: cleanPresetId });
+    await cacheService.bumpTenantCatalogVersion(tenantId);
+
+    res.status(201).json({
+      success: true,
+      message: `Berhasil menerapkan template kategori "${preset.name}"!`,
+      preset: preset.name,
+      totalAdded: result.createdCategories,
+      totalSubCategoriesAdded: result.createdSubCategories
+    });
+  } catch (err: any) {
+    console.error('Error applying category preset:', err);
+    res.status(500).json({ error: 'Gagal menerapkan preset kategori', details: err.message });
+  }
+});
+
+// Reorder categories sortOrder (Batch reorder for tenant)
+router.post('/reorder', authenticateToken, requirePermission('categories.manage'), async (req: Request, res: Response) => {
+  try {
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Data items urutan tidak valid' });
+    }
+
+    // Validasi semua ID kategori milik tenant aktif
+    const categoryIds = items.map((i: any) => Number(i.id)).filter(Boolean);
+    const existing = await prisma.category.findMany({
+      where: { id: { in: categoryIds }, tenantId, deletedAt: null },
+      select: { id: true }
+    });
+
+    const existingSet = new Set(existing.map(e => e.id));
+    const updates = items.filter((i: any) => existingSet.has(Number(i.id)));
+
+    await prisma.$transaction(
+      updates.map((item: any) =>
+        prisma.category.updateMany({
+          where: { id: Number(item.id), tenantId },
+          data: { sortOrder: Number(item.sortOrder) || 0 }
+        })
+      )
+    );
+
+    emitToTenant(tenantId, 'categories:updated', { action: 'REORDER' });
+
+    res.json({ success: true, message: 'Urutan kategori berhasil diperbarui' });
+  } catch (error) {
+    console.error('Error reordering categories:', error);
+    res.status(500).json({ error: 'Gagal memperbarui urutan kategori' });
+  }
+});
 
 // Get all categories (Public - for Dine-In customers)
 router.get('/public', async (req: Request, res: Response) => {
   try {
+    let tenantId = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string);
+    const tenantSlug = req.query.tenant as string;
+
+    if (!tenantId && tenantSlug) {
+      const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+      if (tenant) tenantId = tenant.id;
+    }
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context required', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    const whereCondition: any = {
+      parentId: null,
+      deletedAt: null,
+      tenantId,
+      isActive: true
+    };
+
     const categories = await prisma.category.findMany({
-      where: { parentId: null },
+      where: whereCondition,
       include: {
         subCategories: {
-          orderBy: { name: 'asc' }
+          where: { deletedAt: null, tenantId, isActive: true },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }]
         }
       },
-      orderBy: { name: 'asc' }
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }]
     });
     res.json(categories);
   } catch (error) {
@@ -23,40 +147,64 @@ router.get('/public', async (req: Request, res: Response) => {
   }
 });
 
-// Get all categories (Admin / POS)
+// Get all categories (Admin / POS - Scoped to active tenant)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const isFlat = req.query.flat === 'true';
+    const includeInactive = req.query.includeInactive === 'true';
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const tenantCondition = { tenantId };
+    const activeCondition = includeInactive ? {} : { isActive: true };
     
     if (isFlat) {
       const allCategories = await prisma.category.findMany({
+        where: {
+          deletedAt: null,
+          ...tenantCondition,
+          ...activeCondition
+        },
         include: {
           parent: true,
           _count: {
-            select: { products: true, subProducts: true }
+            select: { 
+              products: { where: { deletedAt: null } }, 
+              subProducts: { where: { deletedAt: null } } 
+            }
           }
         },
-        orderBy: { name: 'asc' }
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }]
       });
       return res.json(allCategories);
     }
 
     const categories = await prisma.category.findMany({
-      where: { parentId: null },
+      where: { 
+        parentId: null,
+        deletedAt: null,
+        ...tenantCondition,
+        ...activeCondition
+      },
       include: {
         subCategories: {
+          where: { deletedAt: null, ...tenantCondition, ...activeCondition },
           include: {
             _count: {
-              select: { subProducts: true, products: true }
+              select: { 
+                subProducts: { where: { deletedAt: null } }, 
+                products: { where: { deletedAt: null } } 
+              }
             }
           },
-          orderBy: { name: 'asc' }
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }]
         },
         _count: {
-          select: { products: true }
+          select: { products: { where: { deletedAt: null } } }
         }
       },
-      orderBy: { name: 'asc' }
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }]
     });
     res.json(categories);
   } catch (error) {
@@ -65,25 +213,50 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// Create new category or sub-category
-router.post('/', authenticateToken, async (req: Request, res: Response) => {
+// Create new category or sub-category (Scoped to active tenant)
+router.post('/', authenticateToken, requirePermission('categories.manage'), async (req: Request, res: Response) => {
   try {
-    const { name, printerTarget, parentId } = req.body;
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const { name, icon, color, sortOrder, printerTarget, stationTarget, isActive, parentId } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'Nama kategori wajib diisi' });
     }
     
+    let validParentId: number | null = null;
+    if (parentId) {
+      const parent = await prisma.category.findFirst({
+        where: { id: Number(parentId), tenantId, deletedAt: null }
+      });
+      if (!parent) {
+        return res.status(400).json({ error: 'Kategori induk tidak valid atau bukan milik outlet Anda' });
+      }
+      validParentId = parent.id;
+    }
+    
     const category = await prisma.category.create({
       data: { 
+        tenantId,
         name: name.trim(),
-        printerTarget: printerTarget || 'KITCHEN',
-        parentId: parentId ? Number(parentId) : null
+        icon: icon || '🍽️',
+        color: color || '#4f46e5',
+        sortOrder: sortOrder !== undefined ? Number(sortOrder) : 0,
+        printerTarget: printerTarget || (stationTarget === 'BAR' ? 'BAR' : stationTarget === 'NONE' ? 'NONE' : 'KITCHEN'),
+        stationTarget: stationTarget || (printerTarget === 'BAR' ? 'BAR' : printerTarget === 'NONE' ? 'NONE' : 'KITCHEN'),
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
+        parentId: validParentId
       },
       include: {
         parent: true,
         subCategories: true
       }
     });
+
+    emitToTenant(tenantId, 'categories:updated', { action: 'CREATE', categoryId: category.id });
+    await cacheService.bumpTenantCatalogVersion(tenantId);
+
     res.status(201).json(category);
   } catch (error) {
     console.error('Error creating category:', error);
@@ -91,24 +264,65 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// Update category
-router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
+// Update category (Scoped to active tenant)
+router.put('/:id', authenticateToken, requirePermission('categories.manage'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, printerTarget, parentId } = req.body;
+    const categoryId = Number(id);
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const { name, icon, color, sortOrder, printerTarget, stationTarget, isActive, parentId } = req.body;
+
+    const existing = await prisma.category.findFirst({
+      where: {
+        id: categoryId,
+        deletedAt: null,
+        tenantId
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Kategori tidak ditemukan atau Anda tidak memiliki akses.' });
+    }
+
+    let validParentId: number | null | undefined = undefined;
+    if (parentId !== undefined) {
+      if (parentId) {
+        const parent = await prisma.category.findFirst({
+          where: { id: Number(parentId), tenantId, deletedAt: null }
+        });
+        if (!parent || parent.id === categoryId) {
+          return res.status(400).json({ error: 'Kategori induk tidak valid atau bukan milik outlet Anda' });
+        }
+        validParentId = parent.id;
+      } else {
+        validParentId = null;
+      }
+    }
     
     const category = await prisma.category.update({
-      where: { id: Number(id) },
+      where: { id: categoryId },
       data: { 
         name: name !== undefined ? name.trim() : undefined,
-        printerTarget: printerTarget !== undefined ? printerTarget : undefined,
-        parentId: parentId !== undefined ? (parentId ? Number(parentId) : null) : undefined
+        icon: icon !== undefined ? icon : undefined,
+        color: color !== undefined ? color : undefined,
+        sortOrder: sortOrder !== undefined ? Number(sortOrder) : undefined,
+        printerTarget: printerTarget !== undefined ? printerTarget : (stationTarget === 'BAR' ? 'BAR' : stationTarget === 'NONE' ? 'NONE' : stationTarget ? 'KITCHEN' : undefined),
+        stationTarget: stationTarget !== undefined ? stationTarget : (printerTarget === 'BAR' ? 'BAR' : printerTarget === 'NONE' ? 'NONE' : printerTarget ? 'KITCHEN' : undefined),
+        isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+        parentId: validParentId
       },
       include: {
         parent: true,
         subCategories: true
       }
     });
+
+    emitToTenant(tenantId, 'categories:updated', { action: 'UPDATE', categoryId: category.id });
+    await cacheService.bumpTenantCatalogVersion(tenantId);
+
     res.json(category);
   } catch (error) {
     console.error('Error updating category:', error);
@@ -116,58 +330,85 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// Delete category
-router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+// Soft Delete category (Move to Recycle Bin for 30 days)
+router.delete('/:id', authenticateToken, requirePermission('categories.manage'), async (req: Request, res: Response) => {
   try {
     const categoryId = Number(req.params.id);
-    
-    // Check if category has direct products or sub-products
-    const directProductsCount = await prisma.product.count({
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    const existing = await prisma.category.findFirst({
       where: {
+        id: categoryId,
+        deletedAt: null,
+        tenantId
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Kategori tidak ditemukan atau Anda tidak memiliki akses.' });
+    }
+    
+    // 1. Ambil seluruh ID sub-kategori turunan milik tenant ini
+    const childCategories = await prisma.category.findMany({
+      where: { parentId: categoryId, tenantId, deletedAt: null },
+      select: { id: true, name: true }
+    });
+    const allTargetIds = [categoryId, ...childCategories.map(c => c.id)];
+
+    // 2. Periksa apakah ada produk aktif yang mengaitkan kategori induk maupun sub-kategori turunan
+    const activeProductsCount = await prisma.product.count({
+      where: {
+        tenantId,
+        deletedAt: null,
         OR: [
-          { categoryId: categoryId },
-          { subCategoryId: categoryId }
+          { categoryId: { in: allTargetIds } },
+          { subCategoryId: { in: allTargetIds } }
         ]
       }
     });
     
-    if (directProductsCount > 0) {
+    if (activeProductsCount > 0) {
       return res.status(400).json({ 
-        error: `Tidak dapat menghapus kategori karena masih digunakan oleh ${directProductsCount} produk.` 
+        error: `Tidak dapat menghapus kategori karena masih digunakan oleh ${activeProductsCount} produk aktif (termasuk pada sub-kategori). Harap pindahkan produk terlebih dahulu.`,
+        code: 'CATEGORY_HAS_ACTIVE_PRODUCTS'
       });
     }
 
-    // Check if category has subcategories that have products
-    const subCategories = await prisma.category.findMany({
-      where: { parentId: categoryId },
-      include: {
-        _count: {
-          select: { subProducts: true, products: true }
-        }
-      }
-    });
+    // 3. Soft delete kategori induk dan seluruh anak secara atomik & terisolasi per tenant
+    await prisma.$transaction([
+      prisma.category.updateMany({
+        where: { id: categoryId, tenantId, deletedAt: null },
+        data: { deletedAt: new Date() }
+      }),
+      prisma.category.updateMany({
+        where: { parentId: categoryId, tenantId, deletedAt: null },
+        data: { deletedAt: new Date() }
+      })
+    ]);
 
-    const subCategoryProductCount = subCategories.reduce(
-      (sum, sub) => sum + sub._count.products + sub._count.subProducts, 
-      0
-    );
+    await AuditLogger.log({
+      action: 'CATEGORY_SOFT_DELETE',
+      resource: 'SETTINGS',
+      resourceId: String(categoryId),
+      description: `Kategori "${existing.name}" dipindahkan ke Keranjang Sampah (Recycle Bin 30 hari).`,
+      oldValue: { name: existing.name },
+      severity: 'WARNING'
+    }, req);
 
-    if (subCategoryProductCount > 0) {
-      return res.status(400).json({ 
-        error: `Tidak dapat menghapus kategori karena sub-kategorinya masih digunakan oleh ${subCategoryProductCount} produk.` 
-      });
-    }
-    
-    // If it has subcategories with 0 products, delete them or let cascade delete handle it
-    await prisma.category.delete({
-      where: { id: categoryId }
+    emitToTenant(tenantId, 'categories:updated', { action: 'DELETE', categoryId });
+    await cacheService.bumpTenantCatalogVersion(tenantId);
+
+    res.json({ 
+      success: true,
+      message: `Kategori "${existing.name}" dipindahkan ke Keranjang Sampah. Anda dapat memulihkannya dalam 30 hari.` 
     });
-    res.json({ message: 'Kategori berhasil dihapus' });
   } catch (error) {
-    console.error('Error deleting category:', error);
+    console.error('Error soft deleting category:', error);
     res.status(500).json({ error: 'Gagal menghapus kategori' });
   }
 });
 
 export default router;
-

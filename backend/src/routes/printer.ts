@@ -1,10 +1,9 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { PrinterService } from '../services/PrinterService';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Helper to load complete order with product categories
 const getFullOrder = async (orderId: number) => {
@@ -135,4 +134,75 @@ router.post('/all', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/printer/send-whatsapp — antrekan pengiriman struk digital / notifikasi WA di background
+router.post('/send-whatsapp', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const { phone, content, recipientName, messageType, metadata } = req.body;
+
+    if (!phone || !content) {
+      return res.status(400).json({ error: 'Nomor WhatsApp dan isi pesan wajib disertakan' });
+    }
+
+    const { enqueueWhatsAppMessage } = await import('../queues/waQueue');
+    const job = await enqueueWhatsAppMessage(
+      tenantId,
+      phone,
+      content,
+      messageType || 'RECEIPT',
+      recipientName,
+      metadata
+    );
+
+    res.status(202).json({
+      success: true,
+      status: 'QUEUED',
+      jobId: job.id,
+      message: 'Pesan WhatsApp sedang diproses di antrean background.'
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Gagal mendaftarkan antrean WhatsApp' });
+  }
+});
+
+// POST /api/printer/network-print — Relay raw ESC/POS bytes / command ke printer LAN/WiFi TCP Port 9100
+router.post('/network-print', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    const { printerIp, port = 9100, rawBase64, textContent, stationTarget } = req.body;
+
+    if (!printerIp) {
+      return res.status(400).json({ error: 'IP printer LAN wajib diisi' });
+    }
+
+    let printBuffer: Buffer;
+    if (rawBase64) {
+      printBuffer = Buffer.from(rawBase64, 'base64');
+    } else if (textContent) {
+      printBuffer = Buffer.from(textContent, 'utf-8');
+    } else {
+      return res.status(400).json({ error: 'Konten cetak (rawBase64 atau textContent) wajib disertakan' });
+    }
+
+    await PrinterService.sendRawToNetwork(printerIp, Number(port) || 9100, printBuffer);
+
+    res.json({
+      success: true,
+      message: `Data berhasil dikirim ke printer ${stationTarget || 'LAN'} (${printerIp}:${port})`
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: `Gagal mencetak ke printer LAN: ${error.message}` });
+  }
+});
+
 export default router;
+

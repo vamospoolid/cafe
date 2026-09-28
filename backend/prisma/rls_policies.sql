@@ -48,7 +48,19 @@ DECLARE
     'Subscription',
     'Invoice',
     'PaymentTransaction',
-    'TenantFeature'
+    'TenantFeature',
+    -- Bengkel Vertical Entities
+    'WorkOrder',
+    'WorkOrderService',
+    'WorkOrderPart',
+    'WorkOrderReturn',
+    'WorkOrderReturnItem',
+    'MechanicProfile',
+    'CommissionPayout',
+    'WorkOrderInvoice',
+    'WorkOrderInvoiceItem',
+    'Vehicle',
+    'ServiceType'
   ];
 BEGIN
   FOREACH tbl_name IN ARRAY tables_list LOOP

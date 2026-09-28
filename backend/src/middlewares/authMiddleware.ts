@@ -1,9 +1,9 @@
+import prisma from '../db';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { TenantContext } from '../utils/tenantContext';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
-const prisma = new PrismaClient();
 
 export interface AuthUser {
   id: number;
@@ -15,6 +15,8 @@ export interface AuthUser {
   roleId?: string;
   permissions: string[] | Record<string, boolean>;
   isPlatformAdmin?: boolean;
+  isImpersonated?: boolean;
+  impersonatorId?: number;
 }
 
 export interface AuthRequest extends Request {
@@ -111,11 +113,13 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       id: userExists.id,
       username: userExists.username,
       name: userExists.name,
-      tenantId: activeTenantId || 'tenant-default-muki',
+      tenantId: activeTenantId || undefined,
       role: activeRole || userExists.role,
       roleId: activeRoleId,
       permissions: permissionsArray,
-      isPlatformAdmin: userExists.isPlatformAdmin || false
+      isPlatformAdmin: userExists.isPlatformAdmin || false,
+      isImpersonated: verified.isImpersonated === true,
+      impersonatorId: verified.impersonatorId ? Number(verified.impersonatorId) : undefined
     };
 
     next();
@@ -182,7 +186,14 @@ export const requirePlatformAdmin = (req: AuthRequest, res: Response, next: Next
     return res.status(401).json({ error: 'Akses Ditolak: Memerlukan login.' });
   }
 
-  const isSuper = req.user.isPlatformAdmin === true || req.user.role === 'SUPERADMIN' || req.user.role === 'OWNER';
+  // Celah Keamanan: Sesi impersonasi dilarang keras mengakses endpoint platform developer
+  if (req.user.isImpersonated) {
+    return res.status(403).json({
+      error: 'Akses Ditolak: Sesi impersonasi tidak diizinkan mengakses Master Console.'
+    });
+  }
+
+  const isSuper = req.user.isPlatformAdmin === true || req.user.role === 'SUPERADMIN';
   if (!isSuper) {
     return res.status(403).json({
       error: 'Akses Ditolak: Hanya Platform Developer / SuperAdmin yang memiliki wewenang ke Master Console.'
@@ -194,3 +205,56 @@ export const requirePlatformAdmin = (req: AuthRequest, res: Response, next: Next
 
 // Legacy backwards compatibility alias
 export const requireAdmin = requirePermission(['settings.manage', 'employees.manage']);
+
+/**
+ * Middleware — Blokir akses jika tenant berstatus SUSPENDED atau INACTIVE.
+ * Platform Admin (isPlatformAdmin = true) selalu diizinkan bypass.
+ * Fail-open saat DB error agar tidak memblokir shift aktif saat gangguan DB.
+ */
+export const requireActiveTenant = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  // Platform Admin tidak terikat status tenant — bypass selalu
+  if (req.user?.isPlatformAdmin) return next();
+
+  // Ambil tenantId dari request context (diisi oleh tenantResolverMiddleware / authenticateToken / TenantContext)
+  const tenantId = (req as any).tenantId || req.user?.tenantId || TenantContext.getTenantId();
+  if (!tenantId) return next(); // Route publik / tanpa konteks tenant
+
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true, status: true }
+    });
+
+    if (!tenant) {
+      res.status(403).json({
+        error: 'Tenant tidak ditemukan.',
+        code: 'TENANT_NOT_FOUND'
+      });
+      return;
+    }
+
+    if (tenant.status === 'SUSPENDED') {
+      res.status(403).json({
+        error: 'Akun tenant Anda sedang ditangguhkan. Hubungi administrator platform untuk informasi lebih lanjut.',
+        code: 'TENANT_SUSPENDED',
+        tenantName: tenant.name
+      });
+      return;
+    }
+
+    if (tenant.status === 'INACTIVE') {
+      res.status(403).json({
+        error: 'Akun tenant tidak aktif.',
+        code: 'TENANT_INACTIVE',
+        tenantName: tenant.name
+      });
+      return;
+    }
+
+    next();
+  } catch (err: any) {
+    // Fail-open: jika DB error, jangan blokir request agar shift kasir yang sedang berjalan tidak terganggu
+    console.error('[requireActiveTenant] DB error saat cek status tenant:', err?.message || err);
+    next();
+  }
+};

@@ -1,25 +1,47 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// Buat PO number otomatis: PO-YYYYMMDD-XXX
-const generatePoNumber = async (): Promise<string> => {
+// Router-level fail-closed guard: all purchase order operations require authentication & tenant context
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const user = (req as AuthRequest).user;
+  const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+  if (!tenantId) {
+    return res.status(400).json({ 
+      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
+      code: 'MISSING_TENANT_CONTEXT' 
+    });
+  }
+  next();
+});
+
+export const generatePoNumber = async (tenantId?: string): Promise<string> => {
+  if (!tenantId) {
+    throw new Error('MISSING_TENANT_ID: generatePoNumber requires valid tenantId');
+  }
   const today = new Date();
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
   const count = await prisma.purchaseOrder.count({
-    where: { poNumber: { startsWith: `PO-${dateStr}` } }
+    where: {
+      poNumber: { startsWith: `PO-${dateStr}` },
+      tenantId
+    }
   });
   return `PO-${dateStr}-${String(count + 1).padStart(3, '0')}`;
 };
 
-// GET all POs
+// GET all POs - Terisolasi per Tenant
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { status, supplierId } = req.query;
-    const where: any = {};
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+
+    const where: any = { tenantId };
     if (status) where.status = status;
     if (supplierId) where.supplierId = Number(supplierId);
 
@@ -38,12 +60,18 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// GET single PO detail
+// GET single PO detail - Terisolasi per Tenant
 router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const po = await prisma.purchaseOrder.findUnique({
-      where: { id: Number(id) },
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+
+    const po = await prisma.purchaseOrder.findFirst({
+      where: {
+        id: Number(id),
+        tenantId
+      },
       include: {
         supplier: true,
         user: { select: { name: true } },
@@ -62,21 +90,53 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// POST create PO baru
+// POST create PO baru - Terisolasi per Tenant & Outlet
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.id;
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    const outletId = user?.outletId || TenantContext.getOutletId();
+    const userId = user?.id || 1;
     const { supplierId, notes, items } = req.body;
     // items: Array<{ productId?, ingredientId?, itemName, unit, qtyOrdered, unitPrice }>
 
     if (!supplierId) return res.status(400).json({ error: 'Supplier wajib dipilih' });
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'PO harus memiliki minimal 1 item' });
 
-    const poNumber = await generatePoNumber();
+    // Validate supplier belongs to active tenant
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: Number(supplierId), tenantId }
+    });
+    if (!supplier) return res.status(404).json({ error: 'Supplier tidak ditemukan atau bukan milik tenant ini' });
+
+    // Validate nested items belong to active tenant
+    const productIds = items.filter((i: any) => i.productId).map((i: any) => Number(i.productId));
+    if (productIds.length > 0) {
+      const validProducts = await prisma.product.findMany({
+        where: { id: { in: productIds }, tenantId }
+      });
+      if (validProducts.length !== new Set(productIds).size) {
+        return res.status(400).json({ error: 'Satu atau lebih produk tidak ditemukan atau bukan milik tenant ini' });
+      }
+    }
+
+    const ingredientIds = items.filter((i: any) => i.ingredientId).map((i: any) => Number(i.ingredientId));
+    if (ingredientIds.length > 0) {
+      const validIngredients = await prisma.ingredient.findMany({
+        where: { id: { in: ingredientIds }, tenantId }
+      });
+      if (validIngredients.length !== new Set(ingredientIds).size) {
+        return res.status(400).json({ error: 'Satu atau lebih bahan baku tidak ditemukan atau bukan milik tenant ini' });
+      }
+    }
+
+    const poNumber = await generatePoNumber(tenantId);
     const totalAmount = items.reduce((sum: number, i: any) => sum + (Number(i.qtyOrdered) * Number(i.unitPrice)), 0);
 
     const po = await prisma.purchaseOrder.create({
       data: {
+        tenantId,
+        outletId,
         poNumber,
         supplierId: Number(supplierId),
         userId,
@@ -85,6 +145,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         status: 'Draft',
         items: {
           create: items.map((item: any) => ({
+            tenantId,
             productId: item.productId ? Number(item.productId) : null,
             ingredientId: item.ingredientId ? Number(item.ingredientId) : null,
             itemName: item.itemName,
@@ -104,15 +165,51 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// PUT update PO (hanya jika Draft)
+// PUT update PO (hanya jika Draft) - Terisolasi per Tenant
 router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { supplierId, notes, items } = req.body;
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
 
-    const po = await prisma.purchaseOrder.findUnique({ where: { id: Number(id) } });
+    const po = await prisma.purchaseOrder.findFirst({
+      where: {
+        id: Number(id),
+        tenantId
+      }
+    });
     if (!po) return res.status(404).json({ error: 'PO tidak ditemukan' });
     if (po.status !== 'Draft') return res.status(400).json({ error: 'Hanya PO berstatus Draft yang dapat diubah' });
+
+    if (supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: { id: Number(supplierId), tenantId }
+      });
+      if (!supplier) return res.status(404).json({ error: 'Supplier tidak ditemukan atau bukan milik tenant ini' });
+    }
+
+    if (items) {
+      const productIds = items.filter((i: any) => i.productId).map((i: any) => Number(i.productId));
+      if (productIds.length > 0) {
+        const validProducts = await prisma.product.findMany({
+          where: { id: { in: productIds }, tenantId }
+        });
+        if (validProducts.length !== new Set(productIds).size) {
+          return res.status(400).json({ error: 'Satu atau lebih produk tidak ditemukan atau bukan milik tenant ini' });
+        }
+      }
+
+      const ingredientIds = items.filter((i: any) => i.ingredientId).map((i: any) => Number(i.ingredientId));
+      if (ingredientIds.length > 0) {
+        const validIngredients = await prisma.ingredient.findMany({
+          where: { id: { in: ingredientIds }, tenantId }
+        });
+        if (validIngredients.length !== new Set(ingredientIds).size) {
+          return res.status(400).json({ error: 'Satu atau lebih bahan baku tidak ditemukan atau bukan milik tenant ini' });
+        }
+      }
+    }
 
     const totalAmount = items
       ? items.reduce((sum: number, i: any) => sum + (Number(i.qtyOrdered) * Number(i.unitPrice)), 0)
@@ -123,6 +220,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
         await tx.purchaseOrderItem.deleteMany({ where: { poId: Number(id) } });
         await tx.purchaseOrderItem.createMany({
           data: items.map((item: any) => ({
+            tenantId,
             poId: Number(id),
             productId: item.productId ? Number(item.productId) : null,
             ingredientId: item.ingredientId ? Number(item.ingredientId) : null,
@@ -147,11 +245,19 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// PATCH send PO → status: Dikirim
+// PATCH send PO → status: Dikirim - Terisolasi per Tenant
 router.patch('/:id/send', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const po = await prisma.purchaseOrder.findUnique({ where: { id: Number(id) } });
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+
+    const po = await prisma.purchaseOrder.findFirst({
+      where: {
+        id: Number(id),
+        tenantId
+      }
+    });
     if (!po) return res.status(404).json({ error: 'PO tidak ditemukan' });
     if (po.status !== 'Draft') return res.status(400).json({ error: 'Hanya PO Draft yang bisa dikirim' });
 
@@ -165,30 +271,32 @@ router.patch('/:id/send', authenticateToken, async (req: Request, res: Response)
   }
 });
 
-// PATCH receive PO → proses penerimaan barang + update stok
+// PATCH receive PO → proses penerimaan barang + update stok bahan/produk + pengeluaran kas proporsional
 router.patch('/:id/receive', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { receivedItems } = req.body;
+    const { receivedItems, paymentSource = 'BANK_TRANSFER' } = req.body;
     // receivedItems: Array<{ itemId: number, qtyReceived: number }>
-    const userId = (req as any).user.id;
+    // paymentSource: 'CASH_DRAWER' | 'BANK_TRANSFER' | 'SUPPLIER_CREDIT'
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    const outletId = user?.outletId || TenantContext.getOutletId();
+    const userId = user?.id || 1;
 
-    const po = await prisma.purchaseOrder.findUnique({
-      where: { id: Number(id) },
-      include: { items: true }
+    const po = await prisma.purchaseOrder.findFirst({
+      where: {
+        id: Number(id),
+        tenantId
+      },
+      include: { items: true, supplier: true }
     });
     if (!po) return res.status(404).json({ error: 'PO tidak ditemukan' });
     if (po.status === 'Diterima' || po.status === 'Dibatalkan') {
       return res.status(400).json({ error: `PO berstatus ${po.status} tidak dapat diproses` });
     }
 
-    // Cek mode inventaris
-    const settings = await prisma.settings.findFirst();
-    const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
-
     const result = await prisma.$transaction(async (tx) => {
-      let totalReceived = 0;
-      let totalItems = po.items.length;
+      let batchExpense = 0;
 
       for (const recv of (receivedItems as any[])) {
         const poItem = po.items.find(i => i.id === recv.itemId);
@@ -203,47 +311,94 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
           data: { qtyReceived: { increment: qty } }
         });
 
-        // Update stok sesuai mode
-        if (isAdvancedMode && poItem.ingredientId) {
-          // Advanced Mode: naikkan stok bahan baku
+        // 1. Jika PO Item memiliki ingredientId (Bahan Baku):
+        // Naikkan stok Ingredient & update buyPrice secara dinamis menggunakan Weighted Moving Average
+        if (poItem.ingredientId) {
+          const currentIng = await tx.ingredient.findUnique({ where: { id: poItem.ingredientId } });
+          const oldStock = Math.max(0, currentIng?.stock || 0);
+          const oldPrice = currentIng?.buyPrice || 0;
+          const newQty = qty;
+          const newPrice = poItem.unitPrice;
+          const weightedPrice = (oldStock + newQty > 0)
+            ? Math.round(((oldStock * oldPrice) + (newQty * newPrice)) / (oldStock + newQty))
+            : newPrice;
+
           await tx.ingredient.update({
             where: { id: poItem.ingredientId },
-            data: { stock: { increment: qty } }
-          });
-          await tx.ingredientLog.create({
-            data: {
-              ingredientId: poItem.ingredientId,
-              change: qty,
-              type: 'PO',
-              description: `Penerimaan PO #${po.poNumber}`,
-              referenceId: po.poNumber
+            data: { 
+              stock: { increment: qty },
+              buyPrice: weightedPrice
             }
           });
-        } else if (!isAdvancedMode && poItem.productId) {
-          // Simple Mode: naikkan stok produk
-          await tx.product.update({
-            where: { id: poItem.productId },
-            data: { stock: { increment: qty } }
+
+          await tx.ingredientLog.create({
+            data: {
+              tenantId: po.tenantId || tenantId,
+              outletId: po.outletId || outletId,
+              ingredientId: poItem.ingredientId,
+              change: qty,
+              cost: Math.round(qty * poItem.unitPrice),
+              type: 'PO',
+              description: `Penerimaan PO #${po.poNumber} (${poItem.itemName}) [HPP: Rp ${oldPrice.toLocaleString('id-ID')} -> Rp ${weightedPrice.toLocaleString('id-ID')}]`,
+              referenceId: po.poNumber,
+              userId
+            }
           });
         }
-        totalReceived++;
+
+        // 2. Jika PO Item memiliki productId (Barang Retail Jadi):
+        // Naikkan stok Product & update buyPrice secara dinamis menggunakan Weighted Moving Average
+        if (poItem.productId) {
+          const currentProd = await tx.product.findUnique({ where: { id: poItem.productId } });
+          const oldStock = Math.max(0, currentProd?.stock || 0);
+          const oldPrice = currentProd?.buyPrice || 0;
+          const newQty = qty;
+          const newPrice = poItem.unitPrice;
+          const weightedPrice = (oldStock + newQty > 0)
+            ? Math.round(((oldStock * oldPrice) + (newQty * newPrice)) / (oldStock + newQty))
+            : newPrice;
+
+          await tx.product.update({
+            where: { id: poItem.productId },
+            data: { 
+              stock: { increment: qty },
+              buyPrice: weightedPrice
+            }
+          });
+        }
+
+        batchExpense += (qty * poItem.unitPrice);
       }
 
-      // Cek apakah semua item sudah diterima penuh
+      // Cek status penerimaan keseluruhan PO
       const updatedItems = await tx.purchaseOrderItem.findMany({ where: { poId: Number(id) } });
       const allFullyReceived = updatedItems.every(i => i.qtyReceived >= i.qtyOrdered);
       const anyReceived = updatedItems.some(i => i.qtyReceived > 0);
 
       const newStatus = allFullyReceived ? 'Diterima' : (anyReceived ? 'Diterima Sebagian' : po.status);
 
-      // Catat pengeluaran kas jika sudah fully received
-      if (allFullyReceived) {
+      // Catat pengeluaran kas proporsional sesuai nominal barang yang nyata-nyata diterima pada batch ini
+      if (batchExpense > 0) {
+        const supplierName = po.supplier?.name || 'Supplier';
+        let categoryExpense = 'Pembelian Stok - Bank';
+        let sourceLabel = 'Transfer Bank Kantor';
+
+        if (paymentSource === 'CASH_DRAWER') {
+          categoryExpense = 'Pembelian Stok - Kasir';
+          sourceLabel = 'Kas Laci Kasir (Petty Cash)';
+        } else if (paymentSource === 'SUPPLIER_CREDIT') {
+          categoryExpense = 'Pembelian Stok - Tempo';
+          sourceLabel = 'Hutang Tempo Supplier';
+        }
+
         await tx.cashFlow.create({
           data: {
+            tenantId: po.tenantId || tenantId,
+            outletId: po.outletId || outletId,
             type: 'Pengeluaran',
-            category: 'Pembelian Stok',
-            amount: po.totalAmount,
-            description: `PO ${po.poNumber} dari ${(await tx.supplier.findUnique({ where: { id: po.supplierId } }))?.name}`,
+            category: categoryExpense,
+            amount: batchExpense,
+            description: `Belanja PO #${po.poNumber} (${supplierName}) - [${sourceLabel}] ${allFullyReceived ? 'Penuh' : 'Bertahap'}`,
             userId
           }
         });
@@ -266,11 +421,19 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
   }
 });
 
-// PATCH cancel PO
+// PATCH cancel PO - Terisolasi per Tenant
 router.patch('/:id/cancel', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const po = await prisma.purchaseOrder.findUnique({ where: { id: Number(id) } });
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+
+    const po = await prisma.purchaseOrder.findFirst({
+      where: {
+        id: Number(id),
+        tenantId
+      }
+    });
     if (!po) return res.status(404).json({ error: 'PO tidak ditemukan' });
     if (!['Draft', 'Dikirim'].includes(po.status)) {
       return res.status(400).json({ error: 'Hanya PO Draft atau Dikirim yang dapat dibatalkan' });

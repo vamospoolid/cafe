@@ -239,11 +239,12 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 <select name="role" className="form-control font-semibold" value={formData.role} onChange={handleChange}>
                   {availableRoles.length > 0 ? (
                     availableRoles.map(r => (
-                      <option key={r.id} value={r.name}>{r.name} - {r.description?.split('-')[0]}</option>
+                      <option key={r.id} value={r.name}>{r.name} — {r.description}</option>
                     ))
                   ) : (
                     <>
                       <option value="CASHIER">CASHIER (Kasir)</option>
+                      <option value="MEKANIK">MEKANIK (Mekanik / Teknisi Bengkel)</option>
                       <option value="KITCHEN">KITCHEN (Dapur)</option>
                       <option value="MANAGER">MANAGER (Manager Outlet)</option>
                       <option value="WAREHOUSE">WAREHOUSE (Gudang)</option>

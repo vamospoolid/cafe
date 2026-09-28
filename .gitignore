@@ -17,3 +17,19 @@ backend/uploads/*
 !backend/uploads/.gitkeep
 
 
+# Build artifacts & releases
+release/
+*.apk
+*.aab
+
+# Local backups & DB dumps
+backups/
+backend/backups/
+*.gz.enc
+*.meta.json
+
+# Local uploaded files
+uploads/
+backend/uploads/
+
+

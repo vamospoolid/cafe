@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db';
 import { Request } from 'express';
 import { TenantContext } from '../utils/tenantContext';
 
-const prisma = new PrismaClient();
 
 export interface AuditLogInput {
   tenantId?: string | null;
@@ -41,11 +40,18 @@ export class AuditLogger {
    */
   static async log(input: AuditLogInput, req?: Request): Promise<void> {
     try {
-      const tenantId = input.tenantId ?? 
-        (req as any)?.tenantId ?? 
-        (req as any)?.user?.tenantId ?? 
-        TenantContext.getTenantId() ?? 
-        null;
+      // PENTING: Bedakan antara tenantId yang sengaja null (platform-level event)
+      // vs tenantId yang tidak diisi (undefined → gunakan fallback dari context).
+      // Gunakan 'in' check untuk memastikan caller sengaja memberikan null.
+      const callerExplicitlyPassedNull = 'tenantId' in input && input.tenantId === null;
+
+      const tenantId = callerExplicitlyPassedNull
+        ? null   // Platform-level event — jangan fallback ke tenant context
+        : (input.tenantId ??
+            (req as any)?.tenantId ??
+            (req as any)?.user?.tenantId ??
+            TenantContext.getTenantId() ??
+            null);
 
       const outletId = input.outletId ?? 
         (req as any)?.outletId ?? 
@@ -92,6 +98,13 @@ export class AuditLogger {
         }
       };
 
+      let description = input.description || null;
+      if ((req as any)?.user?.isImpersonated) {
+        const impersonatorId = (req as any)?.user?.impersonatorId;
+        const tag = `[IMPERSONATED by Admin #${impersonatorId || 'Unknown'}]`;
+        description = description ? `${tag} ${description}` : tag;
+      }
+
       await prisma.auditLog.create({
         data: {
           tenantId,
@@ -102,7 +115,7 @@ export class AuditLogger {
           action: input.action.toUpperCase(),
           resource: input.resource.toUpperCase(),
           resourceId: input.resourceId !== undefined && input.resourceId !== null ? String(input.resourceId) : null,
-          description: input.description || null,
+          description,
           oldValue: stringifyVal(input.oldValue),
           newValue: stringifyVal(input.newValue),
           ipAddress: ipAddress ? String(ipAddress) : null,
@@ -124,7 +137,10 @@ export class AuditLogger {
     const skip = (page - 1) * limit;
 
     const where: any = {
-      tenantId
+      tenantId,
+      // Double-protection: jangan pernah tampilkan event platform-level ke tenant audit trail
+      // Ini mencakup data historis (pre-fix) maupun event yang salah masuk di masa depan
+      NOT: { resource: 'PLATFORM_ADMIN' }
     };
 
     if (filter.outletId) {
@@ -200,7 +216,8 @@ export class AuditLogger {
    * Export all audit logs matching filter for export (max 1000 items).
    */
   static async exportLogs(tenantId: string, filter: AuditLogFilter = {}) {
-    const where: any = { tenantId };
+    // Selalu exclude event PLATFORM_ADMIN dari export tenant
+    const where: any = { tenantId, NOT: { resource: 'PLATFORM_ADMIN' } };
 
     if (filter.outletId) where.outletId = filter.outletId;
     if (filter.userId) where.userId = Number(filter.userId);
@@ -235,15 +252,17 @@ export class AuditLogger {
   static async getSummary(tenantId: string) {
     const now = new Date();
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    // Selalu exclude event PLATFORM_ADMIN dari ringkasan tenant
+    const baseWhere = { tenantId, NOT: { resource: 'PLATFORM_ADMIN' } };
 
     const [totalLogs, criticalCount, warningCount, recentLogs, topActions] = await Promise.all([
-      prisma.auditLog.count({ where: { tenantId } }),
-      prisma.auditLog.count({ where: { tenantId, severity: 'CRITICAL' } }),
-      prisma.auditLog.count({ where: { tenantId, severity: 'WARNING' } }),
-      prisma.auditLog.count({ where: { tenantId, createdAt: { gte: last24h } } }),
+      prisma.auditLog.count({ where: baseWhere }),
+      prisma.auditLog.count({ where: { ...baseWhere, severity: 'CRITICAL' } }),
+      prisma.auditLog.count({ where: { ...baseWhere, severity: 'WARNING' } }),
+      prisma.auditLog.count({ where: { ...baseWhere, createdAt: { gte: last24h } } }),
       prisma.auditLog.groupBy({
         by: ['action'],
-        where: { tenantId },
+        where: baseWhere,
         _count: { action: true },
         orderBy: { _count: { action: 'desc' } },
         take: 5

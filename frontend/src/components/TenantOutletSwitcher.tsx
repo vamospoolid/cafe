@@ -1,36 +1,117 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { 
   Building2, 
   Store, 
   ChevronDown, 
   Check, 
   Plus, 
-  Sparkles, 
   RefreshCw,
-  Crown,
-  Layers,
-  ArrowRight
+  ArrowRight,
+  Coffee,
+  Wrench,
+  ShoppingBag,
+  Shirt
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
+import { offlineDb } from '../db/offlineDb';
 import TenantRegisterWizard from './TenantRegisterWizard';
 
-export const TenantOutletSwitcher: React.FC = () => {
+const getVerticalMeta = (type?: string) => {
+  switch ((type || '').toUpperCase()) {
+    case 'BENGKEL':
+      return {
+        label: 'Bengkel',
+        icon: Wrench,
+        badgeBg: 'bg-blue-50 text-blue-700 border-blue-200/80',
+        activeIconBg: 'bg-blue-600 text-white',
+        inactiveIconBg: 'bg-blue-100 text-blue-700'
+      };
+    case 'RETAIL':
+      return {
+        label: 'Retail',
+        icon: ShoppingBag,
+        badgeBg: 'bg-purple-50 text-purple-700 border-purple-200/80',
+        activeIconBg: 'bg-purple-600 text-white',
+        inactiveIconBg: 'bg-purple-100 text-purple-700'
+      };
+    case 'LAUNDRY':
+      return {
+        label: 'Laundry',
+        icon: Shirt,
+        badgeBg: 'bg-teal-50 text-teal-700 border-teal-200/80',
+        activeIconBg: 'bg-teal-600 text-white',
+        inactiveIconBg: 'bg-teal-100 text-teal-700'
+      };
+    case 'CAFE':
+    default:
+      return {
+        label: 'Kafe & Resto',
+        icon: Coffee,
+        badgeBg: 'bg-amber-50 text-amber-700 border-amber-200/80',
+        activeIconBg: 'bg-amber-600 text-white',
+        inactiveIconBg: 'bg-amber-100 text-amber-700'
+      };
+  }
+};
+
+interface TenantOutletSwitcherProps {
+  compact?: boolean;
+}
+
+export const TenantOutletSwitcher: React.FC<TenantOutletSwitcherProps> = ({ compact = false }) => {
   const posContext = useContext(POSContext);
   const [isOpen, setIsOpen] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const user = posContext?.user;
   const memberships = user?.memberships || [];
   const currentTenantId = user?.tenantId;
   const currentOutletId = user?.outletId;
-  const currentTenantName = memberships.find(m => m.tenantId === currentTenantId)?.tenantName || 'Kafe Utama';
+  const currentMembership = memberships.find(m => m.tenantId === currentTenantId);
+  const currentTenantName = currentMembership?.tenantName 
+    || posContext?.settings?.storeName 
+    || 'Kafe Utama';
+  const currentBusinessType = currentMembership?.businessType || user?.businessType || 'CAFE';
+  const currentMeta = getVerticalMeta(currentBusinessType);
+  const CurrentIcon = currentMeta.icon;
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
 
   const handleSwitchTenant = async (targetTenantId: string, targetTenantName: string) => {
     if (targetTenantId === currentTenantId) {
       setIsOpen(false);
       return;
+    }
+
+    // 1. Pre-Switch Offline Guard: Cek apakah ada antrean offline yang belum tersinkron
+    try {
+      const pendingCount = await offlineDb.getAllPendingOrdersCount(currentTenantId);
+      if (pendingCount > 0) {
+        const confirmSwitch = window.confirm(
+          `⚠️ Perhatian Sinkronisasi Offline:\n\nTerdapat ${pendingCount} pesanan offline yang belum tersinkronisasi ke server untuk bisnis saat ini (${currentTenantName}).\n\nBeralih bisnis sekarang berisiko menunda pengiriman transaksi offline tersebut.\n\nApakah Anda yakin ingin tetap beralih bisnis?`
+        );
+        if (!confirmSwitch) {
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Gagal memeriksa antrean offline sebelum switch:', err);
     }
 
     setSwitching(targetTenantId);
@@ -46,6 +127,16 @@ export const TenantOutletSwitcher: React.FC = () => {
 
       const data = await res.json();
       if (res.ok) {
+        // 2. Pembersihan Cache Atomik: Bersihkan cache katalog lokal agar tidak ada kebocoran data antar tenant
+        try {
+          await offlineDb.clearCatalogCache();
+          // Reset data cart & meja lokal
+          localStorage.removeItem('pos_cart');
+          localStorage.removeItem('pos_active_table');
+        } catch (cacheErr) {
+          console.warn('Gagal membersihkan cache lokal katalog:', cacheErr);
+        }
+
         toast(`✅ Beralih ke bisnis: ${targetTenantName}`, 'success');
         if (data.token && data.user && posContext?.login) {
           posContext.login(data.user, data.token);
@@ -65,28 +156,42 @@ export const TenantOutletSwitcher: React.FC = () => {
 
   return (
     <>
-      <div className="relative">
+      <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white transition-all backdrop-blur-md active:scale-95 text-left"
+          className={`flex items-center rounded-xl bg-slate-100/90 hover:bg-slate-200/80 border border-slate-200/90 text-slate-800 transition-all active:scale-95 text-left shadow-xs shrink-0 ${
+            compact ? 'gap-1 px-1.5 py-1' : 'gap-2 px-2.5 sm:px-3 py-1.5'
+          }`}
+          title="Beralih cabang atau bisnis"
         >
-          <div className="w-7 h-7 rounded-xl bg-indigo-500/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300 shrink-0">
-            <Building2 size={15} />
+          <div className={`${compact ? 'w-5 h-5 rounded-md' : 'w-6 h-6 rounded-lg'} ${currentMeta.activeIconBg} flex items-center justify-center shrink-0 shadow-xs`}>
+            <CurrentIcon size={compact ? 11 : 13} />
           </div>
-          <div className="hidden sm:block">
-            <div className="text-xs font-black tracking-tight leading-tight line-clamp-1 text-white">
+          {compact ? (
+            <span className="text-[10.5px] font-extrabold tracking-tight leading-none text-slate-900 line-clamp-1 max-w-[65px] truncate">
               {currentTenantName}
+            </span>
+          ) : (
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold tracking-tight leading-none text-slate-900 line-clamp-1 max-w-[110px] sm:max-w-[150px]">
+                  {currentTenantName}
+                </span>
+                <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border ${currentMeta.badgeBg} leading-tight hidden xs:inline-block`}>
+                  {currentMeta.label}
+                </span>
+              </div>
+              <div className="text-[10px] font-medium text-slate-500 leading-none mt-0.5 hidden sm:block">
+                {user?.role || 'Staff'} • Codenusa
+              </div>
             </div>
-            <div className="text-[10px] font-bold text-slate-300 leading-tight">
-              {user?.role || 'Staff'} • Codenusa SaaS
-            </div>
-          </div>
-          <ChevronDown size={14} className={`text-slate-300 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          )}
+          <ChevronDown size={compact ? 11 : 13} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {/* Dropdown Menu */}
         {isOpen && (
-          <div className="absolute left-0 mt-2 w-72 bg-white rounded-3xl shadow-2xl border border-slate-200/90 p-3 z-50 animate-fade-in text-slate-800">
+          <div className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-24px)] bg-white rounded-3xl shadow-2xl border border-slate-200/90 p-3 z-50 animate-fade-in text-slate-800">
             
             <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
               <span className="text-[10px] font-black tracking-wider uppercase text-slate-400">
@@ -102,6 +207,8 @@ export const TenantOutletSwitcher: React.FC = () => {
               {memberships.map(m => {
                 const isActive = m.tenantId === currentTenantId;
                 const isProcessing = switching === m.tenantId;
+                const meta = getVerticalMeta(m.businessType);
+                const IconComponent = meta.icon;
 
                 return (
                   <button
@@ -116,13 +223,18 @@ export const TenantOutletSwitcher: React.FC = () => {
                   >
                     <div className="flex items-center gap-2.5">
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                        isActive ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'
+                        isActive ? meta.activeIconBg : meta.inactiveIconBg
                       }`}>
-                        <Store size={15} />
+                        <IconComponent size={15} />
                       </div>
                       <div>
-                        <div className="text-xs font-bold leading-tight">{m.tenantName}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{m.tenantSlug}.codenusa.id</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold leading-tight">{m.tenantName}</span>
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-full border ${meta.badgeBg}`}>
+                            {meta.label}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">{m.tenantSlug}.codenusa.id</div>
                       </div>
                     </div>
 

@@ -1,8 +1,8 @@
 module.exports = {
   apps: [
     {
-      name: 'codepos-backend',
-      cwd: '/var/www/codepos/backend',
+      name: 'codenusa-backend',
+      cwd: '/var/www/codenusa/backend',
       script: 'dist/src/index.js',
       instances: 1,
       exec_mode: 'fork',
@@ -16,8 +16,8 @@ module.exports = {
         PORT: 5001,
         TZ: 'Asia/Jakarta'
       },
-      error_file: '/var/log/pm2/codepos-error.log',
-      out_file: '/var/log/pm2/codepos-out.log',
+      error_file: '/var/log/pm2/codenusa-error.log',
+      out_file: '/var/log/pm2/codenusa-out.log',
       merge_logs: true,
       time: true
     }

@@ -1,36 +1,132 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import bcrypt from 'bcryptjs';
+import { authenticateToken, requirePermission } from '../middlewares/authMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
+import { TenantContext } from '../utils/tenantContext';
+import { invalidateTenantCache } from '../middlewares/tenantResolver';
+import { cacheService } from '../services/CacheService';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// Get settings (Singleton - ID 1)
+// Helper to strictly resolve tenantId from token, header, or async context
+const resolveSettingsTenantId = (req: Request): string | undefined => {
+  return (req as any).user?.tenantId || 
+         (req as any).tenantId || 
+         (req.headers['x-tenant-id'] as string) || 
+         TenantContext.getTenantId() || 
+         undefined;
+};
+
+// GET /api/settings/public - Public store branding resolver
+router.get('/public', async (req: Request, res: Response) => {
+  try {
+    const tenantQuery = (req.query.tenant as string) || (req.query.username as string);
+    let tenant = null;
+
+    if (tenantQuery) {
+      const clean = tenantQuery.trim().toLowerCase();
+      tenant = await prisma.tenant.findFirst({
+        where: {
+          OR: [
+            { slug: clean },
+            { id: clean },
+            { name: { contains: clean, mode: 'insensitive' } },
+            { memberships: { some: { user: { username: clean } } } }
+          ]
+        },
+        include: { settings: true }
+      });
+    }
+
+    if (!tenant) {
+      const { resolveTenantFromRequest } = require('../middlewares/tenantResolver');
+      const resolved = await resolveTenantFromRequest(req);
+      if (resolved) {
+        tenant = await prisma.tenant.findUnique({
+          where: { id: resolved.id },
+          include: { settings: true }
+        });
+      }
+    }
+
+    const settings = tenant?.settings?.[0] || await prisma.settings.findFirst({
+      where: tenant ? { tenantId: tenant.id } : undefined
+    });
+
+    const storeName = settings?.storeName || tenant?.name || 'CodePOS Platform';
+    const logoUrl = settings?.logoUrl || tenant?.logoUrl || '/logo.png';
+
+    res.setHeader('Cache-Control', 'public, max-age=180');
+
+    return res.json({
+      storeName,
+      logoUrl,
+      tenantSlug: tenant?.slug || 'platform',
+      tenantName: tenant?.name || storeName,
+      address: settings?.address || '',
+      primaryColor: settings?.primaryColor || '#4f46e5',
+      accentColor: settings?.accentColor || '#f59e0b',
+      loginLayout: settings?.loginLayout || 'split_modern',
+      loginCoverUrl: settings?.loginCoverUrl || '/assets/images/cafe_login_cover.png',
+      loginTagline: settings?.loginTagline || '',
+      faviconUrl: settings?.faviconUrl || null,
+      hidePlatformBranding: Boolean(settings?.hidePlatformBranding)
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Gagal memuat branding publik' });
+  }
+});
+
+// Get settings (Tenant Scoped)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    let settings = await prisma.settings.findFirst();
+    const tenantId = resolveSettingsTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    let settings = await prisma.settings.findFirst({
+      where: { tenantId }
+    });
     
-    // If no settings exist yet, create default
+    // If no settings exist yet for this tenant, create dynamic default from tenant profile
     if (!settings) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId }
+      });
+
+      const tenantOutlet = await prisma.outlet.findFirst({
+        where: { tenantId }
+      });
+
+      const initialStoreName = tenant?.name || 'Kafe Mitra';
+      const initialAddress = tenantOutlet?.address || '';
+      const initialPhone = tenantOutlet?.phone || '';
+      const initialLogo = tenant?.logoUrl || '/logo.png';
+      const initialLat = tenantOutlet?.latitude || -6.200000;
+      const initialLng = tenantOutlet?.longitude || 106.816666;
+
       settings = await prisma.settings.create({
         data: {
-          storeName: 'MUKI RAMEN',
-          phone: '081298765432',
-          address: 'Jl. Kesadaran No. 3, Sidorejo, Kec. Wonomulyo, Kabupaten Polewali Mandar, Sulawesi Barat 91352',
-          logoUrl: '/logo-muki-ramen.png',
-          taxRate: 10,
-          serviceCharge: 5,
-          receiptHeader: 'MUKI RAMEN\nJl. Kesadaran No. 3, Wonomulyo, Polman',
-          receiptFooter: 'Arigatou Gozaimasu!\nTerima Kasih Atas Kunjungan Anda',
-          storeLatitude: -3.4026521,
-          storeLongitude: 119.2137757,
+          tenantId,
+          storeName: initialStoreName,
+          phone: initialPhone,
+          address: initialAddress,
+          logoUrl: initialLogo,
+          taxRate: 0,
+          serviceCharge: 0,
+          receiptHeader: initialAddress ? `${initialStoreName}\n${initialAddress}` : initialStoreName,
+          receiptFooter: 'Terima kasih atas kunjungan Anda!\nSilakan datang kembali',
+          storeLatitude: initialLat,
+          storeLongitude: initialLng,
           gpsRadiusMeters: 200,
           profitSharingOwnerPercent: 80,
+          enableProfitSharing: false,
           profitSharingRamenPercent: 20,
           profitSharingDrinkPercent: 20,
           profitSharingOpexMode: 'BEFORE_SPLIT',
-          enableDailyOmzetBonus: true,
+          enableDailyOmzetBonus: false,
           dailyOmzetTiers: JSON.stringify([
             { minOmzet: 2500000, bonus: 5000 },
             { minOmzet: 3000000, bonus: 10000 },
@@ -41,8 +137,16 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         }
       });
     }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
     
-    res.json(settings);
+    res.json({
+      ...settings,
+      businessType: tenant?.businessType || 'CAFE'
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Gagal mengambil pengaturan toko' });
@@ -50,7 +154,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // Update settings
-router.put('/', authenticateToken, async (req: Request, res: Response) => {
+router.put('/', authenticateToken, requirePermission('settings.manage'), async (req: Request, res: Response) => {
   try {
     const data = req.body;
     
@@ -75,8 +179,12 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     if (updateData.enableKDS !== undefined) updateData.enableKDS = Boolean(updateData.enableKDS);
     if (updateData.autoCompleteKDSOnPay !== undefined) updateData.autoCompleteKDSOnPay = Boolean(updateData.autoCompleteKDSOnPay);
     if (updateData.autoPrintReceipt !== undefined) updateData.autoPrintReceipt = Boolean(updateData.autoPrintReceipt);
+    if (updateData.enableTieredPricing !== undefined) updateData.enableTieredPricing = Boolean(updateData.enableTieredPricing);
     if (updateData.autoPrintKitchen !== undefined) updateData.autoPrintKitchen = Boolean(updateData.autoPrintKitchen);
     if (updateData.autoPrintBar !== undefined) updateData.autoPrintBar = Boolean(updateData.autoPrintBar);
+
+    if (updateData.receiptShowCashier !== undefined) updateData.receiptShowCashier = Boolean(updateData.receiptShowCashier);
+    if (updateData.receiptShowTable !== undefined) updateData.receiptShowTable = Boolean(updateData.receiptShowTable);
 
     if (updateData.storeLatitude !== undefined) updateData.storeLatitude = Number(updateData.storeLatitude);
     if (updateData.storeLongitude !== undefined) updateData.storeLongitude = Number(updateData.storeLongitude);
@@ -86,6 +194,15 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     if (updateData.workShifts !== undefined && typeof updateData.workShifts !== 'string') {
       updateData.workShifts = JSON.stringify(updateData.workShifts);
     }
+
+    // Jam Operasional Outlet & Kontrol Shift Kasir
+    if (updateData.operatingHours !== undefined && typeof updateData.operatingHours !== 'string') {
+      updateData.operatingHours = JSON.stringify(updateData.operatingHours);
+    }
+    if (updateData.earlyOpenBufferMinutes !== undefined) updateData.earlyOpenBufferMinutes = Number(updateData.earlyOpenBufferMinutes);
+    if (updateData.closingGraceMinutes !== undefined) updateData.closingGraceMinutes = Number(updateData.closingGraceMinutes);
+    if (updateData.enforceOperatingHours !== undefined) updateData.enforceOperatingHours = Boolean(updateData.enforceOperatingHours);
+    if (updateData.allowOrdersAfterClose !== undefined) updateData.allowOrdersAfterClose = Boolean(updateData.allowOrdersAfterClose);
 
     // Reward & Punishment Karyawan
     if (updateData.enableZeroLateBonus !== undefined) updateData.enableZeroLateBonus = Boolean(updateData.enableZeroLateBonus);
@@ -103,6 +220,7 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
     if (updateData.warehouseMarkupPercent !== undefined) updateData.warehouseMarkupPercent = Number(updateData.warehouseMarkupPercent);
 
     // Konfigurasi Bagi Hasil (Profit Sharing)
+    if (updateData.enableProfitSharing !== undefined) updateData.enableProfitSharing = Boolean(updateData.enableProfitSharing);
     if (updateData.profitSharingOwnerPercent !== undefined) updateData.profitSharingOwnerPercent = Number(updateData.profitSharingOwnerPercent);
     if (updateData.profitSharingRamenPercent !== undefined) updateData.profitSharingRamenPercent = Number(updateData.profitSharingRamenPercent);
     if (updateData.profitSharingDrinkPercent !== undefined) updateData.profitSharingDrinkPercent = Number(updateData.profitSharingDrinkPercent);
@@ -114,17 +232,85 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
       updateData.dailyOmzetTiers = JSON.stringify(updateData.dailyOmzetTiers);
     }
 
-    let settings = await prisma.settings.findFirst();
+    // Dynamic White-Label Theming & Login Layout Validation (Anti-XSS & Safety)
+    const HEX_COLOR_REGEX = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+    if (updateData.primaryColor !== undefined) {
+      const color = String(updateData.primaryColor).trim();
+      if (!HEX_COLOR_REGEX.test(color)) {
+        return res.status(400).json({ error: 'Format warna primer tidak valid. Gunakan format HEX (misal: #4f46e5).' });
+      }
+      updateData.primaryColor = color;
+    }
+    if (updateData.accentColor !== undefined) {
+      const color = String(updateData.accentColor).trim();
+      if (!HEX_COLOR_REGEX.test(color)) {
+        return res.status(400).json({ error: 'Format warna aksen tidak valid. Gunakan format HEX (misal: #f59e0b).' });
+      }
+      updateData.accentColor = color;
+    }
+    if (updateData.loginLayout !== undefined) {
+      const allowedLayouts = ['split_modern', 'centered_glass', 'minimal_luxe', 'cafe_atmosphere'];
+      const layout = String(updateData.loginLayout).trim();
+      if (!allowedLayouts.includes(layout)) {
+        return res.status(400).json({ error: 'Preset layout login tidak dikenali. Pilihan: split_modern, centered_glass, minimal_luxe, cafe_atmosphere.' });
+      }
+      updateData.loginLayout = layout;
+    }
+    if (updateData.loginCoverUrl !== undefined) updateData.loginCoverUrl = String(updateData.loginCoverUrl);
+    if (updateData.loginTagline !== undefined) updateData.loginTagline = String(updateData.loginTagline).slice(0, 200);
+    if (updateData.faviconUrl !== undefined) updateData.faviconUrl = updateData.faviconUrl ? String(updateData.faviconUrl) : null;
+    if (updateData.hidePlatformBranding !== undefined) updateData.hidePlatformBranding = Boolean(updateData.hidePlatformBranding);
+
+    const tenantId = resolveSettingsTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    // Whitelist scalar fields of Prisma model Settings to prevent crash on non-schema fields (businessType, id, tenantId, etc.)
+    const SETTINGS_SCALAR_FIELDS = new Set([
+      'storeName', 'phone', 'address', 'logoUrl', 'receiptHeader', 'receiptFooter',
+      'receiptPaperSize', 'wifiName', 'wifiPassword', 'receiptShowCashier', 'receiptShowTable',
+      'taxRate', 'serviceCharge', 'includeTax', 'bankName', 'accountNumber', 'accountName',
+      'qrisUrl', 'qrCodeBaseUrl', 'enableDrinkCustomization', 'loyaltyEnabled', 'loyaltyEarnPerAmount',
+      'loyaltyPointValue', 'loyaltySilverThreshold', 'loyaltyGoldThreshold', 'loyaltySilverMultiplier',
+      'loyaltyGoldMultiplier', 'ingredientTrackingEnabled', 'enableKitchenAuditMode', 'enableStaffMealTracking',
+      'printerIp', 'printerPort', 'windowsPrinterName', 'autoPrintKDS', 'autoPrintReceipt',
+      'kitchenPrinterIp', 'kitchenPrinterPort', 'autoPrintKitchen', 'barPrinterIp', 'barPrinterPort',
+      'autoPrintBar', 'enableKDS', 'autoCompleteKDSOnPay', 'storeLatitude', 'storeLongitude',
+      'gpsRadiusMeters', 'enableGpsValidation', 'enableCameraPhoto', 'workShifts', 'enableZeroLateBonus',
+      'zeroLateBonusAmount', 'zeroLateMinAttendance', 'zeroLateMaxLateAllowed', 'enableLatePenalty',
+      'latePenaltyType', 'latePenaltyAmount', 'enableAlphaPenalty', 'alphaPenaltyAmount',
+      'warehouseTransferPricing', 'warehouseMarkupPercent', 'enableProfitSharing',
+      'profitSharingOwnerPercent', 'profitSharingRamenPercent', 'profitSharingDrinkPercent',
+      'profitSharingOpexMode', 'enableDailyOmzetBonus', 'dailyOmzetTiers', 'operatingHours',
+      'earlyOpenBufferMinutes', 'closingGraceMinutes', 'enforceOperatingHours', 'allowOrdersAfterClose',
+      'primaryColor', 'accentColor', 'loginLayout', 'loginCoverUrl', 'loginTagline', 'faviconUrl',
+      'hidePlatformBranding'
+    ]);
+
+    const sanitizedData: Record<string, any> = {};
+    for (const [key, value] of Object.entries(updateData)) {
+      if (SETTINGS_SCALAR_FIELDS.has(key)) {
+        sanitizedData[key] = value;
+      }
+    }
+
+    let settings = await prisma.settings.findFirst({
+      where: { tenantId }
+    });
     const oldSettings = settings ? { ...settings } : null;
     
     if (settings) {
       settings = await prisma.settings.update({
         where: { id: settings.id },
-        data: updateData
+        data: sanitizedData
       });
     } else {
       settings = await prisma.settings.create({
-        data: updateData
+        data: {
+          ...sanitizedData,
+          tenantId
+        }
       });
     }
 
@@ -135,14 +321,201 @@ router.put('/', authenticateToken, async (req: Request, res: Response) => {
       resourceId: String(settings.id),
       description: `Memperbarui konfigurasi toko / hardware (${settings.storeName}).`,
       oldValue: oldSettings,
-      newValue: updateData,
+      newValue: sanitizedData,
       severity: 'WARNING'
     }, req);
 
-    res.json(settings);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Gagal menyimpan pengaturan toko' });
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+
+    res.json({
+      ...settings,
+      businessType: tenant?.businessType || 'CAFE'
+    });
+  } catch (error: any) {
+    console.error('Settings update error:', error);
+    res.status(500).json({ error: 'Gagal menyimpan pengaturan toko: ' + (error?.message || 'Internal error') });
+  }
+});
+
+/**
+ * POST /api/settings/migrate-vertical
+ * Transisi Terpandu Profil Bisnis (Kafe <-> Bengkel <-> Retail)
+ * Akses: Hanya role OWNER atau PLATFORM_ADMIN dengan validasi password.
+ */
+router.post('/migrate-vertical', authenticateToken, requirePermission('settings.manage'), async (req: Request, res: Response) => {
+  try {
+    const tenantId = resolveSettingsTenantId(req);
+    const user = (req as any).user;
+    const userId = user?.id;
+
+    if (!tenantId || !userId) {
+      return res.status(400).json({ error: 'Konteks sesi atau tenant tidak valid.' });
+    }
+
+    // Layer 1: Role check (OWNER or Platform Admin)
+    const userRole = (user?.role || '').toUpperCase();
+    if (userRole !== 'OWNER' && !user?.isPlatformAdmin) {
+      return res.status(403).json({ error: 'Akses Ditolak: Hanya Akun Owner yang berhak melakukan migrasi jenis bisnis.' });
+    }
+
+    const { targetBusinessType, password, migrationStrategy = 'CLEAN_PIVOT' } = req.body;
+
+    if (!['CAFE', 'BENGKEL', 'RETAIL', 'LAUNDRY'].includes(targetBusinessType)) {
+      return res.status(400).json({ error: 'Jenis bisnis target tidak valid. Pilihan: CAFE, BENGKEL, RETAIL, LAUNDRY.' });
+    }
+
+    // Layer 2: Password Challenge
+    if (!password) {
+      return res.status(400).json({ error: 'Kata sandi akun Owner wajib diisi untuk otorisasi migrasi bisnis.' });
+    }
+
+    const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!currentUser) {
+      return res.status(404).json({ error: 'Data user tidak ditemukan.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, currentUser.passwordHash);
+    if (!isMatch && currentUser.pin !== password) {
+      return res.status(401).json({ error: 'Kata sandi / PIN otorisasi salah. Migrasi dibatalkan demi keamanan data.' });
+    }
+
+    // Cek tenant saat ini
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true, businessType: true }
+    });
+
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant tidak ditemukan.' });
+    }
+
+    const currentBusinessType = tenant.businessType || 'CAFE';
+    if (currentBusinessType === targetBusinessType) {
+      return res.status(400).json({ error: `Bisnis Anda saat ini sudah terdaftar sebagai profil [${targetBusinessType}].` });
+    }
+
+    // Eksekusi migrasi transaksional
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update businessType pada tenant
+      const updatedTenant = await tx.tenant.update({
+        where: { id: tenantId },
+        data: { businessType: targetBusinessType }
+      });
+
+      // 2. Jika CLEAN_PIVOT, nonaktifkan kategori lama & sediakan starter categories baru
+      let newCategoriesCount = 0;
+      let newServicesCount = 0;
+
+      if (migrationStrategy === 'CLEAN_PIVOT') {
+        // Nonaktifkan kategori lama
+        await tx.category.updateMany({
+          where: { tenantId },
+          data: { isActive: false }
+        });
+
+        if (targetBusinessType === 'BENGKEL') {
+          // Buat kategori bawaan bengkel
+          await tx.category.createMany({
+            data: [
+              { tenantId, name: 'Oli & Pelumas Mesin', printerTarget: 'NONE' },
+              { tenantId, name: 'Suku Cadang Fast Moving', printerTarget: 'NONE' },
+              { tenantId, name: 'Ban & Kaki-Kaki', printerTarget: 'NONE' },
+              { tenantId, name: 'Aki & Kelistrikan', printerTarget: 'NONE' }
+            ]
+          });
+          newCategoriesCount = 4;
+
+          // Buat jasa servis bawaan bengkel jika belum ada
+          const existingServices = await tx.serviceType.count({ where: { tenantId } });
+          if (existingServices === 0) {
+            await tx.serviceType.createMany({
+              data: [
+                { tenantId, name: 'Ganti Oli Mesin', priceRetail: 20000, priceMitra: 15000, priceGrosir: 15000, vehicleType: 'ALL', status: 'ACTIVE' },
+                { tenantId, name: 'Tune Up Injeksi / Karburator', priceRetail: 65000, priceMitra: 50000, priceGrosir: 45000, vehicleType: 'MOTOR', status: 'ACTIVE' },
+                { tenantId, name: 'Servis CVT Lengkap', priceRetail: 65000, priceMitra: 50000, priceGrosir: 50000, vehicleType: 'MOTOR', status: 'ACTIVE' },
+                { tenantId, name: 'Ganti Kampas Rem Depan / Belakang', priceRetail: 25000, priceMitra: 20000, priceGrosir: 20000, vehicleType: 'ALL', status: 'ACTIVE' },
+                { tenantId, name: 'Servis Ringan + Pengecekan 12 Titik', priceRetail: 50000, priceMitra: 40000, priceGrosir: 35000, vehicleType: 'ALL', status: 'ACTIVE' }
+              ]
+            });
+            newServicesCount = 5;
+          }
+
+          // Perbarui footer struk bengkel
+          await tx.settings.updateMany({
+            where: { tenantId },
+            data: {
+              receiptHeader: `Selamat Datang di ${tenant.name} (Workshop & Servis)`,
+              receiptFooter: 'Garansi servis berlaku 7 hari kerja. Terima kasih!'
+            }
+          });
+        } else if (targetBusinessType === 'CAFE') {
+          // Buat kategori bawaan kafe
+          await tx.category.createMany({
+            data: [
+              { tenantId, name: 'Makanan', printerTarget: 'KITCHEN' },
+              { tenantId, name: 'Minuman', printerTarget: 'BAR' }
+            ]
+          });
+          newCategoriesCount = 2;
+
+          // Inisialisasi meja bawaan jika belum ada meja
+          const existingTables = await tx.table.count({ where: { tenantId } });
+          if (existingTables === 0) {
+            await tx.table.createMany({
+              data: [
+                { tenantId, tableNo: '01', name: 'Area Utama', capacity: 4 },
+                { tenantId, tableNo: '02', name: 'Area Utama', capacity: 4 },
+                { tenantId, tableNo: '03', name: 'Area VIP', capacity: 6 }
+              ]
+            });
+          }
+
+          // Perbarui footer struk kafe
+          await tx.settings.updateMany({
+            where: { tenantId },
+            data: {
+              receiptHeader: `Selamat Datang di ${tenant.name}`,
+              receiptFooter: 'Terima kasih atas kunjungan Anda!'
+            }
+          });
+        }
+      }
+
+      return {
+        tenant: updatedTenant,
+        newCategoriesCount,
+        newServicesCount
+      };
+    });
+
+    // 3. Cache Invalidation
+    await invalidateTenantCache(tenantId);
+    await cacheService.del(`cache:tenant:businessType:${tenantId}`);
+
+    // 4. Audit Log
+    await AuditLogger.log({
+      tenantId,
+      action: 'TENANT_VERTICAL_MIGRATION',
+      resource: 'SETTINGS',
+      resourceId: tenantId,
+      description: `Migrasi profil bisnis berhasil dari [${currentBusinessType}] ke [${targetBusinessType}] (Strategi: ${migrationStrategy}).`,
+      severity: 'CRITICAL'
+    }, req);
+
+    return res.json({
+      success: true,
+      message: `Profil bisnis berhasil dialihkan ke [${targetBusinessType}]. Antarmuka dan modul kasir kini telah disesuaikan.`,
+      previousBusinessType: currentBusinessType,
+      currentBusinessType: targetBusinessType,
+      newCategoriesCount: result.newCategoriesCount,
+      newServicesCount: result.newServicesCount
+    });
+  } catch (error: any) {
+    console.error('Migrate vertical error:', error);
+    res.status(500).json({ error: error?.message || 'Gagal memproses migrasi jenis bisnis' });
   }
 });
 

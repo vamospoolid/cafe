@@ -58,7 +58,8 @@ async function deploySaaS() {
         npx prisma generate
         
         echo "   -> Sync database schema..."
-        npx prisma db push --accept-data-loss --skip-generate
+        # KEAMANAN: --accept-data-loss DIHAPUS. Jangan tambahkan kembali!
+        npx prisma db push --skip-generate
         
         echo "   -> Running seed foundation..."
         npx ts-node prisma/seed_foundation.ts || true

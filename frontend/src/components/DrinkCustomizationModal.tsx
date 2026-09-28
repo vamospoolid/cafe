@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Droplets, Thermometer, Layers, MessageSquare, Coffee, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Droplets, Thermometer, Layers, MessageSquare, Coffee, Check, Sparkles } from 'lucide-react';
 
 export type DrinkCustomization = {
   sugar: string;
@@ -15,228 +15,272 @@ interface DrinkCustomizationModalProps {
   onConfirm: (customization: DrinkCustomization) => void;
 }
 
+const TEMP_OPTIONS = [
+  { label: 'Iced', emoji: '🧊', subtitle: 'Dingin' },
+  { label: 'Hot', emoji: '♨️', subtitle: 'Panas' },
+  { label: 'Room Temp', emoji: '🌡️', subtitle: 'Normal' },
+];
+
 const SUGAR_OPTIONS = [
-  { label: 'No Sugar', emoji: '🚫' },
-  { label: 'Less Sugar', emoji: '☕' },
-  { label: 'Normal', emoji: '👌' },
-  { label: 'Extra Sweet', emoji: '🍯' },
+  { label: 'No Sugar', percent: '0%', emoji: '🚫' },
+  { label: 'Less Sugar', percent: '50%', emoji: '☕' },
+  { label: 'Normal', percent: '100%', emoji: '👌' },
+  { label: 'Extra Sweet', percent: '120%', emoji: '🍯' },
 ];
 
 const ICE_OPTIONS = [
-  { label: 'No Ice', emoji: '🌡️' },
-  { label: 'Less Ice', emoji: '🧊' },
-  { label: 'Normal Ice', emoji: '❄️' },
-  { label: 'Extra Ice', emoji: '🫙' },
-];
-
-const TEMP_OPTIONS = [
-  { label: 'Iced', emoji: '🧊', desc: 'Minuman dingin' },
-  { label: 'Hot', emoji: '♨️', desc: 'Minuman panas' },
-  { label: 'Room Temp', emoji: '🌡️', desc: 'Suhu ruangan' },
+  { label: 'No Ice', percent: '0%', emoji: '🌡️' },
+  { label: 'Less Ice', percent: '50%', emoji: '🧊' },
+  { label: 'Normal Ice', percent: '100%', emoji: '❄️' },
+  { label: 'Extra Ice', percent: '120%', emoji: '🫙' },
 ];
 
 const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
-  productName, isOpen, onClose, onConfirm,
+  productName,
+  isOpen,
+  onClose,
+  onConfirm,
 }) => {
-  const [sugar, setSugar]             = React.useState('Normal');
-  const [ice, setIce]                 = React.useState('Normal Ice');
-  const [temperature, setTemperature] = React.useState('Iced');
-  const [notes, setNotes]             = React.useState('');
+  const [temperature, setTemperature] = useState('Iced');
+  const [sugar, setSugar] = useState('Normal');
+  const [ice, setIce] = useState('Normal Ice');
+  const [notes, setNotes] = useState('');
+
+  // Reset state when opening modal
+  useEffect(() => {
+    if (isOpen) {
+      setTemperature('Iced');
+      setSugar('Normal');
+      setIce('Normal Ice');
+      setNotes('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    onConfirm({ sugar, ice: temperature === 'Iced' ? ice : '-', temperature, notes });
-    setSugar('Normal'); setIce('Normal Ice'); setTemperature('Iced'); setNotes('');
+    onConfirm({
+      temperature,
+      sugar,
+      ice: temperature === 'Iced' ? ice : '-',
+      notes: notes.trim(),
+    });
   };
 
-  const summaryTags = [
-    { label: temperature, color: temperature === 'Iced' ? '#dbeafe' : '#fee2e2', text: temperature === 'Iced' ? '#1e40af' : '#991b1b' },
-    { label: sugar, color: '#fef9c3', text: '#92400e' },
-    ...(temperature === 'Iced' ? [{ label: ice, color: '#e0f2fe', text: '#075985' }] : []),
-    ...(notes ? [{ label: `📝 ${notes}`, color: '#f0fdf4', text: '#166534' }] : []),
-  ];
-
-  const OptionChip = ({
-    label, emoji, desc, selected, onClick,
-  }: { label: string; emoji?: string; desc?: string; selected: boolean; onClick: () => void }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex flex-col items-center justify-center text-center transition-all cursor-pointer rounded-2xl border-2 active:scale-95 ${
-        desc ? 'flex-1 min-w-0 p-2 sm:p-3' : 'p-2 sm:p-2.5 flex-1 min-w-[70px] sm:min-w-0'
-      } ${
-        selected 
-          ? 'border-indigo-600 bg-indigo-50/70 text-indigo-700 shadow-sm ring-2 ring-indigo-200/50' 
-          : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100/80 text-slate-600'
-      }`}
-    >
-      {emoji && <span className="text-lg sm:text-xl leading-tight mb-0.5">{emoji}</span>}
-      <span className="font-bold text-xs sm:text-xs leading-tight">{label}</span>
-      {desc && <span className={`text-[10px] mt-0.5 font-medium leading-tight ${selected ? 'text-indigo-600' : 'text-slate-400'}`}>{desc}</span>}
-    </button>
-  );
-
   return (
-    <div className="modal-overlay p-3 sm:p-4" style={{ zIndex: 1100 }}>
-      {/* Container: Full width on mobile vertical, Max 780px on tablet/web */}
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[780px] max-h-[92vh] sm:max-h-[85vh] overflow-hidden flex flex-col animate-scale-up border border-slate-200/80">
-
+    <div 
+      className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200" 
+      style={{ zIndex: 1200 }}
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200"
+        onClick={e => e.stopPropagation()}
+      >
         {/* ─── Header ─── */}
-        <div className="p-3.5 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-50/80 via-purple-50/40 to-slate-50 shrink-0">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-sm shadow-indigo-200">
-              <Coffee size={18} />
+        <div className="p-4 sm:p-5 border-b border-indigo-100/70 bg-gradient-to-r from-indigo-50/90 via-purple-50/60 to-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+              <Coffee size={20} />
             </div>
-            <div className="truncate">
-              <div className="font-extrabold text-sm sm:text-base text-slate-900 truncate">Kustomisasi Minuman</div>
-              <div className="text-xs font-bold text-indigo-600 truncate">{productName}</div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-black text-base sm:text-lg text-slate-900 tracking-tight leading-none">
+                  Kustomisasi Minuman
+                </h3>
+                <Sparkles size={14} className="text-amber-500 shrink-0" />
+              </div>
+              <p className="text-xs font-bold text-indigo-600 truncate mt-1">
+                {productName}
+              </p>
             </div>
           </div>
           <button 
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all shrink-0 ml-2" 
+            type="button"
+            className="w-8 h-8 rounded-full bg-white/80 hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors shadow-sm shrink-0" 
             onClick={onClose}
           >
             <X size={18} />
           </button>
         </div>
 
-        {/* ─── Body: 2-column layout on Desktop/Tablet, Vertical Scrollable Stack on Mobile ─── */}
-        <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
+        {/* ─── Body (Scrollable) ─── */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex flex-col gap-5">
 
-          {/* LEFT: Options (Scrollable) */}
-          <div className="flex-1 p-4 sm:p-6 flex flex-col gap-4 sm:gap-5 overflow-y-auto md:border-r border-slate-100">
-
-            {/* Suhu */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-2">
+          {/* 1. Suhu Minuman */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider">
                 <Thermometer size={14} className="text-indigo-600" />
-                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Suhu Minuman</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {TEMP_OPTIONS.map(t => (
-                  <OptionChip 
-                    key={t.label} 
-                    label={t.label} 
-                    emoji={t.emoji} 
-                    desc={t.desc} 
-                    selected={temperature === t.label} 
-                    onClick={() => setTemperature(t.label)} 
-                  />
-                ))}
-              </div>
+                Suhu Minuman
+              </span>
+              <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                {temperature}
+              </span>
             </div>
-
-            {/* Gula */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-2">
-                <Layers size={14} className="text-indigo-600" />
-                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Tingkat Gula</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {SUGAR_OPTIONS.map(s => (
-                  <OptionChip 
-                    key={s.label} 
-                    label={s.label} 
-                    emoji={s.emoji} 
-                    selected={sugar === s.label} 
-                    onClick={() => setSugar(s.label)} 
-                  />
-                ))}
-              </div>
+            <div className="grid grid-cols-3 gap-2">
+              {TEMP_OPTIONS.map(t => {
+                const isSelected = temperature === t.label;
+                return (
+                  <button
+                    key={t.label}
+                    type="button"
+                    onClick={() => setTemperature(t.label)}
+                    className={`py-2.5 px-3 rounded-2xl border-2 flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                      isSelected
+                        ? 'border-indigo-600 bg-indigo-50/80 text-indigo-900 shadow-sm ring-2 ring-indigo-200'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <span className="text-xl mb-0.5">{t.emoji}</span>
+                    <span className="text-xs font-bold">{t.label}</span>
+                    <span className="text-[10px] text-slate-400">{t.subtitle}</span>
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            {/* Es (only Iced) */}
-            <div className={`transition-opacity duration-200 ${temperature === 'Iced' ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
-              <div className="flex items-center gap-1.5 mb-2">
-                <Droplets size={14} className="text-indigo-600" />
-                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Tingkat Es</span>
+          {/* 2. Tingkat Gula */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider">
+                <Layers size={14} className="text-amber-500" />
+                Tingkat Gula
+              </span>
+              <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                {sugar}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {SUGAR_OPTIONS.map(s => {
+                const isSelected = sugar === s.label;
+                return (
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={() => setSugar(s.label)}
+                    className={`py-2 px-2.5 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-sm ring-2 ring-amber-200'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <span className="text-lg">{s.emoji}</span>
+                    <span className="text-xs font-bold leading-tight mt-0.5">{s.label}</span>
+                    <span className="text-[10px] font-semibold text-slate-400">{s.percent}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 3. Tingkat Es (Hanya jika Iced) */}
+          <div className={temperature === 'Iced' ? 'opacity-100' : 'opacity-40 pointer-events-none'}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider">
+                <Droplets size={14} className="text-sky-500" />
+                Tingkat Es
                 {temperature !== 'Iced' && (
-                  <span className="text-[10px] text-amber-700 font-bold bg-amber-50 border border-amber-200/70 px-1.5 py-0.2 rounded-md ml-1">
-                    Khusus Iced
-                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400 normal-case">(Hanya Iced)</span>
                 )}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {ICE_OPTIONS.map(i => (
-                  <OptionChip 
-                    key={i.label} 
-                    label={i.label} 
-                    emoji={i.emoji} 
-                    selected={ice === i.label} 
-                    onClick={() => setIce(i.label)} 
-                  />
-                ))}
-              </div>
+              </span>
+              {temperature === 'Iced' && (
+                <span className="text-[11px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">
+                  {ice}
+                </span>
+              )}
             </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {ICE_OPTIONS.map(i => {
+                const isSelected = ice === i.label && temperature === 'Iced';
+                return (
+                  <button
+                    key={i.label}
+                    type="button"
+                    disabled={temperature !== 'Iced'}
+                    onClick={() => setIce(i.label)}
+                    className={`py-2 px-2.5 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
+                      isSelected
+                        ? 'border-sky-500 bg-sky-50 text-sky-900 shadow-sm ring-2 ring-sky-200'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <span className="text-lg">{i.emoji}</span>
+                    <span className="text-xs font-bold leading-tight mt-0.5">{i.label}</span>
+                    <span className="text-[10px] font-semibold text-slate-400">{i.percent}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-            {/* Catatan */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-2">
+          {/* 4. Catatan Tambahan */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider">
                 <MessageSquare size={14} className="text-indigo-600" />
-                <span className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider">Catatan Tambahan</span>
-                <span className="text-[10px] text-slate-400 font-medium">opsional</span>
-              </div>
-              <input
-                type="text"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all bg-slate-50/50"
-                placeholder="cth: tanpa whip cream, ekstra saus..."
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
+                Catatan Tambahan
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">Opsional</span>
+            </div>
+            <input
+              type="text"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all bg-slate-50/50 placeholder:text-slate-400"
+              placeholder="Contoh: Tanpa whip cream, sirup dipisah..."
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
+          </div>
+
+          {/* ─── Preview Ringkasan ─── */}
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col gap-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              Ringkasan Pilihan (Akan Tertera di KDS &amp; Struk):
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                temperature === 'Iced' 
+                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                  : 'bg-rose-50 text-rose-700 border-rose-200'
+              }`}>
+                {temperature}
+              </span>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">
+                {sugar}
+              </span>
+              {temperature === 'Iced' && (
+                <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 border border-sky-200">
+                  {ice}
+                </span>
+              )}
+              {notes.trim() && (
+                <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 truncate max-w-full">
+                  📝 "{notes.trim()}"
+                </span>
+              )}
             </div>
           </div>
 
-          {/* RIGHT / BOTTOM: Summary + CTA */}
-          <div className="w-full md:w-[260px] p-4 sm:p-5 flex flex-col justify-between bg-slate-50/90 border-t md:border-t-0 border-slate-100 shrink-0">
-            <div>
-              <div className="font-extrabold text-[11px] text-slate-500 uppercase tracking-wider mb-2">
-                Preview Kustomisasi
-              </div>
+        </div>
 
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-3 flex flex-col gap-1.5 shadow-sm">
-                <div className="font-bold text-xs sm:text-sm text-slate-800 border-b border-dashed border-slate-200 pb-1.5 truncate">
-                  {productName}
-                </div>
-                <div className="flex flex-wrap md:flex-col gap-1.5">
-                  {summaryTags.map((tag, i) => (
-                    <div key={i} className="flex items-center gap-1.5">
-                      <CheckCircle2 size={12} style={{ color: tag.text }} className="shrink-0" />
-                      <span 
-                        style={{ background: tag.color, color: tag.text }} 
-                        className="font-bold text-[11px] px-2 py-0.5 rounded-md"
-                      >
-                        {tag.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <p className="hidden md:block mt-3 text-[11px] text-slate-400 leading-relaxed">
-                Pilihan ini akan diteruskan ke <strong className="text-indigo-600 font-bold">KDS Dapur</strong> &amp; <strong className="text-indigo-600 font-bold">Struk Kasir</strong>.
-              </p>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex flex-col gap-2 mt-3 sm:mt-4">
-              <button
-                type="button"
-                onClick={handleConfirm}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-              >
-                <span>✓ Tambah ke Keranjang</span>
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs active:scale-95 transition-all"
-              >
-                Lewati / Tanpa Kustomisasi
-              </button>
-            </div>
-          </div>
-
+        {/* ─── Footer Action Buttons ─── */}
+        <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full sm:w-1/3 py-3 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs sm:text-sm active:scale-95 transition-all text-center"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="w-full sm:w-2/3 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <Check size={16} />
+            <span>Tambah ke Keranjang</span>
+          </button>
         </div>
       </div>
     </div>

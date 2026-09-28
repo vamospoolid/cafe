@@ -9,9 +9,11 @@ import {
   Smartphone, UserCheck, KeyRound, ArrowRight, CornerDownLeft, Sparkles, Activity,
   Lock, Eye, EyeOff, QrCode, Share2, Download, Shield, ShieldAlert,
   Sliders, Thermometer, Flame, Star, BadgeCheck, HelpCircle, Timer, Compass,
-  CreditCard, Wallet
+  CreditCard, Wallet, Loader2, Wrench, Truck, Barcode, Store, Play
 } from 'lucide-react';
 import { toast, confirmAlert } from '../utils/alert';
+import { offlineDb } from '../db/offlineDb';
+import { compressImage } from '../utils/imageCompressor';
 
 interface WorkShift {
   id: string;
@@ -21,17 +23,25 @@ interface WorkShift {
   lateTolerance?: number;
 }
 
-interface Ingredient {
+export interface UnifiedStockItem {
   id: number;
   name: string;
-  category?: 'FOOD' | 'DRINK' | 'PACKAGING' | string;
+  category?: 'FOOD' | 'DRINK' | 'PACKAGING' | 'SPAREPART' | 'RETAIL' | string;
   subCategory?: string;
   unit: string;
   stock: number;
   minStock: number;
   buyPrice: number;
+  price?: number;
+  itemLocation?: string;
+  barcode?: string;
   supplier?: { id: number; name: string; phone?: string } | null;
+  priceTiers?: any[];
+  productUoms?: any[];
 }
+
+// Backward-compatibility alias
+type Ingredient = UnifiedStockItem;
 
 interface LeaveRequestItem {
   id: number;
@@ -44,6 +54,7 @@ interface LeaveRequestItem {
   approvedBy?: string;
   adminNotes?: string;
   createdAt: string;
+  user?: { id: number; name: string; username: string; role: string };
 }
 
 interface ShiftHandoverItem {
@@ -72,23 +83,62 @@ const DEFAULT_SHIFTS: WorkShift[] = [
   { id: 'full', name: 'Shift Full Day', start: '09:00', end: '18:00', lateTolerance: 15 },
 ];
 
-const DEFAULT_OPENING_SOP: SOPCheckItem[] = [
-  { id: 'op1', text: 'Kalibrasi Grinder & Cek Rasa Espresso (Dose & Yield)', checked: false, category: 'bar' },
-  { id: 'op2', text: 'Periksa Suhu Chiller / Kulkas Susu (< 4°C)', checked: false, category: 'chiller' },
-  { id: 'op3', text: 'Cek Kesiapan Bahan Baku & Stock Susu Segar', checked: false, category: 'bar' },
-  { id: 'op4', text: 'Sanitasi Meja Bar, Portafilter & Steam Wand', checked: false, category: 'clean' },
-  { id: 'op5', text: 'Hitung Kas Awal / Modal Uang Pas di Laci Kasir', checked: false, category: 'cash' },
-  { id: 'op6', text: 'Nyalakan POS & Pastikan Kertas Thermal Siap', checked: false, category: 'cash' },
-];
-
-const DEFAULT_CLOSING_SOP: SOPCheckItem[] = [
-  { id: 'cl1', text: 'Backflush & Chemical Cleaning Mesin Espresso', checked: false, category: 'bar' },
-  { id: 'cl2', text: 'Bersihkan & Kosongkan Hopper Grinder Kopi', checked: false, category: 'bar' },
-  { id: 'cl3', text: 'Simpan Semua Bahan Sisa ke Dalam Chiller', checked: false, category: 'chiller' },
-  { id: 'cl4', text: 'Sapu, Pel Lantai & Buang Sampah Bar/Dapur', checked: false, category: 'clean' },
-  { id: 'cl5', text: 'Rekonsiliasi Kas Laci & Tutup Shift Kasir', checked: false, category: 'cash' },
-  { id: 'cl6', text: 'Matikan Semua Mesin, AC, Lampu & Kunci Pintu', checked: false, category: 'clean' },
-];
+export const VERTICAL_SOP_PRESETS: Record<string, { opening: SOPCheckItem[]; closing: SOPCheckItem[] }> = {
+  CAFE: {
+    opening: [
+      { id: 'c_op1', text: 'Kalibrasi Grinder & Cek Rasa Espresso (Dose & Yield)', checked: false, category: 'bar' },
+      { id: 'c_op2', text: 'Periksa Suhu Chiller / Kulkas Susu (< 4°C)', checked: false, category: 'chiller' },
+      { id: 'c_op3', text: 'Cek Kesiapan Bahan Baku & Stock Susu Segar', checked: false, category: 'bar' },
+      { id: 'c_op4', text: 'Sanitasi Meja Bar, Portafilter & Steam Wand', checked: false, category: 'clean' },
+      { id: 'c_op5', text: 'Hitung Kas Awal / Modal Uang Pas di Laci Kasir', checked: false, category: 'cash' },
+      { id: 'c_op6', text: 'Nyalakan POS & Pastikan Kertas Thermal Siap', checked: false, category: 'cash' },
+    ],
+    closing: [
+      { id: 'c_cl1', text: 'Backflush & Chemical Cleaning Mesin Espresso', checked: false, category: 'bar' },
+      { id: 'c_cl2', text: 'Bersihkan & Kosongkan Hopper Grinder Kopi', checked: false, category: 'bar' },
+      { id: 'c_cl3', text: 'Simpan Semua Bahan Sisa ke Dalam Chiller', checked: false, category: 'chiller' },
+      { id: 'c_cl4', text: 'Sapu, Pel Lantai & Buang Sampah Bar/Dapur', checked: false, category: 'clean' },
+      { id: 'c_cl5', text: 'Rekonsiliasi Kas Laci & Tutup Shift Kasir', checked: false, category: 'cash' },
+      { id: 'c_cl6', text: 'Matikan Semua Mesin, AC, Lampu & Kunci Pintu', checked: false, category: 'clean' },
+    ]
+  },
+  BENGKEL: {
+    opening: [
+      { id: 'b_op1', text: 'Cek Tekanan Angin Kompresor & Kuras Tabung Air', checked: false, category: 'bar' },
+      { id: 'b_op2', text: 'Kalibrasi Kunci Torsi & Cek Kelengkapan Kunci Pit', checked: false, category: 'bar' },
+      { id: 'b_op3', text: 'Periksa Stok Oli Mesin & Suku Cadang Fast-Moving', checked: false, category: 'chiller' },
+      { id: 'b_op4', text: 'Kesiapan Sarung Tangan, Masker & Kain Majun Bersih', checked: false, category: 'clean' },
+      { id: 'b_op5', text: 'Hitung Kas Awal / Modal Uang Kembalian Kasir', checked: false, category: 'cash' },
+      { id: 'b_op6', text: 'Nyalakan POS Bengkel & Printer SPK / Invoice A4', checked: false, category: 'cash' },
+    ],
+    closing: [
+      { id: 'b_cl1', text: 'Kunci & Rapikan Seluruh Kotak Toolkit Mekanik', checked: false, category: 'bar' },
+      { id: 'b_cl2', text: 'Kuras Udara Kompresor & Matikan MCB Listrik 3-Phase', checked: false, category: 'bar' },
+      { id: 'b_cl3', text: 'Tuang Bak Tampung Oli Bekas ke Drum Limbah B3', checked: false, category: 'chiller' },
+      { id: 'b_cl4', text: 'Sapu & Bersihkan Lantai Pit dari Ceceran Oli/Gemuk', checked: false, category: 'clean' },
+      { id: 'b_cl5', text: 'Rekonsiliasi Kas Laci & Rekap SPK Selesai Hari Ini', checked: false, category: 'cash' },
+      { id: 'b_cl6', text: 'Gembok Pintu Rolling Door Pit & Gerbang Bengkel', checked: false, category: 'clean' },
+    ]
+  },
+  RETAIL: {
+    opening: [
+      { id: 'r_op1', text: 'Cek Label Harga di Rak (Price Tag & Promo Depan)', checked: false, category: 'bar' },
+      { id: 'r_op2', text: 'Pastikan Lorong Toko Bebas Halangan Dus/Palet', checked: false, category: 'clean' },
+      { id: 'r_op3', text: 'Display Penuh Barang Fast-Moving / Sembako / Semen', checked: false, category: 'bar' },
+      { id: 'r_op4', text: 'Hitung Kas Awal / Modal Uang Pas di Laci Kasir', checked: false, category: 'cash' },
+      { id: 'r_op5', text: 'Nyalakan POS, Barcode Scanner & Kertas Struk', checked: false, category: 'cash' },
+      { id: 'r_op6', text: 'Cek Kesiapan Armada Pick-Up / Kendaraan Kirim', checked: false, category: 'chiller' },
+    ],
+    closing: [
+      { id: 'r_cl1', text: 'Tutup Terpal / Amankan Barang Display di Luar Toko', checked: false, category: 'bar' },
+      { id: 'r_cl2', text: 'Sapu Lorong & Rapikan Barang Rak yang Berantakan', checked: false, category: 'clean' },
+      { id: 'r_cl3', text: 'Catat Barang Display yang Menipis untuk Kulakan Besok', checked: false, category: 'chiller' },
+      { id: 'r_cl4', text: 'Rekonsiliasi Kas Laci, EDC & Tutup Shift Kasir', checked: false, category: 'cash' },
+      { id: 'r_cl5', text: 'Parkir Armada Kirim di Garasi & Kunci Setir', checked: false, category: 'clean' },
+      { id: 'r_cl6', text: 'Matikan Lampu Display, AC & Gembok Rolling Door', checked: false, category: 'clean' },
+    ]
+  }
+};
 
 export const StaffPWAView: React.FC = () => {
   // Authentication state
@@ -109,8 +159,8 @@ export const StaffPWAView: React.FC = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Active Tab: 'attendance' | 'handover' | 'leave' | 'stock' | 'profile'
-  const [activeTab, setActiveTab] = useState<'attendance' | 'handover' | 'leave' | 'stock' | 'profile'>('attendance');
+  // Active Tab
+  const [activeTab, setActiveTab] = useState<'attendance' | 'handover' | 'leave' | 'stock' | 'profile' | 'approvals' | 'bengkel_spk'>('attendance');
 
   // Live Digital Time
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -134,6 +184,13 @@ export const StaffPWAView: React.FC = () => {
   const [shifts, setShifts] = useState<WorkShift[]>(DEFAULT_SHIFTS);
   const [selectedShiftId, setSelectedShiftId] = useState<string>('pagi');
 
+  // Business Type & Role Identification
+  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' = (settings?.businessType || user?.tenant?.businessType || 'CAFE').toUpperCase() as any;
+  const isCafe = businessType === 'CAFE';
+  const isBengkel = businessType === 'BENGKEL';
+  const isRetail = businessType === 'RETAIL';
+  const isOwnerOrAdmin = ['owner', 'admin', 'manager', 'supervisor', 'superadmin'].includes(user?.role?.toLowerCase() || '');
+
   // GPS State
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsDistance, setGpsDistance] = useState<number | null>(null);
@@ -145,18 +202,23 @@ export const StaffPWAView: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const leavePhotoRef = useRef<HTMLInputElement>(null);
+  const wastePhotoInputRef = useRef<HTMLInputElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   // Attendance Clocking State & My Summary
   const [clockLoading, setClockLoading] = useState(false);
   const [mySummary, setMySummary] = useState<any>(null);
 
-  // SOP Checklist State
+  // SOP Checklist State (Adaptif per Vertikal)
   const [sopType, setSopType] = useState<'OPENING' | 'CLOSING'>('OPENING');
-  const [sopList, setSopList] = useState<SOPCheckItem[]>(DEFAULT_OPENING_SOP);
+  const [sopList, setSopList] = useState<SOPCheckItem[]>(() => {
+    const preset = VERTICAL_SOP_PRESETS[businessType] || VERTICAL_SOP_PRESETS.CAFE;
+    return preset.opening;
+  });
   const [savingSOP, setSavingSOP] = useState(false);
 
   // Handover State
@@ -166,28 +228,31 @@ export const StaffPWAView: React.FC = () => {
   const [handoverForm, setHandoverForm] = useState({
     shiftName: 'Shift Pagi ke Shift Sore',
     cashBalance: '',
-    equipmentStatus: 'Semua mesin normal & area bar bersih',
+    equipmentStatus: isBengkel ? 'Semua toolkit & mesin kompresor normal' : isRetail ? 'Area lorong bersih & display rapi' : 'Semua mesin normal & area bar bersih',
     notes: ''
   });
   const [submittingHandover, setSubmittingHandover] = useState(false);
 
-  // Stock State
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  // Stock State (Dual-Core: Ingredients vs Products)
+  const [ingredients, setIngredients] = useState<UnifiedStockItem[]>([]);
+  const [productsList, setProductsList] = useState<any[]>([]);
   const [stockLoading, setStockLoading] = useState(false);
   const [stockSearch, setStockSearch] = useState('');
   const [stockCategory, setStockCategory] = useState<'ALL' | 'FOOD' | 'DRINK' | 'PACKAGING' | 'LOW'>('ALL');
 
-  // Stock Modals
+  // Stock Modals & Modern Waste Reporting
   const [showLossModal, setShowLossModal] = useState(false);
+  const [wasteType, setWasteType] = useState<'INGREDIENT' | 'PRODUCT'>('INGREDIENT');
+  const [wastePhoto, setWastePhoto] = useState<string | null>(null);
   const [lossForm, setLossForm] = useState({
     ingredientId: '',
     qtyLoss: '',
-    reason: 'Busuk / Kadaluarsa',
+    reason: 'Busuk / Basi',
     notes: ''
   });
   const [submittingLoss, setSubmittingLoss] = useState(false);
 
-  const [adjustModal, setAdjustModal] = useState<{ open: boolean; ingredient: Ingredient | null }>({
+  const [adjustModal, setAdjustModal] = useState<{ open: boolean; ingredient: UnifiedStockItem | null }>({
     open: false,
     ingredient: null
   });
@@ -226,14 +291,36 @@ export const StaffPWAView: React.FC = () => {
   const [profileNameInput, setProfileNameInput] = useState('');
   const [submittingProfile, setSubmittingProfile] = useState(false);
 
-  // Helper styling
+  // Kasbon Request Modal State (Staff Loan Application)
+  const [showLoanRequestModal, setShowLoanRequestModal] = useState(false);
+  const [loanRequestForm, setLoanRequestForm] = useState({ amount: '', reason: '' });
+  const [submittingLoanRequest, setSubmittingLoanRequest] = useState(false);
+  const [expandedLoanId, setExpandedLoanId] = useState<number | null>(null);
+
+  // Owner Quick-Approval Center State
+  const [pendingLeaves, setPendingLeaves] = useState<LeaveRequestItem[]>([]);
+  const [pendingLoans, setPendingLoans] = useState<any[]>([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+
+  // Bengkel Work Orders State (Mechanic Pit Board)
+  const [bengkelWorkOrders, setBengkelWorkOrders] = useState<any[]>([]);
+  const [bengkelLoading, setBengkelLoading] = useState(false);
+  const [updatingSpkId, setUpdatingSpkId] = useState<string | null>(null);
+  const [spkFilter, setSpkFilter] = useState<'ALL' | 'IN_PROGRESS' | 'WAITING_PARTS' | 'DONE'>('ALL');
+
+  // Helper styling persona per Vertikal
   const getAvatarGradient = (role: string = '') => {
     const r = role.toLowerCase();
     if (r.includes('barista') || r.includes('kopi')) return 'bg-gradient-to-tr from-[#7C3AED] to-[#A78BFA] text-white';
     if (r.includes('chef') || r.includes('dapur') || r.includes('cook')) return 'bg-gradient-to-tr from-[#F43F5E] to-[#FDA4AF] text-white';
+    if (r.includes('mekanik') || r.includes('mechanic')) return 'bg-gradient-to-tr from-[#F59E0B] to-[#FBBF24] text-[#1A1033]';
+    if (r.includes('advisor') || r.includes('service')) return 'bg-gradient-to-tr from-[#2563EB] to-[#60A5FA] text-white';
     if (r.includes('kasir') || r.includes('cashier')) return 'bg-gradient-to-tr from-[#10B981] to-[#6EE7B7] text-white';
+    if (r.includes('helper') || r.includes('gudang') || r.includes('warehouse')) return 'bg-gradient-to-tr from-[#0D9488] to-[#2DD4BF] text-white';
+    if (r.includes('driver') || r.includes('kurir') || r.includes('armada')) return 'bg-gradient-to-tr from-[#8B5CF6] to-[#C4B5FD] text-white';
     if (r.includes('waiter') || r.includes('server')) return 'bg-gradient-to-tr from-[#06B6D4] to-[#67E8F9] text-white';
-    if (r.includes('admin') || r.includes('manager')) return 'bg-gradient-to-tr from-[#1A1033] to-[#7C3AED] text-white';
+    if (r.includes('owner') || r.includes('admin') || r.includes('manager')) return 'bg-gradient-to-tr from-[#1A1033] to-[#7C3AED] text-white ring-2 ring-[#FFD600]';
     return 'bg-gradient-to-tr from-[#6366F1] to-[#A5B4FC] text-white';
   };
 
@@ -241,8 +328,13 @@ export const StaffPWAView: React.FC = () => {
     const r = role.toLowerCase();
     if (r.includes('barista')) return 'bg-[#F5F3FF] text-[#7C3AED] border border-[#DDD6FE]';
     if (r.includes('chef') || r.includes('dapur')) return 'bg-rose-50 text-[#F43F5E] border border-rose-200';
+    if (r.includes('mekanik') || r.includes('mechanic')) return 'bg-amber-50 text-amber-800 border border-amber-300';
+    if (r.includes('advisor')) return 'bg-blue-50 text-blue-700 border border-blue-200';
     if (r.includes('kasir')) return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+    if (r.includes('helper') || r.includes('gudang')) return 'bg-teal-50 text-teal-800 border border-teal-200';
+    if (r.includes('driver') || r.includes('kurir')) return 'bg-purple-50 text-purple-700 border border-purple-200';
     if (r.includes('waiter')) return 'bg-cyan-50 text-cyan-700 border border-cyan-200';
+    if (r.includes('owner') || r.includes('admin')) return 'bg-[#1A1033] text-[#FFD600] border border-[#FFD600]/40';
     return 'bg-slate-100 text-slate-700 border border-slate-200';
   };
 
@@ -267,9 +359,10 @@ export const StaffPWAView: React.FC = () => {
   // Fetch Settings & Shifts
   const fetchSettingsAndShifts = async () => {
     try {
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
       const [setRes, shiftRes] = await Promise.all([
-        fetch('/api/settings'),
-        fetch('/api/attendance/shifts')
+        fetch('/api/settings', { headers }),
+        fetch('/api/attendance/shifts', { headers })
       ]);
       if (setRes.ok) setSettings(await setRes.json());
       if (shiftRes.ok) {
@@ -286,7 +379,14 @@ export const StaffPWAView: React.FC = () => {
 
   useEffect(() => {
     fetchSettingsAndShifts();
-  }, []);
+  }, [token]);
+
+  // Synchronize SOP checklist to vertical preset dynamically
+  useEffect(() => {
+    const bType = (settings?.businessType || user?.tenant?.businessType || 'CAFE').toUpperCase();
+    const preset = VERTICAL_SOP_PRESETS[bType] || VERTICAL_SOP_PRESETS.CAFE;
+    setSopList(sopType === 'OPENING' ? preset.opening : preset.closing);
+  }, [settings?.businessType, sopType]);
 
   // Request GPS Location
   const requestGpsLocation = () => {
@@ -369,21 +469,26 @@ export const StaffPWAView: React.FC = () => {
       videoRef.current.srcObject = cameraStream;
       videoRef.current.play().catch(e => console.warn('Video play error:', e));
     }
-  }, [cameraStream, isCameraActive, activeTab, capturedPhoto]);
+  }, [cameraStream, isCameraActive, isCameraOpen, capturedPhoto]);
 
   useEffect(() => {
-    if (token && activeTab === 'attendance' && !capturedPhoto) {
-      startCamera();
+    if (token && activeTab === 'attendance') {
       requestGpsLocation();
+    }
+  }, [token, activeTab]);
+
+  useEffect(() => {
+    if (isCameraOpen && !capturedPhoto) {
+      startCamera();
     } else {
       stopCamera();
     }
     return () => {
       stopCamera();
     };
-  }, [token, activeTab, capturedPhoto]);
+  }, [isCameraOpen, capturedPhoto]);
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (!videoRef.current) return;
     const canvas = document.createElement('canvas');
     canvas.width = videoRef.current.videoWidth || 480;
@@ -395,23 +500,23 @@ export const StaffPWAView: React.FC = () => {
         ctx.scale(-1, 1);
       }
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      setCapturedPhoto(dataUrl);
+      const rawDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const compressed = await compressImage(rawDataUrl, 640, 640, 0.65);
+      setCapturedPhoto(compressed);
       stopCamera();
+      setIsCameraOpen(false);
+      toast('Foto selfie verifikasi berhasil diambil!', 'success');
     }
   };
 
-  const handleNativeCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNativeCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        setCapturedPhoto(dataUrl);
-        stopCamera();
-        toast('Foto selfie berhasil diambil!', 'success');
-      };
-      reader.readAsDataURL(file);
+      const compressed = await compressImage(file, 640, 640, 0.65);
+      setCapturedPhoto(compressed);
+      stopCamera();
+      setIsCameraOpen(false);
+      toast('Foto selfie berhasil diambil!', 'success');
     }
   };
 
@@ -431,24 +536,56 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Fetch Ingredients
-  const fetchIngredients = async () => {
+  // Fetch Stock (Dual-Core: Ingredients for Cafe vs Products for Retail/Bengkel)
+  const fetchInventoryStock = async () => {
     if (!token) return;
     setStockLoading(true);
     try {
-      const res = await fetch('/api/ingredients', {
+      const isCafeCurrent = (settings?.businessType || user?.tenant?.businessType || 'CAFE') === 'CAFE';
+      const endpoint = isCafeCurrent ? '/api/ingredients' : '/api/products';
+      const res = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
-        setIngredients(data);
+        const raw = await res.json();
+        if (isCafeCurrent) {
+          setIngredients(raw);
+        } else {
+          const mapped: UnifiedStockItem[] = (raw || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            category: p.category?.name || (isBengkel ? 'SPAREPART' : 'RETAIL'),
+            subCategory: p.subCategory?.name,
+            unit: p.unit || 'pcs',
+            stock: p.stock ?? 0,
+            minStock: p.minStock ?? 5,
+            buyPrice: p.buyPrice || p.price || 0,
+            price: p.price || 0,
+            itemLocation: p.itemLocation || '',
+            barcode: p.barcode || '',
+            priceTiers: p.priceTiers || [],
+            productUoms: p.productUoms || []
+          }));
+          setIngredients(mapped);
+        }
+      }
+      // Also fetch products for dish waste in Cafe mode
+      if (isCafeCurrent) {
+        const prodRes = await fetch('/api/products', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (prodRes.ok) {
+          setProductsList(await prodRes.json());
+        }
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error fetching stock:', e);
     } finally {
       setStockLoading(false);
     }
   };
+
+  const fetchIngredients = fetchInventoryStock;
 
   // Fetch Leaves
   const fetchMyLeaves = async () => {
@@ -512,19 +649,194 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
+  const handleLoanRequestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(loanRequestForm.amount);
+    if (!amt || amt <= 0) {
+      toast('Nominal kasbon harus lebih dari 0', 'error');
+      return;
+    }
+    setSubmittingLoanRequest(true);
+    try {
+      const res = await fetch('/api/employee-loans/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(loanRequestForm)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast('Permohonan kasbon berhasil diajukan ke manajemen!', 'success');
+        setShowLoanRequestModal(false);
+        setLoanRequestForm({ amount: '', reason: '' });
+        fetchMyLoans();
+      } else {
+        toast(data.error || 'Gagal mengajukan kasbon', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setSubmittingLoanRequest(false);
+    }
+  };
+
+  // ─── Owner Quick-Approval Center Functions ──────────────────────
+  const fetchPendingApprovals = async () => {
+    if (!token || !isOwnerOrAdmin) return;
+    setApprovalsLoading(true);
+    try {
+      const [leaveRes, loanRes] = await Promise.all([
+        fetch('/api/attendance/leaves?status=Pending', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/employee-loans', { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      if (leaveRes.ok) {
+        const data = await leaveRes.json();
+        setPendingLeaves(Array.isArray(data) ? data : []);
+      }
+      if (loanRes.ok) {
+        const data = await loanRes.json();
+        const allLoans = Array.isArray(data) ? data : (data.loans || []);
+        const pending = allLoans.filter((l: any) => l.status === 'MENUNGGU_PERSETUJUAN');
+        setPendingLoans(pending);
+      }
+    } catch (e) {
+      console.error('Error fetching pending approvals:', e);
+    } finally {
+      setApprovalsLoading(false);
+    }
+  };
+
+  const handleApproveLeave = async (id: number, status: 'Approved' | 'Rejected') => {
+    setApprovingId(id);
+    try {
+      const res = await fetch(`/api/attendance/leaves/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status,
+          approvedBy: user?.name || user?.username || 'Owner / Manajemen',
+          adminNotes: status === 'Approved' ? 'Disetujui via Mobile PWA' : 'Ditolak via Mobile PWA'
+        })
+      });
+      if (res.ok) {
+        toast(status === 'Approved' ? 'Pengajuan izin/cuti berhasil disetujui!' : 'Pengajuan cuti ditolak.', status === 'Approved' ? 'success' : 'info');
+        fetchPendingApprovals();
+        if (activeTab === 'leave') fetchMyLeaves();
+      } else {
+        toast('Gagal memproses status cuti', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleApproveLoan = async (id: number, action: 'APPROVE' | 'REJECT') => {
+    setApprovingId(id);
+    try {
+      const url = action === 'APPROVE' ? `/api/employee-loans/${id}/approve` : `/api/employee-loans/${id}/reject`;
+      const body = action === 'APPROVE'
+        ? { source: 'KAS_OWNER', approvedBy: user?.name || 'Owner' }
+        : { reason: 'Ditolak via Mobile PWA' };
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        toast(action === 'APPROVE' ? 'Kasbon disetujui & dicairkan dari Kas Owner!' : 'Kasbon berhasil ditolak.', 'success');
+        fetchPendingApprovals();
+      } else {
+        const data = await res.json();
+        toast(data.error || 'Gagal memproses kasbon', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  // ─── Bengkel Work Orders Functions (Mechanic Pit Board) ──────────
+  const fetchBengkelWorkOrders = async () => {
+    if (!token || !isBengkel) return;
+    setBengkelLoading(true);
+    try {
+      const res = await fetch('/api/bengkel/work-orders?boardOnly=true', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBengkelWorkOrders(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Error fetching work orders:', e);
+    } finally {
+      setBengkelLoading(false);
+    }
+  };
+
+  const handleUpdateSpkStatus = async (spkId: string, nextStatus: string) => {
+    setUpdatingSpkId(spkId);
+    try {
+      const res = await fetch(`/api/bengkel/work-orders/${spkId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: nextStatus })
+      });
+      if (res.ok) {
+        toast(`Status SPK berhasil diperbarui ke ${nextStatus}!`, 'success');
+        fetchBengkelWorkOrders();
+      } else {
+        const d = await res.json();
+        toast(d.error || 'Gagal memperbarui status SPK', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan koneksi', 'error');
+    } finally {
+      setUpdatingSpkId(null);
+    }
+  };
+
   useEffect(() => {
     if (!token) return;
     fetchMySummary();
     if (activeTab === 'stock') {
-      fetchIngredients();
+      fetchInventoryStock();
     } else if (activeTab === 'leave') {
       fetchMyLeaves();
     } else if (activeTab === 'handover') {
       fetchHandovers();
     } else if (activeTab === 'profile') {
       fetchMyLoans();
+    } else if (activeTab === 'approvals') {
+      fetchPendingApprovals();
+    } else if (activeTab === 'bengkel_spk') {
+      fetchBengkelWorkOrders();
     }
-  }, [token, activeTab]);
+  }, [token, activeTab, settings?.businessType]);
+
+  // Initial fetch for pending approvals badge and bengkel active work orders
+  useEffect(() => {
+    if (token && isOwnerOrAdmin) {
+      fetchPendingApprovals();
+    }
+    if (token && isBengkel) {
+      fetchBengkelWorkOrders();
+    }
+  }, [token, isOwnerOrAdmin, isBengkel]);
 
   // Handle Login
   const handleIndividualLogin = async (e: React.FormEvent) => {
@@ -584,8 +896,9 @@ export const StaffPWAView: React.FC = () => {
 
   // Perform Clock In / Out
   const handleClockAction = async (type: 'IN' | 'OUT') => {
-    if (type === 'IN' && !capturedPhoto && settings?.enableCameraPhoto) {
-      return toast('Harap ambil foto selfie verifikasi kehadiran terlebih dahulu', 'warning');
+    if (!capturedPhoto && settings?.enableCameraPhoto) {
+      setIsCameraOpen(true);
+      return toast(`Harap ambil foto selfie verifikasi ${type === 'IN' ? 'kehadiran' : 'kepulangan'} terlebih dahulu`, 'warning');
     }
 
     if (type === 'IN' && !isWithinRadius && settings?.enableGpsValidation) {
@@ -593,8 +906,39 @@ export const StaffPWAView: React.FC = () => {
     }
 
     setClockLoading(true);
+    const selectedShift = shifts.find(s => s.id === selectedShiftId) || DEFAULT_SHIFTS[0];
+    const clientTimestamp = new Date().toISOString();
+
+    // Mode Offline
+    if (!navigator.onLine) {
+      try {
+        const offlineId = 'ATT-' + (window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2, 8)));
+        await offlineDb.queueOfflineAttendance({
+          offlineId,
+          userId: String(user.id),
+          userName: user.name || user.username || 'Staf',
+          tenantId: user.tenantId,
+          type,
+          photoBase64: capturedPhoto || undefined,
+          latitude: gpsLocation?.lat,
+          longitude: gpsLocation?.lng,
+          notes: '',
+          clientTimestamp,
+        });
+
+        stopCamera();
+        setCapturedPhoto(null);
+        setIsCameraOpen(false);
+        toast(`✅ Presensi ${type === 'IN' ? 'Masuk' : 'Pulang'} tersimpan di perangkat (Offline) & akan dikirim otomatis saat online!`, 'warning');
+      } catch (err: any) {
+        toast(err.message || 'Gagal mencatat presensi offline', 'error');
+      } finally {
+        setClockLoading(false);
+      }
+      return;
+    }
+
     try {
-      const selectedShift = shifts.find(s => s.id === selectedShiftId) || DEFAULT_SHIFTS[0];
       const payload = {
         pin: user?.pin || '',
         type,
@@ -619,12 +963,35 @@ export const StaffPWAView: React.FC = () => {
       if (res.ok) {
         toast(data.message || 'Presensi berhasil dicatat!', 'success');
         setCapturedPhoto(null);
+        stopCamera();
+        setIsCameraOpen(false);
         fetchMySummary();
       } else {
         toast(data.error || 'Gagal memproses absensi', 'error');
       }
     } catch (e) {
-      toast('Terjadi kesalahan koneksi', 'error');
+      // Fallback offline queue on network drop
+      try {
+        const offlineId = 'ATT-' + (window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2, 8)));
+        await offlineDb.queueOfflineAttendance({
+          offlineId,
+          userId: String(user.id),
+          userName: user.name || user.username || 'Staf',
+          tenantId: user.tenantId,
+          type,
+          photoBase64: capturedPhoto || undefined,
+          latitude: gpsLocation?.lat,
+          longitude: gpsLocation?.lng,
+          notes: '',
+          clientTimestamp,
+        });
+        stopCamera();
+        setCapturedPhoto(null);
+        setIsCameraOpen(false);
+        toast(`✅ Presensi ${type === 'IN' ? 'Masuk' : 'Pulang'} tersimpan di perangkat (Offline) & akan dikirim otomatis saat online!`, 'warning');
+      } catch (err: any) {
+        toast('Terjadi kesalahan koneksi', 'error');
+      }
     } finally {
       setClockLoading(false);
     }
@@ -750,7 +1117,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Submit Stock Loss
+  // Submit Stock Loss / Food Waste (Modern Unified /api/waste Engine)
   const handleSubmitStockLoss = async (e: React.FormEvent) => {
     e.preventDefault();
     const qty = parseFloat(lossForm.qtyLoss);
@@ -760,25 +1127,41 @@ export const StaffPWAView: React.FC = () => {
 
     setSubmittingLoss(true);
     try {
-      const res = await fetch('/api/ingredients/loss', {
+      const selectedId = Number(lossForm.ingredientId);
+      const isIngType = wasteType === 'INGREDIENT';
+      const payload: any = {
+        type: isCafe ? wasteType : 'PRODUCT',
+        qty,
+        reason: lossForm.reason || 'Busuk / Basi',
+        notes: `${lossForm.notes ? lossForm.notes + ' - ' : ''}[Staf: ${user?.name}]`,
+        photoUrl: wastePhoto || null
+      };
+
+      if (isCafe && isIngType) {
+        payload.ingredientId = selectedId;
+      } else {
+        payload.productId = selectedId;
+      }
+
+      const res = await fetch('/api/waste', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...lossForm,
-          notes: `${lossForm.notes ? lossForm.notes + ' - ' : ''}[Staf: ${user?.name}]`
-        })
+        body: JSON.stringify(payload)
       });
 
+      const data = await res.json();
       if (res.ok) {
-        toast('Pencatatan stock loss berhasil disimpan!', 'success');
+        const costStr = data.totalCost ? ` (Kerugian HPP: Rp ${Number(data.totalCost).toLocaleString('id-ID')})` : '';
+        toast(`Pencatatan waste berhasil disimpan!${costStr}`, 'success');
         setShowLossModal(false);
-        setLossForm({ ingredientId: '', qtyLoss: '', reason: 'Busuk / Kadaluarsa', notes: '' });
-        fetchIngredients();
+        setLossForm({ ingredientId: '', qtyLoss: '', reason: 'Busuk / Basi', notes: '' });
+        setWastePhoto(null);
+        fetchInventoryStock();
       } else {
-        toast('Gagal menyimpan stock loss', 'error');
+        toast(data.error || 'Gagal menyimpan pencatatan waste', 'error');
       }
     } catch (e) {
       toast('Terjadi kesalahan koneksi', 'error');
@@ -787,7 +1170,7 @@ export const StaffPWAView: React.FC = () => {
     }
   };
 
-  // Submit Quick Restock
+  // Submit Quick Restock (Dual-Core: Ingredients vs Products)
   const handleQuickAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjustModal.ingredient) return;
@@ -798,24 +1181,40 @@ export const StaffPWAView: React.FC = () => {
 
     setSubmittingAdjust(true);
     try {
-      const res = await fetch(`/api/ingredients/${adjustModal.ingredient.id}/adjust`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          change: changeVal,
-          type: 'Restock',
-          description: adjustForm.description || `Quick Restock Staf (${user?.name})`
-        })
-      });
+      const isCafeCurrent = (settings?.businessType || 'CAFE') === 'CAFE';
+      let res: Response;
+      if (isCafeCurrent) {
+        res = await fetch(`/api/ingredients/${adjustModal.ingredient.id}/adjust`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            change: changeVal,
+            type: 'Restock',
+            description: adjustForm.description || `Quick Restock Staf (${user?.name})`
+          })
+        });
+      } else {
+        const newStock = (adjustModal.ingredient.stock || 0) + changeVal;
+        res = await fetch(`/api/products/${adjustModal.ingredient.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            stock: newStock
+          })
+        });
+      }
 
       if (res.ok) {
         toast(`Berhasil restock ${adjustModal.ingredient.name}!`, 'success');
         setAdjustModal({ open: false, ingredient: null });
         setAdjustForm({ change: '', description: '' });
-        fetchIngredients();
+        fetchInventoryStock();
       } else {
         toast('Gagal melakukan restock', 'error');
       }
@@ -1087,16 +1486,60 @@ export const StaffPWAView: React.FC = () => {
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {/* Quick Owner Approval Button */}
+              {isOwnerOrAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('approvals')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm transition-all active:scale-95 ${
+                    activeTab === 'approvals'
+                      ? 'bg-[#FFD600] text-[#1A1033]'
+                      : 'bg-white/10 text-[#FFD600] border border-[#FFD600]/60 hover:bg-white/20'
+                  }`}
+                  title="Pusat Persetujuan Owner"
+                >
+                  <ShieldCheck size={12} />
+                  <span>Approval</span>
+                  {(pendingLeaves.length + pendingLoans.length) > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
+                      {pendingLeaves.length + pendingLoans.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {/* Quick Bengkel SPK Button */}
+              {isBengkel && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bengkel_spk')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm transition-all active:scale-95 ${
+                    activeTab === 'bengkel_spk'
+                      ? 'bg-amber-400 text-[#1A1033]'
+                      : 'bg-white/10 text-amber-300 border border-amber-400/50 hover:bg-white/20'
+                  }`}
+                  title="Papan SPK Pit Mekanik"
+                >
+                  <Wrench size={12} />
+                  <span>SPK Pit</span>
+                  {bengkelWorkOrders.filter(w => ['ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS'].includes(w.status)).length > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-amber-400 text-[#1A1033] text-[9px] font-black flex items-center justify-center">
+                      {bengkelWorkOrders.filter(w => ['ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS'].includes(w.status)).length}
+                    </span>
+                  )}
+                </button>
+              )}
+
               {/* Quick ID Card Modal Button */}
               <button
                 type="button"
                 onClick={() => setShowIDCardModal(true)}
-                className="px-3 py-1 rounded-full bg-[#FFD600] text-[#1A1033] font-bold text-[10px] flex items-center gap-1 shadow-sm hover:bg-[#FACC15] active:scale-95 transition-all"
+                className="px-2.5 py-1 rounded-full bg-[#FFD600] text-[#1A1033] font-bold text-[10px] flex items-center gap-1 shadow-sm hover:bg-[#FACC15] active:scale-95 transition-all"
                 title="Buka Kartu ID Digital"
               >
-                <QrCode size={13} />
-                <span>ID Card</span>
+                <QrCode size={12} />
+                <span>ID</span>
               </button>
 
               {/* Logout Button */}
@@ -1309,19 +1752,23 @@ export const StaffPWAView: React.FC = () => {
 
                 </div>
 
-                {/* Hero Biometric Camera Card */}
+                {/* Hero Biometric Camera & Attendance Card */}
                 <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-[0_4px_20px_rgba(124,58,237,0.04)] space-y-3">
                   
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-[#1A1033] flex items-center gap-1.5">
-                      <Camera size={15} className="text-[#7C3AED]" /> Kamera Selfie Presensi
+                      <Camera size={15} className="text-[#7C3AED]" /> Verifikasi Presensi Biometrik
                     </span>
                     {capturedPhoto ? (
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
                         <CheckCircle2 size={11} /> Foto Siap
                       </span>
+                    ) : isCameraOpen ? (
+                      <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Kamera Aktif
+                      </span>
                     ) : (
-                      <span className="text-[10px] text-slate-400">Posisikan wajah Anda</span>
+                      <span className="text-[10px] text-slate-400">Kamera Standby (Hemat Daya)</span>
                     )}
                   </div>
 
@@ -1334,10 +1781,10 @@ export const StaffPWAView: React.FC = () => {
                     className="hidden"
                   />
 
-                  {!capturedPhoto ? (
+                  {/* 1. Live Camera Viewfinder (Only shown when user opens camera) */}
+                  {isCameraOpen ? (
                     <div className="space-y-3">
-                      {/* Viewfinder Frame */}
-                      <div className="relative rounded-3xl overflow-hidden bg-[#1A1033] aspect-square max-w-[270px] mx-auto shadow-inner">
+                      <div className="relative rounded-3xl overflow-hidden bg-[#1A1033] aspect-square max-w-[270px] mx-auto shadow-inner border-2 border-[#7C3AED]">
                         <video
                           ref={videoRef}
                           autoPlay
@@ -1358,20 +1805,33 @@ export const StaffPWAView: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Top Badges */}
+                        {/* Top Badges & Controls */}
                         <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between pointer-events-auto">
                           <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-[9px] font-bold text-emerald-400 border border-white/10 flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
                           </span>
 
-                          <button
-                            type="button"
-                            onClick={toggleCameraFacing}
-                            className="p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-all active:scale-90"
-                            title="Putar Kamera"
-                          >
-                            <RefreshCcw size={13} />
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={toggleCameraFacing}
+                              className="p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-all active:scale-90"
+                              title="Putar Kamera"
+                            >
+                              <RefreshCcw size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCameraOpen(false);
+                                stopCamera();
+                              }}
+                              className="p-1.5 rounded-full bg-black/60 hover:bg-rose-600 text-white transition-all"
+                              title="Tutup Kamera"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Shutter Capture Button */}
@@ -1389,18 +1849,29 @@ export const StaffPWAView: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Native Camera Trigger */}
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-2.5 bg-[#F5F3FF] hover:bg-[#EDE9FE] text-[#7C3AED] rounded-2xl text-xs font-semibold border border-[#DDD6FE]/60 transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                      >
-                        <Smartphone size={14} />
-                        <span>Buka Kamera Bawaan HP</span>
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex-1 py-2 bg-[#F5F3FF] hover:bg-[#EDE9FE] text-[#7C3AED] rounded-2xl text-xs font-semibold border border-[#DDD6FE]/60 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                        >
+                          <Smartphone size={13} />
+                          <span>Kamera HP</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCameraOpen(false);
+                            stopCamera();
+                          }}
+                          className="py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-semibold transition-all"
+                        >
+                          Batal
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    /* Captured Photo Preview */
+                  ) : capturedPhoto ? (
+                    /* 2. Captured Photo Preview (Camera is OFF) */
                     <div className="space-y-3">
                       <div className="relative rounded-3xl overflow-hidden bg-[#1A1033] aspect-square max-w-[220px] mx-auto border-2 border-emerald-500 shadow-md">
                         <img src={capturedPhoto} alt="Selfie" className="w-full h-full object-cover" />
@@ -1408,9 +1879,10 @@ export const StaffPWAView: React.FC = () => {
                           type="button"
                           onClick={() => {
                             setCapturedPhoto(null);
-                            startCamera();
+                            setIsCameraOpen(true);
                           }}
                           className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors"
+                          title="Hapus & Foto Ulang"
                         >
                           <X size={13} />
                         </button>
@@ -1420,13 +1892,64 @@ export const StaffPWAView: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setCapturedPhoto(null);
-                          startCamera();
+                          setIsCameraOpen(true);
                         }}
                         className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-2xl border border-slate-200 flex items-center justify-center gap-1.5 transition-all"
                       >
                         <RefreshCw size={12} />
-                        <span>Foto Ulang</span>
+                        <span>Ambil Ulang Selfie</span>
                       </button>
+                    </div>
+                  ) : (
+                    /* 3. Standby State (Camera OFF, Prompt to Open Camera) */
+                    <div className="space-y-2 py-1">
+                      {mySummary?.todayStatus?.clockedIn && !mySummary?.todayStatus?.clockedOut ? (
+                        <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-teal-500/10 border border-emerald-500/20 text-center space-y-2">
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-800 text-xs font-bold">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            SEDANG BERTUGAS (ON DUTY)
+                          </div>
+                          <p className="text-xs text-slate-600">
+                            Kamera dalam mode standby. Buka kamera saat Anda siap untuk melakukan absen kepulangan.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setIsCameraOpen(true)}
+                            className="w-full py-2.5 bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-300 shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                          >
+                            <Camera size={14} className="text-emerald-600" />
+                            <span>Ambil Foto Selfie Pulang</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-center space-y-2.5">
+                          <div className="w-12 h-12 rounded-2xl bg-[#7C3AED]/10 text-[#7C3AED] flex items-center justify-center mx-auto text-xl">
+                            📸
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-[#1A1033]">Selfie Verifikasi Kehadiran</div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Ambil foto selfie di area outlet untuk verifikasi presensi Anda.</p>
+                          </div>
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsCameraOpen(true)}
+                              className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-xl shadow-md shadow-[#7C3AED]/20 transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                            >
+                              <Camera size={14} />
+                              <span>Buka Kamera Selfie</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 transition-all flex items-center justify-center gap-1"
+                              title="Gunakan Kamera HP"
+                            >
+                              <Smartphone size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1513,7 +2036,8 @@ export const StaffPWAView: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setSopType('OPENING');
-                          setSopList(DEFAULT_OPENING_SOP);
+                          const preset = VERTICAL_SOP_PRESETS[businessType] || VERTICAL_SOP_PRESETS.CAFE;
+                          setSopList(preset.opening);
                         }}
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
                           sopType === 'OPENING' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-500'
@@ -1525,7 +2049,8 @@ export const StaffPWAView: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setSopType('CLOSING');
-                          setSopList(DEFAULT_CLOSING_SOP);
+                          const preset = VERTICAL_SOP_PRESETS[businessType] || VERTICAL_SOP_PRESETS.CAFE;
+                          setSopList(preset.closing);
                         }}
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
                           sopType === 'CLOSING' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-500'
@@ -1732,7 +2257,7 @@ export const StaffPWAView: React.FC = () => {
             )}
 
             {/* ══════════════════════════════════════════════════════════════
-                TAB 4: STOK BAHAN BAKU & QUICK LOSS / RESTOCK
+                TAB 4: STOK INVENTARIS DUAL-CORE (BAHAN / PART / BARANG)
                ══════════════════════════════════════════════════════════════ */}
             {activeTab === 'stock' && (
               <div className="space-y-3">
@@ -1745,14 +2270,14 @@ export const StaffPWAView: React.FC = () => {
                     className="flex-1 py-2 px-3 rounded-full bg-rose-50 text-[#F43F5E] border border-rose-200 text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-rose-100 shadow-sm transition-all"
                   >
                     <TrendingDown size={14} />
-                    <span>Lapor Basi / Rusak</span>
+                    <span>{isBengkel ? 'Lapor Rusak / Cacat Part' : isRetail ? 'Lapor Rusak / Retur' : 'Lapor Basi / Rusak'}</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={fetchIngredients}
+                    onClick={fetchInventoryStock}
                     className="p-2.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm"
-                    title="Refresh Stok"
+                    title="Segarkan Stok"
                   >
                     <RefreshCw size={13} className={stockLoading ? 'animate-spin text-[#7C3AED]' : ''} />
                   </button>
@@ -1766,11 +2291,12 @@ export const StaffPWAView: React.FC = () => {
                       type="text"
                       value={stockSearch}
                       onChange={e => setStockSearch(e.target.value)}
-                      placeholder="Cari bahan baku (kopi, susu, sirup)..."
+                      placeholder={isBengkel ? 'Cari suku cadang, oli, busi...' : isRetail ? 'Cari barang, sembako, material...' : 'Cari bahan baku (kopi, susu, sirup)...'}
                       className="w-full pl-9 pr-3.5 py-2 bg-[#F4F6F9] border border-slate-200 rounded-2xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#7C3AED]"
                     />
                   </div>
 
+                  {/* Kategori Adaptif */}
                   <div className="grid grid-cols-4 gap-1 text-center text-[10px]">
                     <button
                       onClick={() => setStockCategory('ALL')}
@@ -1780,22 +2306,66 @@ export const StaffPWAView: React.FC = () => {
                     >
                       Semua ({ingredients.length})
                     </button>
-                    <button
-                      onClick={() => setStockCategory('FOOD')}
-                      className={`py-1.5 rounded-xl font-bold transition-all ${
-                        stockCategory === 'FOOD' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
-                      }`}
-                    >
-                      Makanan
-                    </button>
-                    <button
-                      onClick={() => setStockCategory('DRINK')}
-                      className={`py-1.5 rounded-xl font-bold transition-all ${
-                        stockCategory === 'DRINK' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
-                      }`}
-                    >
-                      Minuman
-                    </button>
+
+                    {isCafe ? (
+                      <>
+                        <button
+                          onClick={() => setStockCategory('FOOD')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'FOOD' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Makanan
+                        </button>
+                        <button
+                          onClick={() => setStockCategory('DRINK')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'DRINK' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Minuman
+                        </button>
+                      </>
+                    ) : isBengkel ? (
+                      <>
+                        <button
+                          onClick={() => setStockCategory('FOOD')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'FOOD' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Oli &amp; Cairan
+                        </button>
+                        <button
+                          onClick={() => setStockCategory('DRINK')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'DRINK' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Sparepart
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setStockCategory('FOOD')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'FOOD' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Display
+                        </button>
+                        <button
+                          onClick={() => setStockCategory('DRINK')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'DRINK' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Gudang
+                        </button>
+                      </>
+                    )}
+
                     <button
                       onClick={() => setStockCategory('LOW')}
                       className={`py-1.5 rounded-xl font-bold transition-all ${
@@ -1807,17 +2377,16 @@ export const StaffPWAView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Ingredients List */}
+                {/* Stock Items List */}
                 <div className="space-y-2">
                   {ingredients
                     .filter(i => {
-                      if (stockCategory === 'FOOD') return (i.category || 'FOOD') === 'FOOD';
-                      if (stockCategory === 'DRINK') return i.category === 'DRINK';
-                      if (stockCategory === 'PACKAGING') return i.category === 'PACKAGING';
+                      if (stockCategory === 'FOOD') return (i.category || '').toUpperCase().includes('FOOD') || (i.category || '').toUpperCase().includes('OLI');
+                      if (stockCategory === 'DRINK') return (i.category || '').toUpperCase().includes('DRINK') || (i.category || '').toUpperCase().includes('PART') || (i.category || '').toUpperCase().includes('SPARE');
                       if (stockCategory === 'LOW') return i.stock <= i.minStock;
                       return true;
                     })
-                    .filter(i => i.name.toLowerCase().includes(stockSearch.toLowerCase()))
+                    .filter(i => i.name.toLowerCase().includes(stockSearch.toLowerCase()) || (i.barcode && i.barcode.includes(stockSearch)))
                     .map(ing => {
                       const isLow = ing.stock <= ing.minStock;
                       return (
@@ -1827,21 +2396,29 @@ export const StaffPWAView: React.FC = () => {
                             isLow ? 'border-rose-200 bg-rose-50/20' : 'border-slate-100'
                           }`}
                         >
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <h5 className="text-xs font-bold text-[#1A1033]">{ing.name}</h5>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h5 className="text-xs font-bold text-[#1A1033] truncate">{ing.name}</h5>
                               {isLow && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[#F43F5E] text-white">
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[#F43F5E] text-white shrink-0">
                                   Menipis
                                 </span>
                               )}
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              Min: {ing.minStock} {ing.unit} {ing.subCategory ? `• ${ing.subCategory}` : ''}
-                            </p>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
+                              <span>Min: {ing.minStock} {ing.unit}</span>
+                              {ing.itemLocation && (
+                                <span className="text-[#7C3AED] font-semibold flex items-center gap-0.5">
+                                  <MapPin size={9} /> Rak: {ing.itemLocation}
+                                </span>
+                              )}
+                              {ing.barcode && (
+                                <span className="font-mono text-slate-500">[{ing.barcode}]</span>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <span className="text-xs font-bold text-[#1A1033] font-mono">
                               {ing.stock} <span className="text-[10px] font-normal text-slate-400">{ing.unit}</span>
                             </span>
@@ -1859,6 +2436,344 @@ export const StaffPWAView: React.FC = () => {
                         </div>
                       );
                     })}
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                TAB KHUSUS: PUSAT PERSETUJUAN OWNER (MOBILE QUICK-APPROVAL)
+               ══════════════════════════════════════════════════════════════ */}
+            {activeTab === 'approvals' && (
+              <div className="space-y-4">
+                {/* Header Card */}
+                <div className="bg-gradient-to-br from-[#1A1033] to-[#2D1B4E] rounded-3xl p-4 text-white shadow-lg space-y-2 border border-[#FFD600]/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-[#FFD600] text-[#1A1033]">
+                        <ShieldCheck size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Pusat Persetujuan Owner</h4>
+                        <p className="text-[10px] text-purple-200">Verifikasi pengajuan cuti &amp; pencairan kasbon staf</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={fetchPendingApprovals}
+                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                      title="Segarkan"
+                    >
+                      <RefreshCw size={13} className={approvalsLoading ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div className="p-2.5 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10">
+                      <span className="text-[10px] text-purple-200 block">Izin Menunggu:</span>
+                      <span className="text-base font-extrabold text-[#FFD600]">{pendingLeaves.length} Pengajuan</span>
+                    </div>
+                    <div className="p-2.5 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10">
+                      <span className="text-[10px] text-purple-200 block">Kasbon Menunggu:</span>
+                      <span className="text-base font-extrabold text-[#FFD600]">{pendingLoans.length} Pengajuan</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 1: Pengajuan Cuti / Izin Sakit */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+                  <h4 className="text-xs font-bold text-[#1A1033] flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <FileText size={15} className="text-[#7C3AED]" /> Pengajuan Izin / Cuti Staf
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">({pendingLeaves.length} antre)</span>
+                  </h4>
+
+                  {pendingLeaves.length === 0 ? (
+                    <div className="p-4 bg-slate-50 rounded-2xl text-center text-xs text-slate-400 border border-slate-100">
+                      Tidak ada pengajuan izin yang menunggu persetujuan.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {pendingLeaves.map(leave => (
+                        <div key={leave.id} className="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-bold text-[#1A1033]">{leave.user?.name || 'Staf'}</span>
+                              <span className="text-[10px] text-slate-400 block font-mono">
+                                {leave.startDate === leave.endDate ? leave.startDate : `${leave.startDate} s/d ${leave.endDate}`}
+                              </span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              {leave.type}
+                            </span>
+                          </div>
+
+                          <p className="text-slate-600 text-[11px] italic">"{leave.reason}"</p>
+
+                          {leave.photoUrl && (
+                            <div className="pt-1">
+                              <span className="text-[10px] text-slate-400 block mb-1">Lampiran Bukti / Surat Dokter:</span>
+                              <a href={leave.photoUrl} target="_blank" rel="noreferrer">
+                                <img src={leave.photoUrl} alt="Bukti" className="w-16 h-16 rounded-xl object-cover border border-slate-200 hover:opacity-90" />
+                              </a>
+                            </div>
+                          )}
+
+                          <div className="pt-2 flex gap-2 border-t border-slate-200/60">
+                            <button
+                              type="button"
+                              disabled={approvingId === leave.id}
+                              onClick={() => handleApproveLeave(leave.id, 'Rejected')}
+                              className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-[#F43F5E] rounded-xl font-bold text-[11px] flex items-center justify-center gap-1 transition-all"
+                            >
+                              <X size={12} /> Tolak
+                            </button>
+                            <button
+                              type="button"
+                              disabled={approvingId === leave.id}
+                              onClick={() => handleApproveLeave(leave.id, 'Approved')}
+                              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-[11px] flex items-center justify-center gap-1 shadow-sm transition-all"
+                            >
+                              <Check size={12} /> Setujui
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: Pengajuan Kasbon Karyawan */}
+                <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+                  <h4 className="text-xs font-bold text-[#1A1033] flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Wallet size={15} className="text-[#FFD600]" /> Permohonan Kasbon Staf
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">({pendingLoans.length} antre)</span>
+                  </h4>
+
+                  {pendingLoans.length === 0 ? (
+                    <div className="p-4 bg-slate-50 rounded-2xl text-center text-xs text-slate-400 border border-slate-100">
+                      Tidak ada permohonan kasbon yang menunggu persetujuan.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {pendingLoans.map((loan: any) => (
+                        <div key={loan.id} className="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-bold text-[#1A1033]">{loan.user?.name || 'Staf'}</span>
+                              <span className="text-[10px] text-slate-400 block font-mono">
+                                {loan.user?.role || 'Karyawan'}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-rose-600 font-mono text-sm block">
+                                Rp {Number(loan.amount).toLocaleString('id-ID')}
+                              </span>
+                              <span className="text-[9px] text-slate-400">Pengajuan Pinjaman</span>
+                            </div>
+                          </div>
+
+                          <p className="text-slate-600 text-[11px] bg-white p-2 rounded-xl border border-slate-100">
+                            "{loan.reason || 'Kebutuhan mendesak'}"
+                          </p>
+
+                          <div className="pt-2 flex gap-2 border-t border-slate-200/60">
+                            <button
+                              type="button"
+                              disabled={approvingId === loan.id}
+                              onClick={() => handleApproveLoan(loan.id, 'REJECT')}
+                              className="flex-1 py-2 bg-rose-50 hover:bg-rose-100 text-[#F43F5E] rounded-xl font-bold text-[11px] flex items-center justify-center gap-1 transition-all"
+                            >
+                              <X size={12} /> Tolak
+                            </button>
+                            <button
+                              type="button"
+                              disabled={approvingId === loan.id}
+                              onClick={() => handleApproveLoan(loan.id, 'APPROVE')}
+                              className="flex-1 py-2 bg-[#7C3AED] hover:bg-[#6D28D9] text-white rounded-xl font-bold text-[11px] flex items-center justify-center gap-1 shadow-sm transition-all"
+                            >
+                              <DollarSign size={12} /> Cairkan Kas Owner
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                TAB KHUSUS BENGKEL: PAPAN ANTREAN SPK PIT MEKANIK
+               ══════════════════════════════════════════════════════════════ */}
+            {activeTab === 'bengkel_spk' && (
+              <div className="space-y-4">
+                {/* Bengkel Mechanic Hero Header */}
+                <div className="bg-gradient-to-br from-[#1A1033] to-[#251648] rounded-3xl p-4 text-white shadow-lg space-y-2 border border-amber-400/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-amber-400 text-[#1A1033]">
+                        <Wrench size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">Papan Antrean SPK Servis</h4>
+                        <p className="text-[10px] text-amber-200">Pit Pengerjaan &amp; Update Progres Kendaraan</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={fetchBengkelWorkOrders}
+                      className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                      title="Segarkan SPK"
+                    >
+                      <RefreshCw size={13} className={bengkelLoading ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+
+                  {/* KPI Cards: Pit Aktif & Selesai */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div className="p-2.5 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10">
+                      <span className="text-[10px] text-amber-200 block">SPK Aktif di Pit:</span>
+                      <span className="text-base font-extrabold text-white">
+                        {bengkelWorkOrders.filter(w => ['ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS'].includes(w.status)).length} Unit
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10">
+                      <span className="text-[10px] text-amber-200 block">Selesai Hari Ini:</span>
+                      <span className="text-base font-extrabold text-amber-300">
+                        {bengkelWorkOrders.filter(w => ['DONE', 'PAID', 'DELIVERED'].includes(w.status)).length} Unit
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter Status Chips */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 text-[10px]">
+                  {(['ALL', 'IN_PROGRESS', 'WAITING_PARTS', 'DONE'] as const).map(f => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setSpkFilter(f)}
+                      className={`px-3 py-1.5 rounded-full font-bold whitespace-nowrap transition-all ${
+                        spkFilter === f
+                          ? 'bg-[#7C3AED] text-white shadow-sm'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {f === 'ALL' ? 'Semua Status' : f === 'IN_PROGRESS' ? 'Sedang Dikerjakan' : f === 'WAITING_PARTS' ? 'Menunggu Part' : 'Selesai'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Work Orders List */}
+                <div className="space-y-2.5">
+                  {bengkelWorkOrders.length === 0 ? (
+                    <div className="p-8 bg-white rounded-3xl border border-slate-100 text-center space-y-2">
+                      <Wrench size={32} className="mx-auto text-amber-300" />
+                      <h4 className="text-xs font-bold text-[#1A1033]">Belum Ada SPK di Pit</h4>
+                      <p className="text-[11px] text-slate-400">Semua pekerjaan servis telah selesai atau belum ada SPK baru yang ditugaskan.</p>
+                    </div>
+                  ) : (
+                    bengkelWorkOrders
+                      .filter(wo => {
+                        if (spkFilter === 'ALL') return true;
+                        if (spkFilter === 'DONE') return ['DONE', 'PAID', 'DELIVERED'].includes(wo.status);
+                        return wo.status === spkFilter;
+                      })
+                      .map(wo => {
+                        const isDone = ['DONE', 'PAID', 'DELIVERED'].includes(wo.status);
+                        const isProgress = wo.status === 'IN_PROGRESS';
+                        const isWaiting = wo.status === 'WAITING_PARTS';
+                        return (
+                          <div key={wo.id} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-black text-[#1A1033] font-mono">{wo.vehiclePlate}</span>
+                                  <span className="text-[10px] text-slate-400">({wo.vehicleModel || 'Kendaraan'})</span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-mono">{wo.spkNumber}</span>
+                              </div>
+
+                              <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold ${
+                                isDone 
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                  : isProgress 
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  : isWaiting
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {wo.status}
+                              </span>
+                            </div>
+
+                            {wo.complaints && (
+                              <div className="text-[11px] text-slate-600 bg-slate-50 p-2 rounded-xl">
+                                <strong>Keluhan:</strong> {wo.complaints}
+                              </div>
+                            )}
+
+                            {/* Action Buttons for Mechanic */}
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-[10px] text-slate-400">
+                                Pelanggan: {wo.customer?.name || wo.customerName || '-'}
+                              </span>
+
+                              <div className="flex gap-1.5">
+                                {!isDone && (
+                                  <>
+                                    {isProgress && (
+                                      <button
+                                        type="button"
+                                        disabled={updatingSpkId === wo.id}
+                                        onClick={() => handleUpdateSpkStatus(wo.id, 'WAITING_PARTS')}
+                                        className="px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-[10px] border border-amber-200 flex items-center gap-1"
+                                      >
+                                        <Clock size={11} /> Tunggu Part
+                                      </button>
+                                    )}
+                                    {isWaiting && (
+                                      <button
+                                        type="button"
+                                        disabled={updatingSpkId === wo.id}
+                                        onClick={() => handleUpdateSpkStatus(wo.id, 'IN_PROGRESS')}
+                                        className="px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] border border-blue-200 flex items-center gap-1"
+                                      >
+                                        <Play size={11} /> Lanjut Servis
+                                      </button>
+                                    )}
+                                    {(wo.status === 'PENDING' || wo.status === 'ASSIGNED') && (
+                                      <button
+                                        type="button"
+                                        disabled={updatingSpkId === wo.id}
+                                        onClick={() => handleUpdateSpkStatus(wo.id, 'IN_PROGRESS')}
+                                        className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-sm"
+                                      >
+                                        <Play size={11} /> Mulai Servis
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      disabled={updatingSpkId === wo.id}
+                                      onClick={() => handleUpdateSpkStatus(wo.id, 'DONE')}
+                                      className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-sm"
+                                    >
+                                      <CheckCircle size={11} /> Selesai
+                                    </button>
+                                  </>
+                                )}
+                                {isDone && (
+                                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                                    <CheckCircle2 size={13} /> Selesai
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
                 </div>
               </div>
             )}
@@ -1974,49 +2889,102 @@ export const StaffPWAView: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <CreditCard size={16} className="text-[#7C3AED]" />
-                      <h4 className="text-xs font-bold text-[#1A1033]">Kasbon & Pinjaman Saya</h4>
+                      <h4 className="text-xs font-bold text-[#1A1033]">Kasbon &amp; Pinjaman Saya</h4>
                     </div>
 
-                    {myLoansOutstanding > 0 ? (
-                      <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 font-bold text-[10px] border border-rose-200">
-                        Sisa: Rp {myLoansOutstanding.toLocaleString('id-ID')}
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200">
-                        Tidak Ada Kasbon Aktif
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {myLoansOutstanding > 0 ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 font-bold text-[10px] border border-rose-200">
+                          Sisa: Rp {myLoansOutstanding.toLocaleString('id-ID')}
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-200">
+                          Tidak Ada Kasbon
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowLoanRequestModal(true)}
+                        className="px-2 py-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white rounded-xl text-[10px] font-bold shadow-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Plus size={11} /> Ajukan
+                      </button>
+                    </div>
                   </div>
 
                   {loansLoading ? (
                     <div className="text-center py-4 text-xs text-slate-400">Memuat data kasbon...</div>
                   ) : myLoans.length === 0 ? (
                     <div className="p-3.5 bg-slate-50 rounded-2xl text-center text-xs text-slate-400 font-medium border border-slate-100">
-                      Tidak ada catatan kasbon atau pinjaman.
+                      Tidak ada catatan kasbon atau pinjaman aktif.
                     </div>
                   ) : (
-                    <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-0.5">
                       {myLoans.map((loan: any) => (
-                        <div key={loan.id} className="p-3 bg-slate-50/80 border border-slate-200/80 rounded-2xl text-xs space-y-1">
+                        <div key={loan.id} className="p-3 bg-slate-50/80 border border-slate-200/80 rounded-2xl text-xs space-y-1.5">
                           <div className="flex justify-between items-center">
                             <span className="font-bold text-slate-800">
-                              {loan.reason || 'Kasbon Operasional'}
+                              {loan.reason || 'Kasbon Staf'}
                             </span>
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                              loan.status === 'Lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                              loan.status === 'Lunas' 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : loan.status === 'MENUNGGU_PERSETUJUAN'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : loan.status === 'Ditolak'
+                                ? 'bg-slate-200 text-slate-600'
+                                : 'bg-rose-100 text-rose-800'
                             }`}>
-                              {loan.status}
+                              {loan.status === 'MENUNGGU_PERSETUJUAN' ? 'Menunggu Review' : loan.status}
                             </span>
                           </div>
+                          
                           <div className="flex justify-between items-center text-[11px] text-slate-500">
                             <span>Pinjaman: Rp {loan.amount.toLocaleString('id-ID')}</span>
                             <span className="font-bold text-rose-600">
-                              {loan.remaining > 0 ? `Sisa: Rp ${loan.remaining.toLocaleString('id-ID')}` : 'Lunas'}
+                              {loan.status === 'MENUNGGU_PERSETUJUAN' 
+                                ? 'Menunggu Persetujuan' 
+                                : loan.remaining > 0 
+                                ? `Sisa: Rp ${loan.remaining.toLocaleString('id-ID')}` 
+                                : 'Lunas'}
                             </span>
                           </div>
+
+                          {loan.approvedBy && (
+                            <div className="text-[10px] text-slate-400">
+                              Disetujui: {loan.approvedBy}
+                            </div>
+                          )}
+
                           {loan.settledNote && (
-                            <div className="text-[10px] text-slate-400 italic pt-0.5">
+                            <div className="text-[10px] text-slate-400 italic">
                               Catatan: {loan.settledNote}
+                            </div>
+                          )}
+
+                          {/* Riwayat Cicilan / Payments jika ada */}
+                          {loan.payments && loan.payments.length > 0 && (
+                            <div className="pt-1 border-t border-slate-200/60 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedLoanId(expandedLoanId === loan.id ? null : loan.id)}
+                                className="text-[10px] text-[#7C3AED] font-bold flex items-center justify-between w-full"
+                              >
+                                <span>{loan.payments.length}x Potongan Gaji / Pembayaran</span>
+                                <span>{expandedLoanId === loan.id ? 'Tutup ▲' : 'Rincian ▼'}</span>
+                              </button>
+                              
+                              {expandedLoanId === loan.id && (
+                                <div className="mt-1 space-y-1 bg-white p-2 rounded-xl border border-slate-100">
+                                  {loan.payments.map((p: any) => (
+                                    <div key={p.id} className="flex justify-between items-center text-[10px] text-slate-600">
+                                      <span>{new Date(p.paymentDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {p.paymentMethod}</span>
+                                      <span className="font-bold text-emerald-700">Rp {p.amountPaid.toLocaleString('id-ID')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -2182,7 +3150,7 @@ export const StaffPWAView: React.FC = () => {
               )}
             </button>
 
-            {/* Tab 4: Stok Bahan */}
+            {/* Tab 4: Stok Bahan / Part / Barang */}
             <button
               type="button"
               onClick={() => setActiveTab('stock')}
@@ -2193,7 +3161,7 @@ export const StaffPWAView: React.FC = () => {
               }`}
             >
               <Package size={20} className={activeTab === 'stock' ? 'text-[#7C3AED]' : 'text-slate-400'} />
-              <span className="text-[10px] mt-0.5">Stok</span>
+              <span className="text-[10px] mt-0.5">{isBengkel ? 'Part' : isRetail ? 'Barang' : 'Stok'}</span>
               {activeTab === 'stock' ? (
                 <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] mt-0.5" />
               ) : ingredients.filter(i => i.stock <= i.minStock).length > 0 ? (
@@ -2667,98 +3635,235 @@ export const StaffPWAView: React.FC = () => {
         )}
 
         {/* ══════════════════════════════════════════════════════════════
-            MODAL 6: LAPOR STOCK LOSS
+            MODAL 6: LAPOR STOCK LOSS / FOOD WASTE (UNIFIED /api/waste)
            ══════════════════════════════════════════════════════════════ */}
-        {showLossModal && (
-          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b pb-2.5">
-                <h3 className="text-xs font-bold text-[#F43F5E] uppercase tracking-wider flex items-center gap-1.5">
-                  <TrendingDown size={14} />
-                  <span>Pencatatan Bahan Rusak / Basi</span>
-                </h3>
-                <button onClick={() => setShowLossModal(false)} className="text-slate-400 hover:text-slate-600">
-                  <X size={16} />
-                </button>
-              </div>
+        {showLossModal && (() => {
+          const selectedLossItem = isCafe && wasteType === 'PRODUCT'
+            ? productsList.find(p => String(p.id) === String(lossForm.ingredientId))
+            : ingredients.find(i => String(i.id) === String(lossForm.ingredientId));
 
-              <form onSubmit={handleSubmitStockLoss} className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Pilih Bahan Baku:</label>
-                  <select
-                    required
-                    value={lossForm.ingredientId}
-                    onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="">-- Pilih Bahan --</option>
-                    {ingredients.map(ing => (
-                      <option key={ing.id} value={ing.id}>
-                        {ing.name} (Stok: {ing.stock} {ing.unit})
+          const lossQtyNum = parseFloat(lossForm.qtyLoss) || 0;
+          const estLossCost = selectedLossItem
+            ? lossQtyNum * (Number(selectedLossItem.buyPrice || selectedLossItem.costPrice || selectedLossItem.price || 0))
+            : 0;
+
+          return (
+            <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+                <div className="flex items-center justify-between border-b pb-2.5">
+                  <h3 className="text-xs font-bold text-[#F43F5E] uppercase tracking-wider flex items-center gap-1.5">
+                    <TrendingDown size={14} />
+                    <span>
+                      {isBengkel
+                        ? 'Lapor Part Rusak / Cacat'
+                        : isRetail
+                        ? 'Lapor Barang Rusak / Kadaluarsa'
+                        : 'Pencatatan Food Waste & Kerugian'}
+                    </span>
+                  </h3>
+                  <button onClick={() => setShowLossModal(false)} className="text-slate-400 hover:text-slate-600">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Cafe Toggle: Bahan Mentah vs Produk Menu Jadi */}
+                {isCafe && (
+                  <div className="flex bg-[#F4F6F9] p-1 rounded-2xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWasteType('INGREDIENT');
+                        setLossForm({ ...lossForm, ingredientId: '' });
+                      }}
+                      className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        wasteType === 'INGREDIENT'
+                          ? 'bg-[#F43F5E] text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Bahan Mentah
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWasteType('PRODUCT');
+                        setLossForm({ ...lossForm, ingredientId: '' });
+                      }}
+                      className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        wasteType === 'PRODUCT'
+                          ? 'bg-[#F43F5E] text-white shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Menu / Porsi Jadi
+                    </button>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmitStockLoss} className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      {isCafe
+                        ? wasteType === 'INGREDIENT'
+                          ? 'Pilih Bahan Baku Rusak:'
+                          : 'Pilih Menu / Porsi Terbuang:'
+                        : isBengkel
+                        ? 'Pilih Suku Cadang / Part:'
+                        : 'Pilih Produk / Barang:'}
+                    </label>
+                    <select
+                      required
+                      value={lossForm.ingredientId}
+                      onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                    >
+                      <option value="">
+                        -- {isCafe && wasteType === 'PRODUCT' ? 'Pilih Menu' : isBengkel ? 'Pilih Part' : 'Pilih Item'} --
                       </option>
-                    ))}
-                  </select>
-                </div>
+                      {isCafe && wasteType === 'PRODUCT'
+                        ? productsList.map(prod => (
+                            <option key={prod.id} value={prod.id}>
+                              {prod.name} (HPP: Rp {(prod.buyPrice || prod.price || 0).toLocaleString('id-ID')})
+                            </option>
+                          ))
+                        : ingredients.map(ing => (
+                            <option key={ing.id} value={ing.id}>
+                              {ing.name} (Stok: {ing.stock} {ing.unit})
+                            </option>
+                          ))}
+                    </select>
+                  </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Jumlah Rusak / Terbuang:</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={lossForm.qtyLoss}
-                    onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
-                    placeholder="Contoh: 0.5 atau 2"
-                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
-                  />
-                </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Jumlah Terbuang / Rusak ({selectedLossItem ? selectedLossItem.unit || 'pcs' : 'Qty'}):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={lossForm.qtyLoss}
+                      onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
+                      placeholder="Contoh: 1, 0.5, atau 2"
+                      className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
+                    />
+                  </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Penyebab Kerugian:</label>
-                  <select
-                    value={lossForm.reason}
-                    onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
-                  >
-                    <option value="Busuk / Kadaluarsa">Busuk / Kadaluarsa</option>
-                    <option value="Tumpah / Pecah">Tumpah / Pecah</option>
-                    <option value="Salah Buat / Reject Order">Salah Buat / Reject Order</option>
-                    <option value="Hilang / Selisih Opname">Hilang / Selisih Opname</option>
-                    <option value="Lainnya">Lainnya</option>
-                  </select>
-                </div>
+                  {/* Live HPP Loss Preview */}
+                  {estLossCost > 0 && (
+                    <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-between text-xs font-medium">
+                      <span>Estimasi Kerugian HPP:</span>
+                      <span className="font-bold font-mono text-[#F43F5E]">
+                        Rp {Math.round(estLossCost).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  )}
 
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Catatan Tambahan:</label>
-                  <input
-                    type="text"
-                    value={lossForm.notes}
-                    onChange={e => setLossForm({ ...lossForm, notes: e.target.value })}
-                    placeholder="Contoh: Susu basi saat chiller mati semalam"
-                    className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
-                  />
-                </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Penyebab Kerugian:</label>
+                    <select
+                      value={lossForm.reason}
+                      onChange={e => setLossForm({ ...lossForm, reason: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
+                    >
+                      <option value="Busuk / Basi">Busuk / Basi</option>
+                      <option value="Kadaluarsa (Expired)">Kadaluarsa (Expired)</option>
+                      <option value="Gosong / Overcooked">Gosong / Overcooked</option>
+                      <option value="Salah Buat Dapur">Salah Buat / Reject Order</option>
+                      <option value="Tumpah / Pecah">Tumpah / Pecah</option>
+                      <option value="Trimming Kulit/Lemak">Trimming Kulit / Lemak</option>
+                      <option value="Part Cacat / Rusak Pabrik">Part Cacat / Rusak Pabrik</option>
+                      <option value="Sisa Tutup Toko">Sisa Tutup Toko</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
+                  </div>
 
-                <div className="pt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowLossModal(false)}
-                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submittingLoss}
-                    className="flex-1 py-2.5 bg-[#F43F5E] hover:bg-rose-600 text-white font-bold text-xs rounded-full shadow-md"
-                  >
-                    {submittingLoss ? 'Menyimpan...' : 'Simpan Loss'}
-                  </button>
-                </div>
-              </form>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">Catatan Tambahan:</label>
+                    <input
+                      type="text"
+                      value={lossForm.notes}
+                      onChange={e => setLossForm({ ...lossForm, notes: e.target.value })}
+                      placeholder="Contoh: Susu basi chiller mati / sparepart patah saat unboxing"
+                      className="w-full px-3 py-2 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400"
+                    />
+                  </div>
+
+                  {/* Lampirkan Foto Bukti Waste */}
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={wastePhotoInputRef}
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          try {
+                            const compressed = await compressImage(f, 640, 640, 0.65);
+                            setWastePhoto(compressed);
+                            toast('Foto bukti waste berhasil dilampirkan!', 'success');
+                          } catch (err) {
+                            toast('Gagal memproses foto bukti', 'error');
+                          }
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    {wastePhoto ? (
+                      <div className="relative rounded-2xl overflow-hidden border border-rose-200 shadow-sm">
+                        <img src={wastePhoto} alt="Bukti Waste" className="w-full h-28 object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setWastePhoto(null)}
+                          className="absolute top-2 right-2 p-1 bg-black/60 hover:bg-black/80 text-white rounded-full transition-all"
+                          title="Hapus foto"
+                        >
+                          <X size={14} />
+                        </button>
+                        <span className="absolute bottom-1.5 left-2 bg-black/60 text-white text-[9px] px-2 py-0.5 rounded-full font-medium">
+                          ✓ Foto Bukti Terlampir
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => wastePhotoInputRef.current?.click()}
+                        className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-[#F43F5E] rounded-xl text-xs font-semibold border border-rose-200/80 flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Camera size={13} />
+                        <span>Lampirkan Foto Bukti Fisik (Kamera / Galeri)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="pt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLossModal(false)}
+                      className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-full"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingLoss}
+                      className="flex-1 py-2.5 bg-[#F43F5E] hover:bg-rose-600 text-white font-bold text-xs rounded-full shadow-md flex items-center justify-center gap-1.5"
+                    >
+                      {submittingLoss ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          <span>Menyimpan...</span>
+                        </>
+                      ) : (
+                        <span>Simpan Laporan Waste</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════════
             MODAL 7: QUICK RESTOCK
@@ -2821,6 +3926,109 @@ export const StaffPWAView: React.FC = () => {
                     className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs rounded-full shadow-md"
                   >
                     {submittingAdjust ? 'Menyimpan...' : 'Simpan Restock'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL: AJUKAN KASBON STAF ── */}
+        {showLoanRequestModal && (
+          <div className="fixed inset-0 z-50 bg-[#1A1033]/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center text-[#7C3AED]">
+                    <Wallet size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#1A1033]">Ajukan Kasbon Baru</h3>
+                    <p className="text-[10px] text-slate-500">Pinjaman darurat staf / potong gaji</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowLoanRequestModal(false)}
+                  className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              <form onSubmit={handleLoanRequestSubmit} className="space-y-3.5">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Nominal Pinjaman (Rp) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                    <input
+                      type="number"
+                      required
+                      min={10000}
+                      step={5000}
+                      value={loanRequestForm.amount}
+                      onChange={e => setLoanRequestForm({ ...loanRequestForm, amount: e.target.value })}
+                      placeholder="0"
+                      className="w-full pl-9 pr-3 py-2.5 bg-[#F8FAFC] border border-slate-200 rounded-xl text-sm font-bold font-mono text-[#1A1033] focus:border-[#7C3AED] focus:bg-white focus:outline-none transition-all"
+                    />
+                  </div>
+                  <div className="flex gap-1.5 mt-2">
+                    {[100000, 250000, 500000].map(amt => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setLoanRequestForm({ ...loanRequestForm, amount: String(amt) })}
+                        className="text-[10px] font-bold px-2 py-1 bg-slate-100 hover:bg-violet-50 hover:text-[#7C3AED] text-slate-600 rounded-lg transition-colors"
+                      >
+                        +{amt.toLocaleString('id-ID')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    Keperluan / Alasan Pinjaman <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={2}
+                    value={loanRequestForm.reason}
+                    onChange={e => setLoanRequestForm({ ...loanRequestForm, reason: e.target.value })}
+                    placeholder="Contoh: Kebutuhan keluarga mendesak / servis motor"
+                    className="w-full px-3 py-2 bg-[#F8FAFC] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:border-[#7C3AED] focus:bg-white focus:outline-none resize-none transition-all"
+                  />
+                </div>
+
+                <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200/60 text-[10px] text-amber-800 leading-relaxed">
+                  💡 <strong>Catatan:</strong> Pengajuan ini akan langsung masuk ke Dashboard Owner/Admin untuk verifikasi & persetujuan pencairan kas.
+                </div>
+
+                <div className="pt-1 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowLoanRequestModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingLoanRequest}
+                    className="flex-1 py-2.5 bg-[#7C3AED] hover:bg-[#6D28D9] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                  >
+                    {submittingLoanRequest ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Mengirim...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        <span>Kirim Pengajuan</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>

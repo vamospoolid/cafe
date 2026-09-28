@@ -1,3 +1,4 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
 import { authenticateToken, requireAdmin } from '../middlewares/authMiddleware';
 import { paymentService } from '../services/PaymentService';
@@ -16,7 +17,7 @@ const router = Router();
 router.get('/saas/invoices', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const tenantId = TenantContext.getTenantId() || user?.tenantId || 'tenant-default-muki';
+    const tenantId = TenantContext.getTenantId() || user?.tenantId ;
 
     const invoices = await paymentService.getTenantInvoices(tenantId);
     return res.json(invoices);
@@ -29,7 +30,7 @@ router.get('/saas/invoices', authenticateToken, async (req: Request, res: Respon
 router.post('/saas/create-invoice', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const tenantId = TenantContext.getTenantId() || user?.tenantId || 'tenant-default-muki';
+    const tenantId = TenantContext.getTenantId() || user?.tenantId ;
     const { planCode, billingCycle } = req.body;
 
     if (!planCode) {
@@ -55,7 +56,7 @@ router.post('/saas/create-invoice', authenticateToken, async (req: Request, res:
 router.get('/tenant-config', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const tenantId = TenantContext.getTenantId() || user?.tenantId || 'tenant-default-muki';
+    const tenantId = TenantContext.getTenantId() || user?.tenantId ;
 
     const config = await paymentService.getTenantPaymentConfig(tenantId);
     return res.json(config);
@@ -72,7 +73,7 @@ router.get('/tenant-config', authenticateToken, async (req: Request, res: Respon
 router.post('/tenant-config', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const tenantId = TenantContext.getTenantId() || user?.tenantId || 'tenant-default-muki';
+    const tenantId = TenantContext.getTenantId() || user?.tenantId ;
 
     const updated = await paymentService.updateTenantPaymentConfig(tenantId, req.body);
     return res.json({
@@ -93,7 +94,7 @@ router.post('/tenant-config', authenticateToken, requireAdmin, async (req: Reque
 router.post('/pos/charge-order', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const tenantId = TenantContext.getTenantId() || user?.tenantId || 'tenant-default-muki';
+    const tenantId = TenantContext.getTenantId() || user?.tenantId ;
     const { orderId } = req.body;
 
     if (!orderId) {
@@ -105,6 +106,37 @@ router.post('/pos/charge-order', authenticateToken, async (req: Request, res: Re
   } catch (err: any) {
     console.error('[Payment API /pos/charge-order Error]', err);
     return res.status(500).json({ error: err.message || 'Gagal memproses pembayaran Midtrans kasir' });
+  }
+});
+
+/**
+ * POST /api/payments/public/charge-dinein
+ * Menghasilkan Snap Token untuk pesanan meja pelanggan QR Dine-In (Tanpa Token Kasir)
+ */
+router.post('/public/charge-dinein', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) {
+      return res.status(400).json({ error: 'orderId wajib diisi' });
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: Number(orderId) }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+    }
+
+    const tenantId = order.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak valid untuk pesanan ini', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const result = await paymentService.createPOSTransaction(tenantId, Number(orderId));
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Payment API /public/charge-dinein Error]', err);
+    return res.status(500).json({ error: err.message || 'Gagal memproses pembayaran QRIS pesanan meja' });
   }
 });
 

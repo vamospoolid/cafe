@@ -42,8 +42,8 @@ function autoFitColumns(ws: XLSX.WorkSheet, data: any[][], minWidth = 12) {
 
 export function exportProfitSharingExcel(data: any, settings: any, period: { startDate: string; endDate: string }) {
   const wb = XLSX.utils.book_new();
-  const storeName = settings?.storeName || 'MUKI RAMEN';
-  const address = settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo';
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const address = settings?.address || '';
   const phone = settings?.phone || '081298765432';
   const periodText = `${formatDateIndo(period.startDate)} s/d ${formatDateIndo(period.endDate)}`;
   const printedAt = new Date().toLocaleString('id-ID');
@@ -64,20 +64,19 @@ export function exportProfitSharingExcel(data: any, settings: any, period: { sta
     [`Dicetak: ${printedAt}`],
     [],
     ['=== PARAMETER KONFIGURASI BAGI HASIL ==='],
-    ['Rasio Divisi Ramen (Makanan):', `${food.ownerPct || (100 - (config.ramenPct || 20))}% Owner : ${config.ramenPct || 20}% PJ Ramen`],
-    ['Rasio Divisi Drink (Minuman):', `${drink.ownerPct || (100 - (config.drinkPct || 20))}% Owner : ${config.drinkPct || 20}% PJ Drink`],
+    ['Bagian Owner (%):', `${config.ownerPct || 80}%`],
+    ['Bagian PJ Makanan (%):', `${config.ramenPct || 20}%`],
+    ['Bagian PJ Minuman (%):', `${config.drinkPct || 20}%`],
     ['Mode Beban Bersama (OPEX):', config.opexMode === 'BEFORE_SPLIT' ? 'Dipotong Proporsional Sebelum Bagi Hasil' : (config.opexMode === 'OWNER_COVERED' ? 'Ditanggung Penuh Oleh Owner' : 'Split Beban 50% Owner : 25% Ramen : 25% Drink')],
     [],
     ['=== REKAP EKSEKUTIF PEMBAGIAN LABA BERSIH ==='],
     ['Entitas Penerima', 'Divisi', 'Porsi (%)', 'Nominal Pembagian (Rp)', 'Keterangan'],
-    ['Owner (Divisi Ramen)', 'Muki Ramen (Food)', `${food.ownerPct || (100 - (config.ramenPct || 20))}%`, food.ownerShare || 0, 'Hak Owner dari laba bersih makanan'],
-    ['Penanggung Jawab Muki Ramen', 'Muki Ramen (Food)', `${config.ramenPct || 20}%`, summary.pjRamenShare || 0, 'Bagi hasil bersih divisi makanan'],
-    ['Owner (Divisi Drink)', 'Muki Drink (Bar)', `${drink.ownerPct || (100 - (config.drinkPct || 20))}%`, drink.ownerShare || 0, 'Hak Owner dari laba bersih minuman'],
-    ['Penanggung Jawab Muki Drink', 'Muki Drink (Bar)', `${config.drinkPct || 20}%`, summary.pjDrinkShare || 0, 'Bagi hasil bersih divisi minuman'],
-    ['Owner (Produk Netral / Retail)', 'Air Mineral & Toko', '100%', summary.other?.ownerShare || summary.other?.finalNet || 0, 'Hak 100% Owner dari laba bersih produk netral'],
+    ['Owner (Pemilik Modal)', 'Gabungan (Ramen + Drink)', `${config.ownerPct || 80}%`, summary.ownerShare || 0, 'Laba Bersih setelah beban'],
+    ['Penanggung Jawab Makanan', 'Divisi Makanan (Food)', `${config.ramenPct || 20}%`, summary.pjRamenShare || 0, 'Bagi hasil bersih divisi makanan'],
+    ['Penanggung Jawab Minuman', 'Divisi Minuman (Drink)', `${config.drinkPct || 20}%`, summary.pjDrinkShare || 0, 'Bagi hasil bersih divisi minuman'],
     ['TOTAL LABA BERSIH DIBAGIKAN', 'Semua Divisi', '100%', summary.totalNetProfit || 0, 'Total laba bersih usaha periode ini'],
     [],
-    ['=== KINERJA DIVISI 1: MUKI RAMEN (FOOD & KITCHEN) ==='],
+    ['=== KINERJA DIVISI 1: FOOD & KITCHEN ==='],
     ['Metrik Finansial', 'Nilai (Rp / Qty)', 'Catatan'],
     ['Total Omzet Makanan', food.revenue || 0, `Porsi ${food.percentage || 0}% dari total penjualan`],
     ['Jumlah Porsi Terjual', food.qtySold || 0, 'Porsi/item makanan'],
@@ -85,10 +84,10 @@ export function exportProfitSharingExcel(data: any, settings: any, period: { sta
     ['Laba Kotor Divisi Ramen', food.grossProfit || 0, 'Omzet - Beban Belanja'],
     ['Alokasi Beban Bersama (Shared OPEX)', food.sharedOpexPortion || 0, 'Listrik, gas, kemasan, dll'],
     ['Laba Bersih Divisi Ramen', food.netProfit || 0, 'Laba setelah beban bersama'],
-    [`Bagian Owner Ramen (${food.ownerPct || (100 - (config.ramenPct || 20))}%)`, food.ownerShare || 0, 'Setoran ke Owner dari Ramen'],
-    [`Bagian PJ Ramen (${config.ramenPct || 20}%)`, food.pjShare || 0, 'Hak PJ Muki Ramen'],
+    [`Bagian Owner Ramen (${config.ownerPct || 80}%)`, food.ownerShare || 0, 'Setoran ke Owner'],
+    [`Bagian PJ Ramen (${config.ramenPct || 20}%)`, food.pjShare || 0, 'Hak PJ Makanan'],
     [],
-    ['=== KINERJA DIVISI 2: MUKI DRINK (BEVERAGE & BAR) ==='],
+    ['=== KINERJA DIVISI 2: BEVERAGE & BAR ==='],
     ['Metrik Finansial', 'Nilai (Rp / Qty)', 'Catatan'],
     ['Total Omzet Minuman', drink.revenue || 0, `Porsi ${drink.percentage || 0}% dari total penjualan`],
     ['Jumlah Cup Terjual', drink.qtySold || 0, 'Cup/porsi minuman'],
@@ -96,8 +95,8 @@ export function exportProfitSharingExcel(data: any, settings: any, period: { sta
     ['Laba Kotor Divisi Drink', drink.grossProfit || 0, 'Omzet - Beban Belanja'],
     ['Alokasi Beban Bersama (Shared OPEX)', drink.sharedOpexPortion || 0, 'Listrik, es, kemasan, dll'],
     ['Laba Bersih Divisi Drink', drink.netProfit || 0, 'Laba setelah beban bersama'],
-    [`Bagian Owner Drink (${drink.ownerPct || (100 - (config.drinkPct || 20))}%)`, drink.ownerShare || 0, 'Setoran ke Owner dari Minuman'],
-    [`Bagian PJ Drink (${config.drinkPct || 20}%)`, drink.pjShare || 0, 'Hak PJ Muki Drink'],
+    [`Bagian Owner Drink (${config.ownerPct || 80}%)`, drink.ownerShare || 0, 'Setoran ke Owner'],
+    [`Bagian PJ Drink (${config.drinkPct || 20}%)`, drink.pjShare || 0, 'Hak PJ Minuman'],
     [],
     ['=== KINERJA DIVISI 3: PRODUK NETRAL / RETAIL (AIR MINERAL & TOKO) ==='],
     ['Metrik Finansial', 'Nilai (Rp / Qty)', 'Catatan'],
@@ -197,8 +196,8 @@ export function exportProfitSharingExcel(data: any, settings: any, period: { sta
 
     shared.items.forEach((it: any, idx: number) => {
       let divLabel = 'Operasional Bersama (Shared)';
-      if (it.division === 'food') divLabel = 'Muki Ramen (Food)';
-      else if (it.division === 'drink') divLabel = 'Muki Drink (Bar)';
+      if (it.division === 'food') divLabel = 'Divisi Makanan (Food)';
+      else if (it.division === 'drink') divLabel = 'Divisi Minuman (Drink)';
 
       expenseRows.push([
         idx + 1,
@@ -218,15 +217,15 @@ export function exportProfitSharingExcel(data: any, settings: any, period: { sta
   // Save workbook
   const sDate = period.startDate ? period.startDate.split('-').join('') : 'ALL';
   const eDate = period.endDate ? period.endDate.split('-').join('') : 'ALL';
-  XLSX.writeFile(wb, `Laporan_Bagi_Hasil_Muki_Ramen_${sDate}_${eDate}.xlsx`);
+  XLSX.writeFile(wb, `Laporan_Bagi_Hasil_${sDate}_${eDate}.xlsx`);
 }
 
 // ─── 2. EXPORT DAILY OMZET BONUS MATRIX EXCEL ─────────────────────────────────
 
 export function exportDailyBonusExcel(data: any, settings: any, period: { startDate: string; endDate: string }) {
   const wb = XLSX.utils.book_new();
-  const storeName = settings?.storeName || 'MUKI RAMEN';
-  const address = settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo';
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const address = settings?.address || '';
   const periodText = `${formatDateIndo(period.startDate)} s/d ${formatDateIndo(period.endDate)}`;
   const printedAt = new Date().toLocaleString('id-ID');
 
@@ -377,15 +376,15 @@ export function exportDailyBonusExcel(data: any, settings: any, period: { startD
 
   const sDate = period.startDate ? period.startDate.split('-').join('') : 'ALL';
   const eDate = period.endDate ? period.endDate.split('-').join('') : 'ALL';
-  XLSX.writeFile(wb, `Matriks_Bonus_Omzet_Muki_Ramen_${sDate}_${eDate}.xlsx`);
+  XLSX.writeFile(wb, `Matriks_Bonus_Omzet_${sDate}_${eDate}.xlsx`);
 }
 
 // ─── 3. EXPORT PETTY CASH EXCEL ───────────────────────────────────────────────
 
 export function exportPettyCashExcel(cashFlows: any[], summary: any, settings: any, period: { startDate: string; endDate: string }) {
   const wb = XLSX.utils.book_new();
-  const storeName = settings?.storeName || 'MUKI RAMEN';
-  const address = settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo';
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const address = settings?.address || '';
   const periodText = `${formatDateIndo(period.startDate)} s/d ${formatDateIndo(period.endDate)}`;
   const printedAt = new Date().toLocaleString('id-ID');
 
@@ -446,15 +445,15 @@ export function exportPettyCashExcel(cashFlows: any[], summary: any, settings: a
 
   const sDate = period.startDate ? period.startDate.split('-').join('') : 'ALL';
   const eDate = period.endDate ? period.endDate.split('-').join('') : 'ALL';
-  XLSX.writeFile(wb, `Laporan_Kas_Kecil_Muki_Ramen_${sDate}_${eDate}.xlsx`);
+  XLSX.writeFile(wb, `Laporan_Kas_Kecil_${sDate}_${eDate}.xlsx`);
 }
 
 // ─── 4. EXPORT SALES REPORT EXCEL ─────────────────────────────────────────────
 
 export function exportSalesReportExcel(reportData: any, settings: any, period: { startDate: string; endDate: string }) {
   const wb = XLSX.utils.book_new();
-  const storeName = settings?.storeName || 'MUKI RAMEN';
-  const address = settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo';
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const address = settings?.address || '';
   const periodText = `${formatDateIndo(period.startDate)} s/d ${formatDateIndo(period.endDate)}`;
   const printedAt = new Date().toLocaleString('id-ID');
 
@@ -486,8 +485,8 @@ export function exportSalesReportExcel(reportData: any, settings: any, period: {
     [],
     ['=== KINERJA DIVISI MAKANAN VS MINUMAN ==='],
     ['Divisi', 'Omzet (Rp)', 'Qty Terjual', 'HPP Modal (Rp)', 'Laba Kotor (Rp)', 'Margin (%)', 'Porsi Omzet (%)'],
-    ['Muki Ramen (Food)', catBreakdown.food?.revenue || 0, catBreakdown.food?.qty || 0, catBreakdown.food?.cost || 0, catBreakdown.food?.profit || 0, `${catBreakdown.food?.margin || 0}%`, `${catBreakdown.food?.percentage || 0}%`],
-    ['Muki Drink (Bar)', catBreakdown.drink?.revenue || 0, catBreakdown.drink?.qty || 0, catBreakdown.drink?.cost || 0, catBreakdown.drink?.profit || 0, `${catBreakdown.drink?.margin || 0}%`, `${catBreakdown.drink?.percentage || 0}%`],
+    ['Divisi Makanan (Food)', catBreakdown.food?.revenue || 0, catBreakdown.food?.qty || 0, catBreakdown.food?.cost || 0, catBreakdown.food?.profit || 0, `${catBreakdown.food?.margin || 0}%`, `${catBreakdown.food?.percentage || 0}%`],
+    ['Divisi Minuman (Drink)', catBreakdown.drink?.revenue || 0, catBreakdown.drink?.qty || 0, catBreakdown.drink?.cost || 0, catBreakdown.drink?.profit || 0, `${catBreakdown.drink?.margin || 0}%`, `${catBreakdown.drink?.percentage || 0}%`],
     ['Lainnya / Merchandise', catBreakdown.other?.revenue || 0, catBreakdown.other?.qty || 0, catBreakdown.other?.cost || 0, catBreakdown.other?.profit || 0, `${catBreakdown.other?.margin || 0}%`, `${catBreakdown.other?.percentage || 0}%`],
     [],
     ['=== BREAKDOWN METODE PEMBAYARAN ==='],
@@ -597,15 +596,15 @@ export function exportSalesReportExcel(reportData: any, settings: any, period: {
 
   const sDate = period.startDate ? period.startDate.split('-').join('') : 'ALL';
   const eDate = period.endDate ? period.endDate.split('-').join('') : 'ALL';
-  XLSX.writeFile(wb, `Laporan_Penjualan_Muki_Ramen_${sDate}_${eDate}.xlsx`);
+  XLSX.writeFile(wb, `Laporan_Penjualan_${sDate}_${eDate}.xlsx`);
 }
 
 // ─── 5. EXPORT INVENTORY VALUATION EXCEL ──────────────────────────────────────
 
 export function exportInventoryValuationExcel(inventoryData: any, settings: any) {
   const wb = XLSX.utils.book_new();
-  const storeName = settings?.storeName || 'MUKI RAMEN';
-  const address = settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo';
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const address = settings?.address || '';
   const printedAt = new Date().toLocaleString('id-ID');
 
   const summary = inventoryData?.summary || {};
@@ -684,15 +683,15 @@ export function exportInventoryValuationExcel(inventoryData: any, settings: any)
   XLSX.utils.book_append_sheet(wb, ws, 'Valuasi Bahan Baku');
 
   const todayStr = new Date().toISOString().split('T')[0].split('-').join('');
-  XLSX.writeFile(wb, `Laporan_Valuasi_Bahan_Baku_Muki_Ramen_${todayStr}.xlsx`);
+  XLSX.writeFile(wb, `Laporan_Valuasi_Bahan_Baku_${todayStr}.xlsx`);
 }
 
 // ─── 6. EXPORT PRODUCT FINISHED GOODS VALUATION EXCEL ─────────────────────────
 
 export function exportProductValuationExcel(productData: any, settings: any) {
   const wb = XLSX.utils.book_new();
-  const storeName = settings?.storeName || 'MUKI RAMEN';
-  const address = settings?.address || 'Jl. Kesadaran No. 3, Sidorejo, Wonomulyo';
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const address = settings?.address || '';
   const printedAt = new Date().toLocaleString('id-ID');
 
   const summary = productData?.summary || {};
@@ -767,5 +766,5 @@ export function exportProductValuationExcel(productData: any, settings: any) {
   XLSX.utils.book_append_sheet(wb, ws, 'Valuasi Barang Jadi');
 
   const todayStr = new Date().toISOString().split('T')[0].split('-').join('');
-  XLSX.writeFile(wb, `Laporan_Valuasi_Barang_Jadi_Muki_Ramen_${todayStr}.xlsx`);
+  XLSX.writeFile(wb, `Laporan_Valuasi_Barang_Jadi_${todayStr}.xlsx`);
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'solpos-cache-v6';
+const CACHE_NAME = 'solpos-cache-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -36,8 +36,16 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip socket.io & non-GET API mutations
-  if (url.pathname.startsWith('/socket.io')) {
+  // Skip socket.io, Vite dev server HMR & internal modules
+  if (
+    url.pathname.startsWith('/socket.io') ||
+    url.pathname.startsWith('/@vite') ||
+    url.pathname.startsWith('/@fs') ||
+    url.pathname.startsWith('/@id') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.searchParams.has('token')
+  ) {
     return;
   }
 
@@ -134,6 +142,7 @@ self.addEventListener('fetch', (event) => {
           if (event.request.mode === 'navigate') {
             return caches.match('/index.html');
           }
+          return cachedResponse || new Response(null, { status: 504, statusText: 'Offline' });
         });
 
       return cachedResponse || fetchPromise;

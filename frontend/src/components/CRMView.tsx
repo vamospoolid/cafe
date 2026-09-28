@@ -20,13 +20,21 @@ import {
   Cake,
   AlertTriangle,
   Wallet,
-  Eye
+  Eye,
+  Ticket,
+  Tag,
+  Percent,
+  CheckCircle,
+  Clock
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
+import { useVertical } from '../context/VerticalContext';
 
 const CRMView = () => {
   const posContext = useContext(POSContext);
+  const { isBengkel } = useVertical();
+  const isAdminOrOwner = posContext?.user?.role?.toUpperCase() === 'ADMIN' || posContext?.user?.role?.toUpperCase() === 'OWNER';
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -129,11 +137,150 @@ const CRMView = () => {
     }
   };
 
+  // Tab Switch: Members / Vouchers
+  const [activeTab, setActiveTab] = useState<'members' | 'vouchers'>('members');
+
+  // Voucher State
+  const [vouchers, setVouchers] = useState<any[]>([]);
+  const [vouchersLoading, setVouchersLoading] = useState(false);
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
+  const [voucherSubmitting, setVoucherSubmitting] = useState(false);
+  const [voucherForm, setVoucherForm] = useState({
+    code: '',
+    description: '',
+    type: 'PERCENT',
+    amount: '',
+    minSpend: '',
+    maxDiscount: '',
+    maxUsage: '',
+    validUntil: '',
+    status: 'Aktif'
+  });
+
+  const fetchVouchers = async () => {
+    setVouchersLoading(true);
+    try {
+      const res = await fetch('/api/vouchers', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVouchers(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengambil data kupon promo', 'error');
+    } finally {
+      setVouchersLoading(false);
+    }
+  };
+
+  const handleCreateVoucher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voucherForm.code.trim() || !voucherForm.amount) {
+      toast('Kode voucher dan diskon harus diisi', 'warning');
+      return;
+    }
+    setVoucherSubmitting(true);
+    try {
+      const res = await fetch('/api/vouchers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          code: voucherForm.code.trim().toUpperCase(),
+          description: voucherForm.description,
+          type: voucherForm.type,
+          amount: Number(voucherForm.amount),
+          minSpend: Number(voucherForm.minSpend) || 0,
+          maxDiscount: voucherForm.maxDiscount ? Number(voucherForm.maxDiscount) : null,
+          maxUsage: voucherForm.maxUsage ? Number(voucherForm.maxUsage) : null,
+          validUntil: voucherForm.validUntil ? new Date(voucherForm.validUntil).toISOString() : null,
+          status: voucherForm.status
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`✅ Voucher "${data.code}" berhasil dibuat!`, 'success');
+        setIsVoucherModalOpen(false);
+        setVoucherForm({
+          code: '',
+          description: '',
+          type: 'PERCENT',
+          amount: '',
+          minSpend: '',
+          maxDiscount: '',
+          maxUsage: '',
+          validUntil: '',
+          status: 'Aktif'
+        });
+        fetchVouchers();
+      } else {
+        toast(data.error || 'Gagal membuat voucher', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Terjadi kesalahan jaringan', 'error');
+    } finally {
+      setVoucherSubmitting(false);
+    }
+  };
+
+  const handleDeleteVoucher = async (id: number, code: string) => {
+    const confirmResult = await confirmAlert(
+      'Hapus Voucher',
+      `Hapus kupon promo "${code}" secara permanen?`
+    );
+    if (!confirmResult.isConfirmed) return;
+
+    try {
+      const res = await fetch(`/api/vouchers/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        toast(`Voucher "${code}" berhasil dihapus`, 'success');
+        fetchVouchers();
+      } else {
+        const data = await res.json();
+        toast(data.error || 'Gagal menghapus voucher', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleVoucherStatus = async (voucher: any) => {
+    const newStatus = voucher.status === 'Aktif' ? 'Nonaktif' : 'Aktif';
+    try {
+      const res = await fetch(`/api/vouchers/${voucher.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) {
+        toast(`Status voucher diubah ke ${newStatus}`, 'success');
+        fetchVouchers();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     if (posContext?.token) {
-      fetchCustomers();
+      if (activeTab === 'members') {
+        fetchCustomers();
+      } else if (activeTab === 'vouchers') {
+        fetchVouchers();
+      }
     }
-  }, [posContext?.token, searchQuery, selectedTier]);
+  }, [posContext?.token, activeTab, searchQuery, selectedTier]);
 
   const fetchCustomerDetail = async (id: number) => {
     setDrawerLoading(true);
@@ -283,23 +430,57 @@ const CRMView = () => {
 
   return (
     <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4 relative">
-      {/* Main CRM Workspace */}
-      <div className="flex-1 flex flex-col gap-3.5 sm:gap-4">
-        {/* HEADER / ACTION TOOLBAR */}
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
-          <div className="hidden sm:block">
-            <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
-              <Award className="text-primary" size={24} /> Manajemen CRM &amp; Loyalitas
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Pantau level keanggotaan pelanggan, total belanja, dan poin loyalitas</p>
+      {/* TOP TAB NAVIGATION */}
+      <div className="flex border-b border-slate-200 gap-6 shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveTab('members')}
+          className={`pb-3 text-sm font-black flex items-center gap-2 border-b-2 transition-all ${
+            activeTab === 'members'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          <Users size={16} /> Anggota &amp; Pelanggan
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+            {customers.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('vouchers')}
+          className={`pb-3 text-sm font-black flex items-center gap-2 border-b-2 transition-all ${
+            activeTab === 'vouchers'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          <Ticket size={16} /> Kupon &amp; Voucher Promo
+          {vouchers.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+              {vouchers.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'members' && (
+        <div className="flex-1 flex flex-col gap-3.5 sm:gap-4">
+          {/* HEADER / ACTION TOOLBAR */}
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
+            <div className="hidden sm:block">
+              <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
+                <Award className="text-primary" size={24} /> Manajemen CRM &amp; Loyalitas
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">Pantau level keanggotaan pelanggan, total belanja, dan poin loyalitas</p>
+            </div>
+            <button 
+              className="btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold w-full sm:w-auto transition-all active:scale-95"
+              onClick={() => handleOpenModal(null)}
+            >
+              <UserPlus size={16} /> + Tambah Member Baru
+            </button>
           </div>
-          <button 
-            className="btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold w-full sm:w-auto transition-all active:scale-95"
-            onClick={() => handleOpenModal(null)}
-          >
-            <UserPlus size={16} /> + Tambah Member Baru
-          </button>
-        </div>
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 shrink-0">
@@ -455,7 +636,7 @@ const CRMView = () => {
                         >
                           <Edit size={13} /> Edit
                         </button>
-                        {posContext?.user?.role === 'Admin' && (
+                        {isAdminOrOwner && (
                           <button 
                             className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
                             onClick={() => handleDeleteCustomer(c.id, c.name)}
@@ -534,7 +715,7 @@ const CRMView = () => {
                               >
                                 <Edit size={14}/>
                               </button>
-                              {posContext?.user?.role === 'Admin' && (
+                              {isAdminOrOwner && (
                                 <button 
                                   className="icon-btn text-rose-600 bg-rose-50 border border-rose-100" 
                                   title="Hapus Member"
@@ -562,6 +743,227 @@ const CRMView = () => {
           )}
         </div>
       </div>
+      )}
+
+      {activeTab === 'vouchers' && (
+        <div className="flex-1 flex flex-col gap-3.5 sm:gap-4 animate-fade-in">
+          {/* HEADER / ACTION TOOLBAR VOUCHERS */}
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2 text-slate-900">
+                <Ticket className="text-indigo-600" size={24} /> Kupon Promo &amp; Voucher Diskon
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Kelola kode kupon promo kasir POS, diskon persen / nominal, batas kuota, dan masa berlaku
+              </p>
+            </div>
+            <button 
+              type="button"
+              className="btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold w-full sm:w-auto transition-all active:scale-95"
+              onClick={() => setIsVoucherModalOpen(true)}
+            >
+              <Plus size={16} /> + Buat Voucher Baru
+            </button>
+          </div>
+
+          {/* KPI Cards Vouchers */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 shrink-0">
+            <div className="card flex items-center gap-3 p-3.5 bg-white shadow-sm border border-slate-200/80 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Ticket size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Kupon</div>
+                <div className="text-lg sm:text-2xl font-black text-slate-900">{vouchers.length}</div>
+              </div>
+            </div>
+
+            <div className="card flex items-center gap-3 p-3.5 bg-white shadow-sm border border-slate-200/80 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <CheckCircle size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase">Kupon Aktif</div>
+                <div className="text-lg sm:text-2xl font-black text-slate-900">
+                  {vouchers.filter(v => v.status === 'Aktif').length}
+                </div>
+              </div>
+            </div>
+
+            <div className="card flex items-center gap-3 p-3.5 bg-white shadow-sm border border-slate-200/80 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <TrendingUp size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase">Total Dipakai</div>
+                <div className="text-lg sm:text-2xl font-black text-slate-900">
+                  {vouchers.reduce((acc, v) => acc + (v.usedCount || 0), 0)}x
+                </div>
+              </div>
+            </div>
+
+            <div className="card flex items-center gap-3 p-3.5 bg-white shadow-sm border border-slate-200/80 rounded-2xl">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <Tag size={20} />
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-400 font-bold uppercase">Tipe Kupon</div>
+                <div className="text-sm font-black text-slate-800">
+                  {vouchers.filter(v => v.type === 'PERCENT').length} % • {vouchers.filter(v => v.type === 'FIXED').length} Rp
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Vouchers Data Container */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col shrink-0">
+            {vouchersLoading ? (
+              <div className="p-12 text-center text-slate-400 font-medium text-xs">Memuat data kupon promo...</div>
+            ) : vouchers.length === 0 ? (
+              <div className="p-12 text-center flex flex-col items-center justify-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Ticket size={24} />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-slate-800 text-sm">Belum Ada Kupon Promo</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Buat kode promo diskon pertama untuk meningkatkan transaksi kasir Anda.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsVoucherModalOpen(true)}
+                  className="btn btn-primary btn-sm py-2 px-4 rounded-xl text-xs font-bold"
+                >
+                  + Buat Kupon Sekarang
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Mobile Voucher Cards */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {vouchers.map(v => (
+                    <div key={v.id} className="p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="font-mono font-black text-sm px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            {v.code}
+                          </span>
+                          <div className="text-xs font-bold text-slate-800 mt-2">
+                            {v.type === 'PERCENT' ? `Diskon ${v.amount}%` : `Potongan ${formatCurrency(v.amount)}`}
+                            {v.maxDiscount && ` (Maks. ${formatCurrency(v.maxDiscount)})`}
+                          </div>
+                          {v.description && <div className="text-[11px] text-slate-400 mt-0.5">{v.description}</div>}
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${v.status === 'Aktif' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+                          {v.status}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 space-y-1">
+                        <div>Min. Belanja: <b className="text-slate-700">{formatCurrency(v.minSpend)}</b></div>
+                        <div>Terpakai: <b className="text-slate-700">{v.usedCount || 0} / {v.maxUsage || '∞'}</b></div>
+                        <div>Berlaku: <b className="text-slate-700">{v.validUntil ? formatDate(v.validUntil) : 'Selamanya'}</b></div>
+                      </div>
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleVoucherStatus(v)}
+                          className="text-xs font-bold text-slate-600 hover:text-slate-900"
+                        >
+                          Ubah Status ({v.status === 'Aktif' ? 'Nonaktifkan' : 'Aktifkan'})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteVoucher(v.id, v.code)}
+                          className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                        >
+                          <Trash2 size={13} /> Hapus
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Voucher Table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="p-3.5 font-bold text-xs text-slate-400 uppercase">Kode Promo</th>
+                        <th className="p-3.5 font-bold text-xs text-slate-400 uppercase">Diskon</th>
+                        <th className="p-3.5 font-bold text-xs text-slate-400 uppercase">Min. Belanja</th>
+                        <th className="p-3.5 font-bold text-xs text-slate-400 uppercase text-center">Kuota &amp; Dipakai</th>
+                        <th className="p-3.5 font-bold text-xs text-slate-400 uppercase">Masa Berlaku</th>
+                        <th className="p-3.5 font-bold text-xs text-slate-400 uppercase text-center">Status</th>
+                        <th className="p-3.5 font-bold text-xs text-slate-400 uppercase text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vouchers.map(v => (
+                        <tr key={v.id} className="hover:bg-slate-50 border-b border-slate-50 transition-colors">
+                          <td className="p-3.5">
+                            <span className="font-mono font-black text-xs px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                              {v.code}
+                            </span>
+                            {v.description && <div className="text-[10px] text-slate-400 mt-1 font-medium">{v.description}</div>}
+                          </td>
+                          <td className="p-3.5 font-extrabold text-xs text-slate-800">
+                            {v.type === 'PERCENT' ? (
+                              <span>
+                                {v.amount}%
+                                {v.maxDiscount && (
+                                  <span className="block text-[10px] text-slate-400 font-medium">
+                                    Maks. {formatCurrency(v.maxDiscount)}
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              formatCurrency(v.amount)
+                            )}
+                          </td>
+                          <td className="p-3.5 text-xs font-semibold text-slate-600">
+                            {formatCurrency(v.minSpend)}
+                          </td>
+                          <td className="p-3.5 text-xs text-center font-bold text-slate-700">
+                            <span className="inline-block px-2 py-0.5 rounded-full bg-slate-100 text-[11px]">
+                              {v.usedCount || 0} / {v.maxUsage || '∞'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-xs font-medium text-slate-600">
+                            {v.validUntil ? formatDate(v.validUntil) : <span className="text-emerald-600 font-bold">Tanpa Batas</span>}
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleVoucherStatus(v)}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold cursor-pointer transition-all active:scale-95 ${
+                                v.status === 'Aktif'
+                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                  : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                              }`}
+                              title="Klik untuk mengubah status"
+                            >
+                              {v.status}
+                            </button>
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteVoucher(v.id, v.code)}
+                              className="icon-btn text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-100 p-1.5 rounded-lg inline-flex"
+                              title="Hapus Voucher"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Customer Detail Right Drawer / Mobile Modal */}
       {selectedCustomer && (
@@ -689,34 +1091,91 @@ const CRMView = () => {
               )}
             </div>
 
-            {/* Shopping History List */}
+            {/* Shopping History — Riwayat Transaksi (Kafe) atau Servis Kendaraan (Bengkel) */}
             <div>
               <h4 className="font-bold text-sm text-gray-800 flex items-center gap-2 mb-3">
-                <TrendingUp size={16} className="text-primary" /> 10 Transaksi Terakhir
+                <TrendingUp size={16} className="text-primary" />
+                {isBengkel ? '10 Servis Kendaraan Terakhir' : '10 Transaksi Terakhir'}
               </h4>
               {drawerLoading ? (
-                <div className="text-xs text-muted py-2 text-center">Memuat riwayat belanja...</div>
-              ) : !customerDetail?.orders || customerDetail.orders.length === 0 ? (
-                <div className="text-xs text-muted py-4 text-center border border-dashed rounded-lg">Belum ada transaksi belanja</div>
+                <div className="text-xs text-muted py-2 text-center">Memuat riwayat...</div>
+              ) : isBengkel ? (
+                // ── BENGKEL: Riwayat SPK/Servis ──────────────────────────
+                !customerDetail?.workOrders || customerDetail.workOrders.length === 0 ? (
+                  <div className="text-xs text-muted py-4 text-center border border-dashed rounded-lg">
+                    Belum ada riwayat servis kendaraan
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {customerDetail.workOrders.slice(0, 10).map((wo: any) => (
+                      <div key={wo.id} className="p-3 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-mono text-xs font-black text-indigo-700 block">{wo.spkNumber || wo.id?.slice(0,8)}</span>
+                            <span className="text-[10px] text-muted flex items-center gap-1 mt-0.5">
+                              <Calendar size={10} /> {formatDate(wo.createdAt)}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                            wo.status === 'PAID' || wo.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            wo.status === 'DONE' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            wo.status === 'IN_PROGRESS' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            'bg-slate-50 text-slate-600 border-slate-200'
+                          }`}>
+                            {wo.status}
+                          </span>
+                        </div>
+                        {/* Kendaraan & Mekanik */}
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
+                          {wo.vehicle && (
+                            <div className="bg-slate-50 rounded-lg px-2 py-1.5">
+                              <span className="text-slate-400 block">Kendaraan</span>
+                              <span className="font-bold text-slate-700">{wo.vehicle.plateNumber} — {wo.vehicle.brand} {wo.vehicle.model}</span>
+                            </div>
+                          )}
+                          {wo.services && wo.services.length > 0 && (
+                            <div className="bg-slate-50 rounded-lg px-2 py-1.5">
+                              <span className="text-slate-400 block">Jenis Servis</span>
+                              <span className="font-bold text-slate-700 truncate block">
+                                {wo.services.map((s: any) => s.serviceType?.name || s.serviceName || '-').join(', ')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
+                          <span className="text-[10px] text-slate-500">
+                            {wo.services?.length || 0} jasa · {wo.parts?.length || 0} sparepart
+                          </span>
+                          <span className="text-xs font-black text-slate-800">{formatCurrency(wo.grandTotal || wo.totalAmount || 0)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : (
-                <div className="space-y-2">
-                  {customerDetail.orders.map((o: any) => (
-                    <div key={o.id} className="p-3 border border-gray-100 rounded-lg flex justify-between items-center hover:bg-slate-50 transition-colors">
-                      <div>
-                        <span className="font-mono text-xs font-bold text-gray-700 block">{o.orderNumber}</span>
-                        <span className="text-[10px] text-muted flex items-center gap-1 mt-0.5">
-                          <Calendar size={10} /> {formatDate(o.createdAt)}
-                        </span>
+                // ── KAFE: Riwayat Order ───────────────────────────────────
+                !customerDetail?.orders || customerDetail.orders.length === 0 ? (
+                  <div className="text-xs text-muted py-4 text-center border border-dashed rounded-lg">Belum ada transaksi belanja</div>
+                ) : (
+                  <div className="space-y-2">
+                    {customerDetail.orders.map((o: any) => (
+                      <div key={o.id} className="p-3 border border-gray-100 rounded-lg flex justify-between items-center hover:bg-slate-50 transition-colors">
+                        <div>
+                          <span className="font-mono text-xs font-bold text-gray-700 block">{o.orderNumber}</span>
+                          <span className="text-[10px] text-muted flex items-center gap-1 mt-0.5">
+                            <Calendar size={10} /> {formatDate(o.createdAt)}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-gray-800 block">{formatCurrency(o.total)}</span>
+                          <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${o.status === 'Paid' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {o.status}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs font-bold text-gray-800 block">{formatCurrency(o.total)}</span>
-                        <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${o.status === 'Paid' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                          {o.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )
               )}
             </div>
 
@@ -819,7 +1278,7 @@ const CRMView = () => {
                 </div>
 
                 {/* Points Adjustment (Only for Admin when editing) */}
-                {modalCustomer && posContext?.user?.role === 'Admin' && (
+                {modalCustomer && isAdminOrOwner && (
                   <div className="p-3 border border-amber-200 bg-amber-50/50 rounded-lg flex flex-col gap-3">
                     <div className="text-xs font-bold text-amber-800 flex items-center gap-1">
                       <AlertTriangle size={14} />
@@ -949,6 +1408,170 @@ const CRMView = () => {
                 <button type="button" className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all active:scale-95" onClick={() => setIsPayModalOpen(false)}>Batal</button>
                 <button type="submit" className="flex-1 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-xs shadow-md shadow-primary/20 transition-all active:scale-95" disabled={payLoading}>
                   {payLoading ? 'Memproses...' : 'Simpan Pembayaran'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE VOUCHER MODAL DIALOG */}
+      {isVoucherModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 bg-slate-50 border-b border-gray-100 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                  <Ticket size={18} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">Buat Kupon Promo Baru</h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Buat kode diskon untuk diterapkan di kasir POS</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVoucherModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors shadow-sm"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateVoucher} className="p-4 sm:p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Kode Voucher / Promo *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: RAMEN20"
+                    value={voucherForm.code}
+                    onChange={e => setVoucherForm({ ...voucherForm, code: e.target.value.toUpperCase() })}
+                    className="form-control w-full font-mono uppercase font-black"
+                  />
+                  <span className="text-[10px] text-slate-400">Kode unik tanpa spasi</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Tipe Potongan *</label>
+                  <select
+                    className="form-control w-full font-bold"
+                    value={voucherForm.type}
+                    onChange={e => setVoucherForm({ ...voucherForm, type: e.target.value })}
+                  >
+                    <option value="PERCENT">Persentase (%)</option>
+                    <option value="FIXED">Nominal Tetap (Rp)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Deskripsi Singkat</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Promo Grand Opening Diskon 20%"
+                  value={voucherForm.description}
+                  onChange={e => setVoucherForm({ ...voucherForm, description: e.target.value })}
+                  className="form-control w-full text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {voucherForm.type === 'PERCENT' ? 'Persentase Diskon (%) *' : 'Nominal Diskon (Rp) *'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={voucherForm.type === 'PERCENT' ? 100 : undefined}
+                    placeholder={voucherForm.type === 'PERCENT' ? 'Contoh: 15' : 'Contoh: 20000'}
+                    value={voucherForm.amount}
+                    onChange={e => setVoucherForm({ ...voucherForm, amount: e.target.value })}
+                    className="form-control w-full font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Minimal Belanja (Rp)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="0 jika tanpa batas"
+                    value={voucherForm.minSpend}
+                    onChange={e => setVoucherForm({ ...voucherForm, minSpend: e.target.value })}
+                    className="form-control w-full font-bold"
+                  />
+                </div>
+              </div>
+
+              {voucherForm.type === 'PERCENT' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Maksimal Nilai Diskon (Rp)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Kosongkan jika tanpa batas maksimum"
+                    value={voucherForm.maxDiscount}
+                    onChange={e => setVoucherForm({ ...voucherForm, maxDiscount: e.target.value })}
+                    className="form-control w-full font-bold"
+                  />
+                  <span className="text-[10px] text-slate-400">Batas maksimal nominal hemat yang didapatkan pelanggan</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Batas Kuota Pemakaian</label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Kosongkan jika tak terbatas"
+                    value={voucherForm.maxUsage}
+                    onChange={e => setVoucherForm({ ...voucherForm, maxUsage: e.target.value })}
+                    className="form-control w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Berlaku Sampai Tanggal</label>
+                  <input
+                    type="date"
+                    value={voucherForm.validUntil}
+                    onChange={e => setVoucherForm({ ...voucherForm, validUntil: e.target.value })}
+                    className="form-control w-full text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Status Voucher</label>
+                <select
+                  className="form-control w-full font-bold"
+                  value={voucherForm.status}
+                  onChange={e => setVoucherForm({ ...voucherForm, status: e.target.value })}
+                >
+                  <option value="Aktif">Aktif (Bisa Dipakai di Kasir)</option>
+                  <option value="Nonaktif">Nonaktif (Diarsipkan)</option>
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsVoucherModalOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={voucherSubmitting}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {voucherSubmitting ? 'Menyimpan...' : 'Simpan Kupon Promo'}
                 </button>
               </div>
             </form>

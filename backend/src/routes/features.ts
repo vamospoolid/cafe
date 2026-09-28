@@ -12,7 +12,8 @@ const router = Router();
 router.get('/my-features', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const tenantId = TenantContext.getTenantId() || user?.tenantId || 'tenant-default-muki';
+    const tenantId = TenantContext.getTenantId() || user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context required', code: 'MISSING_TENANT_CONTEXT' });
 
     const features = await featureService.getTenantFeatures(tenantId);
     return res.json({
@@ -32,7 +33,8 @@ router.get('/my-features', authenticateToken, async (req: Request, res: Response
 router.get('/tenant-plan', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const tenantId = TenantContext.getTenantId() || user?.tenantId || 'tenant-default-muki';
+    const tenantId = TenantContext.getTenantId() || user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context required', code: 'MISSING_TENANT_CONTEXT' });
 
     const info = await featureService.getTenantPlanAndLimits(tenantId);
     return res.json(info);

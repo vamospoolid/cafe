@@ -326,7 +326,7 @@ export const SplitPrintModal: React.FC<SplitPrintModalProps> = ({ order, isOpen,
 
                 {selectedPreview === 'receipt' && (
                   <div>
-                    <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '1.1rem' }}>{posContext?.settings?.storeName || 'MUKI RAMEN'}</div>
+                    <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '1.1rem' }}>{posContext?.settings?.storeName || 'KAFE & RESTORAN'}</div>
                     <div style={{ textAlign: 'center', fontSize: '.75rem', color: '#64748b' }}>{posContext?.settings?.address || 'Jakarta'}</div>
                     <div style={{ borderBottom: '1px dashed #cbd5e1', margin: '.5rem 0' }} />
                     <div style={{ fontSize: '.75rem' }}>No: {order.orderNumber}</div>

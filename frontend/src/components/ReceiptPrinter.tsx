@@ -305,7 +305,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
       {/* ═══ HEADER ═══ */}
       <div style={{ textAlign: 'center', marginBottom: '1mm' }}>
         <div style={{ fontSize: '14pt', fontWeight: '900', letterSpacing: '1px' }}>
-          {storeSettings?.storeName || 'MUKI RAMEN'}
+          {storeSettings?.storeName || 'KAFE & RESTORAN'}
         </div>
         {storeSettings?.address && (
           <div style={{ fontSize: '9pt' }}>{storeSettings.address}</div>

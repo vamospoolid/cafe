@@ -1,11 +1,10 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../db';
+import { cacheService } from './CacheService';
 
 export class FeatureService {
   private static instance: FeatureService;
 
-  // Cache in-memory sederhana untuk performa tinggi (TTL 60 detik)
+  // L1 In-memory micro-cache (TTL 60 detik)
   private cache = new Map<string, { features: Set<string>; expiry: number }>();
 
   public static getInstance(): FeatureService {
@@ -18,8 +17,10 @@ export class FeatureService {
   public clearCache(tenantId?: string) {
     if (tenantId) {
       this.cache.delete(tenantId);
+      cacheService.del(`cache:features:${tenantId}`).catch(() => {});
     } else {
       this.cache.clear();
+      cacheService.clearAll().catch(() => {});
     }
   }
 
@@ -30,9 +31,20 @@ export class FeatureService {
     if (!tenantId) return [];
 
     const now = Date.now();
-    const cached = this.cache.get(tenantId);
-    if (cached && cached.expiry > now) {
-      return Array.from(cached.features);
+    // L1: In-memory micro-cache check
+    const memCached = this.cache.get(tenantId);
+    if (memCached && memCached.expiry > now) {
+      return Array.from(memCached.features);
+    }
+
+    // L2: Distributed Redis Cache check
+    const redisCached = await cacheService.get<string[]>(`cache:features:${tenantId}`);
+    if (redisCached && Array.isArray(redisCached)) {
+      this.cache.set(tenantId, {
+        features: new Set(redisCached),
+        expiry: now + 60 * 1000
+      });
+      return redisCached;
     }
 
     // 1. Ambil data tenant beserta plan dan overrides
@@ -101,13 +113,15 @@ export class FeatureService {
       }
     }
 
-    // Simpan ke cache selama 60 detik
+    // Simpan ke L1 cache (60 detik) dan L2 Redis (15 menit)
+    const featureArray = Array.from(enabledKeys);
     this.cache.set(tenantId, {
       features: enabledKeys,
       expiry: now + 60 * 1000
     });
+    cacheService.set(`cache:features:${tenantId}`, featureArray, 900).catch(() => {});
 
-    return Array.from(enabledKeys);
+    return featureArray;
   }
 
   /**
@@ -128,6 +142,10 @@ export class FeatureService {
       where: { id: tenantId },
       include: {
         plan: true,
+        subscriptions: {
+          orderBy: { currentPeriodEnd: 'desc' },
+          take: 1
+        },
         _count: {
           select: {
             outlets: true,
@@ -140,10 +158,15 @@ export class FeatureService {
 
     if (!tenant) return null;
 
+    const latestSub = tenant.subscriptions[0];
+
     return {
       tenantId: tenant.id,
       tenantName: tenant.name,
       status: tenant.status,
+      trialEndsAt: tenant.trialEndsAt,
+      currentPeriodEnd: latestSub?.currentPeriodEnd || null,
+      subscriptionStatus: latestSub?.status || null,
       plan: tenant.plan || {
         code: 'STARTER',
         name: 'Paket Starter Default',

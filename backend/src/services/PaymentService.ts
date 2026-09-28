@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db';
 import { encryptAES, decryptAES, verifyMidtransSignature } from '../utils/crypto';
 import { emitToTenant, emitToOutlet } from '../index';
+import { invalidateTenantCache } from '../middlewares/tenantResolver';
 
-const prisma = new PrismaClient();
 
 // Platform SaaS Midtrans Keys (Level 1 Billing)
 const SAAS_MIDTRANS_SERVER_KEY = process.env.MIDTRANS_SAAS_SERVER_KEY || 'SB-Mid-server-TEST_SAAS_KEY_123';
@@ -259,8 +259,21 @@ export class PaymentService {
       }
     }
 
+    // Idempotency: Jika transaksi sudah sukses diproses sebelumnya, jangan proses ulang
+    if (transaction.status === 'SUCCESS') {
+      console.log(`[Midtrans Webhook] Transaction '${gatewayOrderId}' is already SUCCESS. Returning idempotent response.`);
+      return { success: true, message: 'Transaction already processed successfully', transactionId: transaction.id };
+    }
+
     // 3. Verifikasi Keaslian Signature SHA-512 (Anti-Tamper & Anti-Spoofing)
-    if (signatureKey && serverKeyToVerify && !serverKeyToVerify.includes('TEST_SAAS_KEY')) {
+    const isLiveEnvironment = IS_PRODUCTION || (serverKeyToVerify && !serverKeyToVerify.includes('TEST_SAAS_KEY') && !serverKeyToVerify.includes('SB-Mid-server-TEST'));
+    
+    if (isLiveEnvironment) {
+      if (!signatureKey) {
+        console.error(`[Midtrans Webhook Security] Missing signature_key for Order: ${gatewayOrderId}! Rejecting webhook.`);
+        throw new Error('Akses Ditolak: Parameter signature_key wajib disertakan.');
+      }
+
       const isValid = verifyMidtransSignature(
         gatewayOrderId,
         statusCode,
@@ -270,8 +283,20 @@ export class PaymentService {
       );
 
       if (!isValid) {
-        console.error(`[Midtrans Webhook Security] Invalid signature detected for Order: ${gatewayOrderId}! Rejecting.`);
-        throw new Error('Invalid Midtrans signature key');
+        console.error(`[Midtrans Webhook Security] Invalid signature key detected for Order: ${gatewayOrderId}! Rejecting.`);
+        throw new Error('Akses Ditolak: Verifikasi tanda tangan digital Midtrans gagal.');
+      }
+    } else if (signatureKey && serverKeyToVerify) {
+      // Pada mode sandbox/pengujian, tetap verifikasi jika signature dikirimkan
+      const isValid = verifyMidtransSignature(
+        gatewayOrderId,
+        statusCode,
+        grossAmount,
+        serverKeyToVerify,
+        signatureKey
+      );
+      if (!isValid && !signatureKey.startsWith('mock-')) {
+        console.warn(`[Midtrans Webhook Sandbox Warning] Signature mismatch for Order: ${gatewayOrderId}`);
       }
     }
 
@@ -313,10 +338,18 @@ export class PaymentService {
         // Perpanjang atau aktifkan Subscription Tenant
         if (invoice.planId) {
           const now = new Date();
-          const periodEnd = new Date();
-          periodEnd.setMonth(periodEnd.getMonth() + 1); // 1 Bulan ke depan
+          
+          // Cari subscription terakhir untuk menghitung perpanjangan
+          const latestSub = await prisma.subscription.findFirst({
+            where: { tenantId: transaction.tenantId },
+            orderBy: { currentPeriodEnd: 'desc' }
+          });
 
-          await prisma.subscription.create({
+          const baseEnd = latestSub && latestSub.currentPeriodEnd > now ? latestSub.currentPeriodEnd : now;
+          const periodEnd = new Date(baseEnd);
+          periodEnd.setMonth(periodEnd.getMonth() + 1); // Tambah 1 bulan dari batas akhir saat ini
+
+          const newSub = await prisma.subscription.create({
             data: {
               tenantId: transaction.tenantId,
               planId: invoice.planId,
@@ -335,6 +368,25 @@ export class PaymentService {
               status: 'ACTIVE',
               planId: invoice.planId
             }
+          });
+
+          // Flush feature cache agar plan baru langsung berlaku tanpa tunggu 60 detik
+          const { featureService } = require('./FeatureService');
+          featureService.clearCache(transaction.tenantId);
+
+          // Invalidate cache tenant agar middleware langsung mengenali status ACTIVE tanpa restart
+          invalidateTenantCache(transaction.tenantId);
+
+          // Pancarkan event real-time ke room tenant kasir & dashboard untuk auto-unlock
+          emitToTenant(transaction.tenantId, 'tenant:reactivated', {
+            status: 'ACTIVE',
+            planId: invoice.planId,
+            expiresAt: periodEnd
+          });
+          emitToTenant(transaction.tenantId, 'tenant:status_changed', {
+            status: 'ACTIVE',
+            reason: 'INVOICE_PAID',
+            expiresAt: periodEnd
           });
         }
         console.log(`[Midtrans L1] SaaS Invoice ${invoice.invoiceNumber} paid & Tenant ${transaction.tenantId} activated.`);
@@ -400,8 +452,11 @@ export class PaymentService {
       ? decryptedKey.slice(0, 6) + '****************' + decryptedKey.slice(-4) 
       : '';
 
+    // Buang field ciphertext serverKey mentah agar tidak terekspos ke browser
+    const { serverKey, ...safeConfig } = config;
+
     return {
-      ...config,
+      ...safeConfig,
       serverKeyMasked: maskedServerKey,
       hasServerKey: !!decryptedKey
     };

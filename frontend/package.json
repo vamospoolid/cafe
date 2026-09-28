@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:open": "npx cap open android",
+    "build:apk": "npm run build && npx cap sync android"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^6.0.0",
@@ -15,7 +19,9 @@
     "@capacitor/core": "^6.0.0",
     "@capacitor/push-notifications": "^6.0.0",
     "cordova-plugin-bluetooth-serial": "^0.4.7",
+    "dexie": "^4.4.6",
     "esc-pos-encoder": "^2.1.0",
+    "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.21.0",
@@ -28,6 +34,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/cli": "^6.2.2",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

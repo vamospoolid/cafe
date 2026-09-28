@@ -231,20 +231,18 @@ const AuditLogView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-6 animate-in fade-in duration-300">
+    <div className="max-w-[1600px] mx-auto space-y-6 animate-fade-in">
       {/* Top Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-slate-800 relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-950 text-white p-6 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-slate-800 relative">
         <div className="space-y-1 z-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold border border-indigo-500/30 mb-1">
-            <Shield size={13} />
-            <span>Immutable Audit Trail & Security Ledger</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 text-slate-200 text-xs font-semibold border border-slate-700 mb-1">
+            <Shield size={13} className="text-emerald-400" />
+            <span>Immutable Audit Trail &amp; Security Ledger</span>
           </div>
           <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
-            Audit Trail & Log Aktivitas
+            Audit Trail &amp; Log Aktivitas
           </h2>
-          <p className="text-xs text-slate-400 max-w-xl">
+          <p className="text-xs text-slate-400 max-w-xl font-medium">
             Pencatatan riwayat transaksional tidak dapat diubah (immutable) mencakup otentikasi, pembatalan pesanan (void), perubahan harga, mutasi inventaris, dan konfigurasi sistem.
           </p>
         </div>
@@ -253,14 +251,14 @@ const AuditLogView: React.FC = () => {
           <button
             onClick={() => { fetchSummary(); fetchLogs(); }}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold transition-all active:scale-95 border border-white/10 disabled:opacity-50 shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-all active:scale-95 border border-slate-700 disabled:opacity-50 shadow-xs cursor-pointer"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span>Muat Ulang</span>
           </button>
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all active:scale-95 shadow-lg shadow-emerald-900/30"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
           >
             <Download size={14} />
             <span>Ekspor CSV</span>
@@ -270,53 +268,53 @@ const AuditLogView: React.FC = () => {
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-            <Activity size={24} />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center shrink-0">
+            <Activity size={20} />
           </div>
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Aktivitas</div>
-            <div className="text-2xl font-black text-slate-800">{summary?.totalLogs ?? '-'}</div>
+            <div className="text-2xl font-black text-slate-950 font-mono">{summary?.totalLogs ?? '-'}</div>
             <div className="text-[10px] text-slate-400 mt-0.5">Seluruh catatan audit</div>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <AlertOctagon size={24} />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0">
+            <AlertOctagon size={20} />
           </div>
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Aksi Kritis</div>
-            <div className="text-2xl font-black text-rose-600">{summary?.criticalCount ?? '-'}</div>
-            <div className="text-[10px] text-rose-500 font-semibold mt-0.5">Void / Hapus Data</div>
+            <div className="text-2xl font-black text-rose-700 font-mono">{summary?.criticalCount ?? '-'}</div>
+            <div className="text-[10px] text-rose-600 font-semibold mt-0.5">Void / Hapus Data</div>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <AlertTriangle size={24} />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center shrink-0">
+            <AlertTriangle size={20} />
           </div>
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Peringatan</div>
-            <div className="text-2xl font-black text-amber-600">{summary?.warningCount ?? '-'}</div>
-            <div className="text-[10px] text-amber-600 font-semibold mt-0.5">Ubah Harga / Setting</div>
+            <div className="text-2xl font-black text-amber-800 font-mono">{summary?.warningCount ?? '-'}</div>
+            <div className="text-[10px] text-amber-700 font-semibold mt-0.5">Ubah Harga / Setting</div>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <Clock size={24} />
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+            <Clock size={20} />
           </div>
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Aktivitas 24 Jam</div>
-            <div className="text-2xl font-black text-emerald-600">{summary?.activityLast24h ?? '-'}</div>
+            <div className="text-2xl font-black text-emerald-700 font-mono">{summary?.activityLast24h ?? '-'}</div>
             <div className="text-[10px] text-slate-400 mt-0.5">Hari ini</div>
           </div>
         </div>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.03)] space-y-4">
         <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Keyword Search */}
           <div className="relative lg:col-span-2">

@@ -1,9 +1,9 @@
 {
-  "appId": "id.codenusa.cafestaff",
-  "appName": "SOL Staff Portal",
+  "appId": "id.codenusa.mukiramen.staff",
+  "appName": "Kopi Kenangan Senja 6569 Staf",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://cafe.codenusa.id/staff",
+    "url": "https://mukiramen.codenusa.id/staff",
     "cleartext": true
   }
 }

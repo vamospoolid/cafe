@@ -1,11 +1,34 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
-import { io } from '../index';
+import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { io, emitToTenant } from '../index';
 import { syncMenuSoldOutStatus } from './ingredients';
+import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
-const prisma = new PrismaClient();
+
+// Router-level fail-closed guard: all warehouse operations require authentication & tenant context
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const tenantId = getTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ 
+      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
+      code: 'MISSING_TENANT_CONTEXT' 
+    });
+  }
+  next();
+});
+
+function getTenantId(req: Request): string | undefined {
+  const user = (req as AuthRequest).user;
+  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || undefined;
+}
+
+function getOutletId(req: Request): string | undefined {
+  const user = (req as AuthRequest).user;
+  return user?.outletId || TenantContext.getOutletId() || (req.headers['x-outlet-id'] as string) || undefined;
+}
 
 // Helper generate Invoice/Req numbers
 function generateDocNumber(prefix: string) {
@@ -17,24 +40,73 @@ function generateDocNumber(prefix: string) {
 // ─── 1. DASHBOARD & STATS ──────────────────────────────────────────────────
 router.get('/dashboard', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const ingredients = await prisma.ingredient.findMany({
-      select: {
-        id: true,
-        name: true,
-        warehouseStock: true,
-        warehouseMinStock: true,
-        buyPrice: true,
-        unit: true,
-        purchaseUnit: true,
-        conversionRatio: true
-      }
-    });
+    const tenantId = getTenantId(req);
+    const tenantWhere = { tenantId };
 
-    const totalAssetValue = ingredients.reduce((sum, item) => sum + (item.warehouseStock * item.buyPrice), 0);
-    const lowStockItems = ingredients.filter(item => item.warehouseMinStock > 0 && item.warehouseStock <= item.warehouseMinStock);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+    const isRetailOrBengkel = tenant?.businessType === 'RETAIL' || tenant?.businessType === 'BENGKEL';
+
+    let totalAssetValue = 0;
+    let lowStockCount = 0;
+    let lowStockItems: any[] = [];
+    let totalItems = 0;
+
+    if (isRetailOrBengkel) {
+      const products = await prisma.product.findMany({
+        where: { tenantId, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          stock: true,
+          minStock: true,
+          buyPrice: true,
+          baseUom: true,
+          category: { select: { name: true } }
+        }
+      });
+
+      totalAssetValue = products.reduce((sum, item) => sum + (item.stock * (item.buyPrice || 0)), 0);
+      lowStockItems = products
+        .filter(item => item.minStock > 0 && item.stock <= item.minStock)
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          warehouseStock: p.stock,
+          warehouseMinStock: p.minStock,
+          unit: p.baseUom || 'Pcs',
+          buyPrice: p.buyPrice,
+          category: p.category?.name || (tenant?.businessType === 'BENGKEL' ? 'Suku Cadang' : 'Barang Dagangan')
+        }));
+      lowStockCount = lowStockItems.length;
+      totalItems = products.length;
+    } else {
+      const ingredients = await prisma.ingredient.findMany({
+        where: tenantWhere,
+        select: {
+          id: true,
+          name: true,
+          warehouseStock: true,
+          warehouseMinStock: true,
+          buyPrice: true,
+          unit: true,
+          purchaseUnit: true,
+          conversionRatio: true
+        }
+      });
+
+      totalAssetValue = ingredients.reduce((sum, item) => sum + (item.warehouseStock * item.buyPrice), 0);
+      lowStockItems = ingredients.filter(item => item.warehouseMinStock > 0 && item.warehouseStock <= item.warehouseMinStock);
+      lowStockCount = lowStockItems.length;
+      totalItems = ingredients.length;
+    }
 
     // Owner Finance Aggregations
-    const ownerTxns = await prisma.ownerFundTransaction.findMany();
+    const ownerTxns = await prisma.ownerFundTransaction.findMany({
+      where: tenantWhere
+    });
     const totalCapitalIn = ownerTxns
       .filter(t => t.type === 'CAPITAL_IN')
       .reduce((sum, t) => sum + t.amount, 0);
@@ -51,21 +123,33 @@ router.get('/dashboard', authenticateToken, async (req: Request, res: Response) 
 
     // Recent Requisitions
     const recentTransfers = await prisma.warehouseRequisition.findMany({
+      where: tenantWhere,
       take: 5,
       orderBy: { createdAt: 'desc' },
       include: {
         requestedBy: { select: { name: true } },
-        items: true
+        items: {
+          include: {
+            ingredient: { select: { name: true, unit: true } },
+            product: { select: { name: true, baseUom: true } }
+          }
+        }
       }
     });
 
     // Recent Inbounds
     const recentInbounds = await prisma.warehouseInbound.findMany({
+      where: tenantWhere,
       take: 5,
       orderBy: { createdAt: 'desc' },
       include: {
         supplier: { select: { name: true } },
-        items: true
+        items: {
+          include: {
+            ingredient: { select: { name: true, unit: true } },
+            product: { select: { name: true, baseUom: true } }
+          }
+        }
       }
     });
 
@@ -75,11 +159,12 @@ router.get('/dashboard', authenticateToken, async (req: Request, res: Response) 
       totalTransferredToResto,
       totalReimbursedToOwner,
       currentOwnerPayable,
-      lowStockCount: lowStockItems.length,
+      lowStockCount,
       lowStockItems,
-      totalIngredients: ingredients.length,
+      totalIngredients: totalItems,
       recentTransfers,
-      recentInbounds
+      recentInbounds,
+      businessType: tenant?.businessType || 'CAFE'
     });
   } catch (error: any) {
     console.error('Error fetching warehouse dashboard:', error);
@@ -90,14 +175,60 @@ router.get('/dashboard', authenticateToken, async (req: Request, res: Response) 
 // ─── 2. STOK GUDANG PUSAT ─────────────────────────────────────────────────
 router.get('/stock', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { category, search } = req.query;
-    const where: any = {};
 
-    if (category && typeof category === 'string') {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+    const isRetailOrBengkel = tenant?.businessType === 'RETAIL' || tenant?.businessType === 'BENGKEL';
+
+    if (isRetailOrBengkel) {
+      const where: any = { tenantId, deletedAt: null };
+      if (category && typeof category === 'string' && category !== 'Semua') {
+        where.category = { name: category };
+      }
+      if (search && typeof search === 'string') {
+        where.name = { contains: search, mode: 'insensitive' };
+      }
+
+      const products = await prisma.product.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        include: {
+          category: { select: { id: true, name: true } }
+        }
+      });
+
+      const mapped = products.map(p => ({
+        id: p.id,
+        productId: p.id,
+        name: p.name,
+        category: p.category?.name || (tenant?.businessType === 'BENGKEL' ? 'Suku Cadang' : 'Barang Dagangan'),
+        unit: p.baseUom || 'Pcs',
+        purchaseUnit: p.baseUom || 'Pcs',
+        conversionRatio: 1,
+        warehouseStock: p.stock,
+        warehouseMinStock: p.minStock,
+        stock: p.stock,
+        buyPrice: p.buyPrice,
+        sellPrice: p.sellPrice,
+        supplier: null,
+        storageLocation: p.storageLocation || null,
+        brand: p.brand || null,
+        isProduct: true
+      }));
+
+      return res.json(mapped);
+    }
+
+    const where: any = { tenantId };
+    if (category && typeof category === 'string' && category !== 'Semua') {
       where.category = category;
     }
     if (search && typeof search === 'string') {
-      where.name = { contains: search };
+      where.name = { contains: search, mode: 'insensitive' };
     }
 
     const ingredients = await prisma.ingredient.findMany({
@@ -128,6 +259,15 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
     const invoiceNumber = generateDocNumber('INB');
     let totalAmount = 0;
 
+    const tenantId = getTenantId(req);
+    const outletId = getOutletId(req);
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+    const isRetailOrBengkel = tenant?.businessType === 'RETAIL' || tenant?.businessType === 'BENGKEL';
+
     // Process items & calculate
     const processedItems: any[] = [];
     for (const it of items) {
@@ -142,16 +282,33 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
       const subtotal = pQty * pPrice;
       totalAmount += subtotal;
 
+      const isProduct = Boolean(it.productId || it.isProduct || isRetailOrBengkel);
+      const itemId = Number(it.productId || it.ingredientId);
+      const sellingPrice = Number(it.sellingPrice) || 0;
+
+      // Validate tenant ownership if product
+      if (isProduct && itemId) {
+        const validProduct = await prisma.product.findFirst({
+          where: { id: itemId, tenantId, deletedAt: null }
+        });
+        if (!validProduct) {
+          return res.status(400).json({ error: `Barang dagangan #${itemId} tidak valid atau bukan milik toko Anda` });
+        }
+      }
+
       processedItems.push({
-        ingredientId: Number(it.ingredientId),
-        itemName: it.itemName || 'Bahan',
-        purchaseUnit: it.purchaseUnit || 'Karton',
+        tenantId,
+        ingredientId: !isProduct ? itemId : null,
+        productId: isProduct ? itemId : null,
+        itemName: it.itemName || (isProduct ? 'Barang' : 'Bahan'),
+        purchaseUnit: it.purchaseUnit || (isProduct ? 'Pcs' : 'Karton'),
         purchaseQty: pQty,
         conversionRatio: cRatio,
         baseQty,
         purchasePrice: pPrice,
         basePrice,
-        subtotal
+        subtotal,
+        sellingPrice // Stored for product price sync in transaction
       });
     }
 
@@ -159,11 +316,25 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
       return res.status(400).json({ error: 'Tidak ada item dengan jumlah valid' });
     }
 
+    // Nested Foreign Key Injection Prevention: Validate supplierId belongs to active tenant
+    if (supplierId) {
+      const validSupplier = await prisma.supplier.findFirst({
+        where: { id: Number(supplierId), tenantId, deletedAt: null }
+      });
+      if (!validSupplier) {
+        return res.status(400).json({ error: 'Supplier yang dipilih tidak valid, sudah dihapus, atau bukan milik outlet Anda' });
+      }
+    }
+
     // Database transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create Inbound record
+      // 1. Create Inbound record (Central Warehouse is scoped at tenant level)
+      // Note: filter out sellingPrice from Prisma create payload
+      const dbItemsPayload = processedItems.map(({ sellingPrice: _, ...dbItem }) => dbItem);
+
       const inbound = await tx.warehouseInbound.create({
         data: {
+          tenantId,
           invoiceNumber,
           supplierId: supplierId ? Number(supplierId) : null,
           supplierName: supplierName || null,
@@ -173,35 +344,57 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
           notes,
           date: date ? new Date(date) : new Date(),
           items: {
-            create: processedItems
+            create: dbItemsPayload
           }
         },
         include: { items: true }
       });
 
-      // 2. Update each ingredient warehouse stock & latest purchase unit info
+      // 2. Update each ingredient / product stock and dynamic selling price
       for (const it of processedItems) {
-        await tx.ingredient.update({
-          where: { id: it.ingredientId },
-          data: {
-            warehouseStock: { increment: it.baseQty },
-            buyPrice: it.basePrice > 0 ? it.basePrice : undefined,
-            purchaseUnit: it.purchaseUnit,
-            conversionRatio: it.conversionRatio
-          }
-        });
+        if (it.productId) {
+          await tx.product.update({
+            where: { id: it.productId },
+            data: {
+              stock: { increment: Math.round(it.baseQty) },
+              buyPrice: it.basePrice > 0 ? it.basePrice : undefined,
+              sellPrice: it.sellingPrice > 0 ? it.sellingPrice : undefined // Update harga jual kasir POS langsung!
+            }
+          });
+        } else if (it.ingredientId) {
+          await tx.ingredient.update({
+            where: { id: it.ingredientId },
+            data: {
+              warehouseStock: { increment: it.baseQty },
+              buyPrice: it.basePrice > 0 ? it.basePrice : undefined,
+              purchaseUnit: it.purchaseUnit,
+              conversionRatio: it.conversionRatio
+            }
+          });
+        }
       }
 
       // 3. Catat transaksi keuangan berdasarkan sumber dana
       const source = paymentSource || 'DANA_PRIBADI_OWNER';
       if (source === 'KASIR_PETTY_CASH' || source === 'KASIR') {
+        const catName = tenant?.businessType === 'BENGKEL'
+          ? 'Belanja Sparepart (Gudang)'
+          : isRetailOrBengkel
+          ? 'Kulakan & Stok Dagangan'
+          : 'Belanja Bahan Baku (Gudang)';
+        const descName = isRetailOrBengkel
+          ? `Kulakan stok barang masuk gudang (${processedItems.length} item - ${invoiceNumber})`
+          : `Belanja bahan masuk gudang (${processedItems.length} item - ${invoiceNumber})`;
+
         // Potong kas kecil / laci kasir
         await tx.cashFlow.create({
           data: {
+            tenantId,
+            outletId,
             type: 'Pengeluaran',
-            category: 'Belanja Bahan Baku (Gudang)',
+            category: catName,
             amount: totalAmount,
-            description: `Belanja bahan masuk gudang (${processedItems.length} item - ${invoiceNumber})`,
+            description: descName,
             userId,
             date: date ? new Date(date) : new Date()
           }
@@ -210,11 +403,14 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
         // Modal Owner / Transfer Bank (Tidak memotong laci kasir)
         await tx.ownerFundTransaction.create({
           data: {
+            tenantId,
             type: 'CAPITAL_IN',
             amount: totalAmount,
             referenceType: 'INBOUND',
             referenceId: invoiceNumber,
-            description: `Penerimaan pasokan gudang via dana owner/bank (${processedItems.length} item - ${invoiceNumber})`,
+            description: isRetailOrBengkel
+              ? `Penerimaan pasokan barang kulakan via dana owner/bank (${processedItems.length} item - ${invoiceNumber})`
+              : `Penerimaan pasokan gudang via dana owner/bank (${processedItems.length} item - ${invoiceNumber})`,
             userId,
             date: date ? new Date(date) : new Date()
           }
@@ -224,8 +420,8 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
       return inbound;
     });
 
-    if (io) {
-      io.emit('warehouse:stock_updated', { type: 'INBOUND', invoiceNumber });
+    if (tenantId) {
+      emitToTenant(tenantId, 'warehouse:stock_updated', { type: 'INBOUND', invoiceNumber });
     }
 
     res.status(201).json({
@@ -240,13 +436,18 @@ router.post('/inbound', authenticateToken, async (req: Request, res: Response) =
 
 router.get('/inbounds', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const inbounds = await prisma.warehouseInbound.findMany({
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
       include: {
         supplier: true,
         user: { select: { id: true, name: true } },
         items: {
-          include: { ingredient: { select: { name: true, unit: true } } }
+          include: {
+            ingredient: { select: { name: true, unit: true } },
+            product: { select: { name: true, baseUom: true } }
+          }
         }
       }
     });
@@ -263,13 +464,14 @@ router.post('/inbounds/:id/void', authenticateToken, async (req: Request, res: R
     const inboundId = Number(req.params.id);
     const { voidReason } = req.body;
     const userId = (req as any).user.id;
+    const tenantId = getTenantId(req);
 
     if (!voidReason || !voidReason.trim()) {
       return res.status(400).json({ error: 'Alasan pembatalan wajib diisi untuk keperluan audit.' });
     }
 
-    const inbound = await prisma.warehouseInbound.findUnique({
-      where: { id: inboundId },
+    const inbound = await prisma.warehouseInbound.findFirst({
+      where: { id: inboundId, tenantId },
       include: { items: true }
     });
 
@@ -289,16 +491,24 @@ router.post('/inbounds/:id/void', authenticateToken, async (req: Request, res: R
 
       // 2. Reverse warehouse stock untuk setiap item
       for (const it of inbound.items) {
-        await tx.ingredient.update({
-          where: { id: it.ingredientId },
-          data: { warehouseStock: { decrement: it.baseQty } }
-        });
+        if (it.productId) {
+          await tx.product.update({
+            where: { id: it.productId },
+            data: { stock: { decrement: Math.round(it.baseQty) } }
+          });
+        } else if (it.ingredientId) {
+          await tx.ingredient.update({
+            where: { id: it.ingredientId },
+            data: { warehouseStock: { decrement: it.baseQty } }
+          });
+        }
       }
 
       // 3. Reverse ledger modal pusat jika sumber dana adalah Modal Pusat
       if (inbound.paymentSource === 'DANA_PRIBADI_OWNER') {
         await tx.ownerFundTransaction.create({
           data: {
+            tenantId,
             type: 'CAPITAL_IN',
             amount: -inbound.totalAmount, // Negatif = reversal
             referenceType: 'VOID_INBOUND',
@@ -311,7 +521,8 @@ router.post('/inbounds/:id/void', authenticateToken, async (req: Request, res: R
       }
     });
 
-    if (io) io.emit('warehouse:stock_updated', { type: 'VOID_INBOUND', invoiceNumber: inbound.invoiceNumber });
+    const targetTenantId = inbound.tenantId || tenantId;
+    if (targetTenantId) emitToTenant(targetTenantId, 'warehouse:stock_updated', { type: 'VOID_INBOUND', invoiceNumber: inbound.invoiceNumber });
 
     res.json({ message: `Penerimaan ${inbound.invoiceNumber} berhasil dibatalkan. Stok sudah dikembalikan.` });
   } catch (error: any) {
@@ -324,25 +535,55 @@ router.post('/inbounds/:id/void', authenticateToken, async (req: Request, res: R
 
 router.post('/opname', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { ingredientId, actualStock, reason, notes } = req.body;
+    const { ingredientId, productId, actualStock, reason, notes } = req.body;
     const userId = (req as any).user.id;
+    const tenantId = getTenantId(req);
 
-    if (!ingredientId || actualStock === undefined) {
-      return res.status(400).json({ error: 'ID Bahan dan Stok Fisik wajib diisi' });
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+    const isRetailOrBengkel = tenant?.businessType === 'RETAIL' || tenant?.businessType === 'BENGKEL';
+    const isProd = Boolean(productId || (isRetailOrBengkel && ingredientId));
+    const targetId = Number(productId || ingredientId);
+
+    if (!targetId || actualStock === undefined) {
+      return res.status(400).json({ error: 'ID Item dan Stok Fisik wajib diisi' });
     }
 
-    const ing = await prisma.ingredient.findUnique({ where: { id: Number(ingredientId) } });
+    if (isProd) {
+      const prod = await prisma.product.findFirst({ where: { id: targetId, tenantId, deletedAt: null } });
+      if (!prod) return res.status(404).json({ error: 'Produk tidak ditemukan' });
+
+      const diff = Number(actualStock) - prod.stock;
+      const updated = await prisma.product.update({
+        where: { id: targetId },
+        data: { stock: Math.round(Number(actualStock)) }
+      });
+
+      if (tenantId) {
+        emitToTenant(tenantId, 'warehouse:stock_updated', { type: 'OPNAME', productId: prod.id });
+      }
+
+      return res.json({
+        message: 'Stok fisik produk berhasil disesuaikan',
+        difference: diff,
+        product: updated
+      });
+    }
+
+    const ing = await prisma.ingredient.findFirst({ where: { id: targetId, tenantId } });
     if (!ing) return res.status(404).json({ error: 'Bahan baku tidak ditemukan' });
 
     const diff = Number(actualStock) - ing.warehouseStock;
 
     const updated = await prisma.ingredient.update({
-      where: { id: Number(ingredientId) },
+      where: { id: targetId },
       data: { warehouseStock: Number(actualStock) }
     });
 
-    if (io) {
-      io.emit('warehouse:stock_updated', { type: 'OPNAME', ingredientId: ing.id });
+    if (tenantId) {
+      emitToTenant(tenantId, 'warehouse:stock_updated', { type: 'OPNAME', ingredientId: ing.id });
     }
 
     res.json({
@@ -359,13 +600,18 @@ router.post('/opname', authenticateToken, async (req: Request, res: Response) =>
 // ─── 5. PERMINTAAN & TRANSFER DARI GUDANG KE DAPUR (REQUISITION) ─────────
 router.get('/transfers', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const transfers = await prisma.warehouseRequisition.findMany({
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
       include: {
         requestedBy: { select: { id: true, name: true, role: true } },
         approvedBy: { select: { id: true, name: true } },
         items: {
-          include: { ingredient: { select: { name: true, unit: true, purchaseUnit: true, conversionRatio: true } } }
+          include: {
+            ingredient: { select: { name: true, unit: true, purchaseUnit: true, conversionRatio: true } },
+            product: { select: { name: true, baseUom: true } }
+          }
         }
       }
     });
@@ -385,8 +631,11 @@ router.post('/transfers', authenticateToken, async (req: Request, res: Response)
       return res.status(400).json({ error: 'Daftar bahan yang diminta wajib diisi' });
     }
 
+    const tenantId = getTenantId(req);
+    const outletId = getOutletId(req);
+
     // Get settings for transfer pricing
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({ where: { tenantId } });
     const pricingMode = settings?.warehouseTransferPricing || 'AT_COST';
     const markupPercent = Number(settings?.warehouseMarkupPercent) || 0;
 
@@ -395,7 +644,7 @@ router.post('/transfers', authenticateToken, async (req: Request, res: Response)
     const processedItems: any[] = [];
 
     for (const it of items) {
-      const ing = await prisma.ingredient.findUnique({ where: { id: Number(it.ingredientId) } });
+      const ing = await prisma.ingredient.findFirst({ where: { id: Number(it.ingredientId), tenantId } });
       if (!ing) continue;
 
       const rQty = Number(it.requestedQty) || 0;
@@ -431,6 +680,8 @@ router.post('/transfers', authenticateToken, async (req: Request, res: Response)
 
     const requisition = await prisma.warehouseRequisition.create({
       data: {
+        tenantId,
+        outletId,
         reqNumber,
         requestedById: userId,
         status: 'PENDING',
@@ -446,8 +697,8 @@ router.post('/transfers', authenticateToken, async (req: Request, res: Response)
       }
     });
 
-    if (io) {
-      io.emit('warehouse:transfer_created', requisition);
+    if (tenantId) {
+      emitToTenant(tenantId, 'warehouse:transfer_created', requisition);
     }
 
     res.status(201).json({
@@ -468,45 +719,88 @@ router.post('/quick-distribute', authenticateToken, async (req: Request, res: Re
     const userId = (req as any).user.id;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'Daftar bahan yang didistribusikan wajib diisi' });
+      return res.status(400).json({ error: 'Daftar item yang didistribusikan wajib diisi' });
     }
 
     const reqNumber = generateDocNumber('DIST');
     let totalTransferCost = 0;
     const processedItems: any[] = [];
 
-    // Validasi & Siapkan data
-    for (const it of items) {
-      const ing = await prisma.ingredient.findUnique({ where: { id: Number(it.ingredientId) } });
-      if (!ing) continue;
+    const tenantId = getTenantId(req);
+    const outletId = getOutletId(req);
 
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+    const isRetailOrBengkel = tenant?.businessType === 'RETAIL' || tenant?.businessType === 'BENGKEL';
+
+    // Validasi & Siapkan data (Scoped to active tenant)
+    for (const it of items) {
+      const isProduct = Boolean(it.productId || it.isProduct || isRetailOrBengkel);
+      const itemId = Number(it.productId || it.ingredientId);
       const rQty = Number(it.requestedQty) || 0;
       if (rQty <= 0) continue;
 
-      // Cek konversi
-      const isPurchaseUnit = it.requestedUnit === ing.purchaseUnit && (ing.conversionRatio || 1) > 0;
-      const baseQty = isPurchaseUnit ? (rQty * (ing.conversionRatio || 1)) : rQty;
+      if (isProduct) {
+        const prod = await prisma.product.findFirst({
+          where: { id: itemId, tenantId, deletedAt: null }
+        });
+        if (!prod) continue;
 
-      // Cek stok gudang cukup
-      if (ing.warehouseStock < baseQty) {
-        return res.status(400).json({
-          error: `Stok gudang untuk "${ing.name}" tidak mencukupi. Tersedia di gudang: ${ing.warehouseStock} ${ing.unit}, diminta: ${baseQty} ${ing.unit}`
+        const baseQty = rQty;
+        if (prod.stock < baseQty) {
+          return res.status(400).json({
+            error: `Stok gudang untuk "${prod.name}" tidak mencukupi. Tersedia: ${prod.stock} ${prod.baseUom || 'Pcs'}, diminta: ${baseQty} ${prod.baseUom || 'Pcs'}`
+          });
+        }
+
+        const transferPrice = prod.buyPrice || 0;
+        const subtotal = baseQty * transferPrice;
+        totalTransferCost += subtotal;
+
+        processedItems.push({
+          productId: prod.id,
+          ingredientId: null,
+          itemName: prod.name,
+          requestedUnit: it.requestedUnit || prod.baseUom || 'Pcs',
+          requestedQty: rQty,
+          baseQty,
+          transferPrice,
+          subtotal,
+          isProduct: true
+        });
+      } else {
+        const ing = await prisma.ingredient.findFirst({
+          where: { id: itemId, tenantId, deletedAt: null }
+        });
+        if (!ing) continue;
+
+        const isPurchaseUnit = it.requestedUnit === ing.purchaseUnit && (ing.conversionRatio || 1) > 0;
+        const baseQty = isPurchaseUnit ? (rQty * (ing.conversionRatio || 1)) : rQty;
+
+        if (ing.warehouseStock < baseQty) {
+          return res.status(400).json({
+            error: `Stok gudang untuk "${ing.name}" tidak mencukupi. Tersedia di gudang: ${ing.warehouseStock} ${ing.unit}, diminta: ${baseQty} ${ing.unit}`
+          });
+        }
+
+        const transferPrice = ing.buyPrice || 0;
+        const subtotal = baseQty * transferPrice;
+        totalTransferCost += subtotal;
+
+        processedItems.push({
+          ingredientId: ing.id,
+          productId: null,
+          itemName: ing.name,
+          requestedUnit: it.requestedUnit || ing.unit,
+          requestedQty: rQty,
+          baseQty,
+          transferPrice,
+          subtotal,
+          isProduct: false
         });
       }
-
-      const transferPrice = ing.buyPrice || 0;
-      const subtotal = baseQty * transferPrice;
-      totalTransferCost += subtotal;
-
-      processedItems.push({
-        ingredientId: ing.id,
-        itemName: ing.name,
-        requestedUnit: it.requestedUnit || ing.unit,
-        requestedQty: rQty,
-        baseQty,
-        transferPrice,
-        subtotal
-      });
     }
 
     if (processedItems.length === 0) {
@@ -514,21 +808,37 @@ router.post('/quick-distribute', authenticateToken, async (req: Request, res: Re
     }
 
     // Eksekusi transaksi atomik
+    const defaultNotes = isRetailOrBengkel
+      ? (tenant?.businessType === 'BENGKEL' ? 'Keluarkan sparepart ke pit servis' : 'Pindah stok ke rak display / etalase kasir')
+      : 'Distribusi langsung dari Gudang ke Dapur/Bar';
+
     const result = await prisma.$transaction(async (tx) => {
       // 1. Buat dokumen distribusi dengan status langsung RECEIVED
       const requisition = await tx.warehouseRequisition.create({
         data: {
+          tenantId,
+          outletId,
           reqNumber,
           requestedById: userId,
           approvedById: userId,
           status: 'RECEIVED',
           totalTransferCost,
-          notes: notes || 'Distribusi langsung dari Gudang ke Dapur/Bar',
+          notes: notes || defaultNotes,
           requestedAt: new Date(),
           approvedAt: new Date(),
           receivedAt: new Date(),
           items: {
-            create: processedItems
+            create: processedItems.map(p => ({
+              tenantId,
+              ingredientId: p.ingredientId,
+              productId: p.productId,
+              itemName: p.itemName,
+              requestedUnit: p.requestedUnit,
+              requestedQty: p.requestedQty,
+              baseQty: p.baseQty,
+              transferPrice: p.transferPrice,
+              subtotal: p.subtotal
+            }))
           }
         },
         include: {
@@ -537,58 +847,82 @@ router.post('/quick-distribute', authenticateToken, async (req: Request, res: Re
         }
       });
 
-      // 2. Update stok gudang (-) dan stok dapur (+)
+      // 2. Update stok
       for (const it of processedItems) {
-        const ing = await tx.ingredient.findUnique({ where: { id: it.ingredientId } });
-        if (!ing) continue;
+        if (it.isProduct && it.productId) {
+          // Untuk Retail/Bengkel: stok tetap di toko atau dipindahkan ke etalase kasir
+          // Jika diperlukan update storageLocation atau catatan
+        } else if (it.ingredientId) {
+          const affected = await tx.$executeRaw`
+            UPDATE "Ingredient"
+            SET "warehouseStock" = "warehouseStock" - ${it.baseQty},
+                "stock" = "stock" + ${it.baseQty}
+            WHERE "id" = ${it.ingredientId} AND "warehouseStock" >= ${it.baseQty}
+          `;
 
-        await tx.ingredient.update({
-          where: { id: it.ingredientId },
-          data: {
-            warehouseStock: { decrement: it.baseQty },
-            stock: { increment: it.baseQty }
+          if (affected === 0) {
+            const ing = await tx.ingredient.findFirst({ where: { id: it.ingredientId, tenantId } });
+            throw new Error(`Stok gudang untuk "${it.itemName}" tidak mencukupi saat proses distribusi (Tersisa: ${ing?.warehouseStock ?? 0} ${ing?.unit || ''}, diminta: ${it.baseQty} ${ing?.unit || ''}).`);
           }
-        });
 
-        // 3. Catat log mutasi dapur
-        await tx.ingredientLog.create({
-          data: {
-            ingredientId: it.ingredientId,
-            change: it.baseQty,
-            cost: it.subtotal,
-            type: 'Distribusi',
-            referenceId: reqNumber,
-            description: `Distribusi Gudang ➔ ${targetCategory || 'Dapur'}: ${it.requestedQty} ${it.requestedUnit} (${it.baseQty} ${ing.unit})`,
-            userId
-          }
-        });
+          const ing = await tx.ingredient.findFirst({ where: { id: it.ingredientId, tenantId } });
+
+          // 3. Catat log mutasi dapur
+          await tx.ingredientLog.create({
+            data: {
+              tenantId,
+              outletId,
+              ingredientId: it.ingredientId,
+              change: it.baseQty,
+              cost: it.subtotal,
+              type: 'Distribusi',
+              referenceId: reqNumber,
+              description: `Distribusi Gudang ➔ ${targetCategory || 'Dapur'}: ${it.requestedQty} ${it.requestedUnit} (${it.baseQty} ${ing?.unit || ''})`,
+              userId
+            }
+          });
+        }
       }
 
       // 4. Catat transaksi modal pusat / transfer biaya
+      const targetName = isRetailOrBengkel
+        ? (tenant?.businessType === 'BENGKEL' ? 'Pit Servis Mekanik' : 'Rak Display Kasir')
+        : 'Dapur/Bar';
+
       await tx.ownerFundTransaction.create({
         data: {
+          tenantId,
           type: 'TRANSFER_TO_RESTO',
           amount: totalTransferCost,
           referenceType: 'REQUISITION',
           referenceId: reqNumber,
-          description: `Distribusi langsung bahan ke Dapur/Bar (${processedItems.length} item - ${reqNumber})`,
+          description: `Distribusi barang ke ${targetName} (${processedItems.length} item - ${reqNumber})`,
           userId,
           date: new Date()
         }
       });
 
       return requisition;
+    }, {
+      maxWait: 10000,
+      timeout: 20000
     });
 
-    // Sinkronisasi status menu sold out
-    await syncMenuSoldOutStatus();
-
-    if (io) {
-      io.emit('warehouse:stock_updated', { type: 'QUICK_DISTRIBUTE', reqNumber });
+    // Sinkronisasi status menu sold out jika ada Kafe
+    if (!isRetailOrBengkel) {
+      await syncMenuSoldOutStatus();
     }
 
+    if (tenantId) {
+      emitToTenant(tenantId, 'warehouse:stock_updated', { type: 'QUICK_DISTRIBUTE', reqNumber });
+    }
+
+    const successMsg = isRetailOrBengkel
+      ? (tenant?.businessType === 'BENGKEL' ? `Pengeluaran ${processedItems.length} part ke pit servis berhasil!` : `Pindah stok ${processedItems.length} barang ke rak display berhasil!`)
+      : `Distribusi ${processedItems.length} bahan ke dapur berhasil diselesaikan!`;
+
     res.status(201).json({
-      message: `Distribusi ${processedItems.length} bahan ke dapur berhasil diselesaikan!`,
+      message: successMsg,
       requisition: result
     });
   } catch (error: any) {
@@ -600,10 +934,12 @@ router.post('/quick-distribute', authenticateToken, async (req: Request, res: Re
 // ─── 5c. LAPORAN PEMAKAIAN / DISTRIBUSI DAPUR ─────────────────────────────
 router.get('/kitchen-usage-report', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const { startDate, endDate } = req.query;
 
     const where: any = {
-      status: 'RECEIVED'
+      status: 'RECEIVED',
+      tenantId
     };
 
     if (startDate && endDate) {
@@ -654,9 +990,10 @@ router.put('/transfers/:id/approve', authenticateToken, async (req: Request, res
   try {
     const id = Number(req.params.id);
     const userId = (req as any).user.id;
+    const tenantId = getTenantId(req);
 
-    const reqDoc = await prisma.warehouseRequisition.findUnique({
-      where: { id },
+    const reqDoc = await prisma.warehouseRequisition.findFirst({
+      where: { id, tenantId },
       include: { items: true }
     });
 
@@ -679,8 +1016,9 @@ router.put('/transfers/:id/approve', authenticateToken, async (req: Request, res
       }
     });
 
-    if (io) {
-      io.emit('warehouse:transfer_approved', updated);
+    const targetTenantId = updated.tenantId || tenantId;
+    if (targetTenantId) {
+      emitToTenant(targetTenantId, 'warehouse:transfer_approved', updated);
     }
 
     res.json({ message: 'Permintaan bahan telah disetujui untuk dikirim', requisition: updated });
@@ -696,9 +1034,10 @@ router.post('/transfers/:id/cancel', authenticateToken, async (req: Request, res
     const id = Number(req.params.id);
     const { reason } = req.body;
     const userId = (req as any).user.id;
+    const tenantId = getTenantId(req);
 
-    const reqDoc = await prisma.warehouseRequisition.findUnique({
-      where: { id },
+    const reqDoc = await prisma.warehouseRequisition.findFirst({
+      where: { id, tenantId },
       include: { items: true }
     });
 
@@ -717,9 +1056,10 @@ router.post('/transfers/:id/cancel', authenticateToken, async (req: Request, res
       }
     });
 
-    if (io) {
-      io.emit('warehouse:transfer_cancelled', updated);
-      io.emit('warehouse:stock_updated', { type: 'TRANSFER_CANCELLED', reqNumber: reqDoc.reqNumber });
+    const targetTenantId = updated.tenantId || tenantId;
+    if (targetTenantId) {
+      emitToTenant(targetTenantId, 'warehouse:transfer_cancelled', updated);
+      emitToTenant(targetTenantId, 'warehouse:stock_updated', { type: 'TRANSFER_CANCELLED', reqNumber: reqDoc.reqNumber });
     }
 
     res.json({ message: `Permintaan ${reqDoc.reqNumber} berhasil dibatalkan.`, requisition: updated });
@@ -735,9 +1075,10 @@ router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res
   try {
     const id = Number(req.params.id);
     const userId = (req as any).user.id;
+    const tenantId = getTenantId(req);
 
-    const reqDoc = await prisma.warehouseRequisition.findUnique({
-      where: { id },
+    const reqDoc = await prisma.warehouseRequisition.findFirst({
+      where: { id, tenantId },
       include: { items: true }
     });
 
@@ -748,37 +1089,45 @@ router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res
 
     // Execute atomic transfer transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Update each ingredient: decrease warehouseStock, increase kitchen stock
+      // 1. Update each ingredient: decrease warehouseStock, increase kitchen stock dengan Atomic Guard
       for (const it of reqDoc.items) {
-        const ing = await tx.ingredient.findUnique({ where: { id: it.ingredientId } });
-        if (!ing) continue;
+        if (it.ingredientId) {
+          const ingId = it.ingredientId;
+          const affected = await tx.$executeRaw`
+            UPDATE "Ingredient"
+            SET "warehouseStock" = "warehouseStock" - ${it.baseQty},
+                "stock" = "stock" + ${it.baseQty}
+            WHERE "id" = ${ingId} AND "warehouseStock" >= ${it.baseQty}
+          `;
 
-        // Potong gudang
-        await tx.ingredient.update({
-          where: { id: it.ingredientId },
-          data: {
-            warehouseStock: { decrement: it.baseQty },
-            stock: { increment: it.baseQty }
+          if (affected === 0) {
+            const ing = await tx.ingredient.findFirst({ where: { id: ingId, tenantId } });
+            throw new Error(`Stok gudang pusat untuk "${it.itemName}" tidak mencukupi untuk disalurkan ke dapur (Tersisa: ${ing?.warehouseStock ?? 0} ${ing?.unit || ''}, diminta: ${it.baseQty} ${ing?.unit || ''}).`);
           }
-        });
 
-        // Catat mutasi log dapur Muki Ramen
-        await tx.ingredientLog.create({
-          data: {
-            ingredientId: it.ingredientId,
-            change: it.baseQty,
-            cost: it.subtotal,
-            type: 'Distribusi',
-            referenceId: reqDoc.reqNumber,
-            description: `Terima dari Gudang Pusat: ${it.requestedQty} ${it.requestedUnit} (${it.baseQty} ${ing.unit})`,
-            userId
-          }
-        });
+          const ing = await tx.ingredient.findFirst({ where: { id: ingId, tenantId } });
+
+          // Catat mutasi log dapur Muki Ramen
+          await tx.ingredientLog.create({
+            data: {
+              tenantId,
+              outletId: reqDoc.outletId,
+              ingredientId: ingId,
+              change: it.baseQty,
+              cost: it.subtotal,
+              type: 'Distribusi',
+              referenceId: reqDoc.reqNumber,
+              description: `Terima dari Gudang Pusat: ${it.requestedQty} ${it.requestedUnit} (${it.baseQty} ${ing?.unit || ''})`,
+              userId
+            }
+          });
+        }
       }
 
       // 2. Catat ke Rekonsiliasi Settlement Modal Pusat: Distribusi Bahan ke Unit Operasional
       await tx.ownerFundTransaction.create({
         data: {
+          tenantId,
           type: 'TRANSFER_TO_RESTO',
           amount: reqDoc.totalTransferCost,
           referenceType: 'REQUISITION',
@@ -803,13 +1152,17 @@ router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res
       });
 
       return updated;
+    }, {
+      maxWait: 10000,
+      timeout: 20000
     });
 
     // Sinkronisasi menu sold-out realtime
     await syncMenuSoldOutStatus();
 
-    if (io) {
-      io.emit('warehouse:stock_updated', { type: 'TRANSFER_RECEIVED', reqNumber: reqDoc.reqNumber });
+    const targetTenantId = result.tenantId || tenantId;
+    if (targetTenantId) {
+      emitToTenant(targetTenantId, 'warehouse:stock_updated', { type: 'TRANSFER_RECEIVED', reqNumber: reqDoc.reqNumber });
     }
 
     res.json({
@@ -825,7 +1178,9 @@ router.put('/transfers/:id/receive', authenticateToken, async (req: Request, res
 // ─── 6. REKONSILIASI & SETTLEMENT MODAL PUSAT ─────────────────────────────
 router.get('/owner-finance', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const transactions = await prisma.ownerFundTransaction.findMany({
+      where: { tenantId },
       orderBy: { date: 'desc' },
       include: {
         user: { select: { id: true, name: true, role: true } }
@@ -864,6 +1219,8 @@ router.get('/owner-finance', authenticateToken, async (req: Request, res: Respon
 // Settlement / Pencairan pengembalian dana ke entitas pusat
 router.post('/owner-finance/reimburse', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
+    const outletId = getOutletId(req);
     const { amount, paymentMethod, deductFromMukiCash, deductFromBranchCash, notes } = req.body;
     const shouldDeductCash = deductFromBranchCash || deductFromMukiCash;
     const userId = (req as any).user.id;
@@ -879,6 +1236,7 @@ router.post('/owner-finance/reimburse', authenticateToken, async (req: Request, 
       // 1. Catat transaksi settlement modal pusat
       const txn = await tx.ownerFundTransaction.create({
         data: {
+          tenantId,
           type: 'REIMBURSEMENT_PAID',
           amount: numAmount,
           referenceType: 'REIMBURSEMENT',
@@ -893,6 +1251,8 @@ router.post('/owner-finance/reimburse', authenticateToken, async (req: Request, 
       if (shouldDeductCash) {
         await tx.cashFlow.create({
           data: {
+            tenantId,
+            outletId,
             type: 'Pengeluaran',
             category: 'Settlement Modal Pusat',
             amount: numAmount,
@@ -906,8 +1266,8 @@ router.post('/owner-finance/reimburse', authenticateToken, async (req: Request, 
       return txn;
     });
 
-    if (io) {
-      io.emit('warehouse:owner_reimbursed', result);
+    if (tenantId) {
+      emitToTenant(tenantId, 'warehouse:owner_reimbursed', result);
     }
 
     res.status(201).json({
@@ -926,7 +1286,9 @@ router.post('/owner-finance/reimburse', authenticateToken, async (req: Request, 
 // GET all B2B sales
 router.get('/sales', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const sales = await (prisma as any).warehouseSale.findMany({
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
       include: {
         soldBy: { select: { id: true, name: true } },
@@ -947,9 +1309,10 @@ router.get('/sales', authenticateToken, async (req: Request, res: Response) => {
 // GET single B2B sale by ID
 router.get('/sales/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = getTenantId(req);
     const id = Number(req.params.id);
-    const sale = await (prisma as any).warehouseSale.findUnique({
-      where: { id },
+    const sale = await (prisma as any).warehouseSale.findFirst({
+      where: { id, tenantId },
       include: {
         soldBy: { select: { id: true, name: true } },
         items: {
@@ -1048,6 +1411,7 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Item penjualan tidak valid' });
     }
 
+    const tenantId = getTenantId(req);
     const grossProfit = totalAmount - totalHppCost;
 
     // Atomic transaction
@@ -1055,6 +1419,7 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
       // 1. Create WarehouseSale
       const createdSale = await tx.warehouseSale.create({
         data: {
+          tenantId,
           invoiceNumber,
           customerName: customerName.trim(),
           customerPhone: customerPhone ? customerPhone.trim() : null,
@@ -1076,14 +1441,18 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
         }
       });
 
-      // 2. Decrement warehouse stock & write IngredientLog
+      // 2. Decrement warehouse stock dengan Atomic Guard & write IngredientLog
       for (const it of processedItems) {
-        await tx.ingredient.update({
-          where: { id: it.ingredientId },
-          data: {
-            warehouseStock: { decrement: it.baseQty }
-          }
-        });
+        const affected = await tx.$executeRaw`
+          UPDATE "Ingredient"
+          SET "warehouseStock" = "warehouseStock" - ${it.baseQty}
+          WHERE "id" = ${it.ingredientId} AND "warehouseStock" >= ${it.baseQty}
+        `;
+
+        if (affected === 0) {
+          const ing = await tx.ingredient.findFirst({ where: { id: it.ingredientId, tenantId } });
+          throw new Error(`Stok gudang untuk "${it.itemName}" tidak mencukupi untuk transaksi B2B (Tersisa: ${ing?.warehouseStock ?? 0}, diminta: ${it.baseQty}).`);
+        }
 
         await tx.ingredientLog.create({
           data: {
@@ -1103,6 +1472,7 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
       if (paymentStatus === 'PAID') {
         await tx.ownerFundTransaction.create({
           data: {
+            tenantId,
             type: 'B2B_SALES_REVENUE',
             amount: totalAmount,
             referenceType: 'WAREHOUSE_SALE',
@@ -1115,11 +1485,14 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
       }
 
       return createdSale;
+    }, {
+      maxWait: 10000,
+      timeout: 20000
     });
 
-    if (io) {
-      io.emit('warehouse:sale_created', saleResult);
-      io.emit('warehouse:stock_updated', { type: 'SALE_B2B', invoiceNumber });
+    if (tenantId) {
+      emitToTenant(tenantId, 'warehouse:sale_created', saleResult);
+      emitToTenant(tenantId, 'warehouse:stock_updated', { type: 'SALE_B2B', invoiceNumber });
     }
 
     res.status(201).json({
@@ -1138,13 +1511,14 @@ router.post('/sales/:id/void', authenticateToken, async (req: Request, res: Resp
     const id = Number(req.params.id);
     const { voidReason } = req.body;
     const userId = (req as any).user.id;
+    const tenantId = getTenantId(req);
 
     if (!voidReason || !voidReason.trim()) {
       return res.status(400).json({ error: 'Alasan pembatalan penjualan wajib diisi' });
     }
 
-    const sale = await (prisma as any).warehouseSale.findUnique({
-      where: { id },
+    const sale = await (prisma as any).warehouseSale.findFirst({
+      where: { id, tenantId },
       include: { items: true }
     });
 
@@ -1202,9 +1576,10 @@ router.post('/sales/:id/void', authenticateToken, async (req: Request, res: Resp
       return updatedSale;
     });
 
-    if (io) {
-      io.emit('warehouse:sale_voided', result);
-      io.emit('warehouse:stock_updated', { type: 'SALE_B2B_VOIDED', invoiceNumber: sale.invoiceNumber });
+    const targetTenantId = result.tenantId || tenantId;
+    if (targetTenantId) {
+      emitToTenant(targetTenantId, 'warehouse:sale_voided', result);
+      emitToTenant(targetTenantId, 'warehouse:stock_updated', { type: 'SALE_B2B_VOIDED', invoiceNumber: sale.invoiceNumber });
     }
 
     res.json({

@@ -1,13 +1,26 @@
+import prisma from '../db';
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { TenantContext, TenantContextData } from '../utils/tenantContext';
 import { AuthRequest } from './authMiddleware';
 
-const prisma = new PrismaClient();
 
-// Cache slug-to-tenant in memory for fast resolution
-const tenantCache = new Map<string, { id: string; slug: string; status: string }>();
+import { cacheService } from '../services/CacheService';
+
+/**
+ * Invalidate all cache entries that reference a specific tenantId.
+ * Must be called whenever platform admin changes a tenant's status (suspend/activate).
+ */
+export async function invalidateTenantCache(tenantId: string): Promise<void> {
+  await cacheService.invalidateTenant(tenantId);
+}
+
+/**
+ * Clear all tenant cache entries. Used for testing or emergency reset.
+ */
+export async function clearAllTenantCache(): Promise<void> {
+  await cacheService.clearAll();
+}
 
 export async function resolveTenantFromRequest(req: Request): Promise<{ id: string; slug: string; status: string } | null> {
   const host = req.headers['x-forwarded-host'] || req.headers.host || '';
@@ -18,37 +31,41 @@ export async function resolveTenantFromRequest(req: Request): Promise<{ id: stri
   const headerTenantId = req.headers['x-tenant-id'] as string;
 
   if (headerSlug) {
-    if (tenantCache.has(headerSlug)) return tenantCache.get(headerSlug)!;
-    const tenant = await prisma.tenant.findUnique({ where: { slug: headerSlug } });
-    if (tenant) {
-      const data = { id: tenant.id, slug: tenant.slug, status: tenant.status };
-      tenantCache.set(headerSlug, data);
-      return data;
-    }
+    const data = await cacheService.remember(`cache:tenant:slug:${headerSlug}`, 600, async () => {
+      const tenant = await prisma.tenant.findUnique({ where: { slug: headerSlug } });
+      return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;
+    });
+    if (data) return data;
   }
 
   if (headerTenantId) {
-    if (tenantCache.has(headerTenantId)) return tenantCache.get(headerTenantId)!;
-    const tenant = await prisma.tenant.findUnique({ where: { id: headerTenantId } });
-    if (tenant) {
-      const data = { id: tenant.id, slug: tenant.slug, status: tenant.status };
-      tenantCache.set(headerTenantId, data);
-      return data;
-    }
+    const data = await cacheService.remember(`cache:tenant:id:${headerTenantId}`, 600, async () => {
+      const tenant = await prisma.tenant.findUnique({ where: { id: headerTenantId } });
+      return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;
+    });
+    if (data) return data;
   }
 
-  // 2. Coba ekstrak subdomain dari hostname (e.g. mukiramen.codenusa.id)
-  const hostParts = hostString.split(':')[0].split('.');
+  // 2. Coba lookup langsung dari Custom Domain (e.g. pos.vamospool.id atau kasir.mukiramen.com)
+  const hostClean = hostString.split(':')[0].toLowerCase();
+  if (hostClean && hostClean !== 'localhost' && hostClean !== '127.0.0.1') {
+    const data = await cacheService.remember(`cache:tenant:domain:${hostClean}`, 600, async () => {
+      const tenantByDomain = await prisma.tenant.findFirst({ where: { customDomain: hostClean } });
+      return tenantByDomain ? { id: tenantByDomain.id, slug: tenantByDomain.slug, status: tenantByDomain.status } : null;
+    });
+    if (data) return data;
+  }
+
+  // 3. Coba ekstrak subdomain dari hostname (e.g. mukiramen.codenusa.id)
+  const hostParts = hostClean.split('.');
   if (hostParts.length >= 3) {
     const subdomain = hostParts[0].toLowerCase();
     if (subdomain !== 'app' && subdomain !== 'api' && subdomain !== 'admin' && subdomain !== 'www') {
-      if (tenantCache.has(subdomain)) return tenantCache.get(subdomain)!;
-      const tenant = await prisma.tenant.findUnique({ where: { slug: subdomain } });
-      if (tenant) {
-        const data = { id: tenant.id, slug: tenant.slug, status: tenant.status };
-        tenantCache.set(subdomain, data);
-        return data;
-      }
+      const data = await cacheService.remember(`cache:tenant:slug:${subdomain}`, 600, async () => {
+        const tenant = await prisma.tenant.findUnique({ where: { slug: subdomain } });
+        return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;
+      });
+      if (data) return data;
     }
   }
 
@@ -57,40 +74,43 @@ export async function resolveTenantFromRequest(req: Request): Promise<{ id: stri
 
 export const tenantResolverMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    let resolvedTenantId = req.user?.tenantId;
-    let resolvedOutletId = req.user?.outletId;
+    // 1. Ekstrak Bearer Token lebih dahulu untuk menjamin JWT memiliki otoritas tertinggi
+    let resolvedTenantId: string | undefined = req.user?.tenantId;
+    let resolvedOutletId: string | undefined = req.user?.outletId;
     let tenantSlug = 'mukiramen';
 
-    // Jika ada header subdomain atau custom header, resolusikan
-    const resolvedFromHeader = await resolveTenantFromRequest(req);
-    if (resolvedFromHeader) {
-      resolvedTenantId = resolvedFromHeader.id;
-      tenantSlug = resolvedFromHeader.slug;
-    }
-
-    // Jika belum teresolusi, coba intip dari JWT Bearer Token (jika ada)
-    if (!resolvedTenantId) {
-      const authHeader = req.headers['authorization'];
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        try {
-          const tokenStr = authHeader.split(' ')[1];
-          const decoded = jwt.decode(tokenStr) as any;
-          if (decoded && decoded.tenantId) {
-            resolvedTenantId = decoded.tenantId;
-            if (decoded.outletId) resolvedOutletId = decoded.outletId;
-          }
-        } catch {
-          // Abaikan jika token rusak/invalid, akan ditangani oleh authenticateToken
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const tokenStr = authHeader.split(' ')[1];
+        const decoded = jwt.decode(tokenStr) as any;
+        if (decoded && decoded.tenantId) {
+          resolvedTenantId = decoded.tenantId;
+          if (decoded.outletId) resolvedOutletId = decoded.outletId;
         }
+      } catch {
+        // Abaikan jika token rusak/invalid, akan ditangani oleh authenticateToken
       }
     }
 
+    // 2. Header kustom x-tenant-id/x-tenant-slug HANYA digunakan jika TIDAK ADA token JWT terverifikasi
     if (!resolvedTenantId) {
-      resolvedTenantId = 'tenant-default-muki';
+      const resolvedFromHeader = await resolveTenantFromRequest(req);
+      if (resolvedFromHeader) {
+        resolvedTenantId = resolvedFromHeader.id;
+        tenantSlug = resolvedFromHeader.slug;
+      }
+    }
+
+    if (resolvedTenantId) {
+      (req as any).tenantId = resolvedTenantId;
+    }
+    if (resolvedOutletId) {
+      (req as any).outletId = resolvedOutletId;
     }
 
     const contextData: TenantContextData = {
-      tenantId: resolvedTenantId,
+      tenantId: resolvedTenantId || undefined,
       tenantSlug,
       outletId: resolvedOutletId,
       userId: req.user?.id,

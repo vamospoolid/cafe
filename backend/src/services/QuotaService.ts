@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db';
 
-const prisma = new PrismaClient();
 
 export interface QuotaCheckResult {
   allowed: boolean;

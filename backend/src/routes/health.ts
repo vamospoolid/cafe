@@ -1,15 +1,15 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-import { PrismaClient } from '@prisma/client';
 import { BackupService } from '../services/BackupService';
 import { authenticateToken, requireRole, AuthRequest } from '../middlewares/authMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
-import { io } from '../index';
+import { isRedisReady } from '../lib/redis';
+import { queueManager } from '../queues/queueManager';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * Basic Liveness Endpoint (GET /api/health)
@@ -130,9 +130,25 @@ router.get('/deep', async (_req: Request, res: Response) => {
   // Socket Connections Count
   let activeSocketClients = 0;
   try {
-    if (io && io.sockets) {
-      activeSocketClients = io.sockets.sockets.size;
+    const socketIo = (_req.app && typeof _req.app.get === 'function') ? _req.app.get('io') : null;
+    if (socketIo && socketIo.sockets) {
+      activeSocketClients = socketIo.sockets.sockets.size;
     }
+  } catch (_) {}
+
+  // BullMQ Queue Telemetry
+  let queueStats: any = {};
+  try {
+    const [syncStats, waStats, reportStats] = await Promise.all([
+      queueManager.getQueueStats('sync-queue'),
+      queueManager.getQueueStats('wa-queue'),
+      queueManager.getQueueStats('report-queue')
+    ]);
+    queueStats = {
+      syncQueue: syncStats,
+      waQueue: waStats,
+      reportQueue: reportStats
+    };
   } catch (_) {}
 
   const isHealthy = dbHealthy && dbLatencyMs < 2000;
@@ -181,8 +197,15 @@ router.get('/deep', async (_req: Request, res: Response) => {
       }
     },
     realtime: {
-      activeSocketClients
-    }
+      activeSocketClients,
+      socketAdapter: isRedisReady() ? 'RedisAdapter (Cluster Mesh)' : 'InMemoryAdapter (Standalone)'
+    },
+    redis: {
+      status: isRedisReady() ? 'connected' : 'fallback_in_memory',
+      adapter: isRedisReady() ? 'RedisAdapter' : 'InMemoryAdapter',
+      distributedCache: isRedisReady() ? 'active' : 'local_memory_fallback'
+    },
+    queues: queueStats
   };
 
   const httpStatus = isHealthy ? 200 : (isDegraded ? 200 : 503);

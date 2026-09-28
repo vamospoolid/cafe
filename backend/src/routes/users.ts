@@ -1,23 +1,29 @@
+import prisma from '../db';
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { authenticateToken, requirePermission, AuthRequest } from '../middlewares/authMiddleware';
 import { requireQuota } from '../middlewares/quotaMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // GET /api/users/roles-permissions - Daftar role dan permission yang tersedia
 router.get('/roles-permissions', authenticateToken, requirePermission('employees.view'), async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
-    const [roles, permissions] = await Promise.all([
+    const [tenant, rawRoles, permissions] = await Promise.all([
+      prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { businessType: true }
+      }),
       prisma.role.findMany({
         where: {
           OR: [
-            { isSystem: true },
+            { isSystem: true, tenantId: null },
             { tenantId }
           ]
         },
@@ -35,13 +41,53 @@ router.get('/roles-permissions', authenticateToken, requirePermission('employees
       })
     ]);
 
-    const formattedRoles = roles.map(r => ({
-      id: r.id,
-      name: r.name,
-      description: r.description,
-      isSystem: r.isSystem,
-      permissions: r.permissions.map(p => p.permission.key)
-    }));
+    const businessType = tenant?.businessType || 'CAFE';
+
+    // Filter role sesuai profil vertikal bisnis
+    const filteredRoles = rawRoles.filter(r => {
+      const roleName = r.name.toUpperCase();
+      if (businessType === 'BENGKEL') {
+        // Bengkel tidak memiliki dapur / barista / waiter
+        return roleName !== 'KITCHEN' && roleName !== 'WAITER';
+      }
+      if (businessType === 'RETAIL') {
+        // Retail tidak memiliki dapur dan mekanik servis
+        return roleName !== 'KITCHEN' && roleName !== 'WAITER' && roleName !== 'MEKANIK';
+      }
+      // Kafe / Resto tidak memiliki mekanik
+      return roleName !== 'MEKANIK';
+    });
+
+    const formattedRoles = filteredRoles.map(r => {
+      const roleName = r.name.toUpperCase();
+      let customDesc = r.description;
+
+      // Adaptasi deskripsi per vertikal
+      if (businessType === 'BENGKEL') {
+        if (roleName === 'OWNER') customDesc = 'Pemilik Bengkel';
+        else if (roleName === 'ADMIN') customDesc = 'Admin Operasional Bengkel';
+        else if (roleName === 'MANAGER') customDesc = 'Kepala Bengkel / Service Advisor';
+        else if (roleName === 'CASHIER') customDesc = 'Kasir Front Desk Bengkel';
+        else if (roleName === 'MEKANIK') customDesc = 'Mekanik / Teknisi Servis';
+        else if (roleName === 'WAREHOUSE') customDesc = 'Kepala Gudang Sparepart / Partman';
+        else if (roleName === 'HR') customDesc = 'Personalia Bengkel';
+      } else if (businessType === 'RETAIL') {
+        if (roleName === 'OWNER') customDesc = 'Pemilik Toko';
+        else if (roleName === 'ADMIN') customDesc = 'Admin Toko';
+        else if (roleName === 'MANAGER') customDesc = 'Manager Toko';
+        else if (roleName === 'CASHIER') customDesc = 'Kasir Toko';
+        else if (roleName === 'WAREHOUSE') customDesc = 'Staf Gudang & Logistik';
+        else if (roleName === 'HR') customDesc = 'Personalia';
+      }
+
+      return {
+        id: r.id,
+        name: r.name,
+        description: customDesc,
+        isSystem: r.isSystem,
+        permissions: r.permissions.map(p => p.permission.key)
+      };
+    });
 
     res.json({
       roles: formattedRoles,
@@ -176,7 +222,10 @@ router.put('/me/profile', authenticateToken, async (req: AuthRequest, res: Respo
 // GET /api/users - Daftar seluruh staf dalam tenant aktif
 router.get('/', authenticateToken, requirePermission('employees.view'), async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
     // Cari user yang tergabung dalam membership tenant aktif
     const memberships = await prisma.tenantMembership.findMany({
@@ -187,9 +236,12 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
             id: true,
             name: true,
             username: true,
+            role: true,
+            employmentType: true,
             pin: true,
             status: true,
-            createdAt: true
+            createdAt: true,
+            mechanicProfile: true
           }
         },
         role: {
@@ -207,22 +259,41 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
 
     const mappedUsers = memberships.map(m => {
       const permissionKeys = m.role?.permissions.map(p => p.permission.key) || [];
+      
+      // Deteksi role secara akurat
+      let resolvedRole = m.role?.name;
+      if (!resolvedRole || resolvedRole === 'CASHIER') {
+        if (m.user.mechanicProfile) {
+          resolvedRole = 'MEKANIK';
+        } else if (m.user.role) {
+          const legacyUpper = m.user.role.toUpperCase();
+          if (legacyUpper === 'ADMIN') resolvedRole = 'ADMIN';
+          else if (legacyUpper === 'OWNER') resolvedRole = 'OWNER';
+          else if (legacyUpper === 'KASIR' || legacyUpper === 'CASHIER') resolvedRole = 'CASHIER';
+          else if (legacyUpper === 'STAFF') resolvedRole = m.user.mechanicProfile ? 'MEKANIK' : 'STAFF';
+          else resolvedRole = legacyUpper;
+        }
+      } else if (resolvedRole === 'STAFF' && m.user.mechanicProfile) {
+        resolvedRole = 'MEKANIK';
+      }
+      if (!resolvedRole) resolvedRole = 'CASHIER';
+
       return {
         id: m.user.id,
         name: m.user.name,
         username: m.user.username,
-        role: m.role?.name || 'CASHIER',
+        role: resolvedRole,
         roleId: m.roleId,
-        employmentType: m.employmentType,
+        employmentType: m.employmentType || m.user.employmentType || 'FULL_TIME',
         pin: m.pin || m.user.pin,
         status: m.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif',
         permissionKeys,
         permissions: {
-          canVoid: permissionKeys.includes('pos.void') || m.role?.name === 'OWNER',
-          canDiscount: permissionKeys.includes('pos.discount') || m.role?.name === 'OWNER',
-          canEditMenu: permissionKeys.includes('products.manage') || m.role?.name === 'OWNER',
-          canViewReports: permissionKeys.includes('reports.view') || m.role?.name === 'OWNER',
-          canManageStaff: permissionKeys.includes('employees.manage') || m.role?.name === 'OWNER'
+          canVoid: permissionKeys.includes('pos.void') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
+          canDiscount: permissionKeys.includes('pos.discount') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
+          canEditMenu: permissionKeys.includes('products.manage') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
+          canViewReports: permissionKeys.includes('reports.view') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
+          canManageStaff: permissionKeys.includes('employees.manage') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN'
         },
         createdAt: m.user.createdAt
       };
@@ -238,35 +309,21 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
 // POST /api/users - Tambah staf baru ke dalam tenant
 router.post('/', authenticateToken, requirePermission('employees.manage'), requireQuota('user'), async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { name, username, password, pin, role, roleId, employmentType, permissions, status } = req.body;
 
     if (!name || !username) {
       return res.status(400).json({ error: 'Nama dan username wajib diisi' });
     }
 
-    let existingUser = await prisma.user.findUnique({ where: { username } });
+    const cleanUsername = String(username).trim().toLowerCase();
+    let existingUser = await prisma.user.findUnique({ where: { username: cleanUsername } });
 
-    // Tentukan Role ID
-    let targetRoleId = roleId;
-    if (!targetRoleId && role) {
-      const matchedRole = await prisma.role.findFirst({
-        where: {
-          OR: [
-            { name: role.toUpperCase() },
-            { id: `role-system-${role.toLowerCase()}` }
-          ]
-        }
-      });
-      targetRoleId = matchedRole?.id || 'role-system-cashier';
-    }
-
-    const passwordHash = await bcrypt.hash(password || '123456', 10);
-    const staffPin = pin || '123456';
-
-    let userToLink;
+    // USR-002: Cegah penambahan/pengambilalihan akun staf jika username sudah terdaftar
     if (existingUser) {
-      // User sudah ada, cek apakah sudah jadi member di tenant ini
       const existingMembership = await prisma.tenantMembership.findUnique({
         where: {
           userId_tenantId: {
@@ -278,29 +335,56 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
 
       if (existingMembership) {
         return res.status(400).json({ error: 'Karyawan dengan username ini sudah terdaftar di outlet Anda.' });
+      } else {
+        return res.status(400).json({
+          error: `Username "${cleanUsername}" sudah digunakan oleh akun lain di sistem SaaS. Gunakan username lain (misal: ${cleanUsername}.${tenantId.substring(0, 4)}).`
+        });
       }
+    }
 
-      userToLink = existingUser;
-    } else {
-      // Buat user baru
-      userToLink = await prisma.user.create({
-        data: {
-          name,
-          username,
-          passwordHash,
-          pin: staffPin,
-          role: role || 'Kasir',
-          employmentType: employmentType || 'FULL_TIME',
-          permissions: JSON.stringify(permissions || {}),
-          status: status || 'Aktif'
+    // USR-005: Tentukan Role ID terikat pada role sistem atau tenant aktif
+    let targetRoleId = roleId;
+    if (!targetRoleId && role) {
+      const matchedRole = await prisma.role.findFirst({
+        where: {
+          OR: [
+            { name: role.toUpperCase() },
+            { id: `role-system-${role.toLowerCase()}` }
+          ],
+          AND: [
+            {
+              OR: [
+                { isSystem: true },
+                { tenantId }
+              ]
+            }
+          ]
         }
       });
+      targetRoleId = matchedRole?.id || 'role-system-cashier';
     }
+
+    const passwordHash = await bcrypt.hash(password || '123456', 10);
+    const staffPin = pin || '123456';
+
+    // Buat user baru
+    const newUser = await prisma.user.create({
+      data: {
+        name: String(name).trim(),
+        username: cleanUsername,
+        passwordHash,
+        pin: staffPin,
+        role: role || 'Kasir',
+        employmentType: employmentType || 'FULL_TIME',
+        permissions: JSON.stringify(permissions || {}),
+        status: status || 'Aktif'
+      }
+    });
 
     // Buat membership untuk tenant aktif
     const membership = await prisma.tenantMembership.create({
       data: {
-        userId: userToLink.id,
+        userId: newUser.id,
         tenantId,
         roleId: targetRoleId,
         pin: staffPin,
@@ -317,16 +401,16 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
       tenantId,
       action: 'USER_CREATE',
       resource: 'USER',
-      resourceId: String(userToLink.id),
-      description: `Menambahkan staf "${userToLink.name}" (@${userToLink.username}) dengan role ${membership.role?.name || role}.`,
-      newValue: { name: userToLink.name, username: userToLink.username, role: membership.role?.name || role },
+      resourceId: String(newUser.id),
+      description: `Menambahkan staf "${newUser.name}" (@${newUser.username}) dengan role ${membership.role?.name || role}.`,
+      newValue: { name: newUser.name, username: newUser.username, role: membership.role?.name || role },
       severity: 'INFO'
     }, req);
 
     res.status(201).json({
-      id: userToLink.id,
-      name: userToLink.name,
-      username: userToLink.username,
+      id: newUser.id,
+      name: newUser.name,
+      username: newUser.username,
       role: membership.role?.name || role,
       employmentType: membership.employmentType,
       status: membership.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif'
@@ -340,11 +424,29 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
 // PUT /api/users/:id - Update data staf & role dalam tenant
 router.put('/:id', authenticateToken, requirePermission('employees.manage'), async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
     const { name, username, password, pin, role, roleId, employmentType, permissions, status } = req.body;
 
-    const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
+    // USR-001: Strict tenant ownership check - pastikan user terdaftar di tenant requester
+    const targetMembership = await prisma.tenantMembership.findUnique({
+      where: {
+        userId_tenantId: {
+          userId: Number(id),
+          tenantId
+        }
+      },
+      include: { user: true }
+    });
+
+    if (!targetMembership && !req.user?.isPlatformAdmin) {
+      return res.status(404).json({ error: 'Karyawan tidak ditemukan di outlet Anda.' });
+    }
+
+    const targetUser = targetMembership ? targetMembership.user : await prisma.user.findUnique({ where: { id: Number(id) } });
     if (!targetUser) return res.status(404).json({ error: 'User tidak ditemukan' });
 
     // Cegah menurunkan jabatan akun OWNER / Admin utama
@@ -352,10 +454,18 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
       return res.status(403).json({ error: 'Tidak memiliki izin untuk mengubah data Admin utama.' });
     }
 
-    const updateUserData: any = {
-      name,
-      username
-    };
+    const updateUserData: any = {};
+    if (name) updateUserData.name = String(name).trim();
+    if (username) {
+      const cleanUsername = String(username).trim().toLowerCase();
+      if (cleanUsername !== targetUser.username) {
+        const existingUsername = await prisma.user.findUnique({ where: { username: cleanUsername } });
+        if (existingUsername) {
+          return res.status(400).json({ error: `Username "${cleanUsername}" sudah digunakan oleh pengguna lain.` });
+        }
+        updateUserData.username = cleanUsername;
+      }
+    }
 
     if (password) {
       updateUserData.passwordHash = await bcrypt.hash(password, 10);
@@ -366,13 +476,21 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
     if (status) {
       updateUserData.status = status;
     }
+    if (role) {
+      updateUserData.role = role;
+    }
+    if (employmentType) {
+      updateUserData.employmentType = employmentType;
+    }
 
-    const updatedUser = await prisma.user.update({
-      where: { id: Number(id) },
-      data: updateUserData
-    });
+    const updatedUser = Object.keys(updateUserData).length > 0
+      ? await prisma.user.update({
+          where: { id: Number(id) },
+          data: updateUserData
+        })
+      : targetUser;
 
-    // Update Role & PIN di TenantMembership
+    // USR-005: Update Role & PIN di TenantMembership terikat tenant
     let targetRoleId = roleId;
     if (!targetRoleId && role) {
       const matchedRole = await prisma.role.findFirst({
@@ -380,6 +498,14 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
           OR: [
             { name: role.toUpperCase() },
             { id: `role-system-${role.toLowerCase()}` }
+          ],
+          AND: [
+            {
+              OR: [
+                { isSystem: true },
+                { tenantId }
+              ]
+            }
           ]
         }
       });
@@ -438,10 +564,28 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
 // DELETE /api/users/:id - Nonaktifkan staf dari tenant (Soft delete)
 router.delete('/:id', authenticateToken, requirePermission('employees.manage'), async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
 
-    const targetUser = await prisma.user.findUnique({ where: { id: Number(id) } });
+    // USR-003: Strict membership validation
+    const targetMembership = await prisma.tenantMembership.findUnique({
+      where: {
+        userId_tenantId: {
+          userId: Number(id),
+          tenantId
+        }
+      },
+      include: { user: true }
+    });
+
+    if (!targetMembership && !req.user?.isPlatformAdmin) {
+      return res.status(404).json({ error: 'Karyawan tidak ditemukan di outlet Anda.' });
+    }
+
+    const targetUser = targetMembership?.user;
     if (!targetUser) return res.status(404).json({ error: 'User tidak ditemukan' });
 
     if (targetUser.id === req.user?.id) {

@@ -1,125 +1,100 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../db';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
-import { quotaService } from '../services/QuotaService';
 import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-/**
- * GET /api/outlets
- * Mengambil daftar cabang / outlet milik tenant aktif beserta statistik ringkas
- */
-router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+// Semua rute outlet wajib terautentikasi dan memiliki context tenant
+router.use(authenticateToken);
+
+// ─── 1. GET /api/outlets - Ambil daftar seluruh cabang / outlet milik tenant ──
+router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.' });
+    }
 
-    const outlets = await prisma.outlet.findMany({
+    let outlets = await prisma.outlet.findMany({
       where: { tenantId },
-      include: {
-        _count: {
-          select: {
-            tables: true,
-            orders: true
-          }
-        }
-      },
       orderBy: { createdAt: 'asc' }
     });
 
-    // Ambil omzet dan pesanan hari ini per outlet
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Auto-provisioning outlet default jika tenant belum memiliki outlet sama sekali
+    if (outlets.length === 0) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, slug: true }
+      });
 
-    const outletsWithStats = await Promise.all(
-      outlets.map(async (outlet) => {
-        const todayOrders = await prisma.order.aggregate({
-          where: {
-            tenantId,
-            outletId: outlet.id,
-            status: { notIn: ['CANCELLED', 'VOID'] },
-            createdAt: { gte: today }
-          },
-          _sum: { total: true },
-          _count: { id: true }
-        }).catch(() => ({ _sum: { total: 0 }, _count: { id: 0 } }));
+      const defaultOutlet = await prisma.outlet.create({
+        data: {
+          tenantId,
+          name: `${tenant?.name || 'Cabang'} Utama`,
+          code: `${(tenant?.slug || 'CAB').substring(0, 4).toUpperCase()}-01`,
+          status: 'ACTIVE',
+          address: 'Pusat'
+        }
+      });
+      outlets = [defaultOutlet];
+    }
 
-        return {
-          id: outlet.id,
-          name: outlet.name,
-          code: outlet.code,
-          address: outlet.address || '',
-          phone: outlet.phone || '',
-          status: outlet.status,
-          gpsRadiusMeters: outlet.gpsRadiusMeters,
-          latitude: outlet.latitude,
-          longitude: outlet.longitude,
-          tablesCount: outlet._count.tables,
-          totalOrdersAllTime: outlet._count.orders,
-          todayOrdersCount: todayOrders._count?.id || 0,
-          todayRevenue: todayOrders._sum?.total || 0,
-          createdAt: outlet.createdAt
-        };
-      })
-    );
-
-    return res.json({
-      success: true,
-      total: outletsWithStats.length,
-      outlets: outletsWithStats
-    });
-  } catch (error: any) {
-    console.error('[Outlets API GET Error]', error);
-    return res.status(500).json({ error: error.message || 'Gagal memuat daftar cabang' });
+    return res.json({ outlets });
+  } catch (err: any) {
+    console.error('[Outlets API] Error fetching outlets:', err);
+    return res.status(500).json({ error: 'Gagal mengambil daftar cabang outlet.' });
   }
 });
 
-/**
- * POST /api/outlets
- * Membuat cabang baru dengan proteksi kuota paket langganan
- */
-router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
+// ─── 2. POST /api/outlets - Tambah cabang / outlet baru (Owner / Admin) ───────
+router.post('/', async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
+    const userRole = (req.user?.role || '').toUpperCase();
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.' });
+    }
+
+    if (userRole !== 'OWNER' && userRole !== 'ADMIN' && !(req.user as any)?.isPlatformAdmin) {
+      return res.status(403).json({ error: 'Hanya Owner atau Admin yang berhak mendaftarkan cabang baru.' });
+    }
+
     const { name, code, address, phone, latitude, longitude, gpsRadiusMeters } = req.body;
 
-    if (!name || !code) {
-      return res.status(400).json({ error: 'Nama cabang dan kode cabang wajib diisi' });
+    if (!name || String(name).trim() === '') {
+      return res.status(400).json({ error: 'Nama cabang/outlet wajib diisi.' });
     }
 
-    // 1. Validasi Kuota Cabang Paket SaaS
-    const quotaCheck = await quotaService.canCreateOutlet(tenantId);
-    if (!quotaCheck.allowed) {
-      return res.status(403).json({
-        error: 'QUOTA_EXCEEDED',
-        message: quotaCheck.message || 'Batas maksimal cabang pada paket langganan Anda telah tercapai.',
-        current: quotaCheck.current,
-        max: quotaCheck.max,
-        suggestedUpgrade: 'GROWTH'
-      });
+    // Generate kode jika tidak disediakan
+    let finalCode = (code || '').trim().toUpperCase();
+    if (!finalCode) {
+      const count = await prisma.outlet.count({ where: { tenantId } });
+      finalCode = `CAB-${String(count + 1).padStart(2, '0')}`;
     }
 
-    // 2. Cek keunikan kode outlet dalam tenant
-    const existingCode = await prisma.outlet.findFirst({
+    // Cek duplikasi kode dalam tenant yang sama
+    const existingCode = await prisma.outlet.findUnique({
       where: {
-        tenantId,
-        code: code.trim().toUpperCase()
+        tenantId_code: {
+          tenantId,
+          code: finalCode
+        }
       }
     });
 
     if (existingCode) {
-      return res.status(400).json({ error: `Kode cabang '${code}' sudah digunakan oleh cabang lain.` });
+      return res.status(400).json({ error: `Kode cabang "${finalCode}" sudah digunakan di bisnis Anda.` });
     }
 
-    // 3. Simpan Outlet Baru
     const newOutlet = await prisma.outlet.create({
       data: {
         tenantId,
-        name: name.trim(),
-        code: code.trim().toUpperCase(),
-        address: address?.trim() || null,
-        phone: phone?.trim() || null,
+        name: String(name).trim(),
+        code: finalCode,
+        address: address ? String(address).trim() : null,
+        phone: phone ? String(phone).trim() : null,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
         gpsRadiusMeters: gpsRadiusMeters ? parseFloat(gpsRadiusMeters) : 100,
@@ -127,124 +102,243 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       }
     });
 
-    // 4. Catat Usage Record
-    await quotaService.trackUsage(tenantId, 'outlets', quotaCheck.current + 1, quotaCheck.max);
-
+    // Catat ke Audit Log
     await AuditLogger.log({
       tenantId,
       outletId: newOutlet.id,
-      action: 'OUTLET_CREATE',
-      resource: 'OUTLETS',
-      description: `Membuat cabang baru: ${newOutlet.name} (${newOutlet.code})`,
+      userId: req.user?.id,
+      userName: req.user?.name,
+      userRole: req.user?.role,
+      action: 'CREATE_OUTLET',
+      resource: 'OUTLET',
+      resourceId: newOutlet.id,
+      description: `Menambahkan cabang outlet baru: "${newOutlet.name}" (${newOutlet.code})`,
       severity: 'INFO'
     }, req);
 
     return res.status(201).json({
-      success: true,
-      message: `Cabang ${newOutlet.name} berhasil ditambahkan!`,
+      message: 'Cabang outlet baru berhasil didaftarkan.',
       outlet: newOutlet
     });
-  } catch (error: any) {
-    console.error('[Outlets API POST Error]', error);
-    return res.status(500).json({ error: error.message || 'Gagal menambahkan cabang' });
+  } catch (err: any) {
+    console.error('[Outlets API] Error creating outlet:', err);
+    return res.status(500).json({ error: 'Gagal menambahkan cabang outlet.' });
   }
 });
 
-/**
- * PUT /api/outlets/:id
- * Memperbarui data cabang
- */
-router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+// ─── 3. PUT /api/outlets/:id - Perbarui data cabang outlet ────────────────────
+router.put('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId;
     const id = String(req.params.id);
-    const { name, code, address, phone, latitude, longitude, gpsRadiusMeters, status } = req.body;
+    const userRole = (req.user?.role || '').toUpperCase();
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.' });
+    }
+
+    if (userRole !== 'OWNER' && userRole !== 'ADMIN' && !(req.user as any)?.isPlatformAdmin) {
+      return res.status(403).json({ error: 'Hanya Owner atau Admin yang berhak mengedit data cabang.' });
+    }
 
     const existing = await prisma.outlet.findFirst({
       where: { id, tenantId }
     });
 
     if (!existing) {
-      return res.status(404).json({ error: 'Cabang tidak ditemukan' });
+      return res.status(404).json({ error: 'Cabang outlet tidak ditemukan.' });
     }
+
+    const { name, address, phone, latitude, longitude, gpsRadiusMeters, status } = req.body;
 
     const updated = await prisma.outlet.update({
       where: { id },
       data: {
-        ...(name ? { name: name.trim() } : {}),
-        ...(code ? { code: code.trim().toUpperCase() } : {}),
-        ...(address !== undefined ? { address: address?.trim() || null } : {}),
-        ...(phone !== undefined ? { phone: phone?.trim() || null } : {}),
+        ...(name ? { name: String(name).trim() } : {}),
+        ...(address !== undefined ? { address: address ? String(address).trim() : null } : {}),
+        ...(phone !== undefined ? { phone: phone ? String(phone).trim() : null } : {}),
         ...(latitude !== undefined ? { latitude: latitude ? parseFloat(latitude) : null } : {}),
         ...(longitude !== undefined ? { longitude: longitude ? parseFloat(longitude) : null } : {}),
-        ...(gpsRadiusMeters !== undefined ? { gpsRadiusMeters: parseFloat(gpsRadiusMeters) } : {}),
-        ...(status ? { status } : {})
+        ...(gpsRadiusMeters ? { gpsRadiusMeters: parseFloat(gpsRadiusMeters) } : {}),
+        ...(status ? { status: String(status).toUpperCase() } : {})
       }
     });
 
-    await AuditLogger.log({
-      tenantId,
-      outletId: id,
-      action: 'OUTLET_UPDATE',
-      resource: 'OUTLETS',
-      description: `Memperbarui data cabang: ${updated.name}`,
-      severity: 'INFO'
-    }, req);
-
     return res.json({
-      success: true,
-      message: `Data cabang ${updated.name} berhasil diperbarui`,
+      message: 'Data cabang berhasil diperbarui.',
       outlet: updated
     });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Gagal memperbarui cabang' });
+  } catch (err: any) {
+    console.error('[Outlets API] Error updating outlet:', err);
+    return res.status(500).json({ error: 'Gagal memperbarui data cabang outlet.' });
   }
 });
 
-/**
- * DELETE /api/outlets/:id
- * Menghapus atau menonaktifkan cabang
- */
-router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+// ─── 4. GET /api/outlets/consolidated-summary - Laporan Konsolidasi Seluruh Cabang
+router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
-    const id = String(req.params.id);
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.' });
+    }
 
-    const outlet = await prisma.outlet.findFirst({
-      where: { id, tenantId },
-      include: {
-        _count: {
-          select: { orders: true }
-        }
+    const { startDate, endDate } = req.query;
+
+    // Filter tanggal
+    const dateFilter: any = {};
+    if (startDate) {
+      dateFilter.gte = new Date(String(startDate));
+    }
+    if (endDate) {
+      const eDate = new Date(String(endDate));
+      eDate.setHours(23, 59, 59, 999);
+      dateFilter.lte = eDate;
+    }
+
+    // 1. Ambil seluruh outlet milik tenant
+    const outlets = await prisma.outlet.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // 2. Ambil data order F&B / Retail yang sudah dibayar
+    const orders = await prisma.order.findMany({
+      where: {
+        tenantId,
+        status: 'PAID',
+        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+      },
+      select: {
+        id: true,
+        outletId: true,
+        totalAmount: true,
+        createdAt: true
       }
     });
 
-    if (!outlet) {
-      return res.status(404).json({ error: 'Cabang tidak ditemukan' });
-    }
+    // 3. Ambil data order Laundry
+    const laundryOrders = await prisma.laundryOrder.findMany({
+      where: {
+        tenantId,
+        paymentStatus: { in: ['PAID', 'PARTIAL'] },
+        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+      },
+      select: {
+        id: true,
+        outletId: true,
+        paidAmount: true,
+        totalAmount: true,
+        status: true,
+        createdAt: true
+      }
+    });
 
-    // Jika sudah ada transaksi pesanan, jangan hard delete, ubah status ke CLOSED
-    if (outlet._count.orders > 0) {
-      const closed = await prisma.outlet.update({
-        where: { id },
-        data: { status: 'CLOSED' }
-      });
+    // 4. Ambil data WorkOrder Bengkel
+    const workOrders = await prisma.workOrder.findMany({
+      where: {
+        tenantId,
+        paymentStatus: 'PAID',
+        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+      },
+      select: {
+        id: true,
+        outletId: true,
+        totalAmount: true,
+        createdAt: true
+      }
+    });
 
-      return res.json({
-        success: true,
-        message: `Cabang ${closed.name} dinonaktifkan (karena memiliki riwayat transaksi).`,
-        outlet: closed
-      });
-    }
+    // 5. Ambil data CashFlow (Pengeluaran Operasional per outlet)
+    const cashFlows = await prisma.cashFlow.findMany({
+      where: {
+        tenantId,
+        type: 'Pengeluaran',
+        status: 'APPROVED',
+        ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+      },
+      select: {
+        id: true,
+        outletId: true,
+        amount: true
+      }
+    });
 
-    await prisma.outlet.delete({ where: { id } });
+    // 6. Hitung statistik agregasi per outlet
+    const outletStats = outlets.map((out) => {
+      // Order umum (F&B / Retail)
+      const matchingOrders = orders.filter(o => o.outletId === out.id || (!o.outletId && out.code.endsWith('-01')));
+      const revenueGeneral = matchingOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const countGeneral = matchingOrders.length;
+
+      // Laundry
+      const matchingLaundry = laundryOrders.filter(l => l.outletId === out.id || (!l.outletId && out.code.endsWith('-01')));
+      const revenueLaundry = matchingLaundry.reduce((sum, l) => sum + (l.paidAmount || 0), 0);
+      const countLaundry = matchingLaundry.length;
+
+      // Bengkel
+      const matchingBengkel = workOrders.filter(w => w.outletId === out.id || (!w.outletId && out.code.endsWith('-01')));
+      const revenueBengkel = matchingBengkel.reduce((sum, w) => sum + (w.totalAmount || 0), 0);
+      const countBengkel = matchingBengkel.length;
+
+      // Total revenue & orders gabungan vertikal
+      const totalRevenue = revenueGeneral + revenueLaundry + revenueBengkel;
+      const totalOrders = countGeneral + countLaundry + countBengkel;
+
+      // Total pengeluaran
+      const matchingExpenses = cashFlows.filter(cf => cf.outletId === out.id || (!cf.outletId && out.code.endsWith('-01')));
+      const totalExpense = matchingExpenses.reduce((sum, cf) => sum + (cf.amount || 0), 0);
+
+      const netProfit = totalRevenue - totalExpense;
+      const aov = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+
+      return {
+        outletId: out.id,
+        name: out.name,
+        code: out.code,
+        status: out.status,
+        address: out.address,
+        totalRevenue,
+        totalOrders,
+        totalExpense,
+        netProfit,
+        aov
+      };
+    });
+
+    // 7. Hitung total konsolidasi seluruh bisnis
+    const consolidatedRevenue = outletStats.reduce((sum, s) => sum + s.totalRevenue, 0);
+    const consolidatedOrders = outletStats.reduce((sum, s) => sum + s.totalOrders, 0);
+    const consolidatedExpense = outletStats.reduce((sum, s) => sum + s.totalExpense, 0);
+    const consolidatedProfit = consolidatedRevenue - consolidatedExpense;
+    const consolidatedAOV = consolidatedOrders > 0 ? Math.round(consolidatedRevenue / consolidatedOrders) : 0;
+
+    // Urutkan performa cabang dari omset tertinggi ke terendah
+    const rankedOutlets = [...outletStats].sort((a, b) => b.totalRevenue - a.totalRevenue);
+    const topPerformingOutlet = rankedOutlets[0]?.totalRevenue > 0 ? rankedOutlets[0] : null;
 
     return res.json({
-      success: true,
-      message: `Cabang ${outlet.name} berhasil dihapus.`
+      period: {
+        startDate: startDate || null,
+        endDate: endDate || null
+      },
+      summary: {
+        consolidatedRevenue,
+        consolidatedOrders,
+        consolidatedExpense,
+        consolidatedProfit,
+        consolidatedAOV,
+        outletCount: outlets.length,
+        topPerformingOutlet: topPerformingOutlet ? {
+          name: topPerformingOutlet.name,
+          code: topPerformingOutlet.code,
+          revenue: topPerformingOutlet.totalRevenue
+        } : null
+      },
+      outlets: rankedOutlets
     });
-  } catch (error: any) {
-    return res.status(500).json({ error: error.message || 'Gagal menghapus cabang' });
+  } catch (err: any) {
+    console.error('[Outlets API] Error fetching consolidated summary:', err);
+    return res.status(500).json({ error: 'Gagal mengambil data laporan konsolidasi multi-outlet.' });
   }
 });
 
