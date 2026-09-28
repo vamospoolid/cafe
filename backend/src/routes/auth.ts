@@ -46,7 +46,7 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
   );
 
   // Jika belum ada membership terdaftar, fallback ke default tenant
-  let activeTenantId = activeMembership?.tenantId || 'tenant-default-muki';
+  let activeTenantId = activeMembership?.tenantId || 'tenant-vamos-pool';
   let activeOutletId = activeMembership?.tenant?.outlets?.[0]?.id || 'outlet-default-muki-01';
   let activeRoleName = activeMembership?.role?.name || user.role;
   let activeRoleId = activeMembership?.roleId || undefined;
@@ -237,7 +237,7 @@ router.post('/switch-pin', async (req: Request, res: Response) => {
 // GET /api/auth/staff-list
 router.get('/staff-list', async (req: Request, res: Response) => {
   try {
-    const tenantId = (req.query.tenantId as string) || 'tenant-default-muki';
+    const tenantId = (req.query.tenantId as string) || 'tenant-vamos-pool';
     
     const staff = await prisma.user.findMany({
       where: {

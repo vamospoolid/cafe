@@ -14,9 +14,7 @@ import {
   listPairedBluetoothDevices,
   connectBluetoothPrinter, 
   disconnectBluetoothPrinter, 
-  printRawBytes 
 } from '../utils/printerBluetooth';
-import SaaSPlanManager from './SaaSPlanManager';
 
 const SettingsView = () => {
   const [activeTab, setActiveTab] = useState('profil');

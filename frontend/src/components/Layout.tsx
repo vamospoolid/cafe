@@ -125,6 +125,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/bahan-baku': 'Manajemen Bahan Baku',
     '/po': 'Purchase Order (PO)',
     '/supplier': 'Supplier Bahan',
+    '/kas': 'Arus Kas & Petty Cash',
     '/pengeluaran': 'Petty Cash & Biaya',
     '/karyawan': 'Data Karyawan',
     '/absensi': 'Absensi Karyawan',
@@ -135,7 +136,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/cabang': 'Manajemen Cabang',
     '/pengaturan': 'Pengaturan Sistem'
   };
-  const pageTitle = titleMap[location.pathname] || 'MUKI RAMEN POS';
+  const pageTitle = titleMap[location.pathname] || posContext?.settings?.storeName || 'VAMOS POOL & CAFE';
 
   // Quick PIN Switch States
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);

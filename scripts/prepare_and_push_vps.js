@@ -43,8 +43,8 @@ const VPS_CONFIG = {
   readyTimeout: 30000
 };
 
-const REMOTE_DIR = '/var/www/codenusa';
-const PM2_NAME = 'codenusa-backend';
+const REMOTE_DIR = '/var/www/poscafe';
+const PM2_NAME = 'poscafe-backend';
 const REPO_URL = 'https://github.com/vamospoolid/cafe.git';
 const ROOT_DIR = path.resolve(__dirname, '..');
 
@@ -53,7 +53,7 @@ const args = process.argv.slice(2);
 const isCheckOnly = args.includes('--check-only') || args.includes('-c');
 const skipBuild = args.includes('--skip-build');
 const customMsgArg = args.find(a => !a.startsWith('--') && !a.startsWith('-'));
-const commitMsg = customMsgArg || `Deploy update: Codenusa SaaS (${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })})`;
+const commitMsg = customMsgArg || `Deploy update: POS Cafe (${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })})`;
 
 // Helper pewarnaan console
 const colors = {
@@ -211,91 +211,41 @@ async function runRemoteVpsDeploy() {
         set -e
 
         echo "================================================================"
-        echo "🚀 DEPLOY PIPELINE: CODENUSA SAAS -> ${REMOTE_DIR}"
+        echo "🚀 DEPLOY PIPELINE: POS CAFE -> ${REMOTE_DIR} (cafe.codenusa.id)"
         echo "⏰ Timestamp: $(date '+%Y-%m-%d %H:%M:%S %Z')"
         echo "================================================================"
 
-        # ================================================================
-        # TARGET 1: POSCAFE (Domain: cafe.codenusa.id -> Port 5000)
-        # ================================================================
-        echo "📦 [1/6] Mengupdate repositori di /var/www/poscafe (cafe.codenusa.id)..."
-        cd /var/www/poscafe
+        echo "📦 [1/4] Mengambil pembaruan Git di ${REMOTE_DIR}..."
+        cd "${REMOTE_DIR}"
         git fetch origin
         git reset --hard origin/main
         git clean -fd -e uploads/ -e backups/ -e backend/.env
 
-        echo "🛠️ [2/6] Setup Backend di /var/www/poscafe/backend..."
-        cd /var/www/poscafe/backend
-        npm install --silent
-        npx prisma generate
-        npx prisma db push --skip-generate --accept-data-loss
-        npm run build || npx tsc
-        pm2 restart poscafe-backend || PORT=5000 pm2 start dist/src/index.js --name poscafe-backend --interpreter node
-
-        echo "🌐 [3/6] Membangun Frontend Production di /var/www/poscafe/frontend..."
-        cd /var/www/poscafe/frontend
-        npm install --silent
-        npm run build
-
-        # ================================================================
-        # TARGET 2: CODENUSA SAAS (Domain: codenusa.id -> Port 5001)
-        # ================================================================
-        echo "📦 [4/6] Mengupdate repositori di ${REMOTE_DIR} (codenusa.id)..."
-        if [ ! -d "${REMOTE_DIR}/.git" ]; then
-          mkdir -p "${REMOTE_DIR}"
-          git clone "${REPO_URL}" "${REMOTE_DIR}"
-          cd "${REMOTE_DIR}"
-        else
-          cd "${REMOTE_DIR}"
-          git fetch origin
-          git reset --hard origin/main
-          git clean -fd -e uploads/ -e backups/ -e backend/.env
-        fi
-
-        echo "🛠️ [5/6] Setup Backend di ${REMOTE_DIR}/backend..."
+        echo "🛠️ [2/4] Setup Backend di ${REMOTE_DIR}/backend..."
         cd "${REMOTE_DIR}/backend"
-        if [ -f "/var/www/poscafe/backend/.env" ]; then
-          cp /var/www/poscafe/backend/.env .env
-          sed -i 's/PORT=.*/PORT=5001/g' .env 2>/dev/null || true
-          sed -i 's/COOKIE_DOMAIN=.*/COOKIE_DOMAIN=.codenusa.id/g' .env 2>/dev/null || true
-          sed -i 's/APP_DOMAIN=.*/APP_DOMAIN=codenusa.id/g' .env 2>/dev/null || true
-        fi
-        sed -i 's/PORT=.*/PORT=5001/g' .env 2>/dev/null || true
-        sed -i '/JWT_SECRET=/d' .env 2>/dev/null || true
-        echo 'JWT_SECRET="c0d3nu5a_s44s_jwt_m4st3r_s3cr3t_pr0duct10n_k3y_998877665544332211"' >> .env
-
         npm install --silent
         npx prisma generate
         npx prisma db push --skip-generate --accept-data-loss
         npm run build || npx tsc
+        pm2 restart "${PM2_NAME}" || PORT=5000 pm2 start dist/src/index.js --name "${PM2_NAME}" --interpreter node
 
-        echo "🌐 [6/6] Membangun Frontend Production di ${REMOTE_DIR}/frontend..."
+        echo "🌐 [3/4] Membangun Frontend Production di ${REMOTE_DIR}/frontend..."
         cd "${REMOTE_DIR}/frontend"
         npm install --silent
         npm run build
 
-        # Restart PM2 Codenusa
-        cd "${REMOTE_DIR}"
-        if pm2 show "${PM2_NAME}" > /dev/null 2>&1; then
-          pm2 restart "${PM2_NAME}" --update-env
-        else
-          pm2 start ecosystem.config.js
-          pm2 save
-        fi
-
-        # Bersihkan config Nginx usang dan reload Nginx
-        rm -f /etc/nginx/sites-enabled/codepos 2>/dev/null || true
+        echo "⚙️ [4/4] Memuat ulang konfigurasi Nginx..."
         nginx -t && systemctl reload nginx
         echo "   -> Nginx berhasil direload!"
 
         echo ""
         echo "🩺 [VERIFIKASI HEALTH CHECK]"
-        sleep 3
-        HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5001/api/health/ping || echo "ERR")
+        sleep 2
+        HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/api/health/ping || echo "ERR")
         if [ "$HEALTH_CODE" = "200" ]; then
-          echo "   ✔ Health check PASSED: Backend merespons OK (HTTP 200)!"
+          echo "   ✔ Health check PASSED: POS Cafe Backend merespons OK (HTTP 200)!"
         else
-          echo "   ⚠ Health check returned: $HEALTH_CODE. Memeriksa status log PM2..."
+          echo "   ⚠ Health check returned: $HEALTH_CODE. Memeriksa log..."
           pm2 logs "${PM2_NAME}" --lines 10 --nostream
         fi
 

@@ -80,7 +80,7 @@ export const exportFinancialPDF = async (
   const pageHeight = doc.internal.pageSize.height || 297;
   const margin = 14;
 
-  let currentTitle = 'LAPORAN KAFI';
+  let currentTitle = 'LAPORAN PENJUALAN';
   if (type === 'pl') currentTitle = 'LAPORAN LABA RUGI (PROFIT & LOSS)';
   else if (type === 'cashflow') currentTitle = 'LAPORAN ARUS KAS (METODE LANGSUNG)';
   else if (type === 'ledger') currentTitle = 'BUKU JURNAL LEDGER UMUM (DOUBLE ENTRY)';
@@ -88,6 +88,7 @@ export const exportFinancialPDF = async (
   else if (type === 'shifts') currentTitle = 'LAPORAN REKAPITULASI AUDIT SHIFT';
   else if (type === 'inventory') currentTitle = 'LAPORAN MUTASI & VALUASI STOK';
   else if (type === 'dashboard') currentTitle = 'LAPORAN RINGKASAN PERFORMA OPERASIONAL';
+  else if (type === 'transactions') currentTitle = 'LAPORAN RIWAYAT TRANSAKSI PENJUALAN';
 
   // ─── Header & Footer Callback ───
   const addHeader = (pdfDoc: jsPDF, titleText: string) => {

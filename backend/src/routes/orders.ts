@@ -780,7 +780,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const activeShift = await prisma.shift.findFirst({
         where: {
           status: { in: ['Open', 'OPEN'] },
-          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+          ...(tenantId ? { OR: [{ tenantId }, { tenantId: 'tenant-vamos-pool' }, { tenantId: null }] } : {})
         }
       });
       if (!activeShift) {

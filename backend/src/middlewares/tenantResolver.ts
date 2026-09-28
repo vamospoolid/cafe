@@ -63,7 +63,7 @@ export async function resolveTenantFromRequest(req: Request): Promise<{ id: stri
     if (subdomain === 'cafe') {
       const data = await cacheService.remember(`cache:tenant:slug:cafe_default`, 600, async () => {
         const tenant = await prisma.tenant.findFirst({
-          where: { OR: [{ id: 'tenant-default-muki' }, { slug: 'mukiramen' }, { slug: 'cafe' }] }
+          where: { OR: [{ id: 'tenant-vamos-pool' }, { slug: 'vamospool' }, { slug: 'cafe' }] }
         });
         return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;
       });
@@ -85,7 +85,7 @@ export const tenantResolverMiddleware = async (req: AuthRequest, res: Response, 
     // 1. Ekstrak Bearer Token lebih dahulu untuk menjamin JWT memiliki otoritas tertinggi
     let resolvedTenantId: string | undefined = req.user?.tenantId;
     let resolvedOutletId: string | undefined = req.user?.outletId;
-    let tenantSlug = 'mukiramen';
+    let tenantSlug = 'vamospool';
 
     const authHeader = req.headers['authorization'];
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -101,13 +101,10 @@ export const tenantResolverMiddleware = async (req: AuthRequest, res: Response, 
       }
     }
 
-    // 2. Header kustom x-tenant-id/x-tenant-slug HANYA digunakan jika TIDAK ADA token JWT terverifikasi
+    // 2. Jika tidak ada di JWT, gunakan header kustom atau langsung default tenant kafe (0ms latency)
     if (!resolvedTenantId) {
-      const resolvedFromHeader = await resolveTenantFromRequest(req);
-      if (resolvedFromHeader) {
-        resolvedTenantId = resolvedFromHeader.id;
-        tenantSlug = resolvedFromHeader.slug;
-      }
+      resolvedTenantId = (req.headers['x-tenant-id'] as string) || 'tenant-vamos-pool';
+      tenantSlug = (req.headers['x-tenant-slug'] as string) || 'vamospool';
     }
 
     if (resolvedTenantId) {

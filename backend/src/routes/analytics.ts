@@ -747,20 +747,30 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       };
     }).sort((a, b) => b.qty - a.qty);
 
-    // 2. Fetch Closed Shifts in range
+    // 2. Fetch Shifts in range (both closed and currently open shifts)
     const rawShifts = await prisma.shift.findMany({
       where: {
-        status: 'Closed',
-        waktuTutup: {
-          gte: start,
-          lte: end
-        },
+        OR: [
+          {
+            waktuTutup: {
+              gte: start,
+              lte: end
+            }
+          },
+          {
+            status: 'Open',
+            waktuBuka: {
+              gte: start,
+              lte: end
+            }
+          }
+        ],
         ...tenantWhere(tenantId)
       },
       include: {
         user: { select: { name: true } }
       },
-      orderBy: { waktuTutup: 'desc' }
+      orderBy: { waktuBuka: 'desc' }
     });
 
     // Enrich shifts dengan perhitungan omzet kas dan non-tunai akurat dari transaksi
@@ -791,8 +801,13 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
         cash = Math.max(0, (s.saldoSistem || 0) - (s.saldoAwal || 0));
       }
 
+      const sysBalance = s.saldoSistem !== null && s.saldoSistem !== undefined
+        ? s.saldoSistem
+        : (s.saldoAwal || 0) + cash;
+
       return {
         ...s,
+        saldoSistem: sysBalance,
         cashSales: cash,
         nonCashSales: nonCash
       };

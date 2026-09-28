@@ -37,7 +37,7 @@ const handleGetActiveShift = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
-    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
+    const tenantCondition = { OR: [{ tenantId: 'tenant-vamos-pool' }, { tenantId: null }, ...(tenantId ? [{ tenantId }] : [])] };
 
     const activeShift = await prisma.shift.findFirst({
       where: {
@@ -66,7 +66,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
-    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
+    const tenantCondition = { OR: [{ tenantId: 'tenant-vamos-pool' }, { tenantId: null }, ...(tenantId ? [{ tenantId }] : [])] };
 
     const shifts = await prisma.shift.findMany({
       where: tenantCondition,
@@ -97,7 +97,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       }),
       prisma.cashFlow.findMany({
         where: { date: { gte: earliestOpen, lte: latestClose } },
-        select: { type: true, amount: true, category: true, date: true, pocket: true, status: true }
+        select: { type: true, amount: true, category: true, date: true, cashPocket: true, status: true }
       }),
       prisma.debtPayment.findMany({
         where: { createdAt: { gte: earliestOpen, lte: latestClose } },
@@ -133,10 +133,10 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       // CashFlow dalam shift ini - Hanya uang laci (pocket = DRAWER atau legacy) yang mempengaruhi rekonsiliasi laci kasir
       const shiftCashFlows = allCashFlows.filter(cf => inRange(cf.date));
       const manualCashIn = shiftCashFlows
-        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.pocket === 'DRAWER' || !cf.pocket))
+        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
         .reduce((s, cf) => s + cf.amount, 0);
       const manualCashOut = shiftCashFlows
-        .filter(cf => cf.type === 'Pengeluaran' && (cf.pocket === 'DRAWER' || !cf.pocket) && cf.status === 'APPROVED')
+        .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
         .reduce((s, cf) => s + cf.amount, 0);
 
       // Debt payments dalam shift ini

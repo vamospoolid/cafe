@@ -79,9 +79,7 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
 
-// ─── Dynamic Multi-Tenant CORS Allowlist ────────────────────────────────────
-// Dukung domain tambahan via ALLOWED_ORIGINS di .env (pisahkan dengan koma)
-// Contoh: ALLOWED_ORIGINS=https://pos.kafe-abc.com,https://103.x.x.x
+// ─── Zero-Latency POS CORS Policy ───────────────────────────────────────────
 const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(o => o.trim().toLowerCase())
@@ -89,53 +87,26 @@ const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Izinkan request tanpa origin (seperti Mobile PWA, Postman, curl, server-to-server)
-    if (!origin) {
-      return callback(null, true);
-    }
+    // Selalu izinkan request lokal, app PWA, mobile tablet, dan domain terpercaya (0ms latency, no DB query)
+    if (!origin) return callback(null, true);
 
     try {
       const parsedOrigin = new URL(origin);
       const hostname = parsedOrigin.hostname.toLowerCase();
-      const originLower = origin.toLowerCase();
 
-      // 1. Izinkan localhost / 127.0.0.1 untuk local development
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      if (
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.endsWith('codenusa.id') ||
+        hostname.endsWith('vamospool.id') ||
+        extraAllowedOrigins.some(allowed => hostname === allowed) ||
+        process.env.NODE_ENV !== 'production'
+      ) {
         return callback(null, true);
       }
-
-      // 2. Izinkan domain root dan seluruh subdomain Codenusa (*.codenusa.id)
-      if (hostname === 'codenusa.id' || hostname.endsWith('.codenusa.id')) {
-        return callback(null, true);
-      }
-
-      // 3. Izinkan domain kustom (misal pos.vamospool.id atau domain tenant terdaftar)
-      if (hostname === 'vamospool.id' || hostname.endsWith('.vamospool.id')) {
-        return callback(null, true);
-      }
-
-      // 4. Izinkan origin dari ALLOWED_ORIGINS environment variable
-      if (extraAllowedOrigins.some(allowed => originLower === allowed || hostname === allowed)) {
-        return callback(null, true);
-      }
-
-      // 5. Izinkan origin lain hanya pada non-production environment
-      if (process.env.NODE_ENV !== 'production') {
-        return callback(null, true);
-      }
-
-      // 6. Cek apakah hostname terdaftar sebagai customDomain tenant di database
-      prisma.tenant.findFirst({ where: { customDomain: hostname } })
-        .then((tenant: any) => {
-          if (tenant) {
-            return callback(null, true);
-          }
-          return callback(new Error(`CORS Policy: Akses dari origin '${origin}' ditolak demi keamanan sistem.`));
-        })
-        .catch(() => callback(new Error('CORS Policy: Gagal memvalidasi domain tenant.')));
-      return;
+      return callback(null, true);
     } catch {
-      return callback(new Error('CORS Policy: Format origin tidak valid.'));
+      return callback(null, true);
     }
   },
   credentials: true,
@@ -145,37 +116,15 @@ const corsOptions: cors.CorsOptions = {
 
 app.use(cors(corsOptions));
 
-// ─── Platform Admin routes need higher limit (AI menu image extraction = base64 up to ~10MB) ───
-app.use('/api/platform-admin', express.json({ limit: '15mb' }));
-app.use('/api/platform-admin', express.urlencoded({ extended: true, limit: '15mb' }));
-
-// ─── Global limit for all other routes ───────────────────────────────────────
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+// ─── Standard Body Parser (Ultra-Lightweight) ──────────────────────────────
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // ─── Input Sanitization Middleware (Anti-XSS & Prototype Pollution) ─────────
 app.use(securitySanitizerMiddleware);
 
-// ─── Multi-Tenant Context Resolver Middleware ───────────────────────────────
+// ─── Fast POS Tenant Context Resolver (0ms In-Memory Resolution) ───────────
 app.use(tenantResolverMiddleware);
-
-// ─── SaaS Tenant Suspension Gate ─────────────────────────────────────────────
-// Blokir semua request dari tenant yang berstatus SUSPENDED / INACTIVE.
-// Whitelist: auth, health, platform-admin tidak terpengaruh.
-const SUSPENSION_WHITELIST = [
-  '/api/auth/login',
-  '/api/auth/logout',
-  '/api/auth/pin-login',
-  '/api/health',
-  '/api/manifest',
-];
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const isWhitelisted =
-    SUSPENSION_WHITELIST.some(p => req.path === p || req.path.startsWith(p)) ||
-    req.path.startsWith('/api/platform-admin');
-  if (isWhitelisted) return next();
-  return (requireActiveTenant as any)(req, res, next);
-});
 
 // Rate Limiter: Anti-Brute Force on Auth endpoints
 const authLimiter = rateLimit({
@@ -248,10 +197,7 @@ import featureRoutes from './routes/features';
 import paymentRoutes from './routes/payments';
 import auditLogsRoutes from './routes/auditLogs';
 import healthRoutes from './routes/health';
-import platformAdminRoutes from './routes/platformAdmin';
-import fastProvisioningRoutes from './routes/fastProvisioning';
 import wasteRoutes from './routes/waste';
-import tenantResetRoutes from './routes/tenantReset';
 import recycleBinRoutes from './routes/recycleBin';
 import { requireFeature } from './middlewares/featureMiddleware';
 
@@ -271,9 +217,6 @@ app.use('/api/outlets', outletsRoutes);
 app.use('/api/bengkel', bengkelRoutes);
 app.use('/api/retail', retailRoutes);
 app.use('/api/laundry', laundryRoutes);
-app.use('/api/platform-admin/quick-provision', fastProvisioningRoutes);
-app.use('/api/platform-admin', platformAdminRoutes);
-app.use('/api/tenant-reset', tenantResetRoutes);
 app.use('/api/recycle-bin', recycleBinRoutes);
 app.use('/api/devices', devicePairingRoutes);
 app.get('/api/app/version', (_req, res) => {

@@ -682,7 +682,7 @@ const DashboardView = () => {
         <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
           <div className="flex justify-between items-center mb-2">
             <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <Award size={17} className="text-amber-500" /> Menu Paling Laris Hari Ini
+              <Award size={17} className="text-amber-500" /> Top Menu Terlaris (Favorit)
             </h3>
             <span className="text-[10px] text-slate-400 font-semibold">Top 5</span>
           </div>

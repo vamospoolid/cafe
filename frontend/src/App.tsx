@@ -8,11 +8,9 @@ import QRCodeView from './components/QRCodeView';
 import ReservationView from './components/ReservationView';
 import DashboardView from './components/DashboardView';
 import LoginView from './components/LoginView';
-import LandingPageView from './components/LandingPageView';
 import CustomerSupportWidget from './components/CustomerSupportWidget';
 import DineInView from './components/DineInView';
 import StaffPWAView from './components/StaffPWAView';
-import PlatformAdminLayout from './components/PlatformAdminLayout';
 import DeviceActivationView from './components/DeviceActivationView';
 import InAppUpdateBanner from './components/InAppUpdateBanner';
 import { POSProvider, POSContext } from './context/POSContext';
@@ -44,7 +42,6 @@ const PurchaseOrderView = React.lazy(() => import('./components/PurchaseOrderVie
 const WarehouseView = React.lazy(() => import('./components/WarehouseView'));
 const EmployeeLoanView = React.lazy(() => import('./components/EmployeeLoanView'));
 const AuditLogView = React.lazy(() => import('./components/AuditLogView'));
-const SaaSPlatformAdminView = React.lazy(() => import('./components/SaaSPlatformAdminView'));
 
 const RouteSuspenseFallback = () => (
   <div className="flex-1 flex flex-col items-center justify-center p-12 min-h-[350px] text-center bg-slate-50 gap-2.5">
@@ -90,21 +87,6 @@ const AppRoutes = () => {
     }
   }, [context?.token]);
 
-  // Domain SaaS Utama (codenusa.id & www.codenusa.id) yang menyajikan marketing landing page
-  // Domain cafe (cafe.codenusa.id), tenant subdomain, atau direct POS akan langsung menampilkan Login kasir
-  const isPlatformLandingDomain = window.location.hostname === 'codenusa.id' || window.location.hostname === 'www.codenusa.id';
-
-  // Rute publik landing page SaaS (bisa diakses langsung kapan saja via /landing atau /landing-page)
-  const isLandingRoute = window.location.pathname === '/landing' || window.location.pathname === '/landing-page';
-  if (isLandingRoute) {
-    return (
-      <>
-        <LandingPageView onNavigateLogin={() => navigate('/login')} />
-        <CustomerSupportWidget />
-      </>
-    );
-  }
-
   // Jika ini rute staff PWA mandiri (bisa dibuka di HP staf/dapur), biarkan terbuka
   const isStaffRoute = window.location.pathname.startsWith('/staff') || window.location.pathname.startsWith('/dapur-app');
   if (isStaffRoute) {
@@ -127,18 +109,17 @@ const AppRoutes = () => {
     );
   }
 
-  // Jika belum login (tidak ada token), arahkan ke Landing Page (khusus codenusa.id) atau langsung ke LoginView (cafe.codenusa.id dsb)
+  // Jika belum login (tidak ada token), arahkan langsung ke Login POS Kasir
   if (!context?.token) {
     return (
       <>
         <Routes>
-          <Route path="/" element={isPlatformLandingDomain ? <LandingPageView onNavigateLogin={() => navigate('/login')} /> : <LoginView />} />
+          <Route path="/" element={<LoginView />} />
           <Route path="/login" element={<LoginView />} />
           <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/login')} />} />
-          <Route path="/register" element={<LandingPageView onNavigateLogin={() => navigate('/login')} />} />
           <Route path="/order" element={<DineInView />} />
           <Route path="/staff" element={<StaffPWAView />} />
-          <Route path="*" element={<Navigate to={isPlatformLandingDomain ? "/" : "/login"} replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         <CustomerSupportWidget />
         <InAppUpdateBanner />
@@ -149,30 +130,13 @@ const AppRoutes = () => {
   return (
     <ChunkErrorBoundary>
       <InAppUpdateBanner />
-      <Routes>
-        {/* ─── STANDALONE SAAS DEVELOPER MASTER CONSOLE ─────────────────── */}
-        <Route
-          path="/platform-admin"
-          element={
-            <PlatformAdminLayout>
-              <Suspense fallback={<RouteSuspenseFallback />}>
-                <SaaSPlatformAdminView />
-              </Suspense>
-            </PlatformAdminLayout>
-          }
-        />
-
-        {/* ─── REGULAR MERCHANT PORTAL & POS (WRAPPED IN LAYOUT) ─────────── */}
-        <Route
-          path="/*"
-          element={
-            <Layout>
-              <Suspense fallback={<RouteSuspenseFallback />}>
-                <Routes>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/dashboard" element={<DashboardView />} />
-                  <Route path="/pos" element={<POSViewAdaptive />} />
+      <Layout>
+        <Suspense fallback={<RouteSuspenseFallback />}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardView />} />
+            <Route path="/pos" element={<POSViewAdaptive />} />
                   <Route
                     path="/bengkel/*"
                     element={
@@ -228,9 +192,6 @@ const AppRoutes = () => {
                 </Routes>
               </Suspense>
             </Layout>
-          }
-        />
-      </Routes>
     </ChunkErrorBoundary>
   );
 };

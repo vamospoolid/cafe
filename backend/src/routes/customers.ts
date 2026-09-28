@@ -181,7 +181,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // PUT update customer
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId || 'tenant-vamos-pool';
     const { id } = req.params;
     const { name, phone, email, birthday, pointsAdjustment, adjustmentReason } = req.body;
 
@@ -265,7 +265,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 // DELETE customer
 router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-default-muki';
+    const tenantId = req.user?.tenantId || 'tenant-vamos-pool';
     const { id } = req.params;
 
     const customer = await prisma.customer.findFirst({

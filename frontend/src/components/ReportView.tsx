@@ -1429,6 +1429,7 @@ export const ReportView: React.FC = () => {
                   </thead>
                   <tbody>
                     {(reportData.shifts || []).map((s: any) => {
+                      const isOpen = s.status === 'Open' || !s.waktuTutup;
                       const isBalanced = (s.selisih || 0) === 0;
                       const isShort = (s.selisih || 0) < 0;
                       return (
@@ -1446,18 +1447,18 @@ export const ReportView: React.FC = () => {
                             {formatCurrency(s.saldoSistem || 0)}
                           </td>
                           <td style={{ padding: '.85rem 1rem', fontWeight: 800, color: '#0f172a', fontSize: '.85rem' }}>
-                            {formatCurrency(s.saldoFisikLaci || 0)}
+                            {isOpen ? <span className="text-slate-400 font-normal italic">-</span> : formatCurrency(s.saldoFisikLaci || 0)}
                           </td>
-                          <td style={{ padding: '.85rem 1rem', fontWeight: 900, fontSize: '.85rem', color: isBalanced ? '#10b981' : (isShort ? '#ef4444' : '#f59e0b') }}>
-                            {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
+                          <td style={{ padding: '.85rem 1rem', fontWeight: 900, fontSize: '.85rem', color: isOpen ? '#64748b' : (isBalanced ? '#10b981' : (isShort ? '#ef4444' : '#f59e0b')) }}>
+                            {isOpen ? <span className="text-slate-400 font-normal italic">-</span> : (isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih)))}
                           </td>
                           <td style={{ padding: '.85rem 1rem' }}>
                             <span style={{
                               padding: '.2rem .5rem', borderRadius: '.35rem', fontSize: '.7rem', fontWeight: 800,
-                              background: isBalanced ? '#f0fdf4' : (isShort ? '#fee2e2' : '#fffbeb'),
-                              color: isBalanced ? '#166534' : (isShort ? '#991b1b' : '#b45309')
+                              background: isOpen ? '#eff6ff' : (isBalanced ? '#f0fdf4' : (isShort ? '#fee2e2' : '#fffbeb')),
+                              color: isOpen ? '#1d4ed8' : (isBalanced ? '#166534' : (isShort ? '#991b1b' : '#b45309'))
                             }}>
-                              {isBalanced ? '✅ Seimbang' : (isShort ? '❌ Minus (Shortage)' : '⚠️ Lebih (Overage)')}
+                              {isOpen ? '🟢 Shift Aktif' : (isBalanced ? '✅ Seimbang' : (isShort ? '❌ Minus (Shortage)' : '⚠️ Lebih (Overage)'))}
                             </span>
                           </td>
                         </tr>
@@ -1486,6 +1487,7 @@ export const ReportView: React.FC = () => {
                   </div>
                 ) : (
                   (reportData.shifts || []).map((s: any) => {
+                    const isOpen = s.status === 'Open' || !s.waktuTutup;
                     const isBalanced = (s.selisih || 0) === 0;
                     const isShort = (s.selisih || 0) < 0;
                     return (
@@ -1508,13 +1510,15 @@ export const ReportView: React.FC = () => {
                           </div>
 
                           <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                            isBalanced 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                              : (isShort 
-                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                                : 'bg-amber-50 text-amber-700 border-amber-200')
+                            isOpen
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : (isBalanced 
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                : (isShort 
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'))
                           }`}>
-                            {isBalanced ? '✅ Pas' : (isShort ? '❌ Minus' : '⚠️ Lebih')}
+                            {isOpen ? '🟢 Shift Aktif' : (isBalanced ? '✅ Pas' : (isShort ? '❌ Minus' : '⚠️ Lebih'))}
                           </span>
                         </div>
 
@@ -1530,12 +1534,12 @@ export const ReportView: React.FC = () => {
                           </div>
                           <div>
                             <span className="text-[9px] font-bold uppercase text-slate-400 block">Fisik Laci</span>
-                            <span className="font-bold text-slate-900 block mt-0.5">{formatCurrency(s.saldoFisikLaci || 0)}</span>
+                            <span className="font-bold text-slate-900 block mt-0.5">{isOpen ? '-' : formatCurrency(s.saldoFisikLaci || 0)}</span>
                           </div>
                           <div>
                             <span className="text-[9px] font-bold uppercase text-slate-400 block">Selisih Audit</span>
-                            <span className={`font-black block mt-0.5 ${isBalanced ? 'text-emerald-600' : (isShort ? 'text-rose-600' : 'text-amber-600')}`}>
-                              {isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih))}
+                            <span className={`font-black block mt-0.5 ${isOpen ? 'text-slate-400' : (isBalanced ? 'text-emerald-600' : (isShort ? 'text-rose-600' : 'text-amber-600'))}`}>
+                              {isOpen ? '-' : (isBalanced ? 'Rp 0 (Pas)' : (s.selisih > 0 ? `+${formatCurrency(s.selisih)}` : formatCurrency(s.selisih)))}
                             </span>
                           </div>
                         </div>

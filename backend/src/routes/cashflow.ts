@@ -28,11 +28,11 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 1. Kas Operasional (Petty Cash Toko) - Approved
     const opInAgg = await prisma.cashFlow.aggregate({
-      where: { ...baseWhere, pocket: 'OPERATIONAL', type: 'Pemasukan', status: 'APPROVED' },
+      where: { ...baseWhere, cashPocket: 'KAS_OPERASIONAL', type: 'Pemasukan', status: 'APPROVED' },
       _sum: { amount: true }
     });
     const opOutAgg = await prisma.cashFlow.aggregate({
-      where: { ...baseWhere, pocket: 'OPERATIONAL', type: 'Pengeluaran', status: 'APPROVED' },
+      where: { ...baseWhere, cashPocket: 'KAS_OPERASIONAL', type: 'Pengeluaran', status: 'APPROVED' },
       _sum: { amount: true }
     });
     const operationalIn = opInAgg._sum.amount || 0;
@@ -79,7 +79,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       const drInAgg = await prisma.cashFlow.aggregate({
         where: { 
           ...baseWhere, 
-          pocket: 'DRAWER', 
+          cashPocket: 'LACI_KASIR', 
           type: 'Pemasukan', 
           status: 'APPROVED', 
           date: { gte: activeShift.waktuBuka } 
@@ -89,7 +89,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       const drOutAgg = await prisma.cashFlow.aggregate({
         where: { 
           ...baseWhere, 
-          pocket: 'DRAWER', 
+          cashPocket: 'LACI_KASIR', 
           type: 'Pengeluaran', 
           status: 'APPROVED', 
           date: { gte: activeShift.waktuBuka } 
@@ -124,7 +124,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     const burnRateAgg = await prisma.cashFlow.aggregate({
       where: {
         ...baseWhere,
-        pocket: 'OPERATIONAL',
+        cashPocket: 'KAS_OPERASIONAL',
         type: 'Pengeluaran',
         status: 'APPROVED',
         date: { gte: thirtyDaysAgo }
@@ -159,7 +159,10 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     if (tenantId) whereClause.tenantId = tenantId;
 
     if (type && type !== 'ALL') whereClause.type = type;
-    if (pocket && pocket !== 'ALL') whereClause.pocket = pocket;
+    if (pocket && pocket !== 'ALL') {
+      const pStr = String(pocket).toUpperCase();
+      whereClause.cashPocket = (pStr === 'DRAWER' || pStr === 'LACI_KASIR') ? 'LACI_KASIR' : 'KAS_OPERASIONAL';
+    }
     if (status && status !== 'ALL') whereClause.status = status;
     
     if (startDate && endDate) {
@@ -172,7 +175,6 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       whereClause.OR = [
         { description: { contains: q, mode: 'insensitive' } },
         { category: { contains: q, mode: 'insensitive' } },
-        { subCategory: { contains: q, mode: 'insensitive' } },
         { user: { name: { contains: q, mode: 'insensitive' } } }
       ];
     }
@@ -230,22 +232,24 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       finalStatus = 'APPROVED';
     }
 
+    const pocketUpper = String(pocket || 'OPERATIONAL').toUpperCase();
+    const mappedCashPocket = (pocketUpper === 'DRAWER' || pocketUpper === 'LACI_KASIR') ? 'LACI_KASIR' : 'KAS_OPERASIONAL';
+
     const cashflow = await prisma.cashFlow.create({
       data: {
         tenantId,
-        pocket: pocket || 'OPERATIONAL',
+        cashPocket: mappedCashPocket,
         type,
         category,
-        subCategory: subCategory || null,
         amount: Number(amount),
         description,
-        receiptUrl: receiptUrl || null,
+        receiptImage: receiptUrl || null,
         status: finalStatus,
-        autoStock: !!autoStock,
         userId: user.id,
-        approvedById: finalStatus === 'APPROVED' ? user.id : null,
-        approvedByName: finalStatus === 'APPROVED' ? user.name : null,
-        approvedAt: finalStatus === 'APPROVED' ? new Date() : null
+        approvedBy: finalStatus === 'APPROVED' ? user.id : null,
+        approvedAt: finalStatus === 'APPROVED' ? new Date() : null,
+        linkedIngredientId: ingredientId ? Number(ingredientId) : null,
+        restockQty: ingredientId ? (Number(ingredientQty) || 1) : null
       },
       include: {
         user: { select: { id: true, name: true, role: true } }
@@ -323,8 +327,7 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
       where: { id: Number(id) },
       data: {
         status: 'APPROVED',
-        approvedById: user.id,
-        approvedByName: user.name,
+        approvedBy: user.id,
         approvedAt: new Date(),
         rejectionReason: null
       },
@@ -372,8 +375,7 @@ router.patch('/:id/reject', authenticateToken, async (req: Request, res: Respons
       data: {
         status: 'REJECTED',
         rejectionReason: reason || 'Ditolak oleh Owner',
-        approvedById: user.id,
-        approvedByName: user.name,
+        approvedBy: user.id,
         approvedAt: new Date()
       },
       include: {
