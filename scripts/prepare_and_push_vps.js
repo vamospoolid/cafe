@@ -215,105 +215,78 @@ async function runRemoteVpsDeploy() {
         echo "⏰ Timestamp: $(date '+%Y-%m-%d %H:%M:%S %Z')"
         echo "================================================================"
 
-        # 1. SETUP TARGET DIRECTORY
+        # ================================================================
+        # TARGET 1: POSCAFE (Domain: cafe.codenusa.id -> Port 5000)
+        # ================================================================
+        echo "📦 [1/6] Mengupdate repositori di /var/www/poscafe (cafe.codenusa.id)..."
+        cd /var/www/poscafe
+        git fetch origin
+        git reset --hard origin/main
+        git clean -fd -e uploads/ -e backups/ -e backend/.env
+
+        echo "🛠️ [2/6] Setup Backend di /var/www/poscafe/backend..."
+        cd /var/www/poscafe/backend
+        npm install --silent
+        npx prisma generate
+        npx prisma db push --skip-generate --accept-data-loss
+        npm run build || npx tsc
+        pm2 restart poscafe-backend || PORT=5000 pm2 start dist/src/index.js --name poscafe-backend --interpreter node
+
+        echo "🌐 [3/6] Membangun Frontend Production di /var/www/poscafe/frontend..."
+        cd /var/www/poscafe/frontend
+        npm install --silent
+        npm run build
+
+        # ================================================================
+        # TARGET 2: CODENUSA SAAS (Domain: codenusa.id -> Port 5001)
+        # ================================================================
+        echo "📦 [4/6] Mengupdate repositori di ${REMOTE_DIR} (codenusa.id)..."
         if [ ! -d "${REMOTE_DIR}/.git" ]; then
-          echo "📦 [1/6] Menginisialisasi direktori baru: ${REMOTE_DIR}..."
           mkdir -p "${REMOTE_DIR}"
           git clone "${REPO_URL}" "${REMOTE_DIR}"
           cd "${REMOTE_DIR}"
         else
-          echo "📦 [1/6] Direktori ${REMOTE_DIR} ditemukan. Mengambil update terbaru..."
           cd "${REMOTE_DIR}"
           git fetch origin
           git reset --hard origin/main
           git clean -fd -e uploads/ -e backups/ -e backend/.env
         fi
 
-        # 2. SETUP BACKEND
-        echo "🛠️ [2/6] Mempersiapkan Backend di ${REMOTE_DIR}/backend..."
+        echo "🛠️ [5/6] Setup Backend di ${REMOTE_DIR}/backend..."
         cd "${REMOTE_DIR}/backend"
-
-        # Setup .env Codenusa dengan kredensial database VPS yang valid
         if [ -f "/var/www/poscafe/backend/.env" ]; then
-          echo "   -> Menggunakan konfigurasi database VPS dari /var/www/poscafe/backend/.env..."
           cp /var/www/poscafe/backend/.env .env
           sed -i 's/PORT=.*/PORT=5001/g' .env 2>/dev/null || true
           sed -i 's/COOKIE_DOMAIN=.*/COOKIE_DOMAIN=.codenusa.id/g' .env 2>/dev/null || true
           sed -i 's/APP_DOMAIN=.*/APP_DOMAIN=codenusa.id/g' .env 2>/dev/null || true
-        elif [ ! -f ".env" ] || grep -q "your_secure_db_password" .env; then
-          if [ -f "${REMOTE_DIR}/deployment/env/.env.production.example" ]; then
-            echo "   -> Menyiapkan .env dari template..."
-            cp "${REMOTE_DIR}/deployment/env/.env.production.example" .env
-            sed -i 's/your_secure_db_password/poscafe_secure_pass_2026/g' .env 2>/dev/null || true
-          fi
         fi
-
-        # Pastikan PORT tetap 5001 (isolasi mutlak dari Vamos di port 5000)
         sed -i 's/PORT=.*/PORT=5001/g' .env 2>/dev/null || true
-        # Pastikan JWT_SECRET kuat (>= 32 karakter) untuk production boot guard
         sed -i '/JWT_SECRET=/d' .env 2>/dev/null || true
         echo 'JWT_SECRET="c0d3nu5a_s44s_jwt_m4st3r_s3cr3t_pr0duct10n_k3y_998877665544332211"' >> .env
 
-        echo "   -> Menginstal dependencies backend..."
         npm install --silent
-
-        echo "   -> Men-generate Prisma Client..."
         npx prisma generate
-
-        echo "   -> Menyelaraskan skema database (Safe DB Push)..."
         npx prisma db push --skip-generate --accept-data-loss
+        npm run build || npx tsc
 
-        echo "   -> Menjalankan seed foundation & vertikal..."
-        npx ts-node prisma/seed_foundation.ts || true
-        npx ts-node prisma/seed_features.ts || true
-
-        echo "   -> Mengompilasi TypeScript backend..."
-        npm run build
-
-        # 3. SETUP FRONTEND
-        echo "🌐 [3/6] Membangun Frontend Production Bundle..."
+        echo "🌐 [6/6] Membangun Frontend Production di ${REMOTE_DIR}/frontend..."
         cd "${REMOTE_DIR}/frontend"
         npm install --silent
         npm run build
 
-        # 4. SETUP NGINX & SSL
-        echo "⚙️ [4/6] Mengonfigurasi Nginx Server Block untuk Codenusa..."
-        mkdir -p /etc/letsencrypt/live/codenusa.id
-        if [ ! -f /etc/letsencrypt/live/codenusa.id/fullchain.pem ]; then
-          echo "   -> Menyiapkan SSL sertifikat awal..."
-          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout /etc/letsencrypt/live/codenusa.id/privkey.pem \
-            -out /etc/letsencrypt/live/codenusa.id/fullchain.pem \
-            -subj "/CN=codenusa.id"
-          cp /etc/letsencrypt/live/codenusa.id/fullchain.pem /etc/letsencrypt/live/codenusa.id/chain.pem
-        fi
-
-        # Bersihkan konfigurasi lama yang konflik dengan domain yang sama
-        rm -f /etc/nginx/sites-enabled/codepos 2>/dev/null || true
-
-        cp "${REMOTE_DIR}/deployment/nginx/codenusa.conf" /etc/nginx/sites-available/codenusa
-        ln -sf /etc/nginx/sites-available/codenusa /etc/nginx/sites-enabled/codenusa
-        nginx -t
-        systemctl reload nginx
-        echo "   -> Nginx berhasil di-reload!"
-
-        # 5. PERMISSION HARDENING
-        echo "🔒 [5/6] Mengamankan izin direktori uploads & backups..."
-        mkdir -p "${REMOTE_DIR}/backend/uploads/tenants"
-        mkdir -p "${REMOTE_DIR}/backend/backups"
-        mkdir -p /var/log/pm2
-
-        # 6. PM2 PROCESS MANAGEMENT
-        echo "🔄 [6/6] Me-restart daemon PM2 (${PM2_NAME})..."
+        # Restart PM2 Codenusa
         cd "${REMOTE_DIR}"
         if pm2 show "${PM2_NAME}" > /dev/null 2>&1; then
-          echo "   -> Reloading existing ${PM2_NAME} with updated env..."
           pm2 restart "${PM2_NAME}" --update-env
         else
-          echo "   -> Starting new ${PM2_NAME} via ecosystem.config.js..."
           pm2 start ecosystem.config.js
           pm2 save
         fi
+
+        # Bersihkan config Nginx usang dan reload Nginx
+        rm -f /etc/nginx/sites-enabled/codepos 2>/dev/null || true
+        nginx -t && systemctl reload nginx
+        echo "   -> Nginx berhasil direload!"
 
         echo ""
         echo "🩺 [VERIFIKASI HEALTH CHECK]"

@@ -56,11 +56,19 @@ export async function resolveTenantFromRequest(req: Request): Promise<{ id: stri
     if (data) return data;
   }
 
-  // 3. Coba ekstrak subdomain dari hostname (e.g. mukiramen.codenusa.id)
+  // 3. Coba ekstrak subdomain dari hostname (e.g. mukiramen.codenusa.id atau cafe.codenusa.id)
   const hostParts = hostClean.split('.');
   if (hostParts.length >= 3) {
     const subdomain = hostParts[0].toLowerCase();
-    if (subdomain !== 'app' && subdomain !== 'api' && subdomain !== 'admin' && subdomain !== 'www') {
+    if (subdomain === 'cafe') {
+      const data = await cacheService.remember(`cache:tenant:slug:cafe_default`, 600, async () => {
+        const tenant = await prisma.tenant.findFirst({
+          where: { OR: [{ id: 'tenant-default-muki' }, { slug: 'mukiramen' }, { slug: 'cafe' }] }
+        });
+        return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;
+      });
+      if (data) return data;
+    } else if (subdomain !== 'app' && subdomain !== 'api' && subdomain !== 'admin' && subdomain !== 'www') {
       const data = await cacheService.remember(`cache:tenant:slug:${subdomain}`, 600, async () => {
         const tenant = await prisma.tenant.findUnique({ where: { slug: subdomain } });
         return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;

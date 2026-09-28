@@ -37,6 +37,14 @@ router.get('/', async (req: Request, res: Response) => {
           where: { id: resolved.id },
           include: { settings: true }
         });
+      } else {
+        const host = (req.headers['x-forwarded-host'] || req.headers.host || '').toString().toLowerCase();
+        if (host.includes('cafe')) {
+          tenant = await prisma.tenant.findFirst({
+            where: { OR: [{ id: 'tenant-default-muki' }, { slug: 'mukiramen' }, { businessType: 'CAFE' }] },
+            include: { settings: true }
+          });
+        }
       }
     }
 

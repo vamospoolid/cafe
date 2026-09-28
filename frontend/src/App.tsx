@@ -90,6 +90,10 @@ const AppRoutes = () => {
     }
   }, [context?.token]);
 
+  // Domain SaaS Utama (codenusa.id & www.codenusa.id) yang menyajikan marketing landing page
+  // Domain cafe (cafe.codenusa.id), tenant subdomain, atau direct POS akan langsung menampilkan Login kasir
+  const isPlatformLandingDomain = window.location.hostname === 'codenusa.id' || window.location.hostname === 'www.codenusa.id';
+
   // Rute publik landing page SaaS (bisa diakses langsung kapan saja via /landing atau /landing-page)
   const isLandingRoute = window.location.pathname === '/landing' || window.location.pathname === '/landing-page';
   if (isLandingRoute) {
@@ -123,18 +127,18 @@ const AppRoutes = () => {
     );
   }
 
-  // Jika belum login (tidak ada token), arahkan ke Landing Page atau Login
+  // Jika belum login (tidak ada token), arahkan ke Landing Page (khusus codenusa.id) atau langsung ke LoginView (cafe.codenusa.id dsb)
   if (!context?.token) {
     return (
       <>
         <Routes>
-          <Route path="/" element={<LandingPageView />} />
+          <Route path="/" element={isPlatformLandingDomain ? <LandingPageView onNavigateLogin={() => navigate('/login')} /> : <LoginView />} />
           <Route path="/login" element={<LoginView />} />
           <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/login')} />} />
-          <Route path="/register" element={<LandingPageView />} />
+          <Route path="/register" element={<LandingPageView onNavigateLogin={() => navigate('/login')} />} />
           <Route path="/order" element={<DineInView />} />
           <Route path="/staff" element={<StaffPWAView />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to={isPlatformLandingDomain ? "/" : "/login"} replace />} />
         </Routes>
         <CustomerSupportWidget />
         <InAppUpdateBanner />
