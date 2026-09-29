@@ -927,6 +927,11 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         });
         for (const recipe of recipes) {
           const used = recipe.qtyPerServing * Number(item.qty);
+          // Atomic check: pastikan stok mencukupi sebelum decrement (cegah stok negatif)
+          const currentIng = await tx.ingredient.findUnique({ where: { id: recipe.ingredientId }, select: { stock: true, name: true } });
+          if (currentIng && currentIng.stock < used) {
+            throw new Error(`Stok bahan baku "${currentIng.name}" tidak mencukupi (sisa: ${currentIng.stock}, dibutuhkan: ${used})`);
+          }
           await tx.ingredient.update({
             where: { id: recipe.ingredientId },
             data: { stock: { decrement: used } }
@@ -1087,7 +1092,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
         let cust = await tx.customer.findFirst({
           where: {
             phone: cleanPhone,
-            ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+            ...(tenantId ? { tenantId } : {})
           }
         });
         if (!cust && req.body.customerName) {
@@ -1260,23 +1265,19 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       return updatedOrders;
     });
 
-    // Emit real-time event pembayaran & update meja
-    io.emit('order:paid', { orderIds: result.map((o: any) => o.id) });
+    // Emit hanya ke tenant terkait — tidak global
     const targetTenantId = result[0]?.tenantId || tenantId;
     if (targetTenantId) {
       emitToTenant(targetTenantId, 'order:paid', { orderIds: result.map((o: any) => o.id) });
     }
     for (const ord of result) {
-      if (ord.tableId) {
-        io.emit('table:update', { tableId: ord.tableId });
-        if (targetTenantId) {
-          emitToTenant(targetTenantId, 'table:update', { tableId: ord.tableId });
-        }
+      if (ord.tableId && targetTenantId) {
+        emitToTenant(targetTenantId, 'table:update', { tableId: ord.tableId });
       }
     }
 
-    // Auto-print struk (fire-and-forget)
-    const paySettings = await prisma.settings.findFirst();
+    // Auto-print struk (fire-and-forget) — pakai settings tenant yang benar
+    const paySettings = await prisma.settings.findFirst({ where: { ...(targetTenantId ? { tenantId: targetTenantId } : {}) } });
     if (paySettings?.autoPrintReceipt && result.length > 0) {
       const fullOrder = await prisma.order.findUnique({
         where: { id: result[0].id },
@@ -1451,16 +1452,12 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
       }
     });
 
-    // Emit real-time event
-    io.emit('order:void', { orderId: Number(id), orderNumber: orderData.orderNumber });
+    // Emit hanya ke tenant terkait — tidak global
     if (orderData.tenantId) {
       emitToTenant(orderData.tenantId, 'order:void', { orderId: Number(id), orderNumber: orderData.orderNumber });
     }
-    if (orderData.tableId) {
-      io.emit('table:update', { tableId: orderData.tableId });
-      if (orderData.tenantId) {
-        emitToTenant(orderData.tenantId, 'table:update', { tableId: orderData.tableId });
-      }
+    if (orderData.tableId && orderData.tenantId) {
+      emitToTenant(orderData.tenantId, 'table:update', { tableId: orderData.tableId });
     }
 
     // Audit Log: Order Void
@@ -1757,10 +1754,13 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
       }
     }
 
-    // 4. Emit socket event
-    io.emit('order:new', { message: 'Table moved', sourceTableId: sId, targetTableId: tId });
-    io.emit('order:paid', { sourceTableId: sId, targetTableId: tId });
-    io.emit('kds:statusChanged', { message: 'Table moved KDS' });
+    // Emit hanya ke tenant terkait
+    const moveTenantId = (req as any).user?.tenantId;
+    if (moveTenantId) {
+      emitToTenant(moveTenantId, 'order:new', { message: 'Table moved', sourceTableId: sId, targetTableId: tId });
+      emitToTenant(moveTenantId, 'order:paid', { sourceTableId: sId, targetTableId: tId });
+      emitToTenant(moveTenantId, 'kds:statusChanged', { message: 'Table moved KDS' });
+    }
 
     res.json({ message: 'Meja berhasil dipindahkan', movedCount: sourceActiveOrders.length });
   } catch (error: any) {
@@ -1850,10 +1850,13 @@ router.post('/merge-table', authenticateToken, async (req: Request, res: Respons
       return { type: 'merge', count: sourceActiveOrders.length };
     });
 
-    // 5. Emit socket events
-    io.emit('order:new', { message: 'Table merged', sourceTableId: sId, targetTableId: tId });
-    io.emit('order:paid', { sourceTableId: sId, targetTableId: tId });
-    io.emit('kds:statusChanged', { message: 'Table merged KDS' });
+    // Emit hanya ke tenant terkait
+    const mergeTenantId = (req as any).user?.tenantId;
+    if (mergeTenantId) {
+      emitToTenant(mergeTenantId, 'order:new', { message: 'Table merged', sourceTableId: sId, targetTableId: tId });
+      emitToTenant(mergeTenantId, 'order:paid', { sourceTableId: sId, targetTableId: tId });
+      emitToTenant(mergeTenantId, 'kds:statusChanged', { message: 'Table merged KDS' });
+    }
 
     res.json({ 
       message: result.type === 'move' ? 'Meja berhasil dipindahkan' : 'Meja berhasil digabungkan', 

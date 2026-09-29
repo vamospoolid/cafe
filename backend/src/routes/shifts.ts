@@ -373,10 +373,11 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Tidak ada shift yang aktif untuk ditutup.' });
     }
 
-    // 1. Proteksi Pesanan Belum Lunas (Unpaid / Pending Dine-In Orders)
+    // 1. Proteksi Pesanan Belum Lunas — hanya order tenant ini
     const pendingOrders = await prisma.order.findMany({
       where: {
         status: 'Pending',
+        ...(tenantId ? { tenantId } : {}),
         createdAt: { gte: activeShift.waktuBuka }
       },
       include: { table: true }
@@ -398,10 +399,11 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const effectiveStart = shiftOpenTime < shiftCloseTime ? shiftOpenTime : shiftCloseTime;
     const effectiveEnd = shiftOpenTime < shiftCloseTime ? shiftCloseTime : shiftOpenTime;
 
-    // Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
+    // Ambil order LUNAS milik tenant ini selama shift berlangsung
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
+        ...(tenantId ? { tenantId } : {}),
         OR: [
           { paidAt: { gte: effectiveStart, lte: effectiveEnd } },
           { paidAt: null, createdAt: { gte: effectiveStart, lte: effectiveEnd } }
@@ -412,10 +414,11 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
     const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
-    // Hitung transaksi Void selama shift
+    // Hitung transaksi Void tenant ini selama shift
     const voidOrders = await prisma.order.findMany({
       where: {
         status: 'Void',
+        ...(tenantId ? { tenantId } : {}),
         OR: [
           { paidAt: { gte: activeShift.waktuBuka } },
           { createdAt: { gte: activeShift.waktuBuka } }
@@ -425,13 +428,19 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const voidCashTotal = voidOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
     const voidNonCashTotal = voidOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
-    // Hitung pengeluaran/pemasukan manual kas (CashFlow)
+    // Hitung pengeluaran/pemasukan manual kas tenant ini
     const cashFlows = await prisma.cashFlow.findMany({
-      where: { date: { gte: activeShift.waktuBuka } }
+      where: {
+        ...(tenantId ? { tenantId } : {}),
+        date: { gte: activeShift.waktuBuka }
+      }
     });
 
     const debtPayments = await prisma.debtPayment.findMany({
-      where: { createdAt: { gte: activeShift.waktuBuka } }
+      where: {
+        ...(tenantId ? { tenantId } : {}),
+        createdAt: { gte: activeShift.waktuBuka }
+      }
     });
 
     const cashDebtIncome = debtPayments
@@ -551,14 +560,13 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     }
     // ── END AUTO-CATAT ───────────────────────────────────────────────────
 
-    // Broadcast ke seluruh client bahwa shift telah ditutup
-    io.emit('shift:status_change', { status: 'Closed', shift: closedShift });
+    // Emit hanya ke tenant terkait — tidak global
     if (tenantId) {
       emitToTenant(tenantId, 'shift:status_change', { status: 'Closed', shift: closedShift });
       emitToTenant(tenantId, 'shift:closed', { shift: closedShift });
     }
 
-    // Jika terjadi selisih kas (baik minus/defisit maupun plus/surplus), broadcast alert ke Owner / Admin
+    // Jika terjadi selisih kas, broadcast alert ke Owner / Admin — hanya tenant ini
     if (Math.abs(selisih) > 0) {
       const alertData = {
         shiftId: closedShift.id,
@@ -569,7 +577,6 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         waktuTutup: closedShift.waktuTutup,
         isBlindCount: isBlindMode
       };
-      io.emit('shift:discrepancy_alert', alertData);
       if (tenantId) {
         emitToTenant(tenantId, 'shift:discrepancy_alert', alertData);
       }
@@ -626,9 +633,13 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
 
     for (const shift of openShifts) {
       const now = new Date();
+      const shiftTenantId = shift.tenantId;
+
+      // Ambil order hanya milik tenant shift ini
       const activeOrders = await prisma.order.findMany({
         where: {
           status: 'Paid',
+          ...(shiftTenantId ? { tenantId: shiftTenantId } : {}),
           OR: [
             { paidAt: { gte: shift.waktuBuka, lte: now } },
             { paidAt: null, createdAt: { gte: shift.waktuBuka, lte: now } }
@@ -640,7 +651,10 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
       const nonCashSales = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
       const cashFlows = await prisma.cashFlow.findMany({
-        where: { date: { gte: shift.waktuBuka, lte: now } }
+        where: {
+          ...(shiftTenantId ? { tenantId: shiftTenantId } : {}),
+          date: { gte: shift.waktuBuka, lte: now }
+        }
       });
       const manualCashIn = cashFlows
         .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
@@ -650,7 +664,10 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
         .reduce((sum, cf) => sum + cf.amount, 0);
 
       const debtPayments = await prisma.debtPayment.findMany({
-        where: { createdAt: { gte: shift.waktuBuka, lte: now } }
+        where: {
+          ...(shiftTenantId ? { tenantId: shiftTenantId } : {}),
+          createdAt: { gte: shift.waktuBuka, lte: now }
+        }
       });
       const cashDebtIncome = debtPayments
         .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
@@ -671,7 +688,11 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
         }
       });
 
-      io.emit('shift:status_change', { status: 'Closed', shift: closed });
+      // Emit hanya ke tenant shift yang bersangkutan
+      if (shiftTenantId) {
+        emitToTenant(shiftTenantId, 'shift:status_change', { status: 'Closed', shift: closed });
+        emitToTenant(shiftTenantId, 'shift:closed', { shift: closed });
+      }
     }
 
     console.log(`[Auto-EOD Cutoff] Berhasil menutup ${openShifts.length} shift kasir gantung secara otomatis.`);
@@ -711,9 +732,13 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
     const effectiveStart = shiftOpenTime < shiftCloseTime ? shiftOpenTime : shiftCloseTime;
     const effectiveEnd = shiftOpenTime < shiftCloseTime ? shiftCloseTime : shiftOpenTime;
 
+    const shiftForceTenantId = shift.tenantId;
+
+    // Ambil order hanya milik tenant shift ini
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
+        ...(shiftForceTenantId ? { tenantId: shiftForceTenantId } : {}),
         OR: [
           { paidAt: { gte: effectiveStart, lte: effectiveEnd } },
           { paidAt: null, createdAt: { gte: effectiveStart, lte: effectiveEnd } }
@@ -725,11 +750,17 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
     const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
     const cashFlows = await prisma.cashFlow.findMany({
-      where: { date: { gte: effectiveStart, lte: effectiveEnd } }
+      where: {
+        ...(shiftForceTenantId ? { tenantId: shiftForceTenantId } : {}),
+        date: { gte: effectiveStart, lte: effectiveEnd }
+      }
     });
 
     const debtPayments = await prisma.debtPayment.findMany({
-      where: { createdAt: { gte: effectiveStart, lte: effectiveEnd } }
+      where: {
+        ...(shiftForceTenantId ? { tenantId: shiftForceTenantId } : {}),
+        createdAt: { gte: effectiveStart, lte: effectiveEnd }
+      }
     });
 
     const cashDebtIncome = debtPayments
@@ -764,7 +795,11 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
       }
     });
 
-    io.emit('shift:status_change', { status: 'Closed', shift: closedShift });
+    // Emit hanya ke tenant shift yang bersangkutan
+    if (shiftForceTenantId) {
+      emitToTenant(shiftForceTenantId, 'shift:status_change', { status: 'Closed', shift: closedShift });
+      emitToTenant(shiftForceTenantId, 'shift:closed', { shift: closedShift });
+    }
 
     res.json({
       message: `Shift #${shiftId} berhasil ditutup paksa oleh Admin`,

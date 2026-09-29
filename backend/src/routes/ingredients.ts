@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
-import { io, emitToTenant } from '../index';
+import { emitToTenant } from '../index';
+import prisma from '../db';
 
 // Helper: apakah role punya akses bahan baku (read)
 const INGREDIENT_READER_ROLES = ['Admin', 'Dapur', 'Kasir', 'Owner', 'OWNER', 'ADMIN', 'KITCHEN'];
@@ -20,7 +20,6 @@ function filterIngredientForRole(ing: any, role: string): any {
 }
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Helper to check and emit sold out status in real-time
 export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma, tenantId?: string) {
@@ -75,30 +74,18 @@ export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma, tenantId?:
       }
     });
 
-    if (io) {
-      io.emit('menu:stock_sync', {
+    // Emit hanya ke tenant terkait — tidak global broadcast
+    if (tenantId) {
+      emitToTenant(tenantId, 'menu:stock_sync', {
         soldOutProducts,
         availableProducts,
         timestamp: new Date().toISOString()
       });
-      if (tenantId) {
-        emitToTenant(tenantId, 'menu:stock_sync', {
-          soldOutProducts,
-          availableProducts,
-          timestamp: new Date().toISOString()
-        });
-      }
       if (soldOutProducts.length > 0) {
-        io.emit('product:sold_out', {
+        emitToTenant(tenantId, 'product:sold_out', {
           soldOutProducts,
           message: `Stok bahan baku diperbarui: ${soldOutProducts.length} menu sold out!`
         });
-        if (tenantId) {
-          emitToTenant(tenantId, 'product:sold_out', {
-            soldOutProducts,
-            message: `Stok bahan baku diperbarui: ${soldOutProducts.length} menu sold out!`
-          });
-        }
       }
     }
 
