@@ -35,7 +35,6 @@ async function fixRetailTenants() {
     await prisma.settings.updateMany({
       where: { tenantId: t.id },
       data: {
-        businessType: 'RETAIL',
         receiptHeader: `TOKO GROSIR & RETAIL\n${t.name}`,
         storeName: t.name
       }
@@ -88,7 +87,6 @@ async function fixRetailTenants() {
 
   for (const b of bengkelTenants) {
     await prisma.tenant.update({ where: { id: b.id }, data: { businessType: 'BENGKEL' } });
-    await prisma.settings.updateMany({ where: { tenantId: b.id }, data: { businessType: 'BENGKEL' } });
   }
 
   console.log('✔ Penyelarasan profil vertikal tenant selesai.');
