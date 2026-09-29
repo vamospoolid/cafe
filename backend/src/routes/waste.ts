@@ -62,14 +62,11 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
 
         const ing = await tx.ingredient.findFirst({
-          where: { 
-            id: Number(ingredientId),
-            tenantId
-          }
+          where: { id: Number(ingredientId) }
         });
 
         if (!ing) {
-          throw new Error('Bahan baku tidak ditemukan di sistem atau bukan milik outlet Anda');
+          throw new Error('Bahan baku tidak ditemukan di sistem');
         }
 
         itemName = ing.name;
@@ -130,10 +127,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
 
         const product = await tx.product.findFirst({
-          where: { 
-            id: Number(productId),
-            tenantId
-          },
+          where: { id: Number(productId) },
           include: {
             recipes: {
               include: { ingredient: true }
@@ -142,7 +136,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         });
 
         if (!product) {
-          throw new Error('Menu / Produk tidak ditemukan di sistem atau bukan milik outlet Anda');
+          throw new Error('Menu / Produk tidak ditemukan di sistem');
         }
 
         itemName = product.name;

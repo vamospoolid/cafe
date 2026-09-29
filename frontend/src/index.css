@@ -729,7 +729,7 @@ body {
 }
 
 .cart-footer {
-  padding: 1.5rem;
+  padding: 1rem;
   border-top: 1px solid var(--border-color);
   background: #fafafa;
 }
@@ -745,8 +745,6 @@ body {
 .summary-total {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
   border-bottom: 1px dashed var(--border-color);
   font-size: 1.25rem;
   font-weight: 800;

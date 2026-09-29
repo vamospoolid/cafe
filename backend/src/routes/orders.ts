@@ -360,27 +360,27 @@ router.post('/dinein', async (req: Request, res: Response) => {
           }
         });
 
-        // Advanced Mode: kurangi stok bahan baku berdasarkan resep
-        if (isAdvancedMode) {
-          const recipes = await tx.recipeItem.findMany({
-            where: { productId: Number(item.productId) }
+        // Kurangi stok bahan baku berdasarkan resep produk jika tersedia
+        const recipes = await tx.recipeItem.findMany({
+          where: { productId: Number(item.productId) }
+        });
+        for (const recipe of recipes) {
+          const used = recipe.qtyPerServing * Number(item.qty);
+          await tx.ingredient.update({
+            where: { id: recipe.ingredientId },
+            data: { stock: { decrement: used } }
           });
-          for (const recipe of recipes) {
-            const used = recipe.qtyPerServing * Number(item.qty);
-            await tx.ingredient.update({
-              where: { id: recipe.ingredientId },
-              data: { stock: { decrement: used } }
-            });
-            await tx.ingredientLog.create({
-              data: {
-                ingredientId: recipe.ingredientId,
-                change: -used,
-                type: 'Produksi',
-                description: `Order ${orderNumber} (Dine-in Self-Order)`,
-                referenceId: orderNumber
-              }
-            });
-          }
+          await tx.ingredientLog.create({
+            data: {
+              tenantId: tenantId || 'tenant-vamos-pool',
+              outletId: outletId || null,
+              ingredientId: recipe.ingredientId,
+              change: -used,
+              type: 'Produksi',
+              description: `Order ${orderNumber} (Dine-in Self-Order)`,
+              referenceId: orderNumber
+            }
+          });
         }
       }
 
@@ -561,29 +561,27 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
             }
           });
 
-          // Advanced Mode: kurangi stok bahan baku berdasarkan resep
-          if (isAdvancedMode) {
-            const recipes = await tx.recipeItem.findMany({
-              where: { productId: Number(item.productId) }
+          // Kurangi stok bahan baku berdasarkan resep produk jika tersedia
+          const recipes = await tx.recipeItem.findMany({
+            where: { productId: Number(item.productId) }
+          });
+          for (const recipe of recipes) {
+            const used = recipe.qtyPerServing * Number(item.qty);
+            await tx.ingredient.update({
+              where: { id: recipe.ingredientId },
+              data: { stock: { decrement: used } }
             });
-            for (const recipe of recipes) {
-              const used = recipe.qtyPerServing * Number(item.qty);
-              await tx.ingredient.update({
-                where: { id: recipe.ingredientId },
-                data: { stock: { decrement: used } }
-              });
-              await tx.ingredientLog.create({
-                data: {
-                  tenantId: tenantId || null,
-                  outletId: outletId || null,
-                  ingredientId: recipe.ingredientId,
-                  change: -used,
-                  type: 'Produksi',
-                  description: `Order ${orderNumber} (Sync Offline)`,
-                  referenceId: orderNumber
-                }
-              });
-            }
+            await tx.ingredientLog.create({
+              data: {
+                tenantId: tenantId || 'tenant-vamos-pool',
+                outletId: outletId || null,
+                ingredientId: recipe.ingredientId,
+                change: -used,
+                type: 'Produksi',
+                description: `Order ${orderNumber} (Sync Offline)`,
+                referenceId: orderNumber
+              }
+            });
           }
         }
 
@@ -912,29 +910,27 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           data: { stock: { decrement: Number(item.qty) } }
         });
 
-        // Advanced Mode: kurangi stok bahan baku berdasarkan resep
-        if (isAdvancedMode) {
-          const recipes = await tx.recipeItem.findMany({
-            where: { productId: Number(item.productId) }
+        // Kurangi stok bahan baku berdasarkan resep produk jika tersedia
+        const recipes = await tx.recipeItem.findMany({
+          where: { productId: Number(item.productId) }
+        });
+        for (const recipe of recipes) {
+          const used = recipe.qtyPerServing * Number(item.qty);
+          await tx.ingredient.update({
+            where: { id: recipe.ingredientId },
+            data: { stock: { decrement: used } }
           });
-          for (const recipe of recipes) {
-            const used = recipe.qtyPerServing * Number(item.qty);
-            await tx.ingredient.update({
-              where: { id: recipe.ingredientId },
-              data: { stock: { decrement: used } }
-            });
-            await tx.ingredientLog.create({
-              data: {
-                tenantId: tenantId || null,
-                outletId: outletId || null,
-                ingredientId: recipe.ingredientId,
-                change: -used,
-                type: 'Produksi',
-                description: `Order ${orderNumber}`,
-                referenceId: orderNumber
-              }
-            });
-          }
+          await tx.ingredientLog.create({
+            data: {
+              tenantId: tenantId || 'tenant-vamos-pool',
+              outletId: outletId || null,
+              ingredientId: recipe.ingredientId,
+              change: -used,
+              type: 'Produksi',
+              description: `Order ${orderNumber}`,
+              referenceId: orderNumber
+            }
+          });
         }
       }
 

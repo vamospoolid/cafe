@@ -156,14 +156,12 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
-    const tenantCondition = { tenantId };
     const activeCondition = includeInactive ? {} : { isActive: true };
     
     if (isFlat) {
       const allCategories = await prisma.category.findMany({
         where: {
           deletedAt: null,
-          ...tenantCondition,
           ...activeCondition
         },
         include: {
@@ -184,12 +182,11 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       where: { 
         parentId: null,
         deletedAt: null,
-        ...tenantCondition,
         ...activeCondition
       },
       include: {
         subCategories: {
-          where: { deletedAt: null, ...tenantCondition, ...activeCondition },
+          where: { deletedAt: null, ...activeCondition },
           include: {
             _count: {
               select: { 
@@ -228,10 +225,10 @@ router.post('/', authenticateToken, requirePermission('categories.manage'), asyn
     let validParentId: number | null = null;
     if (parentId) {
       const parent = await prisma.category.findFirst({
-        where: { id: Number(parentId), tenantId, deletedAt: null }
+        where: { id: Number(parentId), deletedAt: null }
       });
       if (!parent) {
-        return res.status(400).json({ error: 'Kategori induk tidak valid atau bukan milik outlet Anda' });
+        return res.status(400).json({ error: 'Kategori induk tidak valid atau tidak ditemukan' });
       }
       validParentId = parent.id;
     }
@@ -274,27 +271,25 @@ router.put('/:id', authenticateToken, requirePermission('categories.manage'), as
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
     const { name, icon, color, sortOrder, printerTarget, stationTarget, isActive, parentId } = req.body;
-
     const existing = await prisma.category.findFirst({
       where: {
         id: categoryId,
-        deletedAt: null,
-        tenantId
+        deletedAt: null
       }
     });
 
     if (!existing) {
-      return res.status(404).json({ error: 'Kategori tidak ditemukan atau Anda tidak memiliki akses.' });
+      return res.status(404).json({ error: 'Kategori tidak ditemukan.' });
     }
 
     let validParentId: number | null | undefined = undefined;
     if (parentId !== undefined) {
       if (parentId) {
         const parent = await prisma.category.findFirst({
-          where: { id: Number(parentId), tenantId, deletedAt: null }
+          where: { id: Number(parentId), deletedAt: null }
         });
         if (!parent || parent.id === categoryId) {
-          return res.status(400).json({ error: 'Kategori induk tidak valid atau bukan milik outlet Anda' });
+          return res.status(400).json({ error: 'Kategori induk tidak valid atau tidak ditemukan' });
         }
         validParentId = parent.id;
       } else {

@@ -818,13 +818,12 @@ export const POSView = () => {
             const subCats = currentCat?.subCategories || [];
             if (subCats.length === 0) return null;
             return (
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-1 animate-fade-in scrollbar-none">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider shrink-0 mr-0.5">Sub:</span>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 px-1 animate-fade-in scrollbar-none bg-slate-50/70 rounded-xl border border-slate-200/80 py-2">
                 <button
-                  className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold transition-all shrink-0 ${
+                  className={`text-[13px] px-4 py-2 rounded-full border-2 font-bold transition-all shrink-0 leading-tight ${
                     activeSubCategory === 'Semua'
-                      ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      ? 'bg-gradient-to-br from-slate-800 to-slate-700 text-white border-slate-700 shadow-md shadow-slate-300/40 scale-[1.02]'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-100 hover:text-slate-800 shadow-sm'
                   }`}
                   onClick={() => {
                     setActiveSubCategory('Semua');
@@ -836,23 +835,24 @@ export const POSView = () => {
                 {subCats.map((sub: any) => (
                   <button
                     key={sub.id}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold transition-all shrink-0 flex items-center gap-1 ${
+                    className={`text-[13px] px-4 py-2 rounded-full border-2 font-bold transition-all shrink-0 flex items-center gap-1.5 leading-tight ${
                       activeSubCategory === sub.id
-                        ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        ? 'bg-gradient-to-br from-slate-800 to-slate-700 text-white border-slate-700 shadow-md shadow-slate-300/40 scale-[1.02]'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-100 hover:text-slate-800 shadow-sm'
                     }`}
                     onClick={() => {
                       setActiveSubCategory(sub.id);
                       posContext?.triggerHaptic(10);
                     }}
                   >
-                    {sub.icon && <span>{sub.icon}</span>}
+                    {sub.icon && <span className="text-base leading-none">{sub.icon}</span>}
                     <span>{sub.name}</span>
                   </button>
                 ))}
               </div>
             );
           })()}
+
         </div>
 
         {/* Grid Produk Responsive 2-Kolom di HP / Multi-Kolom di Layar Lebar */}
@@ -1001,46 +1001,54 @@ export const POSView = () => {
                 <span>{formatCurrency(serviceCharge)}</span>
               </div>
             )}
-            <div className="summary-total border-t pt-3 mt-2">
+            <div className="summary-total border-t pt-3 mt-2 mb-3">
               <span>Total</span>
-              <span className="text-xl">{formatCurrency(total)}</span>
+              <span className="text-xl font-black text-emerald-600">{formatCurrency(total)}</span>
             </div>
             
             {/* Customer Selection */}
             <div 
-              className="mb-3 p-3 border border-gray-200 rounded-lg flex items-center justify-between bg-white cursor-pointer hover:border-primary transition-colors group shadow-sm"
+              className="mb-2.5 px-3 py-2.5 border border-slate-200 rounded-xl flex items-center justify-between bg-white cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all group"
               onClick={() => setIsCustomerModalOpen(true)}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-50 text-primary flex items-center justify-center">
-                  <User size={20} />
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <User size={18} />
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-gray-800">
+                  <div className="font-bold text-sm text-slate-800 leading-tight">
                     {customer ? customer.name : 'Pelanggan Umum'}
                   </div>
-                  <div className="text-xs text-muted">
-                    {customer?.points ? `Member (${customer.points} pts)` : 'Klik untuk data Pemesan'}
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {customer?.points ? `Member (${customer.points} pts)` : 'Klik untuk pilih pelanggan'}
                   </div>
                 </div>
               </div>
-              <Edit2 size={16} className="text-gray-400 group-hover:text-primary" />
+              <Edit2 size={15} className="text-slate-400 group-hover:text-indigo-500 shrink-0" />
             </div>
 
             {/* Table / Order Type Selection */}
-            <div className="mb-4 p-3 border border-gray-200 rounded-lg bg-white shadow-sm flex flex-col gap-3">
+            <div className="mb-3 px-3 py-2.5 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-2.5">
               <div className="flex gap-2">
                 <button 
-                  className={`flex-1 py-2 text-sm font-bold rounded-md border transition-all ${orderType === 'Take Away' ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                  className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-all ${
+                    orderType === 'Take Away'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200/50'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                  }`}
                   onClick={() => { setOrderType('Take Away'); clearSelectedTables(); }}
                 >
-                  Take Away
+                  🛍️ Take Away
                 </button>
                 <button 
-                  className={`flex-1 py-2 text-sm font-bold rounded-md border transition-all ${orderType === 'Dine In' ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                  className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-all ${
+                    orderType === 'Dine In'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200/50'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                  }`}
                   onClick={() => setOrderType('Dine In')}
                 >
-                  Dine In
+                  🍽️ Dine In
                 </button>
               </div>
               
@@ -1117,20 +1125,40 @@ export const POSView = () => {
 
             {orderType === 'Dine In' && (
               <button 
-                className={`w-full font-bold rounded-lg py-3 mb-2 flex items-center justify-center gap-2 border-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:text-blue-800 transition-all shadow-sm ${cart.length === 0 || selectedTableIds.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full font-bold rounded-xl py-2.5 mb-2 flex items-center justify-center gap-2 border-2 bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 hover:text-sky-800 transition-all shadow-sm text-sm ${
+                  cart.length === 0 || selectedTableIds.length === 0 ? 'opacity-40 cursor-not-allowed' : ''
+                }`}
                 disabled={cart.length === 0 || selectedTableIds.length === 0}
                 onClick={handleSaveBill}
               >
-                <Save size={20} /> Simpan Bill {selectedTableIds.length > 1 ? `(${selectedTableIds.length} Meja)` : ''} (Kirim ke Dapur)
+                <Save size={17} /> Simpan Bill {selectedTableIds.length > 1 ? `(${selectedTableIds.length} Meja)` : ''}
               </button>
             )}
 
-            <button 
-              className="btn-checkout py-3 flex items-center justify-center gap-2"
+            <button
+              className="w-full py-3.5 rounded-xl font-black text-base flex items-center justify-center gap-2.5 transition-all"
+              style={{
+                background: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                  ? '#e2e8f0'
+                  : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                  ? '#64748b'
+                  : 'white',
+                boxShadow: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                  ? 'none'
+                  : '0 6px 20px rgba(16, 185, 129, 0.35)',
+                cursor: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                  ? 'not-allowed'
+                  : 'pointer',
+                transform: 'none',
+                border: 'none',
+                letterSpacing: '0.01em',
+              }}
               disabled={cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)}
               onClick={() => setIsCheckoutOpen(true)}
             >
-              <CreditCard size={20} /> Proses Pembayaran {selectedTableIds.length > 1 ? `(${selectedTableIds.length} Meja)` : ''}
+              <CreditCard size={20} />
+              Proses Pembayaran{selectedTableIds.length > 1 ? ` (${selectedTableIds.length} Meja)` : ''}
             </button>
           </div>
         </div>
