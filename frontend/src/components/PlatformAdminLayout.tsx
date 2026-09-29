@@ -57,10 +57,41 @@ export const PlatformAdminLayout: React.FC<PlatformAdminLayoutProps> = ({ childr
   }, []);
 
   // SuperAdmin Access Guard
+  const token = posContext?.token;
   const user = posContext?.user;
   const isSuper = user?.isPlatformAdmin === true || 
                   user?.role === 'SUPERADMIN';
 
+  // 1. Jika belum login sama sekali
+  if (!token || !user) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center text-white">
+        <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center mb-4 shadow-xl">
+          <ShieldCheck size={36} />
+        </div>
+        <h1 className="text-2xl font-black text-white">Master SaaS Command Center</h1>
+        <p className="text-sm text-slate-400 max-w-md mt-2">
+          Silakan masuk terlebih dahulu menggunakan akun <strong>Platform Developer / SuperAdmin</strong> untuk mengelola seluruh tenant, paket, dan operasional SaaS.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
+          <button
+            onClick={() => navigate('/login')}
+            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-95"
+          >
+            <LogOut size={16} /> Masuk ke Halaman Login
+          </button>
+          <button
+            onClick={() => navigate('/')}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+          >
+            <ArrowLeft size={16} /> Ke Halaman Beranda
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Jika sudah login tetapi bukan SuperAdmin
   if (!isSuper) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white">
@@ -69,14 +100,25 @@ export const PlatformAdminLayout: React.FC<PlatformAdminLayoutProps> = ({ childr
         </div>
         <h1 className="text-2xl font-black text-white">Akses Terbatas (403 Forbidden)</h1>
         <p className="text-sm text-slate-300 max-w-md mt-2">
-          Area ini khusus untuk <strong>Platform Developer &amp; SuperAdmin</strong>. Akun kasir/staf toko Anda tidak memiliki hak akses ke Master Command Center.
+          Anda sedang login sebagai <strong>{user?.name || user?.username}</strong> ({user?.role}). Akun toko/kasir ini tidak memiliki hak akses ke Master Command Center.
         </p>
-        <button
-          onClick={() => navigate('/pos')}
-          className="mt-6 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm flex items-center gap-2 cursor-pointer transition-all border-2 border-indigo-400 shadow-md active:scale-95"
-        >
-          <ArrowLeft size={16} /> Kembali ke Aplikasi POS
-        </button>
+        <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
+          <button
+            onClick={() => navigate('/pos')}
+            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer transition-all border-2 border-indigo-400 shadow-md active:scale-95"
+          >
+            <ArrowLeft size={16} /> Kembali ke Aplikasi POS
+          </button>
+          <button
+            onClick={() => {
+              posContext?.logout();
+              navigate('/login');
+            }}
+            className="w-full sm:w-auto px-5 py-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
+          >
+            <LogOut size={16} /> Ganti Akun SuperAdmin
+          </button>
+        </div>
       </div>
     );
   }
