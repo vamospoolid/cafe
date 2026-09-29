@@ -106,7 +106,8 @@ export const SaaSPlatformAdminView: React.FC = () => {
   const fetchPlatformData = async () => {
     setLoading(true);
     try {
-      const headers = { Authorization: `Bearer ${posContext?.token}` };
+      const effectiveToken = posContext?.token || localStorage.getItem('pos_token') || localStorage.getItem('token') || '';
+      const headers: Record<string, string> = effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {};
       
       const [ovRes, tenRes, invRes, plansRes] = await Promise.all([
         fetch('/api/platform-admin/overview', { headers }),
@@ -115,7 +116,13 @@ export const SaaSPlatformAdminView: React.FC = () => {
         fetch('/api/features/plans', { headers })
       ]);
 
-      if (ovRes.ok) setOverviewData(await ovRes.json());
+      if (ovRes.ok) {
+        const oData = await ovRes.json();
+        setOverviewData(oData);
+      } else if (ovRes.status === 401 || ovRes.status === 403) {
+        toast('Sesi admin kedaluwarsa. Silakan Logout dan Login ulang.', 'error');
+      }
+
       if (tenRes.ok) {
         const tData = await tenRes.json();
         setTenants(tData.tenants || []);
@@ -126,7 +133,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
       }
       if (plansRes.ok) {
         const pData = await plansRes.json();
-        setPlansList(pData.plans || []);
+        setPlansList(Array.isArray(pData) ? pData : (pData.plans || []));
       }
     } catch (err) {
       console.error('Failed to load platform admin telemetry:', err);
