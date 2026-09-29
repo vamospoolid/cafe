@@ -110,7 +110,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     // If super admin / platform admin / owner, always true
     if ((roleLower === 'owner' || roleLower === 'admin' || roleLower === 'superadmin') && (user?.username === 'admin' || roleLower === 'owner' || roleLower === 'admin')) return true;
     // Core features always allowed
-    if (featureKey === 'pos.cashier' || featureKey === 'inventory.basic' || featureKey === 'finance.cashflow') return true;
+    if (featureKey === 'pos.cashier' || featureKey === 'inventory.basic' || featureKey === 'finance.cashflow' || featureKey === 'pos.tables') return true;
     return features.includes(featureKey);
   };
 
