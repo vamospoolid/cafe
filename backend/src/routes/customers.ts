@@ -151,7 +151,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
       const existingEmail = await prisma.customer.findFirst({
         where: {
           email: email.trim(),
-          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+          ...(tenantId ? { tenantId } : {})
         }
       });
       if (existingEmail) {
@@ -182,12 +182,15 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // PUT update customer
 router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-vamos-pool';
+    const tenantId = (req as any).tenantId || req.user?.tenantId;
+    if (!tenantId && !req.user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
     const { name, phone, email, birthday, pointsAdjustment, adjustmentReason } = req.body;
 
     const existingCustomer = await prisma.customer.findFirst({
-      where: { id: Number(id), tenantId }
+      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
     });
 
     if (!existingCustomer) {
@@ -197,7 +200,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     // Check phone uniqueness if updated
     if (phone && phone !== existingCustomer.phone) {
       const existingPhone = await prisma.customer.findFirst({
-        where: { phone, tenantId, id: { not: Number(id) } }
+        where: { phone, ...(tenantId ? { tenantId } : {}), id: { not: Number(id) } }
       });
       if (existingPhone) {
         return res.status(400).json({ error: 'Nomor telepon sudah terdaftar di outlet Anda' });
@@ -207,7 +210,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     // Check email uniqueness if updated
     if (email && email !== existingCustomer.email) {
       const existingEmail = await prisma.customer.findFirst({
-        where: { email, tenantId, id: { not: Number(id) } }
+        where: { email, ...(tenantId ? { tenantId } : {}), id: { not: Number(id) } }
       });
       if (existingEmail) {
         return res.status(400).json({ error: 'Email sudah terdaftar di outlet Anda' });
@@ -228,7 +231,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       updateData.points = newPoints;
       
       pointsLogData = {
-        tenantId,
+        tenantId: existingCustomer.tenantId || tenantId,
         points: Number(pointsAdjustment),
         type: 'Manual',
         description: adjustmentReason || 'Penyesuaian manual oleh admin'
@@ -244,7 +247,7 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       if (pointsLogData) {
         await tx.pointLog.create({
           data: {
-            tenantId,
+            tenantId: pointsLogData.tenantId,
             customerId: Number(id),
             points: pointsLogData.points,
             type: pointsLogData.type,
@@ -266,11 +269,14 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 // DELETE customer
 router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-vamos-pool';
+    const tenantId = (req as any).tenantId || req.user?.tenantId;
+    if (!tenantId && !req.user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
 
     const customer = await prisma.customer.findFirst({
-      where: { id: Number(id), tenantId }
+      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
     });
 
     if (!customer) {

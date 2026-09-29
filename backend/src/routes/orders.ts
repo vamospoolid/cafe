@@ -311,25 +311,28 @@ router.post('/dinein', async (req: Request, res: Response) => {
       }
     }
     if (!tenantId) {
-      const firstTenant = await prisma.tenant.findFirst({ select: { id: true } });
-      tenantId = firstTenant?.id || null;
+      return res.status(400).json({ error: 'Tenant context tidak valid untuk Self-Order. Silakan scan ulang QR meja.', code: 'MISSING_TENANT_CONTEXT' });
     }
 
     const orderNumber = await generateOrderNumber(tenantId);
 
     const result = await prisma.$transaction(async (tx) => {
-      // Ambil buyPrice untuk produk agar HPP tercatat
+      // Ambil buyPrice untuk produk agar HPP tercatat & validasi kepemilikan tenant
       const productIds = items.map((item: any) => Number(item.productId));
       const products = await tx.product.findMany({
-        where: { id: { in: productIds } }
+        where: { id: { in: productIds }, tenantId }
       });
+      if (products.length !== new Set(productIds).size) {
+        throw new Error('Satu atau lebih menu yang dipilih tidak ditemukan pada tenant ini.');
+      }
       const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
 
       // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
-      const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+      const settings = await tx.settings.findFirst({ where: { tenantId } });
       const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
       const hasTable = Boolean(resolvedTableId);
-      const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
+      const isKDSEnabled = settings?.enableKDS !== false;
+      const shouldAutoServe = !isKDSEnabled || (!hasTable && (settings as any)?.autoCompleteKDSOnPay === true);
 
       // Buat Order Induk
       const order = await tx.order.create({
@@ -388,7 +391,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
           });
           await tx.ingredientLog.create({
             data: {
-              tenantId: tenantId || 'tenant-vamos-pool',
+              tenantId,
               outletId: outletId || null,
               ingredientId: recipe.ingredientId,
               change: -used,
@@ -606,7 +609,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
             });
             await tx.ingredientLog.create({
               data: {
-                tenantId: tenantId || 'tenant-vamos-pool',
+                tenantId: tenantId || null,
                 outletId: outletId || null,
                 ingredientId: recipe.ingredientId,
                 change: -used,
@@ -633,6 +636,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
           }
           await tx.debt.create({
             data: {
+              tenantId: tenantId || null,
               customerId: finalCustomerId,
               orderId: createdOrder.id,
               amount: Number(total),
@@ -650,6 +654,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
             where: {
               userId: userId,
               status: 'Closed',
+              ...(tenantId ? { tenantId } : {}),
               waktuBuka: { lte: datePaid },
               waktuTutup: { gte: datePaid }
             }
@@ -856,11 +861,17 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         outletId = firstOutlet?.id || null;
       }
 
-      // 0. Ambil buyPrice untuk semua product
+      // 0. Ambil buyPrice untuk semua product & validasi kepemilikan tenant
       const productIds = items.map((item: any) => Number(item.productId));
       const products = await tx.product.findMany({
-        where: { id: { in: productIds } }
+        where: {
+          id: { in: productIds },
+          ...(tenantId ? { tenantId } : {})
+        }
       });
+      if (tenantId && products.length !== new Set(productIds).size) {
+        throw new Error('Satu atau lebih produk tidak ditemukan atau bukan milik tenant ini.');
+      }
       const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
 
       // 0.5. Cari/Registrasi Customer jika ada phone
@@ -906,7 +917,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       // Cek settings toko
       const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
       const hasTable = Boolean(tableId);
-      const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
+      const isKDSEnabled = settings?.enableKDS !== false;
+      const shouldAutoServe = !isKDSEnabled || (!hasTable && (settings as any)?.autoCompleteKDSOnPay === true);
       const isActuallyPaid = Boolean(isPaid);
       const nowPaid = isActuallyPaid ? new Date() : null;
 
@@ -1005,7 +1017,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           });
           await tx.ingredientLog.create({
             data: {
-              tenantId: tenantId || 'tenant-vamos-pool',
+              tenantId: tenantId || null,
               outletId: outletId || null,
               ingredientId: recipe.ingredientId,
               change: -used,

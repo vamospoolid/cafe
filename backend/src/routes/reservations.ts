@@ -60,6 +60,16 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     const { customerName, phone, date, time, tableId, guests, dpAmount, paymentMethod, notes } = req.body;
     const userId = user?.id || 1;
 
+    // Validasi kepemilikan meja pada tenant
+    if (tableId) {
+      const tableCheck = await prisma.table.findFirst({
+        where: { id: Number(tableId), ...tenantWhere(tenantId) }
+      });
+      if (!tableCheck) {
+        return res.status(400).json({ error: 'Meja tidak ditemukan pada outlet Anda.' });
+      }
+    }
+
     // Fix #5a: Validasi anti-double booking – cek konflik meja pada tanggal & jam yang sama dalam tenant yang sama
     if (tableId && date && time) {
       const conflict = await prisma.reservation.findFirst({
@@ -139,6 +149,15 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
     });
     if (!existing) {
       return res.status(404).json({ error: 'Data reservasi tidak ditemukan' });
+    }
+
+    if (tableId) {
+      const tableCheck = await prisma.table.findFirst({
+        where: { id: Number(tableId), ...tenantWhere(tenantId) }
+      });
+      if (!tableCheck) {
+        return res.status(400).json({ error: 'Meja tidak ditemukan pada outlet Anda.' });
+      }
     }
 
     // Anti-IDOR: gunakan updateMany dengan { id, tenantId } bukan update dengan { id } saja

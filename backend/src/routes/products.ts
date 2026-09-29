@@ -206,15 +206,6 @@ router.post('/', authenticateToken, requirePermission('products.manage'), requir
     if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
-
-    const tenantFilter = {
-      OR: [
-        { tenantId },
-        { tenantId: 'tenant-vamos-pool' },
-        { tenantId: null }
-      ]
-    };
-
     const { 
       barcode, name, categoryId, subCategoryId, buyPrice, sellPrice, 
       sellPriceRetail, sellPriceMitra, sellPriceGrosir, minQtyGrosir,
@@ -229,36 +220,36 @@ router.post('/', authenticateToken, requirePermission('products.manage'), requir
     // Normalize empty barcode to null (prevent unique constraint violation when multiple products have no barcode)
     const normalizedBarcode = barcode && String(barcode).trim() !== '' ? String(barcode).trim() : null;
 
-    // Validasi keberadaan kategori
+    // Validasi keberadaan kategori milik tenant
     const validCategory = await prisma.category.findFirst({
-      where: { id: Number(categoryId), deletedAt: null }
+      where: { id: Number(categoryId), tenantId, deletedAt: null }
     });
     if (!validCategory) {
-      return res.status(400).json({ error: 'Kategori tidak valid atau tidak ditemukan' });
+      return res.status(400).json({ error: 'Kategori tidak valid atau tidak ditemukan pada tenant ini.' });
     }
 
     let validSubCategoryId: number | null = null;
     if (subCategoryId) {
       const validSubCategory = await prisma.category.findFirst({
-        where: { id: Number(subCategoryId), deletedAt: null }
+        where: { id: Number(subCategoryId), tenantId, deletedAt: null }
       });
       if (!validSubCategory) {
-        return res.status(400).json({ error: 'Sub-kategori tidak valid atau tidak ditemukan' });
+        return res.status(400).json({ error: 'Sub-kategori tidak valid atau tidak ditemukan pada tenant ini.' });
       }
       validSubCategoryId = validSubCategory.id;
     }
     
-    // Validasi keberadaan setiap ingredientId sebelum create
+    // Validasi kepemilikan setiap ingredientId pada tenant sebelum create
     if (rawRecipeItems && Array.isArray(rawRecipeItems) && rawRecipeItems.length > 0) {
       const ingredientIds = rawRecipeItems.map((r: any) => Number(r.ingredientId));
       const validIngredients = await prisma.ingredient.findMany({
-        where: { id: { in: ingredientIds } },
+        where: { id: { in: ingredientIds }, tenantId, deletedAt: null },
         select: { id: true }
       });
       const validIngredientIds = new Set(validIngredients.map(i => i.id));
       const invalidIngredient = ingredientIds.find(id => !validIngredientIds.has(id));
       if (invalidIngredient) {
-        return res.status(400).json({ error: `Bahan baku ID ${invalidIngredient} tidak ditemukan di sistem.`, code: 'INVALID_INGREDIENT_OWNERSHIP' });
+        return res.status(400).json({ error: `Bahan baku ID ${invalidIngredient} tidak ditemukan pada tenant ini.`, code: 'INVALID_INGREDIENT_OWNERSHIP' });
       }
     }
 
@@ -310,7 +301,6 @@ router.post('/', authenticateToken, requirePermission('products.manage'), requir
       }
     });
 
-
     await AuditLogger.log({
       action: 'PRODUCT_CREATE',
       resource: 'PRODUCT',
@@ -355,37 +345,34 @@ router.put('/:id', authenticateToken, requirePermission('products.manage'), asyn
     // Normalize empty barcode to null (prevent unique constraint violation when multiple products have no barcode)
     const normalizedBarcode = barcode && String(barcode).trim() !== '' ? String(barcode).trim() : null;
 
-    const tenantFilter = {
-      OR: [
-        ...(tenantId ? [{ tenantId }] : []),
-        { tenantId: 'tenant-vamos-pool' },
-        { tenantId: null }
-      ]
-    };
-
     const oldProduct = await prisma.product.findFirst({
-      where: { id: productId }
+      where: {
+        id: productId,
+        ...(isPlatformAdmin ? {} : { tenantId })
+      }
     });
 
     if (!oldProduct) {
-      return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+      return res.status(404).json({ error: 'Produk tidak ditemukan atau Anda tidak memiliki akses.' });
     }
+
+    const targetTenantId = oldProduct.tenantId || tenantId;
 
     if (categoryId !== undefined) {
       const validCategory = await prisma.category.findFirst({
-        where: { id: Number(categoryId), deletedAt: null }
+        where: { id: Number(categoryId), tenantId: targetTenantId, deletedAt: null }
       });
       if (!validCategory) {
-        return res.status(400).json({ error: 'Kategori tidak valid atau tidak ditemukan' });
+        return res.status(400).json({ error: 'Kategori tidak valid atau tidak ditemukan pada tenant ini.' });
       }
     }
 
     if (subCategoryId !== undefined && subCategoryId !== null) {
       const validSubCategory = await prisma.category.findFirst({
-        where: { id: Number(subCategoryId), deletedAt: null }
+        where: { id: Number(subCategoryId), tenantId: targetTenantId, deletedAt: null }
       });
       if (!validSubCategory) {
-        return res.status(400).json({ error: 'Sub-kategori tidak valid atau tidak ditemukan' });
+        return res.status(400).json({ error: 'Sub-kategori tidak valid atau tidak ditemukan pada tenant ini.' });
       }
     }
 
@@ -393,13 +380,13 @@ router.put('/:id', authenticateToken, requirePermission('products.manage'), asyn
     if (rawRecipeItems !== undefined && Array.isArray(rawRecipeItems) && rawRecipeItems.length > 0) {
       const ingredientIds = rawRecipeItems.map((r: any) => Number(r.ingredientId));
       const validIngredients = await prisma.ingredient.findMany({
-        where: { id: { in: ingredientIds } },
+        where: { id: { in: ingredientIds }, tenantId: targetTenantId, deletedAt: null },
         select: { id: true }
       });
       const validIngredientIds = new Set(validIngredients.map(i => i.id));
       const invalidIngredient = ingredientIds.find(id => !validIngredientIds.has(id));
       if (invalidIngredient) {
-        return res.status(400).json({ error: `Bahan baku ID ${invalidIngredient} tidak ditemukan di sistem.`, code: 'INVALID_INGREDIENT_OWNERSHIP' });
+        return res.status(400).json({ error: `Bahan baku ID ${invalidIngredient} tidak ditemukan pada tenant ini.`, code: 'INVALID_INGREDIENT_OWNERSHIP' });
       }
     }
 
@@ -478,7 +465,6 @@ router.put('/:id', authenticateToken, requirePermission('products.manage'), asyn
     }, req);
 
     // Invalidate tenant catalog cache
-    const targetTenantId = product?.tenantId || tenantId;
     if (targetTenantId) {
       await cacheService.bumpTenantCatalogVersion(targetTenantId);
     }
@@ -502,18 +488,11 @@ router.delete('/:id', authenticateToken, requirePermission('products.manage'), a
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
 
-    const tenantFilter = {
-      OR: [
-        ...(tenantId ? [{ tenantId }] : []),
-        { tenantId: 'tenant-vamos-pool' },
-        { tenantId: null }
-      ]
-    };
-
     const oldProduct = await prisma.product.findFirst({
       where: {
         id: productId,
-        deletedAt: null
+        deletedAt: null,
+        ...(isPlatformAdmin ? {} : { tenantId })
       }
     });
     
@@ -543,7 +522,7 @@ router.delete('/:id', authenticateToken, requirePermission('products.manage'), a
     }
 
     res.json({ 
-      success: true,
+      success: true, 
       message: `Produk "${oldProduct.name}" dipindahkan ke Keranjang Sampah. Anda dapat memulihkannya dalam 30 hari.` 
     });
   } catch (error: any) {

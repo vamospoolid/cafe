@@ -13,7 +13,10 @@ const router = Router();
  */
 router.get('/my-subscription', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-vamos-pool';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -109,7 +112,10 @@ router.get('/my-subscription', authenticateToken, async (req: AuthRequest, res: 
  */
 router.get('/profile', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-vamos-pool';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -140,7 +146,10 @@ router.get('/profile', authenticateToken, async (req: AuthRequest, res: Response
  */
 router.patch('/profile', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenantId || 'tenant-vamos-pool';
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { name, ownerName, phone, email, notes, logoUrl } = req.body;
 
     const updated = await prisma.tenant.update({

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 import { emitToTenant } from '../index';
+import { TenantContext } from '../utils/tenantContext';
 import prisma from '../db';
 
 // Helper: apakah role punya akses bahan baku (read)
@@ -20,6 +21,27 @@ function filterIngredientForRole(ing: any, role: string): any {
 }
 
 const router = Router();
+
+// Helper to extract tenantId from request context
+function getTenantId(req: Request): string | undefined {
+  const user = (req as any).user;
+  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+}
+
+// Router-level fail-closed guard: semua operasi bahan baku wajib terautentikasi & memiliki tenantId
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const tenantId = getTenantId(req);
+  const user = (req as any).user;
+  if (!tenantId && !user?.isPlatformAdmin) {
+    return res.status(400).json({
+      error: 'Tenant context tidak tersedia. Silakan login ulang.',
+      code: 'MISSING_TENANT_CONTEXT'
+    });
+  }
+  (req as any).tenantId = tenantId;
+  next();
+});
 
 // Helper to check and emit sold out status in real-time
 export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma, tenantId?: string) {
@@ -99,12 +121,16 @@ export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma, tenantId?:
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   const userRole = (req as any).user?.role || 'Kasir';
   const roleUpper = userRole.toUpperCase();
+  const tenantId = (req as any).tenantId;
   // Cek akses minimum
   if (!INGREDIENT_READER_ROLES.some(r => r.toUpperCase() === roleUpper)) {
     return res.status(403).json({ error: 'Akses Ditolak: Role Anda tidak memiliki akses ke modul Bahan Baku.' });
   }
   try {
+    const where: any = { deletedAt: null };
+    if (tenantId) where.tenantId = tenantId;
     const ingredients = await prisma.ingredient.findMany({
+      where,
       include: { supplier: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' }
     });
@@ -119,8 +145,11 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 // GET production forecast & menu capacity (Analisis Menu Hampir Habis & Sold Out)
 router.get('/production-forecast', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
+    const where: any = { status: 'Aktif', deletedAt: null };
+    if (tenantId) where.tenantId = tenantId;
     const products = await prisma.product.findMany({
-      where: { status: 'Aktif' },
+      where,
       include: {
         category: { select: { id: true, name: true } },
         recipes: {
@@ -224,7 +253,8 @@ router.get('/production-forecast', authenticateToken, async (req: Request, res: 
 // POST stock opname audit (Analisis Selisih Stok Sistem vs Fisik & Auto-Adjust)
 router.post('/stock-opname', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { items, auditorName, notes } = req.body;
+    const tenantId = (req as any).tenantId;
+    const { items, auditorName } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Data item stock opname tidak boleh kosong' });
     }
@@ -237,8 +267,8 @@ router.post('/stock-opname', authenticateToken, async (req: Request, res: Respon
 
     await prisma.$transaction(async (tx) => {
       for (const item of items) {
-        const ing = await tx.ingredient.findUnique({
-          where: { id: Number(item.ingredientId) }
+        const ing = await tx.ingredient.findFirst({
+          where: { id: Number(item.ingredientId), tenantId, deletedAt: null }
         });
         if (!ing) continue;
 
@@ -267,6 +297,7 @@ router.post('/stock-opname', authenticateToken, async (req: Request, res: Respon
           
           await tx.ingredientLog.create({
             data: {
+              tenantId,
               ingredientId: ing.id,
               change: variance,
               type: 'Stock Opname',
@@ -313,8 +344,15 @@ router.post('/stock-opname', authenticateToken, async (req: Request, res: Respon
 // GET stock opname audit history
 router.get('/stock-opname/history', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const logs = await prisma.ingredientLog.findMany({
-      where: { type: 'Stock Opname' },
+      where: {
+        type: 'Stock Opname',
+        OR: [
+          { tenantId },
+          { ingredient: { tenantId } }
+        ]
+      },
       include: {
         ingredient: { select: { id: true, name: true, unit: true, buyPrice: true } }
       },
@@ -331,7 +369,9 @@ router.get('/stock-opname/history', authenticateToken, async (req: Request, res:
 // GET low-stock ingredients (stok <= minStock)
 router.get('/low-stock', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const all = await prisma.ingredient.findMany({ 
+      where: { tenantId, deletedAt: null },
       include: { supplier: { select: { id: true, name: true } } },
       orderBy: { stock: 'asc' } 
     });
@@ -345,9 +385,23 @@ router.get('/low-stock', authenticateToken, async (req: Request, res: Response) 
 // POST create ingredient — Admin only
 router.post('/', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId, purchaseUnit, conversionRatio, warehouseMinStock } = req.body;
+    
+    // Validasi supplier jika diisi agar tidak IDOR lintas tenant
+    let validatedSupplierId: number | null = null;
+    if (supplierId) {
+      const supplierExists = await prisma.supplier.findFirst({
+        where: { id: Number(supplierId), tenantId }
+      });
+      if (supplierExists) {
+        validatedSupplierId = supplierExists.id;
+      }
+    }
+
     const ingredient = await prisma.ingredient.create({
       data: {
+        tenantId,
         name: name ? name.trim() : '',
         category: category || 'FOOD',
         subCategory: subCategory ? subCategory.trim() : null,
@@ -355,7 +409,7 @@ router.post('/', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMI
         stock: Number(stock) || 0,
         minStock: Number(minStock) || 0,
         buyPrice: Number(buyPrice) || 0,
-        supplierId: supplierId ? Number(supplierId) : null,
+        supplierId: validatedSupplierId,
         purchaseUnit: purchaseUnit ? purchaseUnit.trim() : null,
         conversionRatio: Number(conversionRatio) > 0 ? Number(conversionRatio) : 1,
         warehouseMinStock: Number(warehouseMinStock) || 0
@@ -372,8 +426,29 @@ router.post('/', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMI
 // PUT update ingredient — Admin only (Dapur tidak bisa edit harga beli / nama / unit)
 router.put('/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { id } = req.params;
     const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId, purchaseUnit, conversionRatio, warehouseMinStock } = req.body;
+
+    const existing = await prisma.ingredient.findFirst({
+      where: { id: Number(id), tenantId }
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Bahan baku tidak ditemukan atau Anda tidak memiliki akses' });
+    }
+
+    let validatedSupplierId: number | null | undefined = undefined;
+    if (supplierId !== undefined) {
+      if (supplierId) {
+        const supplierExists = await prisma.supplier.findFirst({
+          where: { id: Number(supplierId), tenantId }
+        });
+        validatedSupplierId = supplierExists ? supplierExists.id : null;
+      } else {
+        validatedSupplierId = null;
+      }
+    }
+
     const ingredient = await prisma.ingredient.update({
       where: { id: Number(id) },
       data: {
@@ -384,7 +459,7 @@ router.put('/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'AD
         stock: stock !== undefined ? Number(stock) : undefined,
         minStock: minStock !== undefined ? Number(minStock) : undefined,
         buyPrice: buyPrice !== undefined ? Number(buyPrice) : undefined,
-        supplierId: supplierId !== undefined ? (supplierId ? Number(supplierId) : null) : undefined,
+        supplierId: validatedSupplierId,
         purchaseUnit: purchaseUnit !== undefined ? (purchaseUnit ? purchaseUnit.trim() : null) : undefined,
         conversionRatio: conversionRatio !== undefined ? (Number(conversionRatio) > 0 ? Number(conversionRatio) : 1) : undefined,
         warehouseMinStock: warehouseMinStock !== undefined ? Number(warehouseMinStock) : undefined
@@ -401,6 +476,7 @@ router.put('/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'AD
 // POST Catat Stock Loss / Waste (Dual-Mode: Bahan Baku Mentah & Menu / Porsi Jadi)
 router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { targetType = 'INGREDIENT', ingredientId, productId, qtyLoss, reason, notes } = req.body;
     const qty = Number(qtyLoss);
     if (isNaN(qty) || qty <= 0) {
@@ -418,11 +494,11 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        const prod = await tx.product.findUnique({
-          where: { id: Number(productId) },
+        const prod = await tx.product.findFirst({
+          where: { id: Number(productId), tenantId },
           include: { recipes: { include: { ingredient: true } } }
         });
-        if (!prod) throw new Error('Menu masakan tidak ditemukan');
+        if (!prod) throw new Error('Menu masakan tidak ditemukan atau Anda tidak memiliki akses');
 
         let totalCost = 0;
         const createdLogs: any[] = [];
@@ -440,6 +516,7 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
 
             const log = await tx.ingredientLog.create({
               data: {
+                tenantId,
                 ingredientId: r.ingredientId,
                 change: -ingQty,
                 cost: ingCost,
@@ -456,10 +533,11 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
           // If no recipe BOM, use product buyPrice as fallback cost
           const fallbackCost = qty * (prod.buyPrice || 0);
           totalCost = fallbackCost;
-          const firstIng = await tx.ingredient.findFirst();
+          const firstIng = await tx.ingredient.findFirst({ where: { tenantId } });
           if (firstIng) {
             const log = await tx.ingredientLog.create({
               data: {
+                tenantId,
                 ingredientId: firstIng.id,
                 change: 0,
                 cost: fallbackCost,
@@ -477,7 +555,7 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
         return { product: prod, logs: createdLogs, totalCost };
       });
 
-      await syncMenuSoldOutStatus(prisma);
+      await syncMenuSoldOutStatus(prisma, tenantId);
       return res.status(201).json({ message: 'Stock loss menu masakan berhasil dicatat', ...result });
     } else {
       // INGREDIENT MODE
@@ -486,8 +564,8 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
       }
 
       const result = await prisma.$transaction(async (tx) => {
-        const ing = await tx.ingredient.findUnique({ where: { id: Number(ingredientId) } });
-        if (!ing) throw new Error('Bahan baku tidak ditemukan');
+        const ing = await tx.ingredient.findFirst({ where: { id: Number(ingredientId), tenantId } });
+        if (!ing) throw new Error('Bahan baku tidak ditemukan atau Anda tidak memiliki akses');
 
         const cost = qty * ing.buyPrice;
         const updated = await tx.ingredient.update({
@@ -497,6 +575,7 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
 
         const log = await tx.ingredientLog.create({
           data: {
+            tenantId,
             ingredientId: ing.id,
             change: -qty,
             cost,
@@ -511,7 +590,7 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
         return { ingredient: updated, log, cost };
       });
 
-      await syncMenuSoldOutStatus(prisma);
+      await syncMenuSoldOutStatus(prisma, tenantId);
       return res.status(201).json({ message: 'Stock loss bahan baku berhasil dicatat', ...result });
     }
   } catch (error: any) {
@@ -523,20 +602,33 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
 // DELETE /loss/:id - Batalkan / Void catatan stock loss — Admin only (Dapur tidak bisa void/undo)
 router.delete('/loss/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { id } = req.params;
-    const targetLog = await prisma.ingredientLog.findUnique({
-      where: { id: Number(id) }
+    const targetLog = await prisma.ingredientLog.findFirst({
+      where: {
+        id: Number(id),
+        OR: [
+          { tenantId },
+          { ingredient: { tenantId } }
+        ]
+      }
     });
 
     if (!targetLog) {
-      return res.status(404).json({ error: 'Data log stock loss tidak ditemukan' });
+      return res.status(404).json({ error: 'Data log stock loss tidak ditemukan atau Anda tidak memiliki akses' });
     }
 
     await prisma.$transaction(async (tx) => {
       // Jika merupakan bagian dari batch menu waste yang memiliki referenceId
       if (targetLog.referenceId && targetLog.referenceId.startsWith('LOSS-')) {
         const relatedLogs = await tx.ingredientLog.findMany({
-          where: { referenceId: targetLog.referenceId }
+          where: {
+            referenceId: targetLog.referenceId,
+            OR: [
+              { tenantId },
+              { ingredient: { tenantId } }
+            ]
+          }
         });
 
         for (const log of relatedLogs) {
@@ -560,7 +652,7 @@ router.delete('/loss/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWN
       }
     });
 
-    await syncMenuSoldOutStatus(prisma);
+    await syncMenuSoldOutStatus(prisma, tenantId);
     res.json({ message: 'Catatan stock loss berhasil dibatalkan dan stok dikembalikan.' });
   } catch (error: any) {
     console.error('Error voiding stock loss:', error);
@@ -571,9 +663,14 @@ router.delete('/loss/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWN
 // GET Analisis Stock Loss & Efisiensi Yield
 router.get('/loss-analytics', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { startDate, endDate } = req.query;
     const whereCondition: any = {
-      type: { in: ['Rusak', 'Loss'] }
+      type: { in: ['Rusak', 'Loss'] },
+      OR: [
+        { tenantId },
+        { ingredient: { tenantId } }
+      ]
     };
 
     let sDate: Date | null = null;
@@ -600,10 +697,11 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
     const totalLossCost = lossLogs.reduce((sum, log) => sum + (log.cost || (Math.abs(log.change) * (log.ingredient?.buyPrice || 0))), 0);
     const totalLossCount = lossLogs.length;
 
-    // Hitung total gross sales periode ini untuk kalkulasi Waste Ratio
+    // Hitung total gross sales periode ini untuk kalkulasi Waste Ratio (scaped to tenantId)
     const orderSales = await prisma.order.aggregate({
       _sum: { total: true },
       where: {
+        tenantId,
         status: { not: 'Void' },
         ...(sDate && eDate ? { createdAt: { gte: sDate, lte: eDate } } : {})
       }
@@ -633,10 +731,14 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
       }
     });
 
-    // Hitung total pemakaian produksi
+    // Hitung total pemakaian produksi (scoped to tenantId)
     const productionLogs = await prisma.ingredientLog.findMany({
       where: {
         type: 'Produksi',
+        OR: [
+          { tenantId },
+          { ingredient: { tenantId } }
+        ],
         ...(sDate && eDate ? { createdAt: { gte: sDate, lte: eDate } } : {})
       },
       include: { ingredient: { select: { buyPrice: true } } }
@@ -718,6 +820,7 @@ router.get('/loss-analytics', authenticateToken, async (req: Request, res: Respo
 // GET Analisis Aktivitas & Akuntabilitas Staf Dapur (Per-User Audit & Loss Analytics)
 router.get('/staff-activity-analytics', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { startDate, endDate, userId } = req.query;
     let sDate: Date | undefined;
     let eDate: Date | undefined;
@@ -733,6 +836,10 @@ router.get('/staff-activity-analytics', authenticateToken, async (req: Request, 
     }
 
     const whereCondition: any = {
+      OR: [
+        { tenantId },
+        { ingredient: { tenantId } }
+      ],
       ...(sDate && eDate ? { createdAt: dateFilter } : {})
     };
 
@@ -750,8 +857,9 @@ router.get('/staff-activity-analytics', authenticateToken, async (req: Request, 
       orderBy: { createdAt: 'desc' }
     });
 
-    // Ambil daftar semua user untuk pemetaan
+    // Ambil daftar user tenant ini saja untuk pemetaan
     const allUsers = await prisma.user.findMany({
+      where: { tenantId },
       select: { id: true, name: true, role: true, username: true, status: true }
     });
     const userMap: Record<number, any> = {};
@@ -883,7 +991,6 @@ router.get('/staff-activity-analytics', authenticateToken, async (req: Request, 
       .filter((s: any) => s.totalActions > 0 || (s.user.id !== 0 && (s.user.role === 'Dapur' || s.user.role === 'Admin' || s.user.role === 'Kasir')))
       .map((s: any) => {
         const total = s.totalActions || 1;
-        const totalLoss = s.totalLossCost || 1;
         return {
           ...s,
           activityPercentages: {
@@ -939,9 +1046,11 @@ router.get('/staff-activity-analytics', authenticateToken, async (req: Request, 
 // GET Analisis Belanja Cerdas & Restock
 router.get('/shopping-analytics', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const horizonDays = Math.max(1, Number(req.query.days) || 14);
 
     const ingredients = await prisma.ingredient.findMany({
+      where: { tenantId, deletedAt: null },
       include: { supplier: true },
       orderBy: { name: 'asc' }
     });
@@ -954,6 +1063,10 @@ router.get('/shopping-analytics', authenticateToken, async (req: Request, res: R
     const recentLogs = await prisma.ingredientLog.findMany({
       where: {
         type: 'Produksi',
+        OR: [
+          { tenantId },
+          { ingredient: { tenantId } }
+        ],
         createdAt: { gte: horizonAgo }
       }
     });
@@ -1036,6 +1149,7 @@ router.get('/shopping-analytics', authenticateToken, async (req: Request, res: R
 // GET Analisis Tingkat Keberhasilan Porsi & Audit Efisiensi (Yield & Variance Analysis)
 router.get('/yield-analytics', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { days, startDate, endDate, category, scope } = req.query;
 
     let dStart: Date;
@@ -1054,9 +1168,10 @@ router.get('/yield-analytics', authenticateToken, async (req: Request, res: Resp
       dStart.setHours(0, 0, 0, 0);
     }
 
-    // 1. Ambil seluruh transaksi penjualan yang valid dalam periode
+    // 1. Ambil seluruh transaksi penjualan yang valid dalam periode (scoped to tenantId)
     const orders = await prisma.order.findMany({
       where: {
+        tenantId,
         createdAt: { gte: dStart, lte: dEnd },
         status: { notIn: ['Dibatalkan', 'Void', 'Cancelled'] }
       },
@@ -1113,9 +1228,13 @@ router.get('/yield-analytics', authenticateToken, async (req: Request, res: Resp
       });
     });
 
-    // 3. Ambil Mutasi Riil Pengurangan Stok Bahan (Produksi, Rusak, Penyesuaian)
+    // 3. Ambil Mutasi Riil Pengurangan Stok Bahan (scoped to tenantId)
     const ingredientLogs = await prisma.ingredientLog.findMany({
       where: {
+        OR: [
+          { tenantId },
+          { ingredient: { tenantId } }
+        ],
         createdAt: { gte: dStart, lte: dEnd },
         change: { lt: 0 }
       }
@@ -1144,8 +1263,11 @@ router.get('/yield-analytics', authenticateToken, async (req: Request, res: Resp
       else if (log.type === 'Penyesuaian') actualMap[log.ingredientId].adjustmentQty += qty;
     });
 
-    // 4. Ambil Data Master Bahan Baku
-    const whereIng: any = {};
+    // 4. Ambil Data Master Bahan Baku (scoped to tenantId)
+    const whereIng: any = {
+      tenantId,
+      deletedAt: null
+    };
     if (category && category !== 'ALL') {
       whereIng.category = category;
     }
@@ -1326,8 +1448,14 @@ router.get('/yield-analytics', authenticateToken, async (req: Request, res: Resp
 // GET Riwayat Mutasi & Distribusi Stok
 router.get('/stock-movements', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { ingredientId, type, date, startDate, endDate, limit = 200 } = req.query;
-    const where: any = {};
+    const where: any = {
+      OR: [
+        { tenantId },
+        { ingredient: { tenantId } }
+      ]
+    };
     if (ingredientId && ingredientId !== 'ALL') where.ingredientId = Number(ingredientId);
     if (type && type !== 'ALL') where.type = type as string;
 
@@ -1365,6 +1493,7 @@ router.get('/stock-movements', authenticateToken, async (req: Request, res: Resp
 // GET /api/ingredients/analytics/daily-usage
 router.get('/analytics/daily-usage', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { startDate, endDate, category, type } = req.query;
 
     let dateFilter: any = {};
@@ -1394,6 +1523,10 @@ router.get('/analytics/daily-usage', authenticateToken, async (req: Request, res
 
     const logs = await prisma.ingredientLog.findMany({
       where: {
+        OR: [
+          { tenantId },
+          { ingredient: { tenantId } }
+        ],
         createdAt: dateFilter,
         type: typeWhere,
         change: { lt: 0 }
@@ -1411,6 +1544,7 @@ router.get('/analytics/daily-usage', authenticateToken, async (req: Request, res
 
     const orders = await prisma.order.findMany({
       where: {
+        tenantId,
         createdAt: dateFilter,
         status: 'Paid'
       },
@@ -1519,11 +1653,19 @@ router.get('/analytics/daily-usage', authenticateToken, async (req: Request, res
   }
 });
 
-// DELETE ingredient (hanya jika tidak ada resep aktif)
-// DELETE ingredient — Admin only
+// DELETE ingredient (hanya jika tidak ada resep aktif) — Admin only
 router.delete('/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { id } = req.params;
+
+    const ing = await prisma.ingredient.findFirst({
+      where: { id: Number(id), tenantId }
+    });
+    if (!ing) {
+      return res.status(404).json({ error: 'Bahan baku tidak ditemukan atau Anda tidak memiliki akses' });
+    }
+
     const recipeCount = await prisma.recipeItem.count({ where: { ingredientId: Number(id) } });
     if (recipeCount > 0) {
       return res.status(400).json({ error: 'Bahan baku ini masih digunakan dalam resep menu. Hapus resep terkait terlebih dahulu.' });
@@ -1535,10 +1677,10 @@ router.delete('/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 
   }
 });
 
-// POST restock / adjust stok bahan baku
-// POST manual stock adjustment — Admin only (Dapur harus pakai loss/waste, bukan adjust bebas)
+// POST restock / adjust stok bahan baku — Admin only (Dapur harus pakai loss/waste, bukan adjust bebas)
 router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { id } = req.params;
     const { change, type, description, newBuyPrice } = req.body;
     // type: 'Restock' | 'Penyesuaian' | 'Rusak'
@@ -1548,8 +1690,10 @@ router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWN
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const current = await tx.ingredient.findUnique({ where: { id: Number(id) } });
-      if (!current) throw new Error('Bahan baku tidak ditemukan');
+      const current = await tx.ingredient.findFirst({
+        where: { id: Number(id), tenantId }
+      });
+      if (!current) throw new Error('Bahan baku tidak ditemukan atau Anda tidak memiliki akses');
 
       let nextBuyPrice = current.buyPrice;
       if (type === 'Restock' && newBuyPrice !== undefined && newBuyPrice !== null) {
@@ -1577,6 +1721,7 @@ router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWN
 
       await tx.ingredientLog.create({
         data: {
+          tenantId,
           ingredientId: Number(id),
           change: amount,
           type: type || 'Penyesuaian',
@@ -1588,21 +1733,36 @@ router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWN
     });
 
     // Auto-sync real-time sold out menu status across Kasir & QR Dine-In
-    await syncMenuSoldOutStatus(prisma);
+    await syncMenuSoldOutStatus(prisma, tenantId);
 
     res.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: 'Gagal menyesuaikan stok bahan baku' });
+    res.status(500).json({ error: error.message || 'Gagal menyesuaikan stok bahan baku' });
   }
 });
 
 // GET ingredient stock logs
 router.get('/:id/logs', authenticateToken, async (req: Request, res: Response) => {
   try {
+    const tenantId = (req as any).tenantId;
     const { id } = req.params;
+
+    const ing = await prisma.ingredient.findFirst({
+      where: { id: Number(id), tenantId }
+    });
+    if (!ing) {
+      return res.status(404).json({ error: 'Bahan baku tidak ditemukan atau Anda tidak memiliki akses' });
+    }
+
     const logs = await prisma.ingredientLog.findMany({
-      where: { ingredientId: Number(id) },
+      where: {
+        ingredientId: Number(id),
+        OR: [
+          { tenantId },
+          { ingredient: { tenantId } }
+        ]
+      },
       orderBy: { createdAt: 'desc' },
       take: 50
     });

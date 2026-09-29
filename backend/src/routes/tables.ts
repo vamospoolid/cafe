@@ -155,7 +155,10 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 router.post('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user;
-    const tenantId = user?.tenantId || TenantContext.getTenantId() || 'tenant-vamos-pool';
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { tableNo, name, capacity, status, qrUrl } = req.body;
     
     if (!tableNo) return res.status(400).json({ error: 'Table Number is required' });

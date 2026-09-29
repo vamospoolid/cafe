@@ -101,10 +101,10 @@ export const tenantResolverMiddleware = async (req: AuthRequest, res: Response, 
       }
     }
 
-    // 2. Jika tidak ada di JWT, gunakan header kustom atau langsung default tenant kafe (0ms latency)
+    // 2. Jika tidak ada di JWT, gunakan header kustom
     if (!resolvedTenantId) {
-      resolvedTenantId = (req.headers['x-tenant-id'] as string) || 'tenant-vamos-pool';
-      tenantSlug = (req.headers['x-tenant-slug'] as string) || 'vamospool';
+      resolvedTenantId = (req.headers['x-tenant-id'] as string) || undefined;
+      tenantSlug = (req.headers['x-tenant-slug'] as string) || '';
     }
 
     if (resolvedTenantId) {

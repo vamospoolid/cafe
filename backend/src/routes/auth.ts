@@ -45,9 +45,12 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
     m => requestedTenantId ? m.tenantId === requestedTenantId && m.status === 'ACTIVE' : m.status === 'ACTIVE'
   );
 
-  // Jika belum ada membership terdaftar, fallback ke default tenant
-  let activeTenantId = activeMembership?.tenantId || 'tenant-vamos-pool';
-  let activeOutletId = activeMembership?.tenant?.outlets?.[0]?.id || 'outlet-default-muki-01';
+  // Jika belum ada membership terdaftar, fallback ke membership pertama atau user.tenantId
+  let activeTenantId = activeMembership?.tenantId || (user as any).tenantId || requestedTenantId;
+  if (!activeTenantId && user.memberships && user.memberships.length > 0) {
+    activeTenantId = user.memberships[0].tenantId;
+  }
+  let activeOutletId = activeMembership?.tenant?.outlets?.[0]?.id || (activeMembership as any)?.outletId || null;
   let activeRoleName = activeMembership?.role?.name || user.role;
   let activeRoleId = activeMembership?.roleId || undefined;
 
@@ -271,15 +274,15 @@ router.post('/switch-pin', async (req: Request, res: Response) => {
 // GET /api/auth/staff-list
 router.get('/staff-list', async (req: Request, res: Response) => {
   try {
-    const tenantId = (req.query.tenantId as string) || 'tenant-vamos-pool';
+    const tenantId = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     
     const staff = await prisma.user.findMany({
       where: {
         status: 'Aktif',
-        OR: [
-          { memberships: { some: { tenantId, status: 'ACTIVE' } } },
-          { memberships: { none: {} } }
-        ]
+        memberships: { some: { tenantId, status: 'ACTIVE' } }
       },
       select: {
         id: true,
