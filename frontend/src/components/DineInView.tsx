@@ -387,8 +387,22 @@ const DineInView = () => {
       confirmButtonColor: '#d97706',
       cancelButtonColor: '#78716c',
       customClass: { popup: 'rounded-3xl' }
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
+        try {
+          await fetch('/api/tables/public/call-waiter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tableId: tableInfo?.id || tableId,
+              tableNo: tableInfo?.tableNo || tableRef,
+              tenantId: tableInfo?.tenantId
+            })
+          });
+        } catch (callErr) {
+          console.warn('Call waiter network error:', callErr);
+        }
+
         Swal.fire({
           icon: 'success',
           title: 'Pelayan Diberitahu',

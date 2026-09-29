@@ -404,11 +404,26 @@ router.post('/dinein', async (req: Request, res: Response) => {
 
     // Emit real-time event — HANYA ke tenant terkait (tidak global)
     if (result.tenantId) {
+      let resolvedTableNo = (result as any).table?.tableNo || null;
+      if (!resolvedTableNo && resolvedTableId) {
+        try {
+          const tb = await prisma.table.findUnique({ where: { id: resolvedTableId }, select: { tableNo: true } });
+          if (tb) resolvedTableNo = tb.tableNo;
+        } catch (_) {}
+      }
+
       emitToTenant(result.tenantId, 'order:new', {
         orderId: result.id,
         orderNumber: result.orderNumber,
-        tableId: result.tableId,
-        tableNo: (result as any).table?.tableNo || null
+        tableId: result.tableId || resolvedTableId,
+        tableNo: resolvedTableNo,
+        customerName: result.customerName,
+        total: result.total,
+        subtotal: result.subtotal,
+        itemsCount: (result as any).items?.length || items?.length || 0,
+        items: (result as any).items || items,
+        type: 'DINE_IN',
+        timestamp: new Date().toISOString()
       });
     }
 
@@ -719,7 +734,16 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
       // Emit event socket untuk KDS/real-time updates — hanya ke tenant terkait
       if (result.tenantId) {
-        emitToTenant(result.tenantId, 'order:new', { orderId: result.id });
+        emitToTenant(result.tenantId, 'order:new', { 
+          orderId: result.id,
+          orderNumber: result.orderNumber,
+          tableId: result.tableId,
+          tableNo: (result as any).table?.tableNo || null,
+          customerName: result.customerName,
+          total: result.total,
+          type: 'POS',
+          timestamp: new Date().toISOString()
+        });
       }
       
       // Auto-Print KDS & Receipt

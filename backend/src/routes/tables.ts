@@ -97,6 +97,39 @@ router.get('/public/:id', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/tables/public/call-waiter - Customer calls waiter from table
+router.post('/public/call-waiter', async (req: Request, res: Response) => {
+  try {
+    const { tableId, tableNo, tenantId } = req.body;
+    let targetTenantId = tenantId;
+    let resolvedTableNo = tableNo;
+
+    if (tableId && (!targetTenantId || !resolvedTableNo)) {
+      const numTableId = Number(tableId);
+      if (!isNaN(numTableId)) {
+        const table = await prisma.table.findUnique({ where: { id: numTableId } });
+        if (table) {
+          targetTenantId = targetTenantId || table.tenantId;
+          resolvedTableNo = resolvedTableNo || table.tableNo;
+        }
+      }
+    }
+
+    if (targetTenantId) {
+      emitToTenant(targetTenantId, 'waiter:call', {
+        tableId,
+        tableNo: resolvedTableNo || 'Dine-In',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({ success: true, message: 'Pelayan telah diberitahu' });
+  } catch (error) {
+    console.error('Call waiter error:', error);
+    res.status(500).json({ error: 'Gagal memanggil pelayan' });
+  }
+});
+
 // Get all tables (Scoped to active tenant)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
