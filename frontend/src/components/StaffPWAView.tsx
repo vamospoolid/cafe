@@ -359,10 +359,14 @@ export const StaffPWAView: React.FC = () => {
   // Fetch Settings & Shifts
   const fetchSettingsAndShifts = async () => {
     try {
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const activeTenantId = user?.tenantId || (user?.tenant?.id) || localStorage.getItem('tenantId') || localStorage.getItem('staff_tenant_id');
+      const headers: Record<string, string> = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(activeTenantId ? { 'x-tenant-id': activeTenantId } : {})
+      };
       const [setRes, shiftRes] = await Promise.all([
         fetch('/api/settings', { headers }),
-        fetch('/api/attendance/shifts', { headers })
+        fetch(`/api/attendance/shifts${activeTenantId ? `?tenantId=${activeTenantId}` : ''}`, { headers })
       ]);
       if (setRes.ok) setSettings(await setRes.json());
       if (shiftRes.ok) {
@@ -379,7 +383,7 @@ export const StaffPWAView: React.FC = () => {
 
   useEffect(() => {
     fetchSettingsAndShifts();
-  }, [token]);
+  }, [token, user?.tenantId]);
 
   // Synchronize SOP checklist to vertical preset dynamically
   useEffect(() => {
@@ -939,6 +943,7 @@ export const StaffPWAView: React.FC = () => {
     }
 
     try {
+      const activeTenantId = user?.tenantId || user?.tenant?.id || localStorage.getItem('tenantId') || localStorage.getItem('staff_tenant_id');
       const payload = {
         pin: user?.pin || '',
         type,
@@ -947,14 +952,17 @@ export const StaffPWAView: React.FC = () => {
         latitude: gpsLocation?.lat,
         longitude: gpsLocation?.lng,
         photo: capturedPhoto,
-        notes: ''
+        notes: '',
+        tenantId: activeTenantId,
+        outletId: user?.outletId
       };
 
       const res = await fetch('/api/attendance/clock', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(activeTenantId ? { 'x-tenant-id': activeTenantId } : {})
         },
         body: JSON.stringify(payload)
       });

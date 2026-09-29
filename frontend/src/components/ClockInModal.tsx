@@ -36,10 +36,17 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
     
     setLoading(true);
     try {
+      const token = localStorage.getItem('token') || localStorage.getItem('staff_token') || sessionStorage.getItem('token');
+      const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('activeTenantId') || sessionStorage.getItem('tenantId');
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (tenantId) headers['x-tenant-id'] = tenantId;
+
       const res = await fetch('/api/attendance/clock', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin, type })
+        headers,
+        body: JSON.stringify({ pin, type, ...(tenantId ? { tenantId } : {}) })
       });
       const data = await res.json();
       

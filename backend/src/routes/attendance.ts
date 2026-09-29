@@ -41,7 +41,17 @@ const DEFAULT_SHIFTS = [
 // GET Active Shifts (Scoped to tenant settings)
 router.get('/shifts', async (req: Request, res: Response) => {
   try {
-    const tenantId = getTenantId(req);
+    let tenantId = getTenantId(req);
+    if (!tenantId && req.headers.authorization?.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const token = req.headers.authorization.split(' ')[1];
+        const decoded: any = jwt.decode(token);
+        if (decoded?.tenantId) {
+          tenantId = decoded.tenantId;
+        }
+      } catch (e) {}
+    }
     if (!tenantId) return res.status(400).json({ error: 'Tenant context required', code: 'MISSING_TENANT_CONTEXT' });
     const settings = await prisma.settings.findFirst({
       where: tenantWhere(tenantId)
@@ -83,10 +93,44 @@ router.post('/clock', async (req: Request, res: Response) => {
     if (!pin) return res.status(400).json({ error: 'PIN absensi dibutuhkan' });
     if (!['IN', 'OUT'].includes(type)) return res.status(400).json({ error: 'Tipe absensi tidak valid' });
 
-    const requestedTenantId = bodyTenantId || (req.headers['x-tenant-id'] as string);
+    let requestedTenantId = bodyTenantId || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+
+    // Ekstraksi tenantId dari JWT Authorization header jika ada
+    if (!requestedTenantId && req.headers.authorization?.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const token = req.headers.authorization.split(' ')[1];
+        const decoded: any = jwt.decode(token);
+        if (decoded?.tenantId) {
+          requestedTenantId = decoded.tenantId;
+        }
+      } catch (e) {}
+    }
+
+    // Fallback: Jika tenantId belum ditentukan (misal Terminal Absensi Bersama tanpa login POS),
+    // periksa apakah PIN unik milik 1 user yang terdaftar di 1 tenant aktif
+    if (!requestedTenantId) {
+      const candidates = await prisma.user.findMany({
+        where: {
+          status: 'Aktif',
+          OR: [
+            { pin, memberships: { some: { status: 'ACTIVE' } } },
+            { memberships: { some: { pin, status: 'ACTIVE' } } }
+          ]
+        },
+        include: {
+          memberships: {
+            where: { status: 'ACTIVE' },
+            take: 2
+          }
+        }
+      });
+      if (candidates.length === 1 && candidates[0].memberships.length === 1) {
+        requestedTenantId = candidates[0].memberships[0].tenantId;
+      }
+    }
 
     // ATT-001: Fail-closed — tenantId wajib ada dari Staff App / PWA
-    // Mencegah clock-in tanpa konteks tenant (ambiguitas PIN multi-tenant)
     if (!requestedTenantId) {
       return res.status(400).json({
         error: 'Tenant context dibutuhkan untuk absensi. Pastikan PWA outlet sudah terkonfigurasi.',
@@ -95,15 +139,23 @@ router.post('/clock', async (req: Request, res: Response) => {
     }
 
     // ATT-001: Strict membership — hanya user yang terdaftar sebagai anggota aktif tenant ini
-    // Hapus pola fail-open: OR [memberships.some, memberships.none]
-    // memberships.none = user tanpa membership bisa clock-in di semua tenant (BERBAHAYA)
+    // Mendukung PIN global (User.pin) maupun PIN spesifik outlet/tenant (TenantMembership.pin)
     const user = await prisma.user.findFirst({
       where: {
-        pin,
         status: 'Aktif',
-        memberships: {
-          some: { tenantId: requestedTenantId, status: 'ACTIVE' }
-        }
+        OR: [
+          {
+            pin,
+            memberships: {
+              some: { tenantId: requestedTenantId, status: 'ACTIVE' }
+            }
+          },
+          {
+            memberships: {
+              some: { tenantId: requestedTenantId, pin, status: 'ACTIVE' }
+            }
+          }
+        ]
       },
       include: {
         memberships: {
@@ -122,11 +174,26 @@ router.post('/clock', async (req: Request, res: Response) => {
     const settings = await prisma.settings.findFirst({
       where: tenantWhere(resolvedTenantId)
     });
-    const storeLat = settings?.storeLatitude ?? -6.200000;
-    const storeLon = settings?.storeLongitude ?? 106.816666;
-    const maxRadius = settings?.gpsRadiusMeters ?? 100;
+    let storeLat = settings?.storeLatitude ?? -6.200000;
+    let storeLon = settings?.storeLongitude ?? 106.816666;
+    let maxRadius = settings?.gpsRadiusMeters ?? 100;
     const enableGps = settings?.enableGpsValidation ?? true;
     const enableCamera = settings?.enableCameraPhoto ?? true;
+
+    // Jika ada spesifikasi outlet spesifik, prioritaskan koordinat GPS & radius geofencing outlet tersebut
+    const targetOutletId = bodyOutletId;
+    if (targetOutletId) {
+      const outlet = await prisma.outlet.findFirst({
+        where: { id: targetOutletId, tenantId: resolvedTenantId }
+      });
+      if (outlet && outlet.latitude !== null && outlet.longitude !== null && !isNaN(outlet.latitude) && !isNaN(outlet.longitude)) {
+        storeLat = outlet.latitude;
+        storeLon = outlet.longitude;
+        if (outlet.gpsRadiusMeters && outlet.gpsRadiusMeters > 0) {
+          maxRadius = outlet.gpsRadiusMeters;
+        }
+      }
+    }
 
     // Validasi Kamera
     if (enableCamera && !photo && type === 'IN') {

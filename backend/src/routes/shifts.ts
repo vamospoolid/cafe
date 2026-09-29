@@ -312,7 +312,9 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
     const expectedNonCash = nonCashSalesIncome + nonCashDebtIncome;
 
     // Periksa konfigurasi Blind Cash Drawer Count dari Settings
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({
+      where: tenantId ? { tenantId } : undefined
+    });
     const enableBlindClose = (settings as any)?.enableBlindClose ?? false;
     const userRole = ((req as any).user?.role || '').toLowerCase();
     const isBlindMode = enableBlindClose && userRole === 'kasir';
@@ -459,7 +461,9 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       .reduce((sum, cf) => sum + cf.amount, 0);
 
     // Periksa setting Blind Count
-    const settings = await prisma.settings.findFirst();
+    const settings = await prisma.settings.findFirst({
+      where: tenantId ? { tenantId } : undefined
+    });
     const enableBlindClose = (settings as any)?.enableBlindClose ?? false;
     const userRole = ((req as any).user?.role || '').toLowerCase();
     const isBlindMode = enableBlindClose && userRole === 'kasir';
