@@ -1,11 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { getCustomDateRange } from '../utils/dateHelper';
-import { io } from '../index';
+import { emitToTenant } from '../index';
+import prisma from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Helper untuk mengekstrak porsi pembayaran tunai dari Order
 const getOrderCashPortion = (paymentMethod: string | null, total: number): number => {
@@ -23,6 +22,9 @@ const getOrderCashPortion = (paymentMethod: string | null, total: number): numbe
 router.get('/summary', authenticateToken, async (req: Request, res: Response) => {
   try {
     const tenantId = (req as any).tenantId || (req as any).user?.tenantId;
+    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const baseWhere: any = {};
     if (tenantId) baseWhere.tenantId = tenantId;
 
@@ -280,18 +282,19 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       }
     }
 
-    // Socket Notification
-    if (io) {
+    // Socket Notification — hanya ke tenant terkait
+    const cashflowTenantId = (req as any).user?.tenantId;
+    if (cashflowTenantId) {
       if (finalStatus === 'PENDING') {
-        io.emit('cashflow:pending', cashflow);
-        io.emit('notification:new', {
+        emitToTenant(cashflowTenantId, 'cashflow:pending', cashflow);
+        emitToTenant(cashflowTenantId, 'notification:new', {
           title: 'Pengajuan Kasir Baru',
           message: `${user.name} mengajukan ${cashflow.category}: Rp ${cashflow.amount.toLocaleString('id-ID')}`,
           type: 'CASHFLOW_PENDING',
           cashflowId: cashflow.id
         });
       } else {
-        io.emit('cashflow:updated', cashflow);
+        emitToTenant(cashflowTenantId, 'cashflow:updated', cashflow);
       }
     }
 
@@ -313,7 +316,15 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
     }
 
     const { id } = req.params;
-    const existing = await prisma.cashFlow.findUnique({ where: { id: Number(id) } });
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    // IDOR Guard: verifikasi kepemilikan tenant sebelum approve
+    const existing = await prisma.cashFlow.findFirst({
+      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
     }
@@ -336,9 +347,9 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
       }
     });
 
-    if (io) {
-      io.emit('cashflow:approved', updated);
-      io.emit('notification:new', {
+    if (tenantId) {
+      emitToTenant(tenantId, 'cashflow:approved', updated);
+      emitToTenant(tenantId, 'notification:new', {
         title: 'Pengeluaran Disetujui',
         message: `Pengeluaran ${updated.description} (Rp ${updated.amount.toLocaleString('id-ID')}) telah disetujui`,
         type: 'CASHFLOW_APPROVED'
@@ -364,8 +375,15 @@ router.patch('/:id/reject', authenticateToken, async (req: Request, res: Respons
 
     const { id } = req.params;
     const { reason } = req.body;
+    const tenantId = (req as any).user?.tenantId;
+    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
-    const existing = await prisma.cashFlow.findUnique({ where: { id: Number(id) } });
+    // IDOR Guard: verifikasi kepemilikan tenant
+    const existing = await prisma.cashFlow.findFirst({
+      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
     }
@@ -383,9 +401,9 @@ router.patch('/:id/reject', authenticateToken, async (req: Request, res: Respons
       }
     });
 
-    if (io) {
-      io.emit('cashflow:rejected', updated);
-      io.emit('notification:new', {
+    if (tenantId) {
+      emitToTenant(tenantId, 'cashflow:rejected', updated);
+      emitToTenant(tenantId, 'notification:new', {
         title: 'Pengeluaran Ditolak',
         message: `Pengajuan ${updated.description} ditolak: ${reason || 'Tidak disetujui'}`,
         type: 'CASHFLOW_REJECTED'
@@ -404,8 +422,12 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
   try {
     const user = (req as any).user;
     const { id } = req.params;
+    const tenantId = user?.tenantId;
 
-    const existing = await prisma.cashFlow.findUnique({ where: { id: Number(id) } });
+    // IDOR Guard: verifikasi kepemilikan tenant
+    const existing = await prisma.cashFlow.findFirst({
+      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
     }
@@ -419,8 +441,8 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
 
     await prisma.cashFlow.delete({ where: { id: Number(id) } });
 
-    if (io) {
-      io.emit('cashflow:deleted', { id: Number(id) });
+    if (tenantId) {
+      emitToTenant(tenantId, 'cashflow:deleted', { id: Number(id) });
     }
 
     res.json({ message: 'Transaksi arus kas berhasil dihapus' });

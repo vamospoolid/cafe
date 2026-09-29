@@ -1,26 +1,22 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import prisma from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // GET all customers with optional search & filter
 router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenant = await prisma.tenant.findFirst();
-    const tenantId = (req as any).tenantId || req.user?.tenantId || (tenant ? tenant.id : null);
+    const tenantId = (req as any).tenantId || req.user?.tenantId;
+    if (!tenantId && !req.user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { search, tier } = req.query;
 
     const andConditions: any[] = [];
 
     if (tenantId) {
-      andConditions.push({
-        OR: [
-          { tenantId },
-          { tenantId: null }
-        ]
-      });
+      andConditions.push({ tenantId }); // Fail-closed: hanya pelanggan tenant ini
     }
 
     if (search) {
@@ -60,14 +56,17 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 // GET customer detail, order history, and point logs
 router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenant = await prisma.tenant.findFirst();
-    const tenantId = (req as any).tenantId || req.user?.tenantId || (tenant ? tenant.id : null);
+    const tenantId = (req as any).tenantId || req.user?.tenantId;
+    if (!tenantId && !req.user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { id } = req.params;
 
+    // IDOR Guard: verifikasi kepemilikan tenant
     const customer = await prisma.customer.findFirst({
       where: {
         id: Number(id),
-        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+        ...(tenantId ? { tenantId } : {})
       },
       include: {
         orders: {
@@ -115,8 +114,10 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 // POST register new customer
 router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const tenant = await prisma.tenant.findFirst();
-    const tenantId = (req as any).tenantId || req.user?.tenantId || (tenant ? tenant.id : null);
+    const tenantId = (req as any).tenantId || req.user?.tenantId;
+    if (!tenantId && !req.user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { name, phone, email, birthday } = req.body;
 
     if (!name || !phone) {
@@ -125,11 +126,11 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
     const cleanPhone = phone.trim();
 
-    // Check unique phone within tenant or fallback
+    // Check unique phone within tenant
     const existingPhone = await prisma.customer.findFirst({
       where: {
         phone: cleanPhone,
-        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+        ...(tenantId ? { tenantId } : {})
       }
     });
 

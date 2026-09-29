@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { io, emitToTenant } from '../index';
 import { PrinterService } from '../services/PrinterService';
 import { AuditLogger } from '../services/AuditLogger';
+import prisma from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 import { getLocalDateRange, getCustomDateRange, getLocalOrderDatePrefix } from '../utils/dateHelper';
 
@@ -109,29 +108,39 @@ const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRed
   }
 };
 
-// Fungsi untuk generate nomor order (Contoh: ORD-20231025-001)
-export const generateOrderNumber = async (tzOffset?: number | string) => {
+// Fungsi untuk generate nomor order (Contoh: ORD-VAM-20231025-001)
+// WAJIB mengandung kode tenant agar tidak collision antar kafe (race condition)
+export const generateOrderNumber = async (tenantId?: string | null, tzOffset?: number | string) => {
   const dateString = getLocalOrderDatePrefix(typeof tzOffset === 'number' ? tzOffset : -420);
-  
-  // Cari order terakhir di hari yang sama
+
+  // Ambil kode tenant 3 huruf sebagai prefix unik per kafe
+  let tenantCode = 'ORD';
+  if (tenantId) {
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true, name: true } });
+      const rawCode = tenant?.slug || tenant?.name || tenantId;
+      tenantCode = rawCode.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'ORD';
+    } catch (_) {}
+  }
+  const prefix = `ORD-${tenantCode}-${dateString}`;
+
+  // Query hanya order milik tenant ini hari ini untuk sequence yang benar
   const lastOrder = await prisma.order.findFirst({
     where: {
-      orderNumber: {
-        startsWith: `ORD-${dateString}`
-      }
+      orderNumber: { startsWith: prefix },
+      ...(tenantId ? { tenantId } : {})
     },
-    orderBy: {
-      id: 'desc'
-    }
+    orderBy: { id: 'desc' }
   });
 
   if (lastOrder) {
-    const lastSequence = parseInt(lastOrder.orderNumber.split('-')[2]);
+    const parts = lastOrder.orderNumber.split('-');
+    const lastSequence = parseInt(parts[parts.length - 1]) || 0;
     const newSequence = (lastSequence + 1).toString().padStart(3, '0');
-    return `ORD-${dateString}-${newSequence}`;
+    return `${prefix}-${newSequence}`;
   }
-  
-  return `ORD-${dateString}-001`;
+
+  return `${prefix}-001`;
 };
 
 // GET all orders (Riwayat Transaksi)
@@ -139,15 +148,16 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { status, date, startDate, endDate, active, tzOffset } = req.query;
     const tenantId = (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || null;
-    
-    // Filter conditions
-    const whereCondition: any = {};
 
+    // Fail-closed: platform admin saja yang boleh tanpa tenantId
+    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    // Filter conditions — hanya data milik tenant ini (tidak bocor ke tenantId: null)
+    const whereCondition: any = {};
     if (tenantId) {
-      whereCondition.AND = [
-        ...(whereCondition.AND || []),
-        { OR: [{ tenantId }, { tenantId: null }] }
-      ];
+      whereCondition.tenantId = tenantId;
     }
     
     if (active === 'true') {
@@ -204,11 +214,16 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const tenantId = (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+
+    // IDOR Guard: selalu sertakan tenantId agar tidak bisa intip order kafe lain
+    const orderWhere: any = { id: Number(id) };
+    if (tenantId) orderWhere.tenantId = tenantId;
+    else if (!(req as any).user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
     const order = await prisma.order.findFirst({
-      where: {
-        id: Number(id),
-        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
-      },
+      where: orderWhere,
       include: {
         table: true,
         user: { select: { name: true, username: true } },
@@ -299,7 +314,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
       tenantId = firstTenant?.id || null;
     }
 
-    const orderNumber = await generateOrderNumber();
+    const orderNumber = await generateOrderNumber(tenantId);
 
     const result = await prisma.$transaction(async (tx) => {
       // Ambil buyPrice untuk produk agar HPP tercatat
@@ -387,13 +402,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
       return order;
     });
 
-    // Emit real-time event ke semua klien
-    io.emit('order:new', {
-      orderId: result.id,
-      orderNumber: result.orderNumber,
-      tableId: result.tableId,
-      tableNo: (result as any).table?.tableNo || null
-    });
+    // Emit real-time event — HANYA ke tenant terkait (tidak global)
     if (result.tenantId) {
       emitToTenant(result.tenantId, 'order:new', {
         orderId: result.id,
@@ -469,7 +478,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
       if (!items || items.length === 0) continue;
 
-      const orderNumber = await generateOrderNumber();
+      const orderNumber = await generateOrderNumber(tenantId);
 
       const result = await prisma.$transaction(async (tx) => {
         // Ambil buyPrice untuk semua produk
@@ -708,8 +717,10 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         return createdOrder;
       });
 
-      // Emit event socket untuk KDS/real-time updates
-      io.emit('order:new', result);
+      // Emit event socket untuk KDS/real-time updates — hanya ke tenant terkait
+      if (result.tenantId) {
+        emitToTenant(result.tenantId, 'order:new', { orderId: result.id });
+      }
       
       // Auto-Print KDS & Receipt
       try {
@@ -778,7 +789,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const activeShift = await prisma.shift.findFirst({
         where: {
           status: { in: ['Open', 'OPEN'] },
-          ...(tenantId ? { OR: [{ tenantId }, { tenantId: 'tenant-vamos-pool' }, { tenantId: null }] } : {})
+          ...(tenantId ? { tenantId } : {})
         }
       });
       if (!activeShift) {
@@ -789,7 +800,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       }
     }
 
-    const orderNumber = await generateOrderNumber();
+    const orderNumber = await generateOrderNumber(tenantId);
 
     let formattedJoinedTableIds: string | null = null;
     if (joinedTableIds) {
@@ -969,14 +980,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       return order;
     });
 
-    // Emit real-time event ke semua klien
-    io.emit('order:new', {
-      orderId: result.id,
-      orderNumber: result.orderNumber,
-      tableId: result.tableId,
-      joinedTableIds: result.joinedTableIds,
-      tableNo: (result as any).table?.tableNo || null
-    });
+    // Emit real-time event — HANYA ke tenant terkait (tidak global)
     if (result.tenantId) {
       emitToTenant(result.tenantId, 'order:new', {
         orderId: result.id,
@@ -1494,7 +1498,8 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Buat order baru untuk split bill
-      const orderNumber = await generateOrderNumber();
+      const tenantIdForSplit = (req as any).user?.tenantId || null;
+      const orderNumber = await generateOrderNumber(tenantIdForSplit);
       
       // Ambil detail customer dari order pertama di meja ini
       const firstActiveOrder = await tx.order.findFirst({

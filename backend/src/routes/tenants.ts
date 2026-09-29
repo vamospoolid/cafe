@@ -1,12 +1,11 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { quotaService } from '../services/QuotaService';
 import { featureService } from '../services/FeatureService';
 import { AuditLogger } from '../services/AuditLogger';
+import prisma from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * GET /api/tenants/my-subscription

@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
+import prisma from '../db';
 
 const router = Router();
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
 
 // Helper: Generate structured JWT token and user profile with multi-tenant context

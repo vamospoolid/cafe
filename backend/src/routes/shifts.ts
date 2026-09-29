@@ -177,12 +177,11 @@ router.post('/open', authenticateToken, async (req: Request, res: Response) => {
     const tenantId = user.tenantId;
     const { saldoAwal } = req.body;
 
-    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
-
+    // Fail-closed: hanya shift tenant ini
     const existingActive = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...tenantCondition
+        ...(tenantId ? { tenantId } : {})
       },
       include: {
         user: { select: { id: true, name: true, username: true } }
@@ -219,8 +218,7 @@ router.post('/open', authenticateToken, async (req: Request, res: Response) => {
       }
     });
 
-    // Broadcast ke seluruh client real-time
-    io.emit('shift:status_change', { status: 'Open', shift });
+    // Emit real-time event — HANYA ke tenant terkait (tidak global)
     if (tenantId) {
       emitToTenant(tenantId, 'shift:status_change', { status: 'Open', shift });
       emitToTenant(tenantId, 'shift:opened', { shift });
@@ -238,7 +236,8 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
-    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
+    // Fail-closed: ambil shift aktif hanya milik tenant ini
+    const tenantCondition = tenantId ? { tenantId } : {};
 
     const activeShift = await prisma.shift.findFirst({
       where: {
@@ -362,12 +361,11 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const tenantId = user?.tenantId;
     const { saldoFisikLaci, cashDenominations, denominations, catatan, varianceReason, forceClose } = req.body;
 
-    const tenantCondition = tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {};
-
+    // Fail-closed: ambil shift aktif hanya milik tenant ini
     const activeShift = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...tenantCondition
+        ...(tenantId ? { tenantId } : {})
       }
     });
 
