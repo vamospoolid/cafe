@@ -1151,7 +1151,7 @@ export const IngredientView: React.FC = () => {
   const lowStockCount = ingredients.filter(i => i.stock > 0 && i.stock <= i.minStock).length;
   const outStockCount = ingredients.filter(i => i.stock === 0).length;
   const safeStockCount = ingredients.filter(i => i.stock > i.minStock).length;
-  const totalValuation = ingredients.reduce((sum, i) => sum + (i.stock * i.buyPrice), 0);
+  const totalValuation = ingredients.reduce((sum, i) => sum + ((i.stock || 0) * (i.buyPrice || 0)), 0);
 
   // Selected ingredient / product in loss modal calculation
   const selectedLossIngredient = ingredients.find(i => i.id === Number(lossForm.ingredientId));
@@ -1168,7 +1168,7 @@ export const IngredientView: React.FC = () => {
   const unitLabel = lossForm.targetType === 'INGREDIENT'
     ? (selectedLossIngredient?.unit || 'satuan')
     : 'porsi';
-  const estimatedLossAmount = (parseFloat(lossForm.qtyLoss) || 0) * unitHpp;
+  const estimatedLossAmount = (parseFloat(lossForm.qtyLoss) || 0) * (unitHpp || 0);
 
   return (
     <div className="p-3 sm:p-6 pb-52 sm:pb-16 w-full flex flex-col gap-3.5 sm:gap-4">
@@ -4999,7 +4999,10 @@ export const IngredientView: React.FC = () => {
                                       )}
                                     </div>
                                     <p className="text-[10px] text-slate-400 mt-0.5">
-                                      Harga Beli: Rp {item.buyPrice.toLocaleString('id-ID')}/{item.unit}
+                                      {isAdminRole && typeof item.buyPrice === 'number'
+                                        ? `Harga Beli: Rp ${item.buyPrice.toLocaleString('id-ID')}/${item.unit}`
+                                        : `Satuan: ${item.unit}`
+                                      }
                                       {item.avgQtyPerServing > 0 && ` • Standar: ${item.avgQtyPerServing} ${item.unit}/porsi`}
                                     </p>
                                   </div>
@@ -5468,7 +5471,7 @@ export const IngredientView: React.FC = () => {
                   >
                     {ingredients.map(i => (
                       <option key={i.id} value={i.id.toString()}>
-                        {i.name} (Stok: {i.stock} {i.unit}) — Rp {i.buyPrice.toLocaleString('id-ID')}/{i.unit}
+                        {i.name} (Stok: {i.stock} {i.unit}){isAdminRole && typeof i.buyPrice === 'number' ? ` — Rp ${i.buyPrice.toLocaleString('id-ID')}/${i.unit}` : ''}
                       </option>
                     ))}
                   </select>
@@ -5478,7 +5481,7 @@ export const IngredientView: React.FC = () => {
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-bold text-slate-700">Pilih Menu / Porsi Masakan</label>
                     <span className="text-[11px] text-purple-600 font-bold">
-                      HPP Satuan: Rp {unitHpp.toLocaleString('id-ID')}
+                      {isAdminRole ? `HPP Satuan: Rp ${(unitHpp || 0).toLocaleString('id-ID')}` : 'Stok Terhubung ke Resep'}
                     </span>
                   </div>
                   <select
@@ -5490,7 +5493,7 @@ export const IngredientView: React.FC = () => {
                       const pCost = p.buyPrice || 0;
                       return (
                         <option key={p.id} value={p.id.toString()}>
-                          {p.name} {pCost > 0 ? `— HPP: Rp ${pCost.toLocaleString('id-ID')}` : ''}
+                          {p.name} {isAdminRole && pCost > 0 ? `— HPP: Rp ${pCost.toLocaleString('id-ID')}` : ''}
                         </option>
                       );
                     })}
@@ -5582,21 +5585,42 @@ export const IngredientView: React.FC = () => {
                 </div>
               </div>
 
-              {/* LIVE HPP CALCULATION CARD */}
-              <div className="p-3.5 bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl border border-rose-200/80 flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] font-black text-rose-600 uppercase tracking-wider">
-                    Estimasi Kerugian HPP Riil
+              {/* LIVE HPP CALCULATION CARD (Admin only) / OPERATIONAL SUMMARY (Dapur) */}
+              {isAdminRole ? (
+                <div className="p-3.5 bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl border border-rose-200/80 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-black text-rose-600 uppercase tracking-wider">
+                      Estimasi Kerugian HPP Riil
+                    </div>
+                    <div className="text-lg sm:text-xl font-black text-rose-700">
+                      Rp {(estimatedLossAmount || 0).toLocaleString('id-ID')}
+                    </div>
                   </div>
-                  <div className="text-lg sm:text-xl font-black text-rose-700">
-                    Rp {estimatedLossAmount.toLocaleString('id-ID')}
+                  <div className="text-right text-[11px] text-slate-600 font-medium">
+                    <div>{lossForm.qtyLoss || 0} {unitLabel} × Rp {(unitHpp || 0).toLocaleString('id-ID')}</div>
+                    <div className="text-[10px] text-slate-400">HPP Satuan {unitLabel}</div>
                   </div>
                 </div>
-                <div className="text-right text-[11px] text-slate-600 font-medium">
-                  <div>{lossForm.qtyLoss || 0} {unitLabel} × Rp {unitHpp.toLocaleString('id-ID')}</div>
-                  <div className="text-[10px] text-slate-400">HPP Satuan {unitLabel}</div>
+              ) : (
+                <div className="p-3 bg-rose-50/70 rounded-2xl border border-rose-200/70 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                      <TrendingDown size={16} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-rose-900">
+                        Pengurangan Stok Dapur
+                      </div>
+                      <div className="text-[11px] text-rose-700 font-medium">
+                        {lossForm.qtyLoss || 0} {unitLabel} akan dicatat ke audit log dapur
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black text-rose-700 bg-white px-2.5 py-1 rounded-lg border border-rose-200">
+                    Mode Dapur
+                  </span>
                 </div>
-              </div>
+              )}
 
               {/* CATATAN TAMBAHAN (OPSIONAL) */}
               <div>
