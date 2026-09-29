@@ -168,10 +168,15 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     if (!tenantId && !isAll) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
+    const whereCondition: any = { 
+      deletedAt: null
+    };
+    if (!isAll) {
+      whereCondition.tenantId = tenantId;
+    }
+
     const products = await prisma.product.findMany({
-      where: { 
-        deletedAt: null
-      },
+      where: whereCondition,
       include: { 
         category: true, 
         subCategory: true,

@@ -99,17 +99,20 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
     role: activeRoleName,
     roleId: activeRoleId,
     permissions: permissionKeys,
-    isPlatformAdmin: user.isPlatformAdmin
+    isPlatformAdmin: user.isPlatformAdmin,
+    businessType: activeMembership?.tenant?.businessType || (user as any).businessType || 'CAFE'
   };
 
   const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
 
   const { passwordHash, ...safeUser } = user;
+  const effectiveBusinessType = activeMembership?.tenant?.businessType || (user as any).businessType || 'CAFE';
 
   const membershipsList = (user.memberships || []).map(m => ({
     tenantId: m.tenantId,
     tenantName: m.tenant?.name || 'Muki Ramen',
     tenantSlug: m.tenant?.slug || 'muki-ramen',
+    businessType: m.tenant?.businessType || 'CAFE',
     roleName: m.role?.name || user.role,
     status: m.status
   }));
@@ -122,6 +125,8 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
       outletId: activeOutletId,
       role: activeRoleName,
       roleId: activeRoleId,
+      businessType: effectiveBusinessType,
+      tenantBusinessType: effectiveBusinessType,
       permissionKeys,
       permissions: legacyPermissions, // Object for old frontend compatibility
       memberships: membershipsList
@@ -505,8 +510,12 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       ownerName,
       ownerUsername,
       ownerPassword,
-      ownerPin
+      ownerPin,
+      businessType: rawBusinessType
     } = req.body;
+
+    const normalizedType = String(rawBusinessType || 'CAFE').toUpperCase();
+    const businessType = ['RETAIL', 'BENGKEL', 'LAUNDRY', 'CAFE'].includes(normalizedType) ? normalizedType : 'CAFE';
 
     if (!businessName || !slug || !ownerName || !ownerUsername || !ownerPassword) {
       return res.status(400).json({
@@ -521,9 +530,9 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       return res.status(400).json({ error: `Subdomain slug '${cleanSlug}' sudah digunakan oleh bisnis lain.` });
     }
 
-    // 2. Validasi keunikan Username
+    // 2. Validasi keunikan Username dalam tenant (atau existing)
     const existingUser = await prisma.user.findFirst({ where: { username: ownerUsername } });
-    if (existingUser) {
+    if (existingUser && existingUser.tenantId === null) {
       return res.status(400).json({ error: `Username '${ownerUsername}' sudah terdaftar. Silakan gunakan username lain.` });
     }
 
@@ -546,6 +555,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
           name: businessName,
           slug: cleanSlug,
           planId: targetPlan?.id,
+          businessType,
           status: 'ACTIVE',
           trialEndsAt
         }
@@ -568,6 +578,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
           username: ownerUsername,
           passwordHash,
           pin,
+          tenantId: tenant.id,
           role: 'OWNER',
           employmentType: 'FULL_TIME',
           permissions: JSON.stringify({
@@ -597,24 +608,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
         }
       });
 
-      // e. Inisialisasi Kategori Bawaan
-      const catFood = await tx.category.create({
-        data: { tenantId: tenant.id, name: 'Makanan', printerTarget: 'KITCHEN' }
-      });
-      const catDrink = await tx.category.create({
-        data: { tenantId: tenant.id, name: 'Minuman', printerTarget: 'BAR' }
-      });
-
-      // f. Inisialisasi Meja Bawaan
-      await tx.table.createMany({
-        data: [
-          { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '01', name: 'Area Utama', capacity: 4, posX: 20, posY: 30 },
-          { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '02', name: 'Area Utama', capacity: 4, posX: 50, posY: 30 },
-          { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '03', name: 'Area VIP', capacity: 6, posX: 80, posY: 30 }
-        ]
-      });
-
-      // g. Inisialisasi TenantPaymentConfig
+      // e. Inisialisasi TenantPaymentConfig
       await tx.tenantPaymentConfig.create({
         data: {
           tenantId: tenant.id,
@@ -625,16 +619,94 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
         }
       });
 
-      // h. Inisialisasi Settings Toko Default
+      // f. Inisialisasi Settings Toko Default
       await tx.settings.create({
         data: {
           tenantId: tenant.id,
           outletId: primaryOutlet.id,
+          businessType,
           storeName: businessName,
-          receiptHeader: `Selamat Datang di ${businessName}`,
+          receiptHeader: businessType === 'RETAIL' 
+            ? `TOKO GROSIR & RETAIL\n${businessName}` 
+            : (businessType === 'BENGKEL' ? `BENGKEL MOTOR & MOBIL\n${businessName}` : (businessType === 'LAUNDRY' ? `LAUNDRY KILOAN & SATUAN\n${businessName}` : `Selamat Datang di ${businessName}`)),
           receiptFooter: 'Terima kasih atas kunjungan Anda!'
         }
       });
+
+      // g. Inisialisasi Kategori & Produk Bawaan Sesuai Vertikal
+      if (businessType === 'RETAIL') {
+        const catSembako = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Sembako & Beras', icon: '🌾', sortOrder: 1, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catBumbu = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Minyak & Bumbu Dapur', icon: '🍳', sortOrder: 2, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catSnack = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Minuman & Snack', icon: '☕', sortOrder: 3, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+
+        // Produk Retail Sembako Awal
+        await tx.product.createMany({
+          data: [
+            { tenantId: tenant.id, categoryId: catSembako.id, name: 'Beras Premium 5 Kg', barcode: '899100100001', buyPrice: 65000, sellPrice: 74000, sellPriceRetail: 74000, sellPriceGrosir: 71000, minQtyGrosir: 5, stock: 50, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catBumbu.id, name: 'Minyak Goreng 2 Liter', barcode: '899100100002', buyPrice: 32000, sellPrice: 36500, sellPriceRetail: 36500, sellPriceGrosir: 35000, minQtyGrosir: 6, stock: 40, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSembako.id, name: 'Gula Pasir Kristal 1 Kg', barcode: '899100100003', buyPrice: 15500, sellPrice: 17500, sellPriceRetail: 17500, sellPriceGrosir: 16500, minQtyGrosir: 10, stock: 60, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSembako.id, name: 'Telur Ayam Ras 1 Kg', barcode: '899100100004', buyPrice: 25000, sellPrice: 28500, sellPriceRetail: 28500, sellPriceGrosir: 27000, minQtyGrosir: 5, stock: 35, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSnack.id, name: 'Kopi Kapal Api Renceng (10 sachet)', barcode: '899100100005', buyPrice: 12000, sellPrice: 14500, sellPriceRetail: 14500, sellPriceGrosir: 13500, minQtyGrosir: 10, stock: 80, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSnack.id, name: 'Indomie Goreng (Dus/40pcs)', barcode: '899100100006', buyPrice: 108000, sellPrice: 118000, sellPriceRetail: 118000, sellPriceGrosir: 115000, minQtyGrosir: 3, stock: 25, status: 'Aktif' }
+          ]
+        });
+      } else if (businessType === 'BENGKEL') {
+        const catOli = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Oli & Pelumas', icon: '🛢️', sortOrder: 1, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catPart = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Sparepart & Suku Cadang', icon: '⚙️', sortOrder: 2, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catJasa = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Jasa & Ongkos Servis', icon: '🔧', sortOrder: 3, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+
+        await tx.product.createMany({
+          data: [
+            { tenantId: tenant.id, categoryId: catOli.id, name: 'Oli Mesin Matic 10W-40 0.8L', barcode: '899200100001', buyPrice: 42000, sellPrice: 55000, sellPriceRetail: 55000, sellPriceMitra: 50000, stock: 30, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catPart.id, name: 'Kampas Rem Depan Honda/Yamaha', barcode: '899200100002', buyPrice: 30000, sellPrice: 45000, sellPriceRetail: 45000, sellPriceMitra: 40000, stock: 20, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catPart.id, name: 'Busi Standar CPR9EA-9', barcode: '899200100003', buyPrice: 18000, sellPrice: 25000, sellPriceRetail: 25000, sellPriceMitra: 22000, stock: 25, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catJasa.id, name: 'Jasa Servis Ringan + Tune Up', barcode: '899200100004', buyPrice: 0, sellPrice: 40000, sellPriceRetail: 40000, sellPriceMitra: 35000, stock: 999, status: 'Aktif' }
+          ]
+        });
+      } else if (businessType === 'LAUNDRY') {
+        const catKiloan = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Cuci Kiloan (Kg)', icon: '🧺', sortOrder: 1, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catSatuan = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Cuci Satuan & Bedcover', icon: '👔', sortOrder: 2, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+
+        await tx.product.createMany({
+          data: [
+            { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Cuci Komplit Reguler (2 Hari)', barcode: '899300100001', buyPrice: 2000, sellPrice: 8000, stock: 999, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Cuci Kilat Express (1 Hari)', barcode: '899300100002', buyPrice: 3000, sellPrice: 14000, stock: 999, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catSatuan.id, name: 'Cuci Bedcover Besar', barcode: '899300100003', buyPrice: 5000, sellPrice: 35000, stock: 999, status: 'Aktif' }
+          ]
+        });
+      } else {
+        // Default CAFE
+        const catFood = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Makanan', printerTarget: 'KITCHEN' }
+        });
+        const catDrink = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Minuman', printerTarget: 'BAR' }
+        });
+
+        await tx.table.createMany({
+          data: [
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '01', name: 'Area Utama', capacity: 4, posX: 20, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '02', name: 'Area Utama', capacity: 4, posX: 50, posY: 30 },
+            { tenantId: tenant.id, outletId: primaryOutlet.id, tableNo: '03', name: 'Area VIP', capacity: 6, posX: 80, posY: 30 }
+          ]
+        });
+      }
 
       return { tenant, primaryOutlet, user };
     });

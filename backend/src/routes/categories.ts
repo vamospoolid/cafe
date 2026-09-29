@@ -176,6 +176,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     if (isFlat) {
       const allCategories = await prisma.category.findMany({
         where: {
+          tenantId,
           deletedAt: null,
           ...activeCondition
         },
@@ -183,8 +184,8 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
           parent: true,
           _count: {
             select: { 
-              products: { where: { deletedAt: null } }, 
-              subProducts: { where: { deletedAt: null } } 
+              products: { where: { tenantId, deletedAt: null } }, 
+              subProducts: { where: { tenantId, deletedAt: null } } 
             }
           }
         },
@@ -195,13 +196,14 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
 
     const categories = await prisma.category.findMany({
       where: { 
+        tenantId,
         parentId: null,
         deletedAt: null,
         ...activeCondition
       },
       include: {
         subCategories: {
-          where: { deletedAt: null, ...activeCondition },
+          where: { tenantId, deletedAt: null, ...activeCondition },
           include: {
             _count: {
               select: { 

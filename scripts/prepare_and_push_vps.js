@@ -291,6 +291,7 @@ async function runRemoteVpsDeploy() {
         echo "   -> Menjalankan seed foundation & vertikal..."
         npx ts-node prisma/seed_foundation.ts || true
         npx ts-node prisma/seed_features.ts || true
+        npx ts-node prisma/fix_retail_tenant.ts || true
 
         echo "   -> Mengompilasi TypeScript backend..."
         npm run build
@@ -340,17 +341,14 @@ async function runRemoteVpsDeploy() {
           pm2 save
         fi
 
-        # 7. SINKRONISASI KE /var/www/codepos
-        if [ -d "/var/www/codepos/.git" ]; then
-          echo "🔄 [7/7] Sinkronisasi update ke /var/www/codepos..."
-          cd /var/www/codepos
-          git fetch origin
-          git reset --hard origin/main
-          git clean -fd -e uploads/ -e backups/ -e backend/.env
-          echo "   -> Men-generate Prisma client di /var/www/codepos..."
-          cd /var/www/codepos/backend
-          npx prisma generate || true
-          echo "   ✔ Direktori /var/www/codepos berhasil disinkronkan!"
+        # 7. PEMBERSIHAN FOLDER MIRROR /var/www/codepos
+        if [ -d "/var/www/codepos" ]; then
+          echo "🗑️ [7/7] Menghapus folder mirror /var/www/codepos sesuai instruksi..."
+          pm2 delete codepos-backend 2>/dev/null || true
+          rm -rf /var/www/codepos
+          echo "   ✔ Folder /var/www/codepos berhasil dibersihkan! VPS 100% fokus ke /var/www/codenusa."
+        else
+          echo "   ✔ Direktori mirror /var/www/codepos sudah bersih (tidak ada)."
         fi
 
         echo ""
