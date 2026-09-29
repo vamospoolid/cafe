@@ -2,12 +2,8 @@ import React, { useState, useContext, useEffect } from 'react';
 import { 
   X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, 
   Printer, Utensils, Coffee, Layers, Sparkles, ArrowRight, Banknote, Calendar, 
-<<<<<<< HEAD
-  FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck
-=======
   FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck,
   MessageCircle, Send, Ticket, ChevronRight, Search
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -19,6 +15,7 @@ import {
   getSavedBluetoothPrinter,
   printBluetoothReceipt 
 } from '../utils/printerBluetooth';
+import { generateWhatsAppReceiptUrl } from '../utils/receiptFormatter';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -51,8 +48,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [showItemsList, setShowItemsList] = useState(false);
   const [showNumpad, setShowNumpad]       = useState(false);
 
-<<<<<<< HEAD
-=======
   // Voucher Promo State
   const [voucherCode, setVoucherCode] = useState<string>('');
   const [appliedVoucher, setAppliedVoucher] = useState<any | null>(null);
@@ -65,7 +60,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Points Redemption State
   const [redeemPoints, setRedeemPoints] = useState<boolean>(false);
 
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
   const posContext = useContext(POSContext);
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [printLoading, setPrintLoading] = useState(false);
@@ -75,8 +69,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [showSplitPrintModal, setShowSplitPrintModal] = useState(false);
   const [fetchedFullOrder, setFetchedFullOrder] = useState<any | null>(null);
-<<<<<<< HEAD
-=======
   const [offlineOrderSnapshot, setOfflineOrderSnapshot] = useState<any | null>(null);
   const [createdOrderObj, setCreatedOrderObj] = useState<any | null>(null);
   const [waPhone, setWaPhone] = useState<string>(customer?.phone || '');
@@ -126,7 +118,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     window.open(url, '_blank');
     toast('Tautan nota WhatsApp dibuka!', 'success');
   };
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
 
   const fetchAvailableVouchers = async () => {
     if (!posContext?.token) return;
@@ -178,11 +169,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   }, [customer]);
 
-  const fmt = (val: number) => `Rp ${Math.round(val || 0).toLocaleString('id-ID')}`;
-  
   const parentDiscount = customer?.discountAmount || 0;
   const currentDiscount = currentCustomer?.discountAmount || 0;
-  const finalTotal = Math.max(0, total + parentDiscount - currentDiscount - manualDiscount);
 
   const handleApplyVoucher = async (overrideCode?: string) => {
     const codeToValidate = (overrideCode || voucherCode).trim().toUpperCase();
@@ -685,45 +673,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span>PPN (Pajak)</span>
                   <span className="font-semibold text-slate-700">+{fmt(tax)}</span>
                 </div>
-<<<<<<< HEAD
-                {tax > 0 && (
-                  <div className="flex justify-between text-slate-500">
-                    <span>PPN (Pajak)</span>
-                    <span className="font-semibold text-slate-700">+{fmt(tax)}</span>
-                  </div>
-                )}
-                {serviceCharge > 0 && (
-                  <div className="flex justify-between text-slate-500">
-                    <span>Service Charge</span>
-                    <span className="font-semibold text-slate-700">+{fmt(serviceCharge)}</span>
-                  </div>
-                )}
-                {(manualDiscount > 0 || currentDiscount > 0) && (
-                  <div className="flex justify-between text-rose-600 font-semibold">
-                    <span>Diskon & Poin</span>
-                    <span>-{fmt(currentDiscount + manualDiscount)}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Quick Discount Input */}
-              <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2 mt-1">
-                <Tag size={14} className="text-slate-400 shrink-0" />
-                <span className="text-xs font-medium text-slate-500 shrink-0">Diskon Khusus:</span>
-                <input
-                  type="number"
-                  placeholder="0"
-                  max={Math.max(0, total + parentDiscount - currentDiscount)}
-                  value={manualDiscount || ''}
-                  onChange={e => {
-                    const maxAllowed = Math.max(0, total + parentDiscount - currentDiscount);
-                    const val = Number(e.target.value) || 0;
-                    setManualDiscount(Math.max(0, Math.min(val, maxAllowed)));
-                  }}
-                  className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
-                />
-              </div>
-=======
               )}
               {serviceCharge > 0 && (
                 <div className="flex justify-between text-slate-500">
@@ -859,7 +808,6 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 }}
                 className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
               />
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
             </div>
           </div>
 

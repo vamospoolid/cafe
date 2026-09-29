@@ -530,6 +530,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
               } else {
                 console.error('[Orders] Customer auto-create error (non-fatal):', createErr.message);
               }
+            }
           }
           if (cust) {
             finalCustomerId = cust.id;
@@ -800,6 +801,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       total,
       discount,
       customerId,
+      voucherId,
       pointsUsed,
       paymentMethod,
       isPaid
@@ -863,24 +865,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
       // 0.5. Cari/Registrasi Customer jika ada phone
       let finalCustomerId = customerId ? Number(customerId) : null;
-      if (!finalCustomerId && customerPhone) {
-        let cust = await tx.customer.findFirst({
-          where: {
-            phone: customerPhone,
-            ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
-          }
+      if (finalCustomerId) {
+        const custCheck = await tx.customer.findFirst({
+          where: { id: finalCustomerId, tenantId }
         });
-<<<<<<< HEAD
-        if (!cust && customerName) {
-          cust = await tx.customer.create({
-            data: {
-              tenantId: tenantId || null,
-              name: customerName,
-              phone: customerPhone,
-              points: 0,
-              tier: 'Bronze',
-              totalSpent: 0
-=======
         if (!custCheck) {
           throw new Error('Pelanggan tidak ditemukan atau bukan milik tenant ini.');
         }
@@ -907,7 +895,6 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
               cust = await tx.customer.findFirst({ where: { phone: customerPhone, tenantId } });
             } else {
               console.error('[Orders] Customer auto-create error (non-fatal):', createErr.message);
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
             }
           }
         }
@@ -930,43 +917,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const numService = Math.max(0, Number(serviceCharge) || 0);
       const safeTotal = Math.max(0, Number(total) || (numSubtotal - safeDiscount + numTax + numService));
 
-<<<<<<< HEAD
-      const order = await tx.order.create({
-        data: {
-          tenantId: tenantId || null,
-          outletId: outletId || null,
-          orderNumber,
-          customerName: customerName || 'Pelanggan',
-          customerPhone,
-          customerId: finalCustomerId,
-          tableId: tableId ? Number(tableId) : null,
-          joinedTableIds: formattedJoinedTableIds,
-          userId,
-          subtotal: numSubtotal,
-          discount: safeDiscount,
-          tax: numTax,
-          serviceCharge: numService,
-          total: safeTotal,
-          paymentMethod: isActuallyPaid ? paymentMethod : null,
-          status: isActuallyPaid ? 'Paid' : 'Pending',
-          kdsStatus: (isActuallyPaid && shouldAutoServe) ? 'Served' : 'Pending',
-          servedAt: (isActuallyPaid && shouldAutoServe) ? nowPaid : null,
-          paidAt: nowPaid, // Catat waktu pembayaran untuk rekonsiliasi shift akurat
-          
-          items: {
-            create: items.map((item: any) => ({
-              tenantId: tenantId || null,
-              outletId: outletId || null,
-              productId: Number(item.productId),
-              qty: Number(item.qty),
-              price: Number(item.price),
-              buyPrice: buyPriceMap.get(Number(item.productId)) || 0,
-              subtotal: Number(item.price * item.qty),
-              notes: item.notes
-            }))
-=======
-      let order = null;
-      let currentOrderNumber = baseOrderNumber;
+      let order: any = null;
+      let currentOrderNumber = orderNumber;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           order = await tx.order.create({
@@ -1017,11 +969,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             const randSuffix = Math.floor(1000 + Math.random() * 9000);
             currentOrderNumber = `ORD-${Date.now().toString().slice(-6)}-${randSuffix}`;
             continue;
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
           }
-        },
-        include: { items: true, table: true }
-      });
+          throw err;
+        }
+      }
 
       // 2. Kurangi Stok Produk (Fix #6: validasi stok sebelum decrement)
       // Cek mode inventaris untuk menentukan apakah perlu decrement bahan baku juga
@@ -1224,24 +1175,29 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
               totalSpent: 0
             }
           });
-<<<<<<< HEAD
         }
         if (cust) {
           finalCustomerId = cust.id;
-=======
-          const alreadyUsedInThisOrder = orders.some((o: any) => o.voucherId === vId);
-          if (v && (v.status === 'Aktif' || alreadyUsedInThisOrder)) {
-            if (!v.maxUsage || v.usedCount < v.maxUsage || alreadyUsedInThisOrder) {
-              resolvedVoucherId = v.id;
-              if (!alreadyUsedInThisOrder) {
-                await tx.voucher.update({
-                  where: { id: v.id },
-                  data: { usedCount: { increment: 1 } }
-                });
-              }
+        }
+      }
+
+      let resolvedVoucherId: number | null = null;
+      const vId = req.body.voucherId ? Number(req.body.voucherId) : null;
+      if (vId) {
+        const v = await tx.voucher.findFirst({
+          where: { id: vId, ...(tenantId ? { tenantId } : {}) }
+        });
+        const alreadyUsedInThisOrder = orders.some((o: any) => o.voucherId === vId);
+        if (v && (v.status === 'Aktif' || alreadyUsedInThisOrder)) {
+          if (!v.maxUsage || v.usedCount < v.maxUsage || alreadyUsedInThisOrder) {
+            resolvedVoucherId = v.id;
+            if (!alreadyUsedInThisOrder) {
+              await tx.voucher.update({
+                where: { id: v.id },
+                data: { usedCount: { increment: 1 } }
+              });
             }
           }
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
         }
       }
 

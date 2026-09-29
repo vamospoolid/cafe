@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -15,7 +15,6 @@ import {
   connectBluetoothPrinter, 
   disconnectBluetoothPrinter, 
 } from '../utils/printerBluetooth';
-import SaaSPlanManager from './SaaSPlanManager';
 import TenantResetModal from './TenantResetModal';
 import RecycleBinModal from './RecycleBinModal';
 import TenantPWASection from './TenantPWASection';
@@ -418,21 +417,15 @@ const SettingsView = () => {
     }
   };
 
+  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' = ((formData as any).businessType || posContext?.settings?.businessType || 'CAFE').toUpperCase() as any;
+  const isBengkel = businessType === 'BENGKEL';
+  const isRetail = businessType === 'RETAIL';
+  const isLaundry = businessType === 'LAUNDRY';
+  const isCafe = businessType === 'CAFE';
+  const verticalStore = isBengkel ? 'Bengkel' : isRetail ? 'Toko Retail' : isLaundry ? 'Laundry' : 'Kafe';
+  const verticalPrinter = isBengkel ? 'SPK & Printer' : isRetail ? 'Struk & Barcode' : isLaundry ? 'Nota Laundry' : 'Printer & KDS';
+
   const allTabs = [
-<<<<<<< HEAD
-    { id: 'profil', label: 'Profil Kafe', icon: Store, category: 'general' },
-    { id: 'struk', label: 'Printer & KDS', icon: Receipt, category: 'operational' },
-    { id: 'pajak', label: 'Pajak & Service', icon: Percent, category: 'financial' },
-    { id: 'bayar', label: 'Metode Bayar', icon: CreditCard, category: 'financial' },
-    { id: 'fitur', label: 'Mode POS', icon: Settings, category: 'operational' },
-    { id: 'bagi_hasil', label: 'Bagi Hasil', icon: Sliders, category: 'financial' },
-    { id: 'crm', label: 'CRM & Member', icon: Award, category: 'operational' },
-    { id: 'inventaris', label: 'Inventaris', icon: PackageSearch, category: 'operational' },
-    { id: 'printer_bt', label: 'Printer BT', icon: Printer, category: 'operational' },
-    { id: 'database', label: 'Database', icon: Database, category: 'system' },
-    { id: 'absensi_gps', label: 'Absensi GPS', icon: MapPin, category: 'system' },
-    { id: 'koneksi_server', label: 'Koneksi', icon: Smartphone, category: 'system' },
-=======
     { 
       id: 'profil', 
       label: `Profil ${verticalStore}`, 
@@ -538,14 +531,6 @@ const SettingsView = () => {
       show: true 
     },
     { 
-      id: 'saas_plan', 
-      label: 'Paket & Add-on SaaS', 
-      desc: 'Status paket langganan aktif, kuota outlet, & upgrade', 
-      icon: Sparkles, 
-      category: 'system', 
-      show: true 
-    },
-    { 
       id: 'inventaris', 
       label: 'Mode Inventaris', 
       desc: isBengkel ? 'Pelacakan stok sparepart & audit fisik' : (isRetail ? 'Pelacakan stok barang dagangan & multi-gudang' : (isLaundry ? 'Pelacakan deterjen, pewangi & konsumabel' : 'Pelacakan bahan baku, resep BOM & transfer gudang')), 
@@ -569,7 +554,6 @@ const SettingsView = () => {
       category: 'system', 
       show: true 
     },
->>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
   ];
   const currentTab = allTabs.find(t => t.id === activeTab) || allTabs[0];
   const CurrentIcon = currentTab.icon;

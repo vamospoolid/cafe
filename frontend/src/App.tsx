@@ -98,15 +98,10 @@ const AppRoutes = () => {
     }
   }, [context?.token]);
 
-  // Rute publik landing page SaaS (bisa diakses langsung kapan saja via /landing atau /landing-page)
+  // Rute publik landing page SaaS (arahkan ke /login)
   const isLandingRoute = location.pathname === '/landing' || location.pathname === '/landing-page';
   if (isLandingRoute) {
-    return (
-      <>
-        <LandingPageView onNavigateLogin={() => navigate('/login')} />
-        <CustomerSupportWidget />
-      </>
-    );
+    return <Navigate to="/login" replace />;
   }
   // Jika ini rute staff PWA mandiri (bisa dibuka di HP staf/dapur), biarkan terbuka
   const isStaffRoute = location.pathname.startsWith('/staff') || location.pathname.startsWith('/dapur-app');
