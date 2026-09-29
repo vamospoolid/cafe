@@ -39,6 +39,7 @@ import {
   Sparkles,
   Store,
   LayoutGrid,
+  Sliders,
   LogOut
 } from 'lucide-react';
 
@@ -408,6 +409,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <Settings size={20} className="shrink-0" />
                   <span>Pengaturan Sistem</span>
                 </NavLink>
+                {((posContext?.user as any)?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN') && (
+                  <NavLink to="/platform-admin" title="Master SaaS Console" className={({isActive}) => `nav-item ${isActive ? 'active' : ''} text-indigo-400 hover:text-indigo-300 font-bold`}>
+                    <Sliders size={20} className="shrink-0 text-indigo-400" />
+                    <span>Master SaaS Console</span>
+                  </NavLink>
+                )}
               </>
             )}
           </nav>
