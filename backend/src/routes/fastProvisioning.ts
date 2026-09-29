@@ -743,7 +743,7 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
     }
 
     // Check username collision
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.user.findFirst({
       where: { username: cleanUsername }
     });
 

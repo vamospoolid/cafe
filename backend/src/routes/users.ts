@@ -320,26 +320,20 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
     }
 
     const cleanUsername = String(username).trim().toLowerCase();
-    let existingUser = await prisma.user.findUnique({ where: { username: cleanUsername } });
 
-    // USR-002: Cegah penambahan/pengambilalihan akun staf jika username sudah terdaftar
-    if (existingUser) {
-      const existingMembership = await prisma.tenantMembership.findUnique({
-        where: {
-          userId_tenantId: {
-            userId: existingUser.id,
-            tenantId
-          }
-        }
-      });
-
-      if (existingMembership) {
-        return res.status(400).json({ error: 'Karyawan dengan username ini sudah terdaftar di outlet Anda.' });
-      } else {
-        return res.status(400).json({
-          error: `Username "${cleanUsername}" sudah digunakan oleh akun lain di sistem SaaS. Gunakan username lain (misal: ${cleanUsername}.${tenantId.substring(0, 4)}).`
-        });
+    // Validasi keunikan username di dalam tenant aktif
+    const existingInTenant = await prisma.user.findFirst({
+      where: {
+        username: cleanUsername,
+        OR: [
+          { tenantId },
+          { memberships: { some: { tenantId } } }
+        ]
       }
+    });
+
+    if (existingInTenant) {
+      return res.status(400).json({ error: `Karyawan dengan username "${cleanUsername}" sudah terdaftar di outlet Anda.` });
     }
 
     // USR-005: Tentukan Role ID terikat pada role sistem atau tenant aktif
@@ -367,7 +361,7 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
     const passwordHash = await bcrypt.hash(password || '123456', 10);
     const staffPin = pin || '123456';
 
-    // Buat user baru
+    // Buat user baru terikat pada tenant aktif
     const newUser = await prisma.user.create({
       data: {
         name: String(name).trim(),
@@ -375,6 +369,7 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
         passwordHash,
         pin: staffPin,
         role: role || 'Kasir',
+        tenantId,
         employmentType: employmentType || 'FULL_TIME',
         permissions: JSON.stringify(permissions || {}),
         status: status || 'Aktif'
@@ -459,9 +454,18 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
     if (username) {
       const cleanUsername = String(username).trim().toLowerCase();
       if (cleanUsername !== targetUser.username) {
-        const existingUsername = await prisma.user.findUnique({ where: { username: cleanUsername } });
+        const existingUsername = await prisma.user.findFirst({
+          where: {
+            username: cleanUsername,
+            id: { not: targetUser.id },
+            OR: [
+              { tenantId: req.user?.tenantId },
+              { memberships: { some: { tenantId: req.user?.tenantId } } }
+            ]
+          }
+        });
         if (existingUsername) {
-          return res.status(400).json({ error: `Username "${cleanUsername}" sudah digunakan oleh pengguna lain.` });
+          return res.status(400).json({ error: `Username "${cleanUsername}" sudah digunakan oleh staf lain di outlet Anda.` });
         }
         updateUserData.username = cleanUsername;
       }

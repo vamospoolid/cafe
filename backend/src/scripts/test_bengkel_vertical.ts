@@ -52,11 +52,12 @@ async function runTests() {
 
   // Setup Mekanik User for Tenant Bengkel A
   const mekanikUser = await prisma.user.upsert({
-    where: { username: 'test_mekanik_anto' },
+    where: { tenantId_username: { tenantId: tenantBengkelA.id, username: 'test_mekanik_anto' } },
     update: {},
     create: {
       name: 'Anto Wijaya',
       username: 'test_mekanik_anto',
+      tenantId: tenantBengkelA.id,
       passwordHash: 'dummy',
       role: 'Mekanik',
       status: 'Aktif',

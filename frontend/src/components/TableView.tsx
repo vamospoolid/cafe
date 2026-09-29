@@ -1468,7 +1468,10 @@ const TableView = () => {
             phone: selectedOrderToPay.customerPhone, 
             id: selectedOrderToPay.customerId, 
             tableId: selectedOrderToPay.tableId,
-            joinedTableIds: selectedOrderToPay.joinedTableIds 
+            joinedTableIds: selectedOrderToPay.joinedTableIds,
+            voucher: selectedOrderToPay.voucher,
+            voucherId: selectedOrderToPay.voucherId,
+            discount: selectedOrderToPay.discount
           }}
           orderId={selectedOrderToPay.id}
         />

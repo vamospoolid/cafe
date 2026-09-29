@@ -15,6 +15,10 @@ import {
   connectBluetoothPrinter, 
   disconnectBluetoothPrinter, 
 } from '../utils/printerBluetooth';
+import SaaSPlanManager from './SaaSPlanManager';
+import TenantResetModal from './TenantResetModal';
+import RecycleBinModal from './RecycleBinModal';
+import TenantPWASection from './TenantPWASection';
 
 const SettingsView = () => {
   const [activeTab, setActiveTab] = useState('profil');
@@ -415,6 +419,7 @@ const SettingsView = () => {
   };
 
   const allTabs = [
+<<<<<<< HEAD
     { id: 'profil', label: 'Profil Kafe', icon: Store, category: 'general' },
     { id: 'struk', label: 'Printer & KDS', icon: Receipt, category: 'operational' },
     { id: 'pajak', label: 'Pajak & Service', icon: Percent, category: 'financial' },
@@ -427,6 +432,144 @@ const SettingsView = () => {
     { id: 'database', label: 'Database', icon: Database, category: 'system' },
     { id: 'absensi_gps', label: 'Absensi GPS', icon: MapPin, category: 'system' },
     { id: 'koneksi_server', label: 'Koneksi', icon: Smartphone, category: 'system' },
+=======
+    { 
+      id: 'profil', 
+      label: `Profil ${verticalStore}`, 
+      desc: `Identitas, alamat, kontak, & logo resmi ${verticalStore.toLowerCase()}`, 
+      icon: Store, 
+      category: 'store', 
+      show: true 
+    },
+    { 
+      id: 'branding', 
+      label: 'Branding & Tampilan', 
+      desc: 'Warna tema brand, cover login, & tata letak aplikasi', 
+      icon: Sparkles, 
+      category: 'store', 
+      show: true 
+    },
+    { 
+      id: 'jam_operasional', 
+      label: 'Jam Operasional & Shift', 
+      desc: 'Jadwal buka-tutup outlet & toleransi shift kerja', 
+      icon: Clock, 
+      category: 'store', 
+      show: true 
+    },
+    { 
+      id: 'struk', 
+      label: verticalPrinter, 
+      desc: isBengkel ? 'Format SPK, estimasi biaya & struk thermal' : (isRetail ? 'Format struk belanja & barcode thermal' : (isLaundry ? 'Format nota timbangan & label rak cuci' : 'Format nota thermal, target dapur/bar & KDS')), 
+      icon: Receipt, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'pwa_mobile', 
+      label: 'Aplikasi Mobile & PWA', 
+      desc: 'Link mandiri per tenant, QR Code tablet kasir & portal absensi staf', 
+      icon: Smartphone, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'printer_bt', 
+      label: 'Printer Bluetooth', 
+      desc: 'Koneksi printer thermal mobile Android & Web Bluetooth', 
+      icon: Printer, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'koneksi_server', 
+      label: 'Koneksi Terminal', 
+      desc: 'IP backend server & sinkronisasi kasir multi-device', 
+      icon: Smartphone, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'bayar', 
+      label: 'Metode Pembayaran', 
+      desc: 'QRIS statis/dinamis, transfer rekening bank, & kas tunai', 
+      icon: CreditCard, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'pajak', 
+      label: 'Pajak & Service', 
+      desc: 'Pengaturan persentase PB1/PPN & service charge toko', 
+      icon: Percent, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'fitur', 
+      label: 'Mode Operasional POS', 
+      desc: 'Aturan transaksi kasir, tier harga, & opsi pesanan', 
+      icon: Settings, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'bagi_hasil', 
+      label: 'Bagi Hasil & Bonus', 
+      desc: 'Skema bonus target omzet harian & pembagian profit', 
+      icon: Sliders, 
+      category: 'finance', 
+      show: true 
+    },
+    { 
+      id: 'crm', 
+      label: 'CRM & Member', 
+      desc: 'Tingkatan tier loyalitas member & perolehan poin belanja', 
+      icon: Award, 
+      category: 'team', 
+      show: true 
+    },
+    { 
+      id: 'absensi_gps', 
+      label: 'Absensi & GPS Toko', 
+      desc: 'Titik koordinat outlet & radius geofencing presensi karyawan', 
+      icon: MapPin, 
+      category: 'team', 
+      show: true 
+    },
+    { 
+      id: 'saas_plan', 
+      label: 'Paket & Add-on SaaS', 
+      desc: 'Status paket langganan aktif, kuota outlet, & upgrade', 
+      icon: Sparkles, 
+      category: 'system', 
+      show: true 
+    },
+    { 
+      id: 'inventaris', 
+      label: 'Mode Inventaris', 
+      desc: isBengkel ? 'Pelacakan stok sparepart & audit fisik' : (isRetail ? 'Pelacakan stok barang dagangan & multi-gudang' : (isLaundry ? 'Pelacakan deterjen, pewangi & konsumabel' : 'Pelacakan bahan baku, resep BOM & transfer gudang')), 
+      icon: PackageSearch, 
+      category: 'system', 
+      show: true 
+    },
+    { 
+      id: 'database', 
+      label: 'Database & Backup', 
+      desc: 'Cadangkan data snapshot JSON, restore, atau reset toko', 
+      icon: Database, 
+      category: 'system', 
+      show: true 
+    },
+    { 
+      id: 'bantuan_cs', 
+      label: 'Bantuan & CS 24/7', 
+      desc: 'Kontak support WhatsApp teknisi resmi & pusat bantuan', 
+      icon: Headphones, 
+      category: 'system', 
+      show: true 
+    },
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
   ];
   const currentTab = allTabs.find(t => t.id === activeTab) || allTabs[0];
   const CurrentIcon = currentTab.icon;
@@ -716,6 +859,16 @@ const SettingsView = () => {
                   </label>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'pwa_mobile' && (
+            <div className="space-y-6 animate-fade-in">
+              <TenantPWASection
+                tenantSlug={posContext?.user?.memberships?.[0]?.tenantSlug || ''}
+                storeName={formData.storeName}
+                businessType={businessType}
+              />
             </div>
           )}
 

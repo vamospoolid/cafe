@@ -21,11 +21,27 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const response = await originalFetch(finalInput, init);
   
   if (response.status === 401) {
-    // Jika token tidak valid / DB direstart, paksa logout
-    if (localStorage.getItem('pos_token')) {
+    // Cek apakah request yang gagal benar-benar mengirimkan pos_token kasir
+    const posToken = localStorage.getItem('pos_token');
+    const authHeader = String((init?.headers as any)?.Authorization || (init?.headers as any)?.authorization || '');
+    const wasUsingPosToken = Boolean(posToken && authHeader.includes(posToken));
+
+    // Jangan pernah redirect jika sedang di rute portal staf atau rute publik mandiri
+    const isIndependentRoute = 
+      window.location.pathname.startsWith('/staff') ||
+      window.location.pathname.startsWith('/dapur-app') ||
+      window.location.pathname.startsWith('/dinein') ||
+      window.location.pathname.startsWith('/menu') ||
+      window.location.pathname === '/login' ||
+      window.location.pathname === '/' ||
+      window.location.pathname === '/landing' ||
+      window.location.pathname === '/landing-page';
+
+    // HANYA redirect jika session kasir POS utama yang aktif ditolak tokennya
+    if (wasUsingPosToken && !isIndependentRoute) {
       localStorage.removeItem('pos_user');
       localStorage.removeItem('pos_token');
-      window.location.href = '/';
+      window.location.href = '/login';
     }
   }
   return response;

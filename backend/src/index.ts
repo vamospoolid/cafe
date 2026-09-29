@@ -162,7 +162,23 @@ const uploadDir = path.resolve(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadDir, {
+// ─── Path Traversal Protection for Static Upload Files ───────────────────────
+// Mencegah akses `GET /uploads/../../etc/passwd` atau ekstensi berbahaya.
+// File diakses secara publik tapi sudah ter-isolasi per tenant (uploads/tenants/{tenantId}/).
+app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
+  const normalizedPath = path.normalize(req.path);
+  // Blokir path traversal
+  if (normalizedPath.includes('..') || normalizedPath.includes('\0')) {
+    return res.status(400).json({ error: 'Invalid file path.' });
+  }
+  // Blokir ekstensi berbahaya (script, executable, dll)
+  const ext = path.extname(normalizedPath).toLowerCase();
+  const BLOCKED_EXTENSIONS = ['.exe', '.sh', '.bat', '.cmd', '.php', '.py', '.rb', '.js', '.ts', '.env', '.sql'];
+  if (BLOCKED_EXTENSIONS.includes(ext)) {
+    return res.status(403).json({ error: 'Akses file ini tidak diizinkan.' });
+  }
+  next();
+}, express.static(uploadDir, {
   dotfiles: 'ignore',
   maxAge: '1d',
   fallthrough: false
@@ -281,8 +297,19 @@ const httpServer = createServer(app);
 
 export const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    // Production: hanya izinkan domain resmi CodePOS & custom domain tenant terdaftar
+    // Development: longgar agar mudah debug dari localhost berbagai port
+    origin: process.env.NODE_ENV === 'production'
+      ? [
+          'https://codenusa.id',
+          /\.codenusa\.id$/,
+          'https://vamospool.id',
+          /\.vamospool\.id$/,
+          ...(process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean)
+        ]
+      : '*',
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 

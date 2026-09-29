@@ -359,9 +359,26 @@ export const StaffPWAView: React.FC = () => {
   // Fetch Settings & Shifts
   const fetchSettingsAndShifts = async () => {
     try {
+      if (!token) {
+        // Jika staf belum login, jangan tembak endpoint protected (/api/settings)
+        // Ambil branding publik untuk logo dan nama toko di form login
+        const brandRes = await fetch('/api/public-branding');
+        if (brandRes.ok) {
+          const brandData = await brandRes.json();
+          setSettings((prev: any) => ({
+            ...prev,
+            storeName: brandData.storeName,
+            logoUrl: brandData.logoUrl,
+            primaryColor: brandData.primaryColor,
+            businessType: brandData.businessType || 'CAFE',
+          }));
+        }
+        return;
+      }
+
       const activeTenantId = user?.tenantId || (user?.tenant?.id) || localStorage.getItem('tenantId') || localStorage.getItem('staff_tenant_id');
       const headers: Record<string, string> = {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        Authorization: `Bearer ${token}`,
         ...(activeTenantId ? { 'x-tenant-id': activeTenantId } : {})
       };
       const [setRes, shiftRes] = await Promise.all([

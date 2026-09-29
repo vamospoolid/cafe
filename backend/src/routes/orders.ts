@@ -228,6 +228,7 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
         table: true,
         user: { select: { name: true, username: true } },
         customer: true,
+        voucher: true,
         items: {
           include: {
             product: true
@@ -505,23 +506,30 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
         let finalCustomerId = customerId ? Number(customerId) : null;
         if (!finalCustomerId && customerPhone) {
-          let cust = await tx.customer.findFirst({
-            where: {
-              phone: customerPhone,
-              ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
-            }
-          });
-          if (!cust && customerName) {
-            cust = await tx.customer.create({
-              data: {
-                tenantId: tenantId || null,
-                name: customerName,
-                phone: customerPhone,
-                points: 0,
-                tier: 'Bronze',
-                totalSpent: 0
+          let cust = await tx.customer.findFirst({ where: { phone: customerPhone, tenantId } });
+          // Auto-save sebagai member HANYA jika ada nama + phone yang valid
+          // (bukan nama generik walk-in)
+          const genericNames = ['pelanggan umum', 'pelanggan walk-in', 'pelanggan', 'tamu', 'guest'];
+          const isRealName = customerName && !genericNames.includes(customerName.trim().toLowerCase());
+          if (!cust && isRealName) {
+            try {
+              cust = await tx.customer.create({
+                data: {
+                  tenantId,
+                  name: customerName.trim(),
+                  phone: customerPhone.trim(),
+                  points: 0,
+                  tier: 'Bronze',
+                  totalSpent: 0
+                }
+              });
+            } catch (createErr: any) {
+              // P2002: unique constraint — customer sudah ada (race condition), coba fetch ulang
+              if (createErr.code === 'P2002') {
+                cust = await tx.customer.findFirst({ where: { phone: customerPhone, tenantId } });
+              } else {
+                console.error('[Orders] Customer auto-create error (non-fatal):', createErr.message);
               }
-            });
           }
           if (cust) {
             finalCustomerId = cust.id;
@@ -862,6 +870,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
           }
         });
+<<<<<<< HEAD
         if (!cust && customerName) {
           cust = await tx.customer.create({
             data: {
@@ -871,8 +880,36 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
               points: 0,
               tier: 'Bronze',
               totalSpent: 0
+=======
+        if (!custCheck) {
+          throw new Error('Pelanggan tidak ditemukan atau bukan milik tenant ini.');
+        }
+      } else if (customerPhone) {
+        let cust = await tx.customer.findFirst({ where: { phone: customerPhone, tenantId } });
+        // Auto-save sebagai member HANYA jika nama + phone valid (bukan label generik)
+        const genericNames = ['pelanggan umum', 'pelanggan walk-in', 'pelanggan', 'tamu', 'guest'];
+        const isRealName = customerName && !genericNames.includes(customerName.trim().toLowerCase());
+        if (!cust && isRealName) {
+          try {
+            cust = await tx.customer.create({
+              data: {
+                tenantId,
+                name: customerName.trim(),
+                phone: customerPhone.trim(),
+                points: 0,
+                tier: 'Bronze',
+                totalSpent: 0
+              }
+            });
+          } catch (createErr: any) {
+            // P2002: race condition — customer sudah ada, fetch ulang
+            if (createErr.code === 'P2002') {
+              cust = await tx.customer.findFirst({ where: { phone: customerPhone, tenantId } });
+            } else {
+              console.error('[Orders] Customer auto-create error (non-fatal):', createErr.message);
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
             }
-          });
+          }
         }
         if (cust) {
           finalCustomerId = cust.id;
@@ -893,6 +930,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const numService = Math.max(0, Number(serviceCharge) || 0);
       const safeTotal = Math.max(0, Number(total) || (numSubtotal - safeDiscount + numTax + numService));
 
+<<<<<<< HEAD
       const order = await tx.order.create({
         data: {
           tenantId: tenantId || null,
@@ -926,6 +964,60 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
               subtotal: Number(item.price * item.qty),
               notes: item.notes
             }))
+=======
+      let order = null;
+      let currentOrderNumber = baseOrderNumber;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          order = await tx.order.create({
+            data: {
+              tenantId,
+              outletId,
+              orderNumber: currentOrderNumber,
+              customerName: customerName || 'Pelanggan',
+              customerPhone,
+              customerId: finalCustomerId,
+              tableId: tableId ? Number(tableId) : null,
+              joinedTableIds: formattedJoinedTableIds,
+              voucherId: voucherId ? Number(voucherId) : null,
+              pointsUsed: Number(pointsUsed) || 0,
+              userId,
+              subtotal: numSubtotal,
+              discount: safeDiscount,
+              tax: numTax,
+              serviceCharge: numService,
+              total: safeTotal,
+              paymentMethod: isActuallyPaid ? paymentMethod : null,
+              status: isActuallyPaid ? 'Paid' : 'Pending',
+              kdsStatus: (isActuallyPaid && shouldAutoServe) ? 'Served' : 'Pending',
+              servedAt: (isActuallyPaid && shouldAutoServe) ? nowPaid : null,
+              paidAt: nowPaid,
+              
+              items: {
+                create: items.map((item: any) => ({
+                  tenantId,
+                  outletId,
+                  productId: Number(item.productId),
+                  qty: Number(item.qty),
+                  price: Number(item.price),
+                  buyPrice: buyPriceMap.get(Number(item.productId)) || 0,
+                  subtotal: Number(item.price * item.qty),
+                  notes: item.notes,
+                  uomName: item.uomName || null,
+                  uomRatio: item.uomRatio ? Number(item.uomRatio) : null,
+                  priceTierName: item.priceTierName || null
+                }))
+              }
+            },
+            include: { items: true, table: true, voucher: true }
+          });
+          break;
+        } catch (err: any) {
+          if (err.code === 'P2002' && attempt < 2) {
+            const randSuffix = Math.floor(1000 + Math.random() * 9000);
+            currentOrderNumber = `ORD-${Date.now().toString().slice(-6)}-${randSuffix}`;
+            continue;
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
           }
         },
         include: { items: true, table: true }
@@ -1132,9 +1224,24 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
               totalSpent: 0
             }
           });
+<<<<<<< HEAD
         }
         if (cust) {
           finalCustomerId = cust.id;
+=======
+          const alreadyUsedInThisOrder = orders.some((o: any) => o.voucherId === vId);
+          if (v && (v.status === 'Aktif' || alreadyUsedInThisOrder)) {
+            if (!v.maxUsage || v.usedCount < v.maxUsage || alreadyUsedInThisOrder) {
+              resolvedVoucherId = v.id;
+              if (!alreadyUsedInThisOrder) {
+                await tx.voucher.update({
+                  where: { id: v.id },
+                  data: { usedCount: { increment: 1 } }
+                });
+              }
+            }
+          }
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
         }
       }
 

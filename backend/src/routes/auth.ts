@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { resolveTenantFromRequest } from '../middlewares/tenantResolver';
 import { AuditLogger } from '../services/AuditLogger';
 import prisma from '../db';
 
@@ -137,9 +138,44 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Username dan Password wajib diisi.' });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { username }
-    });
+    const cleanUsername = String(username).trim().toLowerCase();
+
+    // Resolusi tenant context (dari body tenantSlug atau dari Host subdomain request)
+    let requestedTenantId: string | undefined;
+    if (tenantSlug) {
+      const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+      if (tenant) requestedTenantId = tenant.id;
+    }
+    if (!requestedTenantId) {
+      const resolvedTenant = await resolveTenantFromRequest(req);
+      if (resolvedTenant) requestedTenantId = resolvedTenant.id;
+    }
+
+    // 1. Cari user di tenant spesifik jika tenant context tersedia (utamakan akun native tenant tersebut)
+    let user = null;
+    if (requestedTenantId) {
+      user = await prisma.user.findFirst({
+        where: {
+          username: cleanUsername,
+          tenantId: requestedTenantId
+        }
+      });
+      if (!user) {
+        user = await prisma.user.findFirst({
+          where: {
+            username: cleanUsername,
+            memberships: { some: { tenantId: requestedTenantId } }
+          }
+        });
+      }
+    }
+
+    // 2. Fallback: jika login tanpa subdomain atau platform superadmin
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: { username: cleanUsername }
+      });
+    }
 
     if (!user) {
       return res.status(401).json({ error: 'Username tidak ditemukan.' });
@@ -156,13 +192,6 @@ router.post('/login', async (req: Request, res: Response) => {
     
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Password atau PIN salah.' });
-    }
-
-    // Resolusi tenant jika disediakan
-    let requestedTenantId: string | undefined;
-    if (tenantSlug) {
-      const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
-      if (tenant) requestedTenantId = tenant.id;
     }
 
     const authData = await generateAuthResponse(user.id, requestedTenantId);
@@ -493,7 +522,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     }
 
     // 2. Validasi keunikan Username
-    const existingUser = await prisma.user.findUnique({ where: { username: ownerUsername } });
+    const existingUser = await prisma.user.findFirst({ where: { username: ownerUsername } });
     if (existingUser) {
       return res.status(400).json({ error: `Username '${ownerUsername}' sudah terdaftar. Silakan gunakan username lain.` });
     }

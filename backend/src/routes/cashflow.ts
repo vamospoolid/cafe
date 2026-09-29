@@ -189,7 +189,42 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       orderBy: { date: 'desc' }
     });
 
-    res.json(cashflows);
+    // Enrich with approver details and linked ingredient details in batch
+    const approverIds = Array.from(new Set(cashflows.map(c => c.approvedBy).filter((id): id is number => typeof id === 'number' && id > 0)));
+    const ingredientIds = Array.from(new Set(cashflows.map(c => c.linkedIngredientId).filter((id): id is number => typeof id === 'number' && id > 0)));
+
+    const [approvers, ingredients] = await Promise.all([
+      approverIds.length > 0
+        ? prisma.user.findMany({
+            where: {
+              id: { in: approverIds },
+              // Anti-cross-tenant: hanya approver yang terdaftar sebagai member aktif tenant ini
+              memberships: { some: { tenantId, status: 'ACTIVE' } }
+            },
+            select: { id: true, name: true, role: true }
+          })
+        : [],
+      ingredientIds.length > 0
+        ? prisma.ingredient.findMany({
+            where: {
+              id: { in: ingredientIds },
+              tenantId  // Anti-cross-tenant: hanya ingredient milik tenant ini
+            },
+            select: { id: true, name: true, unit: true, stock: true }
+          })
+        : []
+    ]);
+
+    const approverMap = new Map(approvers.map(a => [a.id, a]));
+    const ingredientMap = new Map(ingredients.map(i => [i.id, i]));
+
+    const enrichedCashflows = cashflows.map(cf => ({
+      ...cf,
+      approver: cf.approvedBy ? approverMap.get(cf.approvedBy) || null : null,
+      linkedIngredient: cf.linkedIngredientId ? ingredientMap.get(cf.linkedIngredientId) || null : null
+    }));
+
+    res.json(enrichedCashflows);
   } catch (error) {
     console.error('Error fetching cashflow:', error);
     res.status(500).json({ error: 'Gagal mengambil arus kas' });

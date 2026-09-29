@@ -140,10 +140,13 @@ const LoginView = () => {
     setLoading(true);
 
     try {
+      const params = new URLSearchParams(window.location.search);
+      const tenantSlug = params.get('tenant') || params.get('slug') || branding.tenantSlug;
+
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, tenantSlug })
       });
 
       const data = await response.json();

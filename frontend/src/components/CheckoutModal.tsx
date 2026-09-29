@@ -2,7 +2,12 @@ import React, { useState, useContext, useEffect } from 'react';
 import { 
   X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, 
   Printer, Utensils, Coffee, Layers, Sparkles, ArrowRight, Banknote, Calendar, 
+<<<<<<< HEAD
   FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck
+=======
+  FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck,
+  MessageCircle, Send, Ticket, ChevronRight, Search
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -46,6 +51,21 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [showItemsList, setShowItemsList] = useState(false);
   const [showNumpad, setShowNumpad]       = useState(false);
 
+<<<<<<< HEAD
+=======
+  // Voucher Promo State
+  const [voucherCode, setVoucherCode] = useState<string>('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const [isVoucherPickerOpen, setIsVoucherPickerOpen] = useState(false);
+  const [availableVouchers, setAvailableVouchers] = useState<any[]>([]);
+  const [fetchingVouchers, setFetchingVouchers] = useState(false);
+  const [voucherSearchQuery, setVoucherSearchQuery] = useState('');
+
+  // Points Redemption State
+  const [redeemPoints, setRedeemPoints] = useState<boolean>(false);
+
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
   const posContext = useContext(POSContext);
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [printLoading, setPrintLoading] = useState(false);
@@ -55,9 +75,107 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [showSplitPrintModal, setShowSplitPrintModal] = useState(false);
   const [fetchedFullOrder, setFetchedFullOrder] = useState<any | null>(null);
+<<<<<<< HEAD
+=======
+  const [offlineOrderSnapshot, setOfflineOrderSnapshot] = useState<any | null>(null);
+  const [createdOrderObj, setCreatedOrderObj] = useState<any | null>(null);
+  const [waPhone, setWaPhone] = useState<string>(customer?.phone || '');
+
+  const fmt = (val: number) => `Rp ${Math.round(val || 0).toLocaleString('id-ID')}`;
+  
+  const loyaltyPointValue = posContext?.settings?.loyaltyPointValue || 100;
+  const customerPoints = currentCustomer?.points || 0;
+  const maxPointDiscount = customerPoints * loyaltyPointValue;
+
+  const voucherDiscount = appliedVoucher ? (appliedVoucher.discountAmount || 0) : 0;
+  const pointsDiscount = redeemPoints 
+    ? Math.min(maxPointDiscount, Math.max(0, subtotal - voucherDiscount - manualDiscount))
+    : (currentCustomer?.discountAmount || 0);
+
+  const totalDiscount = manualDiscount + voucherDiscount + pointsDiscount;
+  const finalTotal = Math.max(0, subtotal - totalDiscount + tax + serviceCharge);
+
+  const handleSendWhatsAppReceipt = () => {
+    if (!waPhone.trim()) {
+      toast('Masukkan nomor WhatsApp terlebih dahulu', 'warning');
+      return;
+    }
+
+    const orderData = createdOrderObj || offlineOrderSnapshot || {
+      orderNumber: createdOrderId ? `ORD-${createdOrderId}` : 'ORD-LOKAL',
+      customerName: currentCustomer?.name || 'Pelanggan Umum',
+      customerPhone: waPhone,
+      items: cart.map(i => ({
+        name: i.product?.name || i.name,
+        qty: i.qty,
+        price: Number(i.product?.sellPrice || i.product?.price || i.price || 0),
+        notes: i.notes
+      })),
+      subtotal,
+      discount: totalDiscount,
+      voucherCode: appliedVoucher ? appliedVoucher.voucher?.code : undefined,
+      voucherDiscount: voucherDiscount > 0 ? voucherDiscount : undefined,
+      tax,
+      serviceCharge,
+      total: finalTotal,
+      paymentMethod,
+      isPaid: true
+    };
+
+    const url = generateWhatsAppReceiptUrl(waPhone, orderData, posContext?.settings);
+    window.open(url, '_blank');
+    toast('Tautan nota WhatsApp dibuka!', 'success');
+  };
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
+
+  const fetchAvailableVouchers = async () => {
+    if (!posContext?.token) return;
+    setFetchingVouchers(true);
+    try {
+      const res = await fetch('/api/vouchers?status=Aktif', {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableVouchers(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch available vouchers:', err);
+    } finally {
+      setFetchingVouchers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && posContext?.token) {
+      fetchAvailableVouchers();
+    }
+  }, [isOpen, posContext?.token]);
 
   useEffect(() => {
     setCurrentCustomer(customer || null);
+    if (customer?.phone) {
+      setWaPhone(customer.phone);
+    }
+    if (customer?.pointsUsed && customer.pointsUsed > 0) {
+      setRedeemPoints(true);
+    }
+    if (customer?.voucher && !appliedVoucher) {
+      const v = customer.voucher;
+      let calculatedDiscount = 0;
+      if (v.type === 'PERCENT') {
+        calculatedDiscount = (subtotal * v.amount) / 100;
+        if (v.maxDiscount) calculatedDiscount = Math.min(calculatedDiscount, v.maxDiscount);
+      } else {
+        calculatedDiscount = Math.min(v.amount, subtotal);
+      }
+      setAppliedVoucher({
+        valid: true,
+        voucher: v,
+        discountAmount: customer.discount || calculatedDiscount
+      });
+      setVoucherCode(v.code);
+    }
   }, [customer]);
 
   const fmt = (val: number) => `Rp ${Math.round(val || 0).toLocaleString('id-ID')}`;
@@ -65,6 +183,46 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const parentDiscount = customer?.discountAmount || 0;
   const currentDiscount = currentCustomer?.discountAmount || 0;
   const finalTotal = Math.max(0, total + parentDiscount - currentDiscount - manualDiscount);
+
+  const handleApplyVoucher = async (overrideCode?: string) => {
+    const codeToValidate = (overrideCode || voucherCode).trim().toUpperCase();
+    if (!codeToValidate) {
+      toast('Masukkan kode voucher terlebih dahulu', 'warning');
+      return;
+    }
+    setVoucherLoading(true);
+    try {
+      const res = await fetch('/api/vouchers/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          code: codeToValidate,
+          subtotal
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        throw new Error(data.message || 'Kode voucher tidak valid');
+      }
+      setAppliedVoucher(data);
+      setVoucherCode(data.voucher.code);
+      setIsVoucherPickerOpen(false);
+      toast(`✅ Voucher "${data.voucher.code}" berhasil diterapkan! Hemat ${fmt(data.discountAmount)}`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal menerapkan voucher', 'error');
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherCode('');
+    toast('Voucher dibatalkan', 'info');
+  };
   
   // Initialize cashGiven with exact total when opening or changing method
   useEffect(() => {
@@ -494,9 +652,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
-            {/* Accordion / Item list */}
+            {/* Accordion / Item list (Hanya list item yang disembunyikan di mobile agar hemat tempat) */}
             <div className={`flex flex-col gap-2 ${showItemsList ? 'block' : 'hidden md:flex'}`}>
-              <div className="max-h-36 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
+              <div className="max-h-32 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
                 {cart && cart.map((item: any, idx: number) => {
                   const prod = item.product || item;
                   const price = prod.sellPrice || item.price || 0;
@@ -514,13 +672,20 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   );
                 })}
               </div>
+            </div>
 
-              {/* Subtotal, Tax, Discounts Details */}
-              <div className="pt-2 border-t border-slate-200 text-xs space-y-1.5">
+            {/* Subtotal, Tax, Discounts Details (Selalu tampil di mobile & desktop) */}
+            <div className="pt-2 border-t border-slate-200/80 text-xs space-y-1.5">
+              <div className="flex justify-between text-slate-500">
+                <span>Subtotal ({cart?.length || 0} item)</span>
+                <span className="font-semibold text-slate-700">{fmt(subtotal)}</span>
+              </div>
+              {tax > 0 && (
                 <div className="flex justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span className="font-semibold text-slate-700">{fmt(subtotal)}</span>
+                  <span>PPN (Pajak)</span>
+                  <span className="font-semibold text-slate-700">+{fmt(tax)}</span>
                 </div>
+<<<<<<< HEAD
                 {tax > 0 && (
                   <div className="flex justify-between text-slate-500">
                     <span>PPN (Pajak)</span>
@@ -558,6 +723,143 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
                 />
               </div>
+=======
+              )}
+              {serviceCharge > 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span>Service Charge</span>
+                  <span className="font-semibold text-slate-700">+{fmt(serviceCharge)}</span>
+                </div>
+              )}
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-indigo-700 font-bold bg-indigo-50/70 px-2 py-1 rounded-lg border border-indigo-100">
+                  <span className="flex items-center gap-1.5">
+                    <Ticket size={12} className="text-indigo-600" /> Voucher ({appliedVoucher?.voucher?.code})
+                  </span>
+                  <span>-{fmt(voucherDiscount)}</span>
+                </div>
+              )}
+              {pointsDiscount > 0 && (
+                <div className="flex justify-between text-emerald-700 font-bold bg-emerald-50/70 px-2 py-1 rounded-lg border border-emerald-100">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-emerald-600" /> Poin Member
+                  </span>
+                  <span>-{fmt(pointsDiscount)}</span>
+                </div>
+              )}
+              {manualDiscount > 0 && (
+                <div className="flex justify-between text-rose-600 font-semibold px-2 py-0.5">
+                  <span>Diskon Khusus</span>
+                  <span>-{fmt(manualDiscount)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* VOUCHER / KUPON PROMO INPUT (Prominen & Selalu Terlihat) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                  <Ticket size={12} className="text-indigo-600" /> Kupon Promo &amp; Voucher
+                </span>
+                {availableVouchers.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetchAvailableVouchers();
+                      setIsVoucherPickerOpen(true);
+                    }}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <Tag size={11} />
+                    <span>Pilih Kupon ({availableVouchers.length})</span>
+                    <ChevronRight size={11} />
+                  </button>
+                )}
+              </div>
+
+              {appliedVoucher ? (
+                <div className="bg-gradient-to-r from-indigo-50/90 to-indigo-100/60 border border-indigo-200/90 rounded-xl p-2.5 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                      <Ticket size={16} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                        <span className="font-mono bg-white px-1.5 py-0.2 rounded border border-indigo-200">
+                          {appliedVoucher.voucher.code}
+                        </span>
+                        <span className="text-[11px] font-extrabold text-emerald-600">(-{fmt(voucherDiscount)})</span>
+                      </div>
+                      <div className="text-[10px] text-indigo-700 font-medium line-clamp-1 mt-0.5">
+                        {appliedVoucher.voucher.description || (appliedVoucher.voucher.type === 'PERCENT' ? `Diskon ${appliedVoucher.voucher.amount}%` : `Diskon ${fmt(appliedVoucher.voucher.amount)}`)}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveVoucher}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors cursor-pointer"
+                    title="Hapus voucher"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl p-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 shadow-sm transition-all">
+                  <Ticket size={14} className="text-slate-400 ml-1 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="KODE VOUCHER / PROMO"
+                    value={voucherCode}
+                    onChange={e => setVoucherCode(e.target.value.toUpperCase())}
+                    onKeyDown={e => e.key === 'Enter' && handleApplyVoucher()}
+                    className="w-full text-xs font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-normal outline-none bg-transparent uppercase tracking-wider"
+                  />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      disabled={voucherLoading || !voucherCode.trim()}
+                      onClick={() => handleApplyVoucher()}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white disabled:text-slate-400 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      {voucherLoading ? 'Cek...' : 'Pakai'}
+                    </button>
+                    {availableVouchers.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          fetchAvailableVouchers();
+                          setIsVoucherPickerOpen(true);
+                        }}
+                        className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Lihat semua kupon promo aktif"
+                      >
+                        <Tag size={12} />
+                        <span className="hidden sm:inline">Pilih</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Manual Discount Input */}
+            <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2 shadow-sm">
+              <Tag size={14} className="text-slate-400 shrink-0" />
+              <span className="text-xs font-medium text-slate-500 shrink-0">Diskon Manual:</span>
+              <input
+                type="number"
+                placeholder="0"
+                max={Math.max(0, subtotal - voucherDiscount - pointsDiscount)}
+                value={manualDiscount || ''}
+                onChange={e => {
+                  const maxAllowed = Math.max(0, subtotal - voucherDiscount - pointsDiscount);
+                  const val = Number(e.target.value) || 0;
+                  setManualDiscount(Math.max(0, Math.min(val, maxAllowed)));
+                }}
+                className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
+              />
+>>>>>>> da8323e (Feat: Multi-tenant scoped username auth, PWA auto-links & sync to codepos)
             </div>
           </div>
 
@@ -963,6 +1265,168 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           storeSettings={posContext?.settings} 
           onClose={() => setPrintOrderData(null)} 
         />
+      )}
+
+      {/* ================= MODAL VOUCHER PICKER ================= */}
+      {isVoucherPickerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 md:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-scale-up">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
+                  <Ticket size={20} />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm sm:text-base text-slate-900 leading-tight">Pilih Kupon Promo</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Terapkan diskon kupon aktif ke pesanan kasir ini</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVoucherPickerOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Subtotal reminder & Search */}
+            <div className="p-4 border-b border-slate-100 bg-white space-y-3">
+              <div className="flex items-center justify-between text-xs bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100">
+                <span className="font-medium text-indigo-900">Subtotal Belanja Saat Ini:</span>
+                <span className="font-black text-indigo-700 text-sm">{fmt(subtotal)}</span>
+              </div>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Cari kode kupon promo..."
+                  value={voucherSearchQuery}
+                  onChange={e => setVoucherSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 uppercase tracking-wider"
+                />
+              </div>
+            </div>
+
+            {/* List of Vouchers */}
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1 scrollbar-thin">
+              {fetchingVouchers ? (
+                <div className="p-8 text-center text-xs text-slate-400 font-medium">Memuat daftar kupon...</div>
+              ) : availableVouchers.length === 0 ? (
+                <div className="p-8 text-center space-y-2">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                    <Ticket size={24} />
+                  </div>
+                  <div className="font-bold text-xs text-slate-700">Belum Ada Kupon Aktif</div>
+                  <p className="text-[11px] text-slate-400">Buat kupon promo baru di menu CRM &gt; Kupon &amp; Voucher Promo.</p>
+                </div>
+              ) : (
+                availableVouchers
+                  .filter(v => {
+                    if (v.status !== 'Aktif') return false;
+                    if (!voucherSearchQuery.trim()) return true;
+                    const q = voucherSearchQuery.toUpperCase();
+                    return v.code.toUpperCase().includes(q) || (v.description && v.description.toUpperCase().includes(q));
+                  })
+                  .map(v => {
+                    const isEligible = subtotal >= (v.minSpend || 0);
+                    const isCurrentlyApplied = appliedVoucher?.voucher?.id === v.id;
+                    const diffToSpend = Math.max(0, (v.minSpend || 0) - subtotal);
+                    const isQuotaExhausted = v.maxUsage && v.usedCount >= v.maxUsage;
+
+                    return (
+                      <div
+                        key={v.id}
+                        className={`p-3.5 rounded-2xl border transition-all ${
+                          isCurrentlyApplied
+                            ? 'bg-indigo-50/80 border-indigo-400 ring-2 ring-indigo-200 shadow-sm'
+                            : isEligible && !isQuotaExhausted
+                            ? 'bg-white hover:bg-slate-50/80 border-slate-200/90 shadow-sm'
+                            : 'bg-slate-50/60 border-slate-200/60 opacity-70'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-xs px-2 py-0.5 rounded-lg bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                {v.code}
+                              </span>
+                              <span className="font-extrabold text-xs text-emerald-600">
+                                {v.type === 'PERCENT' ? `Diskon ${v.amount}%` : `Diskon ${fmt(v.amount)}`}
+                              </span>
+                              {v.maxDiscount && v.type === 'PERCENT' && (
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  (Maks {fmt(v.maxDiscount)})
+                                </span>
+                              )}
+                            </div>
+                            {v.description && (
+                              <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5">{v.description}</p>
+                            )}
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            {isCurrentlyApplied ? (
+                              <span className="text-[11px] font-black text-indigo-700 bg-indigo-100/80 px-2 py-1 rounded-lg flex items-center gap-1 border border-indigo-200">
+                                <Check size={12} /> Digunakan
+                              </span>
+                            ) : isQuotaExhausted ? (
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-200/80 px-2 py-1 rounded-lg">
+                                Kuota Habis
+                              </span>
+                            ) : isEligible ? (
+                              <button
+                                type="button"
+                                disabled={voucherLoading}
+                                onClick={() => handleApplyVoucher(v.code)}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>Pakai</span>
+                                <ArrowRight size={12} />
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg block">
+                                Kurang {fmt(diffToSpend)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Rules / Limits Footer */}
+                        <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-[10px] text-slate-400 gap-2">
+                          <span className="font-semibold text-slate-500">
+                            Min. Belanja: {fmt(v.minSpend || 0)}
+                          </span>
+                          {v.maxUsage && (
+                            <span className="font-medium text-slate-500">
+                              Sisa Kuota: {Math.max(0, v.maxUsage - (v.usedCount || 0))}x
+                            </span>
+                          )}
+                          {v.validUntil && (
+                            <span className="font-medium text-slate-400">
+                              Berlaku s/d: {new Date(v.validUntil).toLocaleDateString('id-ID')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsVoucherPickerOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

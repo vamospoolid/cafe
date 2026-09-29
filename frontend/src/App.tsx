@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import POSView from './components/POSView';
 import KDSView from './components/KDSView';
@@ -19,6 +19,7 @@ import FeatureGuard from './components/FeatureGuard';
 import { VerticalProvider, useVertical } from './context/VerticalContext';
 import VerticalGuard from './components/VerticalGuard';
 import ChunkErrorBoundary from './components/ChunkErrorBoundary';
+import { updatePwaManifestForRoute } from './utils/pwaManager';
 
 // ─── Code Splitting & Dynamic Imports for Large Modules (Bundle Optimization) ─────
 const BengkelRoutes = React.lazy(() => import('./verticals/bengkel/BengkelRoutes'));
@@ -79,6 +80,16 @@ const POSViewAdaptive = () => {
 const AppRoutes = () => {
   const context = useContext(POSContext);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Sinkronisasi manifest PWA (Kasir vs Staf) & dynamic metadata toko
+  useEffect(() => {
+    updatePwaManifestForRoute(location.pathname, {
+      storeName: context?.settings?.storeName,
+      logoUrl: context?.settings?.logoUrl,
+      themeColor: context?.settings?.primaryColor
+    });
+  }, [location.pathname, context?.settings]);
 
   // Seed IndexedDB catalog cache setiap kali token berubah (login/refresh)
   useEffect(() => {
@@ -87,8 +98,18 @@ const AppRoutes = () => {
     }
   }, [context?.token]);
 
+  // Rute publik landing page SaaS (bisa diakses langsung kapan saja via /landing atau /landing-page)
+  const isLandingRoute = location.pathname === '/landing' || location.pathname === '/landing-page';
+  if (isLandingRoute) {
+    return (
+      <>
+        <LandingPageView onNavigateLogin={() => navigate('/login')} />
+        <CustomerSupportWidget />
+      </>
+    );
+  }
   // Jika ini rute staff PWA mandiri (bisa dibuka di HP staf/dapur), biarkan terbuka
-  const isStaffRoute = window.location.pathname.startsWith('/staff') || window.location.pathname.startsWith('/dapur-app');
+  const isStaffRoute = location.pathname.startsWith('/staff') || location.pathname.startsWith('/dapur-app');
   if (isStaffRoute) {
     return (
       <Routes>
@@ -100,11 +121,12 @@ const AppRoutes = () => {
   }
 
   // Jika ini rute dine-in pelanggan mandiri, biarkan terbuka tanpa login
-  const isDineInRoute = window.location.pathname.startsWith('/dinein/table/');
+  const isDineInRoute = location.pathname.startsWith('/dinein/table/') || location.pathname.startsWith('/order');
   if (isDineInRoute) {
     return (
       <Routes>
         <Route path="/dinein/table/:tableId" element={<DineInView />} />
+        <Route path="/order" element={<DineInView />} />
       </Routes>
     );
   }

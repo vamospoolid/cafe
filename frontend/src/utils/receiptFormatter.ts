@@ -21,6 +21,8 @@ export interface ReceiptOrderData {
   }>;
   subtotal: number;
   discount?: number;
+  voucherCode?: string;
+  voucherDiscount?: number;
   tax?: number;
   serviceCharge?: number;
   total: number;
@@ -102,7 +104,13 @@ export const generateWhatsAppReceiptText = (
 
   text += `\n━━━━━━━━━━━━━━━━━━━━\n`;
   text += `*Subtotal*       : ${fmtRp(order.subtotal)}\n`;
-  if (order.discount && order.discount > 0) {
+  if (order.voucherDiscount && order.voucherDiscount > 0) {
+    text += `*Voucher (${order.voucherCode || 'Promo'})* : -${fmtRp(order.voucherDiscount)}\n`;
+  }
+  const remainingDiscount = (order.discount || 0) - (order.voucherDiscount || 0);
+  if (remainingDiscount > 0) {
+    text += `*Diskon / Potongan* : -${fmtRp(remainingDiscount)}\n`;
+  } else if (!order.voucherDiscount && order.discount && order.discount > 0) {
     text += `*Diskon/Promo*   : -${fmtRp(order.discount)}\n`;
   }
   if (order.tax && order.tax > 0) {

@@ -85,7 +85,7 @@ export const tenantResolverMiddleware = async (req: AuthRequest, res: Response, 
     // 1. Ekstrak Bearer Token lebih dahulu untuk menjamin JWT memiliki otoritas tertinggi
     let resolvedTenantId: string | undefined = req.user?.tenantId;
     let resolvedOutletId: string | undefined = req.user?.outletId;
-    let tenantSlug = 'vamospool';
+    let tenantSlug = ''; // Tidak ada hardcode fallback — resolusi harus dari token/host
 
     const authHeader = req.headers['authorization'];
     if (authHeader && authHeader.startsWith('Bearer ')) {

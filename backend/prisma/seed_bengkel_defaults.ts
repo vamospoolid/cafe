@@ -183,11 +183,12 @@ async function runStandalone() {
 
   // 1. Admin Bengkel
   const adminUser = await prisma.user.upsert({
-    where: { username: 'admin_bengkel' },
+    where: { tenantId_username: { tenantId: tenant.id, username: 'admin_bengkel' } },
     update: {},
     create: {
       name: 'Haji Jaya (Owner)',
       username: 'admin_bengkel',
+      tenantId: tenant.id,
       passwordHash,
       pin: '123456',
       role: 'Admin',
@@ -210,11 +211,12 @@ async function runStandalone() {
 
   // 2. Mekanik Bengkel dengan MechanicProfile
   const mekanikUser = await prisma.user.upsert({
-    where: { username: 'mekanik_budi' },
+    where: { tenantId_username: { tenantId: tenant.id, username: 'mekanik_budi' } },
     update: {},
     create: {
       name: 'Budi Santoso (Mekanik Senior)',
       username: 'mekanik_budi',
+      tenantId: tenant.id,
       passwordHash,
       pin: '123456',
       role: 'Mekanik',
