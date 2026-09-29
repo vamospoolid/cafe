@@ -77,7 +77,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // Maksimal 5MB
+    fileSize: 10 * 1024 * 1024, // Maksimal 10MB
     files: 1 // Maksimal 1 file per request
   }
 });
@@ -87,14 +87,52 @@ router.post('/', authenticateToken, (req: AuthRequest, res: Response) => {
   upload.single('image')(req as any, res as any, async (err: any) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'Ukuran file terlalu besar. Maksimal 5MB.' });
+        return res.status(400).json({ error: 'Ukuran file terlalu besar. Maksimal 10MB.' });
       }
       return res.status(400).json({ error: `Upload Error: ${err.message}` });
     } else if (err) {
       return res.status(400).json({ error: err.message || 'Gagal mengunggah gambar' });
     }
 
-    const file = (req as any).file;
+    let file = (req as any).file;
+
+    // Fallback: Jika gambar dikirimkan sebagai base64 string di body (data:image/...)
+    if (!file && req.body && req.body.image && typeof req.body.image === 'string') {
+      const base64Data = req.body.image.trim();
+      const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1].toLowerCase();
+        const allowedMimes = Object.keys(MIME_EXTENSION_MAP);
+        if (allowedMimes.includes(mimeType)) {
+          const buffer = Buffer.from(matches[2], 'base64');
+          if (buffer.length <= 10 * 1024 * 1024) {
+            const ext = MIME_EXTENSION_MAP[mimeType] || '.webp';
+            const uniqueName = `${crypto.randomUUID()}${ext}`;
+            const rawTenantId = (req as any).tenantId || req.user?.tenantId;
+            const tenantId = sanitizeTenantPath(rawTenantId);
+            const tenantDir = path.join(baseUploadDir, 'tenants', tenantId);
+            if (!fs.existsSync(tenantDir)) {
+              fs.mkdirSync(tenantDir, { recursive: true });
+            }
+            const filePath = path.join(tenantDir, uniqueName);
+            fs.writeFileSync(filePath, buffer);
+
+            file = {
+              filename: uniqueName,
+              originalname: `upload${ext}`,
+              mimetype: mimeType,
+              size: buffer.length,
+              path: filePath
+            };
+          } else {
+            return res.status(400).json({ error: 'Ukuran file terlalu besar. Maksimal 10MB.' });
+          }
+        } else {
+          return res.status(400).json({ error: 'Format file base64 tidak didukung.' });
+        }
+      }
+    }
+
     if (!file) {
       return res.status(400).json({ error: 'Tidak ada file gambar yang diunggah.' });
     }

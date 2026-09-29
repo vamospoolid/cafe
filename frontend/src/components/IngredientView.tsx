@@ -108,8 +108,21 @@ export const IngredientView: React.FC = () => {
   const token = posContext?.token;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
+  // Role-based access control
+  const userRole = posContext?.user?.role || 'Admin';
+  const userRoleUpper = userRole.toUpperCase();
+  const isKitchenRole = userRoleUpper === 'DAPUR' || userRoleUpper === 'KITCHEN';
+  const isAdminRole = !isKitchenRole; // Admin, Owner, Kasir (kasir terbatas di UI)
+
   // Tab State: 'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage' | 'staff_activity' | 'yield'
   const [activeTab, setActiveTab] = useState<'master' | 'loss' | 'movements' | 'shopping' | 'forecast' | 'opname' | 'daily_usage' | 'staff_activity' | 'yield'>('master');
+
+  // Auto-correct activeTab for kitchen role to keep them focused on operational tabs
+  useEffect(() => {
+    if (isKitchenRole && !['master', 'loss', 'forecast', 'movements', 'opname'].includes(activeTab)) {
+      setActiveTab('master');
+    }
+  }, [isKitchenRole, activeTab]);
 
   // Master Ingredients Data
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -1388,7 +1401,7 @@ export const IngredientView: React.FC = () => {
               color: 'text-fuchsia-600 bg-fuchsia-50 border-fuchsia-100',
               activeColor: 'from-fuchsia-600 to-purple-600 text-white shadow-fuchsia-500/30'
             },
-          ].map(tab => {
+          ].filter(tab => isAdminRole || ['master', 'loss', 'forecast', 'movements', 'opname'].includes(tab.id)).map(tab => {
             const Icon = tab.icon;
             const isSelected = activeTab === tab.id;
             return (
@@ -1495,7 +1508,7 @@ export const IngredientView: React.FC = () => {
             icon: Target,
             badge: (yieldData?.summary?.storeEfficiencyRate !== undefined) ? `${yieldData?.summary?.storeEfficiencyRate}% Sukses` : 'Yield'
           },
-        ].map((tab) => {
+        ].filter(tab => isAdminRole || ['master', 'loss', 'forecast', 'movements', 'opname'].includes(tab.id)).map((tab) => {
           const Icon = tab.icon;
           const isSelected = activeTab === tab.id;
           return (
@@ -1621,19 +1634,23 @@ export const IngredientView: React.FC = () => {
               </div>
             </div>
 
-            {/* Card 4: Valuasi Aset Stok */}
+            {/* Card 4: Valuasi Aset Stok (Admin) / Stok Aman (Dapur) */}
             <div className="p-3 sm:p-4 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] sm:text-xs font-bold text-emerald-800 uppercase tracking-wider">Valuasi Aset Stok</span>
+                <span className="text-[10px] sm:text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                  {isAdminRole ? 'Valuasi Aset Stok' : 'Stok Aman / Siap'}
+                </span>
                 <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <DollarSign size={16} />
+                  {isAdminRole ? <DollarSign size={16} /> : <CheckCircle2 size={16} />}
                 </div>
               </div>
               <div className="mt-1">
                 <h4 className="text-base sm:text-xl font-black text-emerald-950 truncate">
-                  Rp {totalValuation.toLocaleString('id-ID')}
+                  {isAdminRole ? `Rp ${totalValuation.toLocaleString('id-ID')}` : `${safeStockCount} Bahan`}
                 </h4>
-                <p className="text-[10px] text-emerald-700/80 mt-0.5">{ingredients.length} item tersimpan</p>
+                <p className="text-[10px] text-emerald-700/80 mt-0.5">
+                  {isAdminRole ? `${ingredients.length} item tersimpan` : 'Siap untuk operasional dapur'}
+                </p>
               </div>
             </div>
           </div>
@@ -1653,13 +1670,20 @@ export const IngredientView: React.FC = () => {
 
               {/* ACTION BUTTONS: + TAMBAH BAHAN & REFRESH */}
               <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                <button
-                  onClick={handleOpenAdd}
-                  className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-purple-600/20 active:scale-95 flex items-center gap-1.5 shrink-0"
-                >
-                  <Plus size={15} />
-                  <span>Tambah Bahan</span>
-                </button>
+                {isAdminRole && (
+                  <button
+                    onClick={handleOpenAdd}
+                    className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-purple-600/20 active:scale-95 flex items-center gap-1.5 shrink-0"
+                  >
+                    <Plus size={15} />
+                    <span>Tambah Bahan</span>
+                  </button>
+                )}
+                {isKitchenRole && (
+                  <span className="px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0">
+                    🍳 Mode Dapur
+                  </span>
+                )}
 
                 <button
                   onClick={() => fetchData()}
@@ -1783,6 +1807,7 @@ export const IngredientView: React.FC = () => {
                     <p className="font-bold text-slate-700 text-sm">Tidak ada bahan baku yang cocok.</p>
                     <p className="text-slate-400 text-xs mt-0.5">Sesuaikan filter atau buat bahan baku baru.</p>
                   </div>
+                  {isAdminRole && (
                   <button
                     onClick={handleOpenAdd}
                     className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95"
@@ -1790,6 +1815,7 @@ export const IngredientView: React.FC = () => {
                     <Plus size={14} />
                     <span>Tambah Bahan Baku</span>
                   </button>
+                  )}
                 </div>
               ) : (
                 filtered.map((ing) => {
@@ -1858,19 +1884,34 @@ export const IngredientView: React.FC = () => {
                         </div>
 
                         <div className="border-x border-slate-100 px-1">
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Harga Beli</p>
-                          <p className="text-xs font-black text-slate-800 mt-0.5">
-                            Rp {ing.buyPrice.toLocaleString('id-ID')}
-                          </p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">per {ing.unit}</p>
+                          {isAdminRole ? (
+                            <>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Harga Beli</p>
+                              <p className="text-xs font-black text-slate-800 mt-0.5">
+                                Rp {ing.buyPrice?.toLocaleString('id-ID') ?? '—'}
+                              </p>
+                              <p className="text-[9px] text-slate-400 mt-0.5">per {ing.unit}</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Stok Gudang</p>
+                              <p className="text-xs font-black text-indigo-700 mt-0.5">
+                                {(ing.warehouseStock || 0).toLocaleString('id-ID')} <span className="text-[10px]">{ing.unit}</span>
+                              </p>
+                              <p className="text-[9px] text-slate-400 mt-0.5">Cadangan</p>
+                            </>
+                          )}
                         </div>
 
                         <div>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Valuasi Stok</p>
-                          <p className="text-xs font-black text-emerald-700 mt-0.5">
-                            Rp {valuation.toLocaleString('id-ID')}
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{isAdminRole ? 'Valuasi Stok' : 'Min Stok'}</p>
+                          <p className={`text-xs font-black mt-0.5 ${isAdminRole ? 'text-emerald-700' : 'text-amber-700'}`}>
+                            {isAdminRole
+                              ? `Rp ${(ing.stock * (ing.buyPrice || 0)).toLocaleString('id-ID')}`
+                              : `${ing.minStock.toLocaleString('id-ID')} ${ing.unit}`
+                            }
                           </p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">Total Modal</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">{isAdminRole ? 'Total Modal' : 'Batas Minimum'}</p>
                         </div>
                       </div>
 
@@ -1881,7 +1922,8 @@ export const IngredientView: React.FC = () => {
                         </span>
 
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Sesuaikan Stok */}
+                          {/* Sesuaikan Stok — Admin only */}
+                          {isAdminRole && (
                           <button
                             onClick={() => {
                               setAdjustModal({ open: true, ingredient: ing });
@@ -1893,17 +1935,21 @@ export const IngredientView: React.FC = () => {
                             <RefreshCw size={11} />
                             <span>Sesuaikan</span>
                           </button>
+                          )}
 
-                          {/* Loss */}
+                          {/* Loss — Dapur & Admin bisa */}
                           <button
                             onClick={() => handleOpenLossModal(ing.id)}
-                            className="p-1 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg transition-all active:scale-95"
+                            className="px-2 py-1 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1"
                             title="Catat Kerusakan/Loss"
                           >
-                            <TrendingDown size={13} />
+                            <TrendingDown size={11} />
+                            <span>Loss</span>
                           </button>
 
-                          {/* Edit */}
+                          {/* Edit & Delete — Admin only */}
+                          {isAdminRole && (
+                          <>
                           <button
                             onClick={() => handleOpenEdit(ing)}
                             className="p-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg transition-all active:scale-95"
@@ -1912,7 +1958,6 @@ export const IngredientView: React.FC = () => {
                             <Edit2 size={13} />
                           </button>
 
-                          {/* Delete */}
                           <button
                             onClick={() => handleDelete(ing.id, ing.name)}
                             className="p-1 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg transition-all active:scale-95"
@@ -1920,6 +1965,8 @@ export const IngredientView: React.FC = () => {
                           >
                             <Trash2 size={13} />
                           </button>
+                          </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1937,8 +1984,14 @@ export const IngredientView: React.FC = () => {
                     <th className="py-3.5 px-3 text-center">Status</th>
                     <th className="py-3.5 px-4 text-right">Stok Riil</th>
                     <th className="py-3.5 px-3 text-right">Batas Min.</th>
-                    <th className="py-3.5 px-4 text-right">Harga Beli / Unit</th>
-                    <th className="py-3.5 px-4 text-right">Valuasi Stok</th>
+                    {isAdminRole ? (
+                      <>
+                        <th className="py-3.5 px-4 text-right">Harga Beli / Unit</th>
+                        <th className="py-3.5 px-4 text-right">Valuasi Stok</th>
+                      </>
+                    ) : (
+                      <th className="py-3.5 px-4 text-center">Stok Cadangan (Gudang)</th>
+                    )}
                     <th className="py-3.5 px-4">Supplier</th>
                     <th className="py-3.5 px-4 text-center">Aksi</th>
                   </tr>
@@ -1946,14 +1999,14 @@ export const IngredientView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={isAdminRole ? 8 : 7} className="py-12 text-center text-slate-400">
                         <RefreshCw className="animate-spin inline-block mb-2 text-purple-600" size={24} />
                         <p>Memuat data bahan baku...</p>
                       </td>
                     </tr>
                   ) : filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={isAdminRole ? 8 : 7} className="py-12 text-center text-slate-400">
                         <Package className="inline-block mb-2 opacity-40 text-slate-400" size={32} />
                         <p>Tidak ada bahan baku yang cocok dengan filter pencarian.</p>
                       </td>
@@ -2020,13 +2073,21 @@ export const IngredientView: React.FC = () => {
                             {ing.minStock.toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{ing.unit}</span>
                           </td>
 
-                          <td className="py-3.5 px-4 text-right font-bold text-slate-800 whitespace-nowrap">
-                            Rp {ing.buyPrice.toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">/{ing.unit}</span>
-                          </td>
+                          {isAdminRole ? (
+                            <>
+                              <td className="py-3.5 px-4 text-right font-bold text-slate-800 whitespace-nowrap">
+                                Rp {ing.buyPrice?.toLocaleString('id-ID') ?? '—'} <span className="text-[10px] text-slate-400">/{ing.unit}</span>
+                              </td>
 
-                          <td className="py-3.5 px-4 text-right font-black text-emerald-700 whitespace-nowrap">
-                            Rp {valuation.toLocaleString('id-ID')}
-                          </td>
+                              <td className="py-3.5 px-4 text-right font-black text-emerald-700 whitespace-nowrap">
+                                Rp {((ing.stock || 0) * (ing.buyPrice || 0)).toLocaleString('id-ID')}
+                              </td>
+                            </>
+                          ) : (
+                            <td className="py-3.5 px-4 text-center font-bold text-indigo-700 whitespace-nowrap">
+                              {(ing.warehouseStock || 0).toLocaleString('id-ID')} <span className="text-[10px] text-slate-400">{ing.unit}</span>
+                            </td>
+                          )}
 
                           <td className="py-3.5 px-4 text-slate-600 text-xs">
                             {ing.supplier ? (
@@ -2038,40 +2099,47 @@ export const IngredientView: React.FC = () => {
 
                           <td className="py-3.5 px-4 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => {
-                                  setAdjustModal({ open: true, ingredient: ing });
-                                  setAdjustForm({ change: '', type: 'Restock', description: '' });
-                                }}
-                                title="Sesuaikan Stok / Restock"
-                                className="px-2 py-1 bg-white hover:bg-slate-100 text-purple-700 hover:border-purple-300 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs"
-                              >
-                                Sesuaikan
-                              </button>
+                              {isAdminRole && (
+                                <button
+                                  onClick={() => {
+                                    setAdjustModal({ open: true, ingredient: ing });
+                                    setAdjustForm({ change: '', type: 'Restock', description: '' });
+                                  }}
+                                  title="Sesuaikan Stok / Restock"
+                                  className="px-2 py-1 bg-white hover:bg-slate-100 text-purple-700 hover:border-purple-300 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs"
+                                >
+                                  Sesuaikan
+                                </button>
+                              )}
 
                               <button
                                 onClick={() => handleOpenLossModal(ing.id)}
                                 title="Catat Kerusakan/Loss"
-                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors"
+                                className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors text-[10px] font-bold flex items-center gap-1"
                               >
-                                <TrendingDown size={13} />
+                                <TrendingDown size={12} />
+                                <span>Catat Loss</span>
                               </button>
 
-                              <button
-                                onClick={() => handleOpenEdit(ing)}
-                                title="Edit Bahan"
-                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
-                              >
-                                <Edit2 size={13} />
-                              </button>
+                              {isAdminRole && (
+                                <>
+                                  <button
+                                    onClick={() => handleOpenEdit(ing)}
+                                    title="Edit Bahan"
+                                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
 
-                              <button
-                                onClick={() => handleDelete(ing.id, ing.name)}
-                                title="Hapus Bahan"
-                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                                  <button
+                                    onClick={() => handleDelete(ing.id, ing.name)}
+                                    title="Hapus Bahan"
+                                    className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -2839,13 +2907,15 @@ export const IngredientView: React.FC = () => {
                           <span className="font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200">
                             {l.user?.name || 'Staff Dapur'}
                           </span>
-                          <button
-                            onClick={() => handleDeleteLoss(l.id)}
-                            title="Batalkan / Void Loss"
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {isAdminRole && (
+                            <button
+                              onClick={() => handleDeleteLoss(l.id)}
+                              title="Batalkan / Void Loss"
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -2899,19 +2969,19 @@ export const IngredientView: React.FC = () => {
                     <th className="py-3 px-4 text-right">Kerugian (Rp)</th>
                     <th className="py-3 px-4">Alasan</th>
                     <th className="py-3 px-4">Dicatat Oleh & Catatan</th>
-                    <th className="py-3 px-3 text-center">Aksi</th>
+                    {isAdminRole && <th className="py-3 px-3 text-center">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                   {lossLoading ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                      <td colSpan={isAdminRole ? 8 : 7} className="py-8 text-center text-slate-400">
                         Memuat data riwayat loss...
                       </td>
                     </tr>
                   ) : (!lossData?.logs || lossData.logs.length === 0) ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                      <td colSpan={isAdminRole ? 8 : 7} className="py-8 text-center text-slate-400">
                         Belum ada log stock loss yang tercatat pada rentang tanggal ini.
                       </td>
                     </tr>
@@ -2954,15 +3024,17 @@ export const IngredientView: React.FC = () => {
                             <div className="font-semibold text-slate-800">{l.user?.name || 'Staff Dapur'}</div>
                             {l.notes && <div className="text-[10px] text-slate-400 italic truncate max-w-xs">{l.notes}</div>}
                           </td>
-                          <td className="py-3 px-3 text-center whitespace-nowrap">
-                            <button
-                              onClick={() => handleDeleteLoss(l.id)}
-                              title="Batalkan / Void Loss dan Kembalikan Stok"
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
+                          {isAdminRole && (
+                            <td className="py-3 px-3 text-center whitespace-nowrap">
+                              <button
+                                onClick={() => handleDeleteLoss(l.id)}
+                                title="Batalkan / Void Loss dan Kembalikan Stok"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })

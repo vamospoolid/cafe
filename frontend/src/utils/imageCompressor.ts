@@ -2,15 +2,34 @@
  * Utility for compressing image data URLs (e.g. webcam selfies / file uploads)
  * using HTML5 Canvas before saving to IndexedDB or uploading to API.
  */
+
+/**
+ * Converts a base64 Data URL to a native browser File object.
+ */
+export function dataURLtoFile(dataurl: string, filename = 'upload.webp'): File {
+  const arr = dataurl.split(',');
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/webp';
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
+}
+
+/**
+ * Compresses an image to a base64 Data URL.
+ */
 export async function compressImage(
   dataUrlOrFile: string | File,
-  maxWidth = 640,
-  maxHeight = 640,
-  quality = 0.65
+  maxWidth = 800,
+  maxHeight = 800,
+  quality = 0.75,
+  format = 'image/webp'
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    let sourceDataUrl = '';
-
     const processImage = (src: string) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -41,10 +60,15 @@ export async function compressImage(
           return;
         }
 
-        // Draw and export compressed JPEG
+        // Draw and export compressed format (WebP or JPEG)
         ctx.drawImage(img, 0, 0, width, height);
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressedDataUrl);
+        try {
+          const compressedDataUrl = canvas.toDataURL(format, quality);
+          // If browser doesn't support WebP export, canvas falls back to image/png or image/jpeg
+          resolve(compressedDataUrl);
+        } catch {
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        }
       };
 
       img.onerror = (err) => {
@@ -72,19 +96,30 @@ export async function compressImage(
   });
 }
 
+/**
+ * Compresses an image file and returns a genuine File object ready for FormData / Multer upload.
+ */
 export async function compressImageFile(
   file: File | string,
   optionsOrMaxWidth?: { maxWidth?: number; maxHeight?: number; quality?: number; format?: string } | number,
   maxHeight = 800,
-  quality = 0.7
-): Promise<string> {
-  if (typeof optionsOrMaxWidth === 'object' && optionsOrMaxWidth !== null) {
-    return compressImage(
-      file,
-      optionsOrMaxWidth.maxWidth || 800,
-      optionsOrMaxWidth.maxHeight || 800,
-      optionsOrMaxWidth.quality || 0.7
-    );
-  }
-  return compressImage(file, typeof optionsOrMaxWidth === 'number' ? optionsOrMaxWidth : 800, maxHeight, quality);
+  quality = 0.75
+): Promise<File> {
+  const opts = typeof optionsOrMaxWidth === 'object' && optionsOrMaxWidth !== null
+    ? optionsOrMaxWidth
+    : { maxWidth: typeof optionsOrMaxWidth === 'number' ? optionsOrMaxWidth : 800, maxHeight, quality };
+
+  const format = opts.format || 'image/webp';
+  const dataUrl = await compressImage(
+    file,
+    opts.maxWidth || 800,
+    opts.maxHeight || 800,
+    opts.quality || 0.75,
+    format
+  );
+
+  const originalName = typeof file === 'object' && file.name ? file.name : 'upload';
+  const ext = format === 'image/webp' ? '.webp' : (format === 'image/png' ? '.png' : '.jpg');
+  const baseName = originalName.replace(/\.[^/.]+$/, "");
+  return dataURLtoFile(dataUrl, `${baseName}${ext}`);
 }

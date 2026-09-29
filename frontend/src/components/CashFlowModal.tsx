@@ -354,7 +354,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
       });
 
       const formData = new FormData();
-      formData.append('image', optimizedFile);
+      formData.append('image', optimizedFile, optimizedFile.name || 'receipt.webp');
 
       const res = await fetch('/api/upload', {
         method: 'POST',

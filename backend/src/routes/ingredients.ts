@@ -1,7 +1,23 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 import { io, emitToTenant } from '../index';
+
+// Helper: apakah role punya akses bahan baku (read)
+const INGREDIENT_READER_ROLES = ['Admin', 'Dapur', 'Kasir', 'Owner', 'OWNER', 'ADMIN', 'KITCHEN'];
+// Helper: hanya Admin ke atas yang boleh CRUD master bahan baku
+const INGREDIENT_ADMIN_ROLES = ['Admin', 'Owner', 'OWNER', 'ADMIN'];
+
+/** Sembunyikan buyPrice dari response jika role Dapur */
+function filterIngredientForRole(ing: any, role: string): any {
+  const roleUpper = (role || '').toUpperCase();
+  if (roleUpper === 'DAPUR' || roleUpper === 'KITCHEN') {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { buyPrice, ...rest } = ing;
+    return rest;
+  }
+  return ing;
+}
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -92,14 +108,22 @@ export async function syncMenuSoldOutStatus(txOrPrisma: any = prisma, tenantId?:
   }
 }
 
-// GET all ingredients
+// GET all ingredients — Dapur: baca stok tanpa harga beli, Admin: full data
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
+  const userRole = (req as any).user?.role || 'Kasir';
+  const roleUpper = userRole.toUpperCase();
+  // Cek akses minimum
+  if (!INGREDIENT_READER_ROLES.some(r => r.toUpperCase() === roleUpper)) {
+    return res.status(403).json({ error: 'Akses Ditolak: Role Anda tidak memiliki akses ke modul Bahan Baku.' });
+  }
   try {
     const ingredients = await prisma.ingredient.findMany({
       include: { supplier: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' }
     });
-    res.json(ingredients);
+    // Sembunyikan harga beli dari Dapur
+    const result = ingredients.map(ing => filterIngredientForRole(ing, userRole));
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: 'Gagal mengambil data bahan baku' });
   }
@@ -331,8 +355,8 @@ router.get('/low-stock', authenticateToken, async (req: Request, res: Response) 
   }
 });
 
-// POST create ingredient
-router.post('/', authenticateToken, async (req: Request, res: Response) => {
+// POST create ingredient — Admin only
+router.post('/', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
     const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId, purchaseUnit, conversionRatio, warehouseMinStock } = req.body;
     const ingredient = await prisma.ingredient.create({
@@ -358,8 +382,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// PUT update ingredient
-router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
+// PUT update ingredient — Admin only (Dapur tidak bisa edit harga beli / nama / unit)
+router.put('/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { name, category, subCategory, unit, stock, minStock, buyPrice, supplierId, purchaseUnit, conversionRatio, warehouseMinStock } = req.body;
@@ -509,8 +533,8 @@ router.post('/loss', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /loss/:id - Batalkan / Void catatan stock loss dan kembalikan stok
-router.delete('/loss/:id', authenticateToken, async (req: Request, res: Response) => {
+// DELETE /loss/:id - Batalkan / Void catatan stock loss — Admin only (Dapur tidak bisa void/undo)
+router.delete('/loss/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const targetLog = await prisma.ingredientLog.findUnique({
@@ -1509,7 +1533,8 @@ router.get('/analytics/daily-usage', authenticateToken, async (req: Request, res
 });
 
 // DELETE ingredient (hanya jika tidak ada resep aktif)
-router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+// DELETE ingredient — Admin only
+router.delete('/:id', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const recipeCount = await prisma.recipeItem.count({ where: { ingredientId: Number(id) } });
@@ -1524,7 +1549,8 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
 });
 
 // POST restock / adjust stok bahan baku
-router.post('/:id/adjust', authenticateToken, async (req: Request, res: Response) => {
+// POST manual stock adjustment — Admin only (Dapur harus pakai loss/waste, bukan adjust bebas)
+router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWNER', 'ADMIN'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { change, type, description, newBuyPrice } = req.body;

@@ -72,7 +72,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
       });
 
       const data = new FormData();
-      data.append('image', optimizedFile);
+      data.append('image', optimizedFile, optimizedFile.name || 'product.webp');
 
       const res = await fetch('/api/upload', {
         method: 'POST',
