@@ -21,7 +21,8 @@ const resolveSettingsTenantId = (req: Request): string | undefined => {
 // GET /api/settings/public - Public store branding resolver
 router.get('/public', async (req: Request, res: Response) => {
   try {
-    const tenantQuery = (req.query.tenant as string) || (req.query.username as string);
+    const tenantQuery = (req.query.tenant as string) || (req.query.username as string) || (req.query.tenantId as string);
+    const tableId = req.query.tableId as string;
     let tenant = null;
 
     if (tenantQuery) {
@@ -37,6 +38,19 @@ router.get('/public', async (req: Request, res: Response) => {
         },
         include: { settings: true }
       });
+    }
+
+    if (!tenant && tableId) {
+      const numTableId = Number(tableId);
+      if (!isNaN(numTableId)) {
+        const table = await prisma.table.findUnique({
+          where: { id: numTableId },
+          include: { tenant: { include: { settings: true } } }
+        });
+        if (table?.tenant) {
+          tenant = table.tenant;
+        }
+      }
     }
 
     if (!tenant) {

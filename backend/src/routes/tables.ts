@@ -10,12 +10,18 @@ const router = Router();
 router.get('/public/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    let tenantId = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string);
+    let tenantId: string | undefined = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string) || undefined;
     const tenantSlug = req.query.tenant as string;
 
     if (!tenantId && tenantSlug) {
       const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
       if (tenant) tenantId = tenant.id;
+    }
+
+    if (!tenantId) {
+      const { resolveTenantFromRequest } = require('../middlewares/tenantResolver');
+      const resolved = await resolveTenantFromRequest(req);
+      if (resolved) tenantId = resolved.id;
     }
 
     if (!tenantId) {
@@ -27,20 +33,56 @@ router.get('/public/:id', async (req: Request, res: Response) => {
 
     if (!isNaN(numId)) {
       table = await prisma.table.findFirst({
-        where: { id: numId, tenantId }
+        where: { id: numId, tenantId },
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              businessType: true,
+              logoUrl: true,
+              settings: true
+            }
+          }
+        }
       });
     }
 
     const paramId = String(id);
     if (!table) {
       table = await prisma.table.findFirst({
-        where: { tableNo: paramId, tenantId }
+        where: { tableNo: paramId, tenantId },
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              businessType: true,
+              logoUrl: true,
+              settings: true
+            }
+          }
+        }
       });
     }
 
     if (!table) {
       const allTables = await prisma.table.findMany({
-        where: { tenantId }
+        where: { tenantId },
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              businessType: true,
+              logoUrl: true,
+              settings: true
+            }
+          }
+        }
       });
       table = allTables.find(t => t.tableNo.toLowerCase() === paramId.toLowerCase()) || null;
     }

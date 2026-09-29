@@ -99,10 +99,25 @@ router.get('/public', async (req: Request, res: Response) => {
   try {
     let tenantId = (req.query.tenantId as string) || (req.headers['x-tenant-id'] as string);
     const tenantSlug = req.query.tenant as string;
+    const tableId = req.query.tableId as string;
 
     if (!tenantId && tenantSlug) {
       const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
       if (tenant) tenantId = tenant.id;
+    }
+
+    if (!tenantId && tableId) {
+      const numTableId = Number(tableId);
+      if (!isNaN(numTableId)) {
+        const table = await prisma.table.findUnique({ where: { id: numTableId } });
+        if (table?.tenantId) tenantId = table.tenantId;
+      }
+    }
+
+    if (!tenantId) {
+      const { resolveTenantFromRequest } = require('../middlewares/tenantResolver');
+      const resolved = await resolveTenantFromRequest(req);
+      if (resolved) tenantId = resolved.id;
     }
 
     if (!tenantId) {
