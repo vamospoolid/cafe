@@ -47,6 +47,7 @@ const LandingPageView = React.lazy(() => import('./components/LandingPageView'))
 const PlatformAdminLayout = React.lazy(() => import('./components/PlatformAdminLayout'));
 const SaaSPlatformAdminView = React.lazy(() => import('./components/SaaSPlatformAdminView'));
 const TenantOutletHubView = React.lazy(() => import('./components/TenantOutletHubView'));
+const PublicInvoiceView = React.lazy(() => import('./components/PublicInvoiceView'));
 
 const RouteSuspenseFallback = () => (
   <div className="flex-1 flex flex-col items-center justify-center p-12 min-h-[350px] text-center bg-slate-50 gap-2.5">
@@ -142,6 +143,22 @@ const AppRoutes = () => {
     );
   }
 
+  // Jika ini rute invoice digital publik (bisa dibuka oleh pelanggan dari WhatsApp e-Receipt tanpa login)
+  const isInvoiceRoute = location.pathname.startsWith('/invoice');
+  if (isInvoiceRoute) {
+    return (
+      <Suspense fallback={<RouteSuspenseFallback />}>
+        <Routes>
+          <Route path="/invoice/order/:orderNumber" element={<PublicInvoiceView />} />
+          <Route path="/invoice/spk/:spkNumber" element={<PublicInvoiceView />} />
+          <Route path="/invoice/:type/:id" element={<PublicInvoiceView />} />
+          <Route path="/invoice/:id" element={<PublicInvoiceView />} />
+          <Route path="*" element={<PublicInvoiceView />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
   // Jika belum login (tidak ada token), arahkan ke Landing Page (khusus codenusa.id) atau langsung ke LoginView (subdomain tenant)
   if (!context?.token) {
     return (
@@ -156,6 +173,10 @@ const AppRoutes = () => {
           <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/login')} />} />
           <Route path="/order" element={<DineInView />} />
           <Route path="/staff" element={<StaffPWAView />} />
+          <Route path="/invoice/order/:orderNumber" element={<PublicInvoiceView />} />
+          <Route path="/invoice/spk/:spkNumber" element={<PublicInvoiceView />} />
+          <Route path="/invoice/:type/:id" element={<PublicInvoiceView />} />
+          <Route path="/invoice/:id" element={<PublicInvoiceView />} />
           <Route path="*" element={<Navigate to={isPlatformLandingDomain ? "/" : "/login"} replace />} />
         </Routes>
         <CustomerSupportWidget />
@@ -187,6 +208,22 @@ const AppRoutes = () => {
                 <SaaSPlatformAdminView />
               </Suspense>
             </PlatformAdminLayout>
+          }
+        />
+
+        {/* ─── PUBLIC DIGITAL RECEIPT INVOICE ────────────────────────────── */}
+        <Route
+          path="/invoice/*"
+          element={
+            <Suspense fallback={<RouteSuspenseFallback />}>
+              <Routes>
+                <Route path="order/:orderNumber" element={<PublicInvoiceView />} />
+                <Route path="spk/:spkNumber" element={<PublicInvoiceView />} />
+                <Route path=":type/:id" element={<PublicInvoiceView />} />
+                <Route path=":id" element={<PublicInvoiceView />} />
+                <Route path="*" element={<PublicInvoiceView />} />
+              </Routes>
+            </Suspense>
           }
         />
 

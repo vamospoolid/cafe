@@ -193,7 +193,9 @@ async function exportPrismaJsonBackup(
     // Retail vertical entities
     productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
     // Laundry vertical entities
-    laundryOrders, laundryOrderItems
+    laundryOrders, laundryOrderItems,
+    // WhatsApp CRM entities
+    whatsAppConfigs, whatsAppTemplates, whatsAppLogs
   ] = await Promise.all([
     prisma.category.findMany({ where: whereTenant }),
     prisma.product.findMany({ where: whereTenant }),
@@ -254,7 +256,11 @@ async function exportPrismaJsonBackup(
     prisma.laundryOrder.findMany({ where: whereTenant }),
     prisma.laundryOrderItem.findMany({
       where: isPlatformAdmin ? {} : { order: { tenantId: tenantId! } }
-    })
+    }),
+    // WhatsApp CRM entities
+    prisma.tenantWhatsAppConfig.findMany({ where: whereTenant }),
+    prisma.whatsAppTemplate.findMany({ where: whereTenant }),
+    prisma.whatsAppLog.findMany({ where: whereTenant })
   ]);
 
   const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
@@ -285,7 +291,9 @@ async function exportPrismaJsonBackup(
       // Retail vertical entities
       productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
       // Laundry vertical entities
-      laundryOrders, laundryOrderItems
+      laundryOrders, laundryOrderItems,
+      // WhatsApp CRM entities
+      whatsAppConfigs, whatsAppTemplates, whatsAppLogs
     }
   };
 

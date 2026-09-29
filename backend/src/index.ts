@@ -224,11 +224,16 @@ import devicePairingRoutes from './routes/devicePairing';
 import bengkelRoutes from './routes/bengkel';
 import retailRoutes from './routes/retail';
 import laundryRoutes from './routes/laundry';
+import whatsappRoutes from './routes/whatsapp';
 import outletsRoutes from './routes/outlets';
 import tenantsRoutes from './routes/tenants';
 import platformAdminRoutes from './routes/platformAdmin';
 import fastProvisioningRoutes from './routes/fastProvisioning';
+import publicInvoiceRoutes from './routes/publicInvoice';
+import { whatsAppManager } from './services/WhatsAppManager';
 
+app.use('/api/public/invoice', publicInvoiceRoutes);
+app.use('/api/invoice', publicInvoiceRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/public-branding', publicBrandingRoutes);
 app.use('/api/outlets', outletsRoutes);
@@ -289,6 +294,7 @@ app.use('/api/warehouse', warehouseRoutes);
 app.use('/api/employee-loans', employeeLoansRoutes);
 app.use('/api/platform-admin', platformAdminRoutes);
 app.use('/api/fast-provisioning', fastProvisioningRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Error handling
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -443,6 +449,12 @@ if (require.main === module) {
           }
         } catch (e) {
           console.error('[BackupCron Startup Error]', e);
+        }
+
+        try {
+          await whatsAppManager.autoRestoreActiveSessions();
+        } catch (e) {
+          console.error('[WhatsApp Startup Error]', e);
         }
       }, 5000);
 

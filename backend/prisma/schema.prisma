@@ -91,8 +91,12 @@ model Tenant {
   // Laundry Vertical Relations
   laundryOrders     LaundryOrder[]
 
-  users             User[]
+  // WhatsApp CRM Relations
+  whatsAppConfig    TenantWhatsAppConfig?
+  whatsAppTemplates WhatsAppTemplate[]
+  whatsAppLogs      WhatsAppLog[]
 
+  users             User[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2080,6 +2084,62 @@ model LaundryOrderItem {
   createdAt      DateTime     @default(now())
 
   @@index([orderId])
+}
+
+// ─── WHATSAPP CRM & MULTI-TENANT GATEWAY ───────────────────────────────────
+
+model TenantWhatsAppConfig {
+  id               String    @id @default(uuid())
+  tenantId         String    @unique
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  status           String    @default("DISCONNECTED") // DISCONNECTED, SCAN_QR, CONNECTED, SUSPENDED
+  phoneConnected   String?
+  qrCode           String?   @db.Text
+  isAddonActive    Boolean   @default(false)
+  monthlyQuota     Int       @default(500)
+  usedThisMonth    Int       @default(0)
+  lastResetQuotaAt DateTime  @default(now())
+  lastConnectedAt  DateTime?
+  autoSendReceipt  Boolean   @default(true)
+  autoSendReminder Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([tenantId])
+}
+
+model WhatsAppTemplate {
+  id           String    @id @default(uuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vertical     String    @default("UNIVERSAL") // CAFE, BENGKEL, RETAIL, LAUNDRY, UNIVERSAL
+  triggerKey   String    // RECEIPT, RESERVATION_CONFIRM, SPK_CREATED, SPK_DONE, OIL_REMINDER, LAUNDRY_READY, AR_DUE
+  title        String
+  templateBody String    @db.Text
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([tenantId, triggerKey])
+  @@index([tenantId, vertical])
+}
+
+model WhatsAppLog {
+  id             String    @id @default(uuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipientPhone String
+  recipientName  String?
+  triggerKey     String?
+  messageBody    String    @db.Text
+  status         String    @default("PENDING") // PENDING, SENT, FAILED
+  errorMessage   String?
+  referenceId    String?   // OrderNumber, WorkOrderNo, ReservationId
+  sentAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
 }
 
 

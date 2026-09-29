@@ -25,11 +25,13 @@ import {
   Tag,
   Percent,
   CheckCircle,
-  Clock
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 import { useVertical } from '../context/VerticalContext';
+import SettingsWhatsAppGateway from './settings/SettingsWhatsAppGateway';
 
 const CRMView = () => {
   const posContext = useContext(POSContext);
@@ -137,8 +139,8 @@ const CRMView = () => {
     }
   };
 
-  // Tab Switch: Members / Vouchers
-  const [activeTab, setActiveTab] = useState<'members' | 'vouchers'>('members');
+  // Tab Switch: Members / Vouchers / WhatsApp Gateway
+  const [activeTab, setActiveTab] = useState<'members' | 'vouchers' | 'whatsapp'>('members');
 
   // Voucher State
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -461,6 +463,20 @@ const CRMView = () => {
               {vouchers.length}
             </span>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('whatsapp')}
+          className={`pb-3 text-sm font-black flex items-center gap-2 border-b-2 transition-all ${
+            activeTab === 'whatsapp'
+              ? 'border-emerald-600 text-emerald-700'
+              : 'border-transparent text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          <MessageSquare size={16} /> WhatsApp Gateway &amp; Notif
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+            Add-On
+          </span>
         </button>
       </div>
 
@@ -962,6 +978,12 @@ const CRMView = () => {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'whatsapp' && (
+        <div className="flex-1 flex flex-col gap-3.5 sm:gap-4 animate-fade-in">
+          <SettingsWhatsAppGateway />
         </div>
       )}
 

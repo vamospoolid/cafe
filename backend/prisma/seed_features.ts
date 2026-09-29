@@ -69,6 +69,22 @@ export const SYSTEM_FEATURES = [
     status: 'ACTIVE'
   },
   {
+    key: 'crm.whatsapp',
+    name: 'Notifikasi WhatsApp Kasir & CRM',
+    module: 'ADVANCED',
+    description: 'Gateway WhatsApp independen per-tenant: e-Receipt kasir, konfirmasi reservasi, SPK bengkel, dan tracking cucian laundry',
+    isCore: false,
+    status: 'ACTIVE'
+  },
+  {
+    key: 'crm.broadcast',
+    name: 'WhatsApp Blast & Broadcast Promo',
+    module: 'ADVANCED',
+    description: 'Kirim pesan promosi dan penawaran re-engagement ke segmen pelanggan tertarget via WhatsApp Gateway',
+    isCore: false,
+    status: 'ACTIVE'
+  },
+  {
     key: 'hr.attendance',
     name: 'Absensi GPS Geofencing Karyawan',
     module: 'HR',
@@ -170,6 +186,7 @@ export const SYSTEM_PLANS = [
       'inventory.basic',
       'inventory.advanced',
       'crm.loyalty',
+      'crm.whatsapp',
       'hr.attendance',
       'finance.cashflow',
       'payment.digital'
@@ -193,6 +210,8 @@ export const SYSTEM_PLANS = [
       'inventory.advanced',
       'warehouse.management',
       'crm.loyalty',
+      'crm.whatsapp',
+      'crm.broadcast',
       'hr.attendance',
       'hr.payroll',
       'finance.loans',

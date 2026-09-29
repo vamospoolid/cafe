@@ -6,6 +6,7 @@ import { AuditLogger } from '../services/AuditLogger';
 import { TenantContext } from '../utils/tenantContext';
 import { invalidateTenantCache } from '../middlewares/tenantResolver';
 import { cacheService } from '../services/CacheService';
+import { whatsAppTemplateService } from '../services/WhatsAppTemplateService';
 
 const router = Router();
 
@@ -508,6 +509,13 @@ router.post('/migrate-vertical', authenticateToken, requirePermission('settings.
     // 3. Cache Invalidation
     await invalidateTenantCache(tenantId);
     await cacheService.del(`cache:tenant:businessType:${tenantId}`);
+
+    // 3.5. Adaptasi Otomatis Template WhatsApp CRM ke Vertikal Baru
+    try {
+      await whatsAppTemplateService.seedDefaultTemplates(tenantId, targetBusinessType);
+    } catch (waErr: any) {
+      console.warn(`[Settings] Gagal update template WhatsApp saat migrasi vertikal:`, waErr.message);
+    }
 
     // 4. Audit Log
     await AuditLogger.log({

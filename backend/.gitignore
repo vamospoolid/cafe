@@ -8,3 +8,7 @@ node_modules
 *.db-journal
 *.db-shm
 *.db-wal
+
+storage/whatsapp_sessions/
+storage/whatsapp_sessions/*
+

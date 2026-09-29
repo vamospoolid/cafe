@@ -1,4 +1,5 @@
 import prisma from '../db';
+import { whatsAppManager } from './WhatsAppManager';
 
 interface SPKNotificationPayload {
   tenantId: string;
@@ -27,7 +28,38 @@ export class WANotifService {
   }
 
   /**
-   * Send WhatsApp message via Fonnte API
+   * Mengirim pesan dengan memprioritaskan Gateway Baileys mandiri tenant, lalu fallback ke Fonnte
+   */
+  private static async sendTenantOrFonnte(
+    tenantId: string,
+    phone: string,
+    message: string,
+    triggerKey: string,
+    referenceId?: string
+  ): Promise<boolean> {
+    try {
+      // 1. Cek sesi Baileys tenant mandiri
+      const waStatus = await whatsAppManager.getTenantStatus(tenantId);
+      if (waStatus.status === 'CONNECTED') {
+        const result = await whatsAppManager.sendMessage(tenantId, phone, message, {
+          triggerKey,
+          referenceId
+        });
+        if (result.success) {
+          console.log(`[WANotifService] Berhasil kirim pesan via Baileys tenant (${tenantId}) ke ${phone}`);
+          return true;
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[WANotifService] Baileys tenant send error, mencoba fallback:`, e.message);
+    }
+
+    // 2. Fallback ke Fonnte jika Baileys belum terhubung
+    return this.sendFonnteMessage(phone, message);
+  }
+
+  /**
+   * Send WhatsApp message via Fonnte API (Fallback)
    */
   private static async sendFonnteMessage(phone: string, message: string): Promise<boolean> {
     const token = process.env.FONNTE_TOKEN;
@@ -91,7 +123,13 @@ export class WANotifService {
       `Mekanik kami sedang menangani kendaraan Anda dengan standar terbaik. Kami akan mengabari Anda kembali saat servis telah selesai.\n\n` +
       `Salam,\n*${bengkelName}*`;
 
-    return this.sendFonnteMessage(payload.customerPhone, message);
+    return this.sendTenantOrFonnte(
+      payload.tenantId,
+      payload.customerPhone,
+      message,
+      'SPK_CREATED',
+      payload.spkNumber
+    );
   }
 
   /**
@@ -118,7 +156,13 @@ export class WANotifService {
       `Silakan datang ke bengkel kami untuk pengambilan kendaraan dan penyelesaian administrasi kasir.\n\n` +
       `Terima kasih atas kepercayaan Anda!\n*${bengkelName}*`;
 
-    return this.sendFonnteMessage(payload.customerPhone, message);
+    return this.sendTenantOrFonnte(
+      payload.tenantId,
+      payload.customerPhone,
+      message,
+      'SPK_DONE',
+      payload.spkNumber
+    );
   }
   /**
    * Kirim WA saat cucian baru diterima (Drop-off Nota Cuci)
@@ -158,7 +202,13 @@ export class WANotifService {
       `Pakaian Anda sedang kami proses dengan higienis dan cermat. Kami akan mengabari Anda kembali saat cucian telah selesai.\n\n` +
       `Salam,\n*${laundryName}*`;
 
-    return this.sendFonnteMessage(payload.customerPhone, message);
+    return this.sendTenantOrFonnte(
+      payload.tenantId,
+      payload.customerPhone,
+      message,
+      'LAUNDRY_RECEIVED',
+      payload.orderNumber
+    );
   }
 
   /**
@@ -198,7 +248,13 @@ export class WANotifService {
       `Silakan datang ke outlet kami untuk pengambilan pakaian dengan menyebutkan nomor nota ini.\n\n` +
       `Terima kasih!\n*${laundryName}*`;
 
-    return this.sendFonnteMessage(payload.customerPhone, message);
+    return this.sendTenantOrFonnte(
+      payload.tenantId,
+      payload.customerPhone,
+      message,
+      'LAUNDRY_READY',
+      payload.orderNumber
+    );
   }
 }
 

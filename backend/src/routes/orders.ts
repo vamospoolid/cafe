@@ -3,6 +3,7 @@ import { authenticateToken } from '../middlewares/authMiddleware';
 import { io, emitToTenant } from '../index';
 import { PrinterService } from '../services/PrinterService';
 import { AuditLogger } from '../services/AuditLogger';
+import { whatsAppTriggerService } from '../services/WhatsAppTriggerService';
 import prisma from '../db';
 
 const router = Router();
@@ -1094,6 +1095,13 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       }
     }
 
+    // Trigger kirim WhatsApp e-Receipt otomatis jika pesanan berstatus lunas
+    if (isPaid && result.tenantId) {
+      whatsAppTriggerService.triggerOrderReceipt(result.id, result.tenantId).catch(err => {
+        console.warn('[WhatsApp Trigger] Gagal trigger e-Receipt:', err.message);
+      });
+    }
+
     res.status(201).json({ message: 'Order berhasil dibuat', order: result });
   } catch (error) {
     console.error('Create Order Error:', error);
@@ -1387,6 +1395,15 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       if (fullOrder) {
         await enrichOrderWithJoinedTables(fullOrder, prisma);
         PrinterService.printReceipt(fullOrder, paySettings).catch(e => console.error('[Printer Receipt]', e.message));
+      }
+    }
+
+    // Trigger kirim WhatsApp e-Receipt otomatis untuk pesanan yang lunas
+    if (targetTenantId) {
+      for (const ord of result) {
+        whatsAppTriggerService.triggerOrderReceipt(ord.id, targetTenantId).catch(err => {
+          console.warn('[WhatsApp Trigger] Gagal trigger e-Receipt on pay:', err.message);
+        });
       }
     }
 

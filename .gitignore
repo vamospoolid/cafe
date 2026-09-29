@@ -32,4 +32,9 @@ backend/backups/
 uploads/
 backend/uploads/
 
+# WhatsApp multi-tenant sessions credentials
+backend/storage/whatsapp_sessions/
+backend/storage/whatsapp_sessions/*
+
+
 

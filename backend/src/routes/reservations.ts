@@ -2,6 +2,7 @@ import prisma from '../db';
 import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { TenantContext } from '../utils/tenantContext';
+import { whatsAppTriggerService } from '../services/WhatsAppTriggerService';
 
 const router = Router();
 
@@ -130,6 +131,12 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
       return newReservation;
     });
+
+    if (tenantId) {
+      whatsAppTriggerService.triggerReservationConfirmation(reservation.id, tenantId).catch(err => {
+        console.warn('[WhatsApp Trigger] Gagal trigger konfirmasi reservasi:', err.message);
+      });
+    }
 
     res.status(201).json(reservation);
   } catch (error: any) {

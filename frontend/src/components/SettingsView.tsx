@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -18,6 +18,7 @@ import {
 import TenantResetModal from './TenantResetModal';
 import RecycleBinModal from './RecycleBinModal';
 import TenantPWASection from './TenantPWASection';
+import SettingsWhatsAppGateway from './settings/SettingsWhatsAppGateway';
 
 const SettingsView = () => {
   const [activeTab, setActiveTab] = useState('profil');
@@ -535,6 +536,14 @@ const SettingsView = () => {
       label: 'Mode Inventaris', 
       desc: isBengkel ? 'Pelacakan stok sparepart & audit fisik' : (isRetail ? 'Pelacakan stok barang dagangan & multi-gudang' : (isLaundry ? 'Pelacakan deterjen, pewangi & konsumabel' : 'Pelacakan bahan baku, resep BOM & transfer gudang')), 
       icon: PackageSearch, 
+      category: 'system', 
+      show: true 
+    },
+    { 
+      id: 'whatsapp', 
+      label: 'WhatsApp Gateway', 
+      desc: 'Gateway WhatsApp mandiri untuk e-Receipt kasir, SPK, dan notifikasi pelanggan', 
+      icon: MessageSquare, 
       category: 'system', 
       show: true 
     },
@@ -2683,6 +2692,12 @@ const SettingsView = () => {
                 </div>
               </div>
               <TerminalConnectionConfig />
+            </div>
+          )}
+
+          {activeTab === 'whatsapp' && (
+            <div className="space-y-6 animate-fade-in">
+              <SettingsWhatsAppGateway />
             </div>
           )}
 
