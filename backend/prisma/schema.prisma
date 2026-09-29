@@ -876,6 +876,7 @@ model Settings {
   gpsRadiusMeters     Float   @default(100)
   enableGpsValidation Boolean @default(true)
   enableCameraPhoto   Boolean @default(true)
+  googleMapsUrl       String? @default("")
   workShifts          String? // JSON list shift kerja
 
   // Reward & Punishment Karyawan

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -193,6 +193,7 @@ const SettingsView = () => {
     gpsRadiusMeters: 300,
     enableGpsValidation: true,
     enableCameraPhoto: true,
+    googleMapsUrl: '',
     workShifts: '',
     // Reward & Punishment Karyawan
     enableZeroLateBonus: true,
@@ -272,19 +273,84 @@ const SettingsView = () => {
     toast('Tier berhasil dihapus', 'info');
   };
 
+  const [resolvingMaps, setResolvingMaps] = useState(false);
+
+  const handleResolveMaps = async (customUrl?: string) => {
+    const targetUrl = (customUrl || formData.googleMapsUrl || '').trim();
+    if (!targetUrl && !formData.storeLatitude && !formData.storeLongitude) {
+      return toast('Masukkan Link Google Maps atau koordinat toko terlebih dahulu', 'warning');
+    }
+
+    setResolvingMaps(true);
+    try {
+      const res = await fetch('/api/settings/resolve-maps', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          url: targetUrl || undefined,
+          latitude: formData.storeLatitude || undefined,
+          longitude: formData.storeLongitude || undefined
+        })
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success) {
+        const { latitude, longitude, address, placeName, googleMapsUrl } = json.data;
+        setFormData(prev => ({
+          ...prev,
+          storeLatitude: latitude,
+          storeLongitude: longitude,
+          googleMapsUrl: googleMapsUrl || targetUrl,
+          ...(address ? { address } : {})
+        }));
+        toast(`Lokasi & Alamat berhasil dideteksi! ${placeName ? `${placeName} — ` : ''}${address ? 'Alamat toko otomatis disinkronkan.' : ''}`, 'success');
+      } else {
+        toast(json.error || 'Gagal mendeteksi lokasi dari Google Maps', 'error');
+      }
+    } catch (err: any) {
+      toast('Terjadi kesalahan saat memproses link Google Maps: ' + err.message, 'error');
+    } finally {
+      setResolvingMaps(false);
+    }
+  };
+
   const handleGetDeviceCoordinates = () => {
     if (!navigator.geolocation) {
       return toast('Browser tidak mendukung Geolocation', 'error');
     }
     toast('Mendeteksi koordinat GPS perangkat...', 'info');
     navigator.geolocation.getCurrentPosition(
-      pos => {
+      async pos => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
         setFormData(prev => ({
           ...prev,
-          storeLatitude: pos.coords.latitude,
-          storeLongitude: pos.coords.longitude
+          storeLatitude: lat,
+          storeLongitude: lon,
+          googleMapsUrl: mapsUrl
         }));
-        toast(`Koordinat berhasil diambil: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`, 'success');
+        toast(`Koordinat berhasil diambil: ${lat.toFixed(6)}, ${lon.toFixed(6)}`, 'success');
+
+        // Otomatis tarik alamat dari koordinat baru
+        try {
+          const res = await fetch('/api/settings/resolve-maps', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${posContext?.token}`
+            },
+            body: JSON.stringify({ latitude: lat, longitude: lon })
+          });
+          const json = await res.json();
+          if (res.ok && json.success && json.data.address) {
+            setFormData(prev => ({ ...prev, address: json.data.address }));
+            toast('Alamat toko otomatis diperbarui sesuai titik GPS perangkat!', 'success');
+          }
+        } catch {}
       },
       err => {
         toast('Gagal mengambil koordinat GPS: ' + err.message, 'error');
@@ -1781,9 +1847,54 @@ const SettingsView = () => {
               {/* GEOFENCING GPS FORM */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4 p-5 rounded-2xl border border-slate-200 bg-white">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <MapPin size={14} className="text-rose-500" /> Koordinat & Radius Toko
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin size={14} className="text-rose-500" /> Koordinat & Radius Toko
+                    </h4>
+                    {formData.storeLatitude && formData.storeLongitude && (
+                      <a
+                        href={formData.googleMapsUrl || `https://www.google.com/maps?q=${formData.storeLatitude},${formData.storeLongitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                      >
+                        <ExternalLink size={12} /> Buka di Maps
+                      </a>
+                    )}
+                  </div>
+
+                  {/* GOOGLE MAPS AUTO-SYNC INPUT */}
+                  <div className="p-3.5 bg-gradient-to-br from-indigo-50/70 via-white to-blue-50/50 rounded-xl border border-indigo-100 space-y-2">
+                    <label className="block text-[11px] font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <Compass size={13} className="text-indigo-600" /> Link Google Maps Toko
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        name="googleMapsUrl"
+                        value={formData.googleMapsUrl || ''}
+                        onChange={handleChange}
+                        className="form-control text-xs font-mono flex-1 bg-white"
+                        placeholder="https://maps.app.goo.gl/... atau tautan Google Maps"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleResolveMaps()}
+                        disabled={resolvingMaps || !formData.googleMapsUrl}
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap active:scale-95"
+                      >
+                        {resolvingMaps ? (
+                          <RefreshCw size={13} className="animate-spin" />
+                        ) : (
+                          <Sparkles size={13} className="text-amber-300" />
+                        )}
+                        <span>{resolvingMaps ? 'Mengurai...' : 'Deteksi Otomatis'}</span>
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      💡 <em>Tips:</em> Tempel tautan dari Google Maps (termasuk link pendek <code>maps.app.goo.gl</code>). Sistem akan otomatis mengisi <strong>Latitude, Longitude, dan Alamat Toko</strong>.
+                    </p>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1829,13 +1940,26 @@ const SettingsView = () => {
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleGetDeviceCoordinates}
-                    className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-slate-200"
-                  >
-                    <MapPin size={14} className="text-indigo-600" /> Gunakan Koordinat GPS Perangkat Ini
-                  </button>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleGetDeviceCoordinates}
+                      className="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-slate-200 active:scale-95"
+                    >
+                      <MapPin size={13} className="text-indigo-600" /> Koordinat Perangkat Ini
+                    </button>
+                    {formData.storeLatitude && formData.storeLongitude && (
+                      <button
+                        type="button"
+                        onClick={() => handleResolveMaps()}
+                        disabled={resolvingMaps}
+                        className="py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-emerald-200 active:scale-95 whitespace-nowrap"
+                        title="Sinkronkan ulang alamat berdasarkan titik latitude & longitude di atas"
+                      >
+                        <RefreshCw size={13} className={resolvingMaps ? 'animate-spin' : ''} /> Tarik Alamat
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* TOGGLES */}

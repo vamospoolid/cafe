@@ -277,7 +277,7 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
       'printerIp', 'printerPort', 'windowsPrinterName', 'autoPrintKDS', 'autoPrintReceipt',
       'kitchenPrinterIp', 'kitchenPrinterPort', 'autoPrintKitchen', 'barPrinterIp', 'barPrinterPort',
       'autoPrintBar', 'enableKDS', 'autoCompleteKDSOnPay', 'storeLatitude', 'storeLongitude',
-      'gpsRadiusMeters', 'enableGpsValidation', 'enableCameraPhoto', 'workShifts', 'enableZeroLateBonus',
+      'gpsRadiusMeters', 'enableGpsValidation', 'enableCameraPhoto', 'googleMapsUrl', 'workShifts', 'enableZeroLateBonus',
       'zeroLateBonusAmount', 'zeroLateMinAttendance', 'zeroLateMaxLateAllowed', 'enableLatePenalty',
       'latePenaltyType', 'latePenaltyAmount', 'enableAlphaPenalty', 'alphaPenaltyAmount',
       'warehouseTransferPricing', 'warehouseMarkupPercent', 'enableProfitSharing',
@@ -516,6 +516,133 @@ router.post('/migrate-vertical', authenticateToken, requirePermission('settings.
   } catch (error: any) {
     console.error('Migrate vertical error:', error);
     res.status(500).json({ error: error?.message || 'Gagal memproses migrasi jenis bisnis' });
+  }
+});
+
+// ─── POST /api/settings/resolve-maps: Extract Address & Coordinates from Google Maps URL or Lat/Lng ───
+router.post('/resolve-maps', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { url, latitude: inputLat, longitude: inputLon } = req.body;
+
+    let latitude: number | null = inputLat !== undefined && inputLat !== null && !isNaN(Number(inputLat)) ? Number(inputLat) : null;
+    let longitude: number | null = inputLon !== undefined && inputLon !== null && !isNaN(Number(inputLon)) ? Number(inputLon) : null;
+    let address = '';
+    let placeName = '';
+    let canonicalUrl = '';
+
+    if (url && typeof url === 'string' && url.trim().length > 0) {
+      const trimmedUrl = url.trim();
+      let finalUrl = trimmedUrl;
+      let htmlContent = '';
+
+      // Follow redirects to unpack shortlinks like maps.app.goo.gl
+      try {
+        const response = await fetch(trimmedUrl, {
+          method: 'GET',
+          redirect: 'follow',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7'
+          }
+        });
+        finalUrl = response.url || trimmedUrl;
+        htmlContent = await response.text();
+      } catch (fetchErr: any) {
+        console.warn('[Settings Maps Resolver] Direct fetch error:', fetchErr?.message);
+      }
+
+      // 1. Extract Coordinates from URL regex patterns
+      const coordsMatch1 = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      const coordsMatch2 = finalUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+      const coordsMatch3 = finalUrl.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+      const coordsMatch4 = finalUrl.match(/ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+      const coordsMatch5 = finalUrl.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+
+      if (coordsMatch1) {
+        latitude = parseFloat(coordsMatch1[1]);
+        longitude = parseFloat(coordsMatch1[2]);
+      } else if (coordsMatch2) {
+        latitude = parseFloat(coordsMatch2[1]);
+        longitude = parseFloat(coordsMatch2[2]);
+      } else if (coordsMatch3) {
+        latitude = parseFloat(coordsMatch3[1]);
+        longitude = parseFloat(coordsMatch3[2]);
+      } else if (coordsMatch4) {
+        latitude = parseFloat(coordsMatch4[1]);
+        longitude = parseFloat(coordsMatch4[2]);
+      } else if (coordsMatch5) {
+        latitude = parseFloat(coordsMatch5[1]);
+        longitude = parseFloat(coordsMatch5[2]);
+      }
+
+      // 2. Extract Place Name
+      const placeMatch = finalUrl.match(/\/maps\/place\/([^/@]+)/);
+      if (placeMatch && placeMatch[1]) {
+        placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+      }
+
+      if (!placeName && htmlContent) {
+        const titleMatch = htmlContent.match(/<title>([^<]+)<\/title>/i);
+        if (titleMatch && titleMatch[1]) {
+          placeName = titleMatch[1].replace(/\s*-\s*Google Maps/i, '').replace(/\s*·\s*Google Maps/i, '').trim();
+        }
+      }
+
+      // 3. Extract OpenGraph Description (often contains the address on Google Maps)
+      if (htmlContent) {
+        const ogDescMatch = htmlContent.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+                            htmlContent.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+        if (ogDescMatch && ogDescMatch[1]) {
+          address = ogDescMatch[1].trim();
+        }
+      }
+    }
+
+    // 4. Reverse Geocoding fallback if coordinates are found and address is minimal or missing
+    if (latitude !== null && longitude !== null && (!address || address.length < 5)) {
+      try {
+        const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`;
+        const geoRes = await fetch(nominatimUrl, {
+          headers: {
+            'User-Agent': 'CodePOS-StoreLocator/1.0 (contact@codepos.id)',
+            'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8'
+          }
+        });
+        if (geoRes.ok) {
+          const geoData: any = await geoRes.json();
+          if (geoData?.display_name) {
+            address = geoData.display_name;
+          }
+        }
+      } catch (geoErr) {
+        console.warn('[Reverse Geocoding] Nominatim lookup failed:', geoErr);
+      }
+    }
+
+    // Generate Canonical Maps URL
+    if (latitude !== null && longitude !== null) {
+      canonicalUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+    }
+
+    if (latitude === null || longitude === null) {
+      return res.status(400).json({
+        error: 'Tidak dapat menemukan koordinat dari link tersebut. Pastikan link Google Maps valid (contoh: https://maps.app.goo.gl/... atau tautan dari Google Maps).'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        latitude,
+        longitude,
+        address: address || 'Alamat Lokasi Terdeteksi di Google Maps',
+        placeName: placeName || '',
+        googleMapsUrl: canonicalUrl
+      }
+    });
+  } catch (error: any) {
+    console.error('Resolve maps error:', error);
+    return res.status(500).json({ error: error?.message || 'Gagal memproses data lokasi Google Maps' });
   }
 });
 
