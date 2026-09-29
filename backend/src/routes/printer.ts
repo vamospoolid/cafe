@@ -6,9 +6,12 @@ import { PrinterService } from '../services/PrinterService';
 const router = Router();
 
 // Helper to load complete order with product categories
-const getFullOrder = async (orderId: number) => {
-  return await prisma.order.findUnique({
-    where: { id: Number(orderId) },
+const getFullOrder = async (orderId: number, tenantId?: string) => {
+  return await prisma.order.findFirst({
+    where: {
+      id: Number(orderId),
+      ...(tenantId ? { tenantId } : {})
+    },
     include: {
       items: {
         include: {
@@ -27,7 +30,8 @@ const getFullOrder = async (orderId: number) => {
 // GET /api/printer/status — cek koneksi printer kasir
 router.get('/status', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const settings = await prisma.settings.findFirst();
+    const tenantId = (req as any).user?.tenantId;
+    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
     const ip   = settings?.printerIp || '';
     const port = settings?.printerPort || 9100;
 
@@ -43,7 +47,8 @@ router.get('/status', authenticateToken, async (req: Request, res: Response) => 
 // POST /api/printer/test — cetak halaman uji (bisa untuk Kasir, Dapur, atau Bar)
 router.post('/test', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const settings = await prisma.settings.findFirst();
+    const tenantId = (req as any).user?.tenantId;
+    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
     const roleName = req.body.roleName || 'PRINTER';
     let ip   = req.body.ip;
     let port = req.body.port;
@@ -74,8 +79,9 @@ router.post('/test', authenticateToken, async (req: Request, res: Response) => {
 router.post('/receipt', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
-    const settings = await prisma.settings.findFirst();
-    const order = await getFullOrder(Number(orderId));
+    const tenantId = (req as any).user?.tenantId;
+    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
 
@@ -90,8 +96,9 @@ router.post('/receipt', authenticateToken, async (req: Request, res: Response) =
 router.post('/kitchen', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
-    const settings = await prisma.settings.findFirst();
-    const order = await getFullOrder(Number(orderId));
+    const tenantId = (req as any).user?.tenantId;
+    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
 
@@ -106,8 +113,9 @@ router.post('/kitchen', authenticateToken, async (req: Request, res: Response) =
 router.post('/bar', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
-    const settings = await prisma.settings.findFirst();
-    const order = await getFullOrder(Number(orderId));
+    const tenantId = (req as any).user?.tenantId;
+    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
 
@@ -122,8 +130,9 @@ router.post('/bar', authenticateToken, async (req: Request, res: Response) => {
 router.post('/all', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
-    const settings = await prisma.settings.findFirst();
-    const order = await getFullOrder(Number(orderId));
+    const tenantId = (req as any).user?.tenantId;
+    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
 

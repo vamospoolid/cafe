@@ -27,8 +27,8 @@ export const enrichOrderWithJoinedTables = async (order: any, txPrisma: any = pr
 };
 
 // Helper: Process loyalty points earning
-const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: number, orderNumber: string) => {
-  const settings = await tx.settings.findFirst();
+const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: number, orderNumber: string, tenantId?: string) => {
+  const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
   if (!loyaltyEnabled) return;
 
@@ -80,8 +80,8 @@ const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: n
 };
 
 // Helper: Process loyalty points redemption
-const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRedeem: number, orderNumber: string) => {
-  const settings = await tx.settings.findFirst();
+const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRedeem: number, orderNumber: string, tenantId?: string) => {
+  const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
   if (!loyaltyEnabled) return;
 
@@ -325,7 +325,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
       const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
 
       // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
-      const settings = await tx.settings.findFirst();
+      const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
       const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
       const hasTable = Boolean(resolvedTableId);
       const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
@@ -517,7 +517,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         const datePaid = paidAt ? new Date(paidAt) : (isPaid ? new Date() : null);
 
         // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
-        const settings = await tx.settings.findFirst();
+        const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
         const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
         const hasTable = Boolean(tableId);
         const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
@@ -597,9 +597,9 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         // Poin Loyalitas
         if (finalCustomerId && isPaid) {
           if (pointsUsed && pointsUsed > 0) {
-            await processLoyaltyRedemption(tx, finalCustomerId, Number(pointsUsed), orderNumber);
+            await processLoyaltyRedemption(tx, finalCustomerId, Number(pointsUsed), orderNumber, tenantId);
           }
-          await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber);
+          await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber, tenantId);
         }
 
         // Piutang
@@ -724,7 +724,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
       
       // Auto-Print KDS & Receipt
       try {
-        const settings = await prisma.settings.findFirst();
+        const settings = await prisma.settings.findFirst({ where: result.tenantId ? { tenantId: result.tenantId } : undefined });
         if (settings) {
           const fullOrder = await prisma.order.findUnique({
             where: { id: result.id },
@@ -856,7 +856,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       }
 
       // Cek settings toko
-      const settings = await tx.settings.findFirst();
+      const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
       const hasTable = Boolean(tableId);
       const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
       const isActuallyPaid = Boolean(isPaid);
@@ -954,11 +954,11 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       if (finalCustomerId) {
         const ptsUsed = Number(pointsUsed) || 0;
         if (ptsUsed > 0) {
-          await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, orderNumber);
+          await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, orderNumber, tenantId);
         }
 
         if (isPaid) {
-          await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber);
+          await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber, tenantId);
         }
       }
 
@@ -997,7 +997,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     }
 
     // Auto-print tiket dapur & bar (fire-and-forget)
-    const settingsPrint = await prisma.settings.findFirst();
+    const settingsPrint = await prisma.settings.findFirst({ where: result.tenantId ? { tenantId: result.tenantId } : undefined });
     if (settingsPrint && (settingsPrint.autoPrintKitchen || settingsPrint.autoPrintKDS || settingsPrint.autoPrintBar)) {
       const fullOrder = await prisma.order.findUnique({
         where: { id: result.id },
@@ -1080,7 +1080,8 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 
       const updatedOrders = [];
       const paidNow = new Date(); // Fix #1: timestamp tunggal untuk semua order yang dibayar bersamaan
-      const settings = await tx.settings.findFirst();
+      const effectiveTenantId = orders[0]?.tenantId || tenantId;
+      const settings = await tx.settings.findFirst({ where: effectiveTenantId ? { tenantId: effectiveTenantId } : undefined });
       const hasAnyTable = orders.some(o => Boolean(o.tableId));
       const shouldAutoServe = !hasAnyTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
       
@@ -1143,9 +1144,9 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
         // Proses poin loyalitas
         if (finalCustomerId) {
           if (ptsUsed > 0) {
-            await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, updated.orderNumber);
+            await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, updated.orderNumber, effectiveTenantId);
           }
-          await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber);
+          await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber, effectiveTenantId);
         }
 
         // Piutang
@@ -1238,7 +1239,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 
           // Poin loyalitas dicatat per masing-masing order agar sinkron saat void sebagian
           if (finalCustomerId) {
-            await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber);
+            await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber, effectiveTenantId);
           }
         }
       }
@@ -1318,7 +1319,7 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
       });
 
       // 2. Kembalikan stok produk
-      const voidSettings = await tx.settings.findFirst();
+      const voidSettings = await tx.settings.findFirst({ where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined });
       const isAdvancedModeVoid = voidSettings?.ingredientTrackingEnabled ?? false;
 
       for (const item of orderData.items) {
@@ -1353,7 +1354,7 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
 
       // 3. Batalkan Poin Loyalitas
       if (orderData.customerId) {
-        const settings = await tx.settings.findFirst();
+        const settings = await tx.settings.findFirst({ where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined });
         const silverThreshold = settings ? settings.loyaltySilverThreshold : 1000000;
         const goldThreshold = settings ? settings.loyaltyGoldThreshold : 3000000;
 
@@ -1489,7 +1490,8 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
     }
 
     // Ambil setting pajak dan service charge
-    const settings = await prisma.settings.findFirst();
+    const tenantIdForSplit = (req as any).user?.tenantId || null;
+    const settings = await prisma.settings.findFirst({ where: tenantIdForSplit ? { tenantId: tenantIdForSplit } : undefined });
     const taxRate = settings?.taxRate || 0;
     const serviceChargeRate = settings?.serviceCharge || 0;
 
