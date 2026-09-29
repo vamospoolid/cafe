@@ -282,7 +282,7 @@ async function runRemoteVpsDeploy() {
             } catch (err) {
               console.log('   ⚠ Backfill notice:', err.message);
             } finally {
-              await p.\$disconnect();
+              process.exit(0);
             }
           }
           b();
