@@ -270,13 +270,22 @@ const NotificationBell: React.FC = () => {
     const handleNewOrder = (data: any) => {
       console.log('[NotificationBell Socket] order:new received:', data);
       
-      const tableLabel = data?.tableNo ? `Meja ${data.tableNo}` : (data?.tableId ? `Meja #${data.tableId}` : 'Pesanan Langsung');
+      // ABAIKAN jika transaksi diinput sendiri oleh Kasir di meja POS!
+      // Notifikasi suara & pop-up KHUSUS untuk pesanan dari Meja (Dine-In QR Self-Order).
+      if (data?.type === 'POS' || data?.type === 'CASHIER' || data?.source === 'POS') {
+        return;
+      }
+      if (data?.type !== 'DINE_IN' && !data?.tableNo) {
+        return;
+      }
+
+      const tableLabel = data?.tableNo ? `Meja ${data.tableNo}` : 'Meja Pelanggan';
       const custLabel = data?.customerName ? ` • ${data.customerName}` : '';
       const orderNum = data?.orderNumber || 'Order Baru';
 
       addNotification({
         type: 'order:new',
-        message: `🔥 Order Baru Masuk (${tableLabel})`,
+        message: `🔥 Order Meja Masuk (${tableLabel})`,
         detail: `${orderNum}${custLabel}${data?.total ? ` • Rp ${Number(data.total).toLocaleString('id-ID')}` : ''}`,
         tableNo: data?.tableNo || null,
         tableId: data?.tableId || null,
@@ -312,22 +321,23 @@ const NotificationBell: React.FC = () => {
 
     const handleOrderPaid = (data: any) => {
       console.log('[NotificationBell Socket] order:paid received:', data);
+      // Abaikan transaksi pembayaran kasir manual di POS
+      // Hanya bunyi jika pembayaran online mandiri dari meja (Midtrans QRIS)
+      if (data?.source === 'POS' || data?.type === 'POS' || (!data?.isOnline && !data?.order?.paymentMethod?.includes('MIDTRANS'))) {
+        return;
+      }
+
       addNotification({
         type: 'order:paid',
-        message: `💳 Transaksi Berhasil`,
-        detail: data?.order?.orderNumber ? `Order #${data.order?.orderNumber} lunas` : 'Pembayaran terkonfirmasi',
+        message: `💳 Pembayaran Online Meja Lunas`,
+        detail: data?.order?.orderNumber ? `Order #${data.order?.orderNumber} lunas` : 'Pembayaran QRIS meja terkonfirmasi',
         orderNumber: data?.order?.orderNumber || null
       });
     };
 
-    const handleOrderVoid = (data: any) => {
-      console.log('[NotificationBell Socket] order:void received:', data);
-      addNotification({
-        type: 'order:void',
-        message: `❌ Order Dibatalkan`,
-        detail: data?.orderNumber ? `Order #${data.orderNumber}` : 'Pesanan telah di-void',
-        orderNumber: data?.orderNumber || null
-      });
+    const handleOrderVoid = () => {
+      // Kasir void transaksi sendiri, tidak perlu lonceng
+      return;
     };
 
     socket.on('order:new', handleNewOrder);

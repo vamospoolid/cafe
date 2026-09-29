@@ -1016,7 +1016,8 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         orderNumber: result.orderNumber,
         tableId: result.tableId,
         joinedTableIds: result.joinedTableIds,
-        tableNo: (result as any).table?.tableNo || null
+        tableNo: (result as any).table?.tableNo || null,
+        type: 'POS'
       });
     }
 
