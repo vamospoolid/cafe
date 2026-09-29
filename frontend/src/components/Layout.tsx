@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import NotificationBell from './NotificationBell';
 import TenantOutletSwitcher from './TenantOutletSwitcher';
 import OpenShiftModal from './OpenShiftModal';
@@ -66,6 +67,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     setIsUserMenuOpen(false);
   }, [location.pathname]);
   const posContext = useContext(POSContext);
+  const { businessType, isBengkel, isCafe, isRetail, isLaundry, profile } = useVertical();
   const [kdsCount, setKdsCount] = useState(0);
   const socket = useSocket();
 
@@ -77,7 +79,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const isKDSEnabled = posContext?.settings?.enableKDS !== false;
+  const isKDSEnabled = Boolean(profile.enableKds && posContext?.settings?.enableKDS !== false);
 
   const fetchKdsCount = async () => {
     if (!posContext?.token || !isKDSEnabled) {
@@ -122,28 +124,28 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   }, [socket, posContext?.token]);
   const titleMap: Record<string, string> = {
     '/dashboard': 'Dashboard',
-    '/pos': 'POS - Point of Sale',
-    '/meja': 'Manajemen Meja',
+    '/pos': `POS - ${profile.orderTerm || 'Penjualan'}`,
+    '/meja': profile.tableTerm || 'Manajemen Meja',
     '/riwayat': 'Riwayat Transaksi',
-    '/produk': 'Katalog Produk',
-    '/kategori': 'Kategori Menu',
+    '/produk': profile.itemTerm || 'Katalog Produk',
+    '/kategori': 'Kategori Produk',
     '/reservasi': 'Buku Reservasi',
     '/kds': 'Dapur (KDS)',
     '/bahan-baku': 'Manajemen Bahan Baku',
     '/po': 'Purchase Order (PO)',
-    '/supplier': 'Supplier Bahan',
+    '/supplier': 'Supplier & Distributor',
     '/kas': 'Arus Kas & Petty Cash',
     '/pengeluaran': 'Petty Cash & Biaya',
     '/karyawan': 'Data Karyawan',
     '/absensi': 'Absensi Karyawan',
     '/shift': 'Riwayat Shift & Kasir',
-    '/crm': 'Pelanggan & CRM',
+    '/crm': isRetail ? 'Pelanggan & Bon Piutang' : (isBengkel ? 'Pelanggan & Kendaraan' : 'Pelanggan & CRM'),
     '/laporan': 'Laporan Penjualan',
     '/audit-log': 'Audit Trail & Log Aktivitas',
     '/cabang': 'Manajemen Cabang',
     '/pengaturan': 'Pengaturan Sistem'
   };
-  const pageTitle = titleMap[location.pathname] || posContext?.settings?.storeName || 'VAMOS POOL & CAFE';
+  const pageTitle = titleMap[location.pathname] || posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Codenusa POS';
 
   // Quick PIN Switch States
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -232,13 +234,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 {posContext?.settings?.logoUrl ? (
                   <img src={posContext.settings.logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 ) : (
-                  <img src="/logo-muki-ramen.png" alt="MUKI RAMEN" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center text-white font-black text-sm">
+                    {(posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'CP').charAt(0).toUpperCase()}
+                  </div>
                 )}
               </div>
               {!isCollapsed && (
                 <div className="brand-text truncate">
-                  <div className="brand-title truncate">{posContext?.settings?.storeName || 'MUKI RAMEN'}</div>
-                  <div className="brand-subtitle truncate">Japanese Ramen POS</div>
+                  <div className="brand-title truncate">{posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Codenusa POS'}</div>
+                  <div className="brand-subtitle truncate text-indigo-300 font-medium text-xs">{profile.displayName}</div>
                 </div>
               )}
             </div>
@@ -292,24 +296,24 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </NavLink>
             )}
             {checkAccess(['Admin']) && (
-              <NavLink to="/produk" title="Produk" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink to="/produk" title={profile.itemTerm || 'Produk'} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Package size={20} className="shrink-0" />
-                <span>Produk</span>
+                <span>{profile.itemTerm || 'Produk'}</span>
               </NavLink>
             )}
-            {checkAccess(['Admin', 'Kasir']) && (
+            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (
               <NavLink to="/reservasi" title="Reservasi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Calendar size={20} className="shrink-0" />
                 <span>Reservasi</span>
               </NavLink>
             )}
-            {checkAccess(['Admin', 'Kasir', 'Dapur']) && (
-              <NavLink to="/meja" title="Nomor Meja" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+            {profile.enableTables && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+              <NavLink to="/meja" title={profile.tableTerm || 'Nomor Meja'} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Grid size={20} className="shrink-0" />
-                <span>Nomor Meja</span>
+                <span>{profile.tableTerm || 'Nomor Meja'}</span>
               </NavLink>
             )}
-            {checkAccess(['Admin', 'Kasir']) && (
+            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (
               <NavLink to="/qrcode" title="Generate QR Code" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <QrCode size={20} className="shrink-0" />
                 <span>Generate QR Code</span>
@@ -342,7 +346,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <Boxes size={20} className="shrink-0" />
                   <span>Gudang Pusat</span>
                 </NavLink>
-                {posContext?.settings && (posContext.settings as any).ingredientTrackingEnabled && (
+                {isCafe && posContext?.settings && (posContext.settings as any).ingredientTrackingEnabled && (
                   <NavLink to="/bahan-baku" title="Bahan Baku" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                     <PackageSearch size={20} className="shrink-0" />
                     <span>Bahan Baku</span>
@@ -720,9 +724,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               )}
             </NavLink>
 
-            {/* 2. Meja */}
+            {/* 2. Meja / Produk */}
             <NavLink
-              to="/meja"
+              to={profile.enableTables ? "/meja" : "/produk"}
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 ${
                   isActive
@@ -736,11 +740,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <div className={`flex items-center justify-center rounded-2xl transition-all ${
                     isActive ? 'bg-emerald-100 px-4 py-1' : 'px-4 py-1'
                   }`}>
-                    <Grid size={22} strokeWidth={isActive ? 2.5 : 2} />
+                    {profile.enableTables ? <Grid size={22} strokeWidth={isActive ? 2.5 : 2} /> : <Package size={22} strokeWidth={isActive ? 2.5 : 2} />}
                   </div>
                   <span className={`text-[11px] leading-none transition-all ${
                     isActive ? 'font-bold' : 'font-medium'
-                  }`}>Meja</span>
+                  }`}>{profile.enableTables ? (isLaundry ? 'Rak' : 'Meja') : 'Produk'}</span>
                 </>
               )}
             </NavLink>
@@ -861,7 +865,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </NavLink>
               )}
 
-              {checkAccess(['Admin', 'Kasir']) && (
+              {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (
                 <NavLink to="/reservasi" onClick={() => setIsMoreMenuOpen(false)}
                   className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
                   <div className="w-11 h-11 rounded-2xl bg-blue-100 flex items-center justify-center">
@@ -894,7 +898,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </NavLink>
               )}
 
-              {checkAccess(['Admin', 'Dapur']) && (
+              {isCafe && checkAccess(['Admin', 'Dapur']) && (
                 <NavLink to="/bahan-baku" onClick={() => setIsMoreMenuOpen(false)}
                   className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
                   <div className="w-11 h-11 rounded-2xl bg-lime-100 flex items-center justify-center">
@@ -924,7 +928,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </NavLink>
               )}
 
-              {checkAccess(['Admin', 'Kasir']) && (
+              {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (
                 <NavLink to="/qrcode" onClick={() => setIsMoreMenuOpen(false)}
                   className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
                   <div className="w-11 h-11 rounded-2xl bg-slate-100 flex items-center justify-center">

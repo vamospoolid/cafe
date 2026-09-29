@@ -10,7 +10,10 @@ const router = Router();
 router.use(authenticateToken);
 router.use((req: Request, res: Response, next) => {
   const user = (req as AuthRequest).user;
-  const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || 'tenant-vamos-pool';
+  const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+  }
   (req as any).tenantId = tenantId;
   next();
 });
@@ -20,25 +23,20 @@ router.use((req: Request, res: Response, next) => {
 router.get('/active', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user;
-    const tenantId = user?.tenantId || TenantContext.getTenantId() || 'tenant-vamos-pool';
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia' });
+    }
 
     const activeShift = await prisma.shift.findFirst({
       where: { 
         status: { in: ['Open', 'OPEN'] },
-        OR: [
-          { tenantId },
-          { tenantId: 'tenant-vamos-pool' },
-          { tenantId: null }
-        ]
+        tenantId
       }
     });
 
     const whereCondition: any = {
-      OR: [
-        { tenantId },
-        { tenantId: 'tenant-vamos-pool' },
-        { tenantId: null }
-      ],
+      tenantId,
       AND: [
         {
           OR: [

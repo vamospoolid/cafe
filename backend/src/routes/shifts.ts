@@ -37,7 +37,10 @@ const handleGetActiveShift = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
-    const tenantCondition = { OR: [{ tenantId: 'tenant-vamos-pool' }, { tenantId: null }, ...(tenantId ? [{ tenantId }] : [])] };
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia' });
+    }
+    const tenantCondition = { tenantId };
 
     const activeShift = await prisma.shift.findFirst({
       where: {
@@ -66,7 +69,10 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
-    const tenantCondition = { OR: [{ tenantId: 'tenant-vamos-pool' }, { tenantId: null }, ...(tenantId ? [{ tenantId }] : [])] };
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia' });
+    }
+    const tenantCondition = { tenantId };
 
     const shifts = await prisma.shift.findMany({
       where: tenantCondition,

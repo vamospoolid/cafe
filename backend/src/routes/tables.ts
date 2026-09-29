@@ -134,15 +134,14 @@ router.post('/public/call-waiter', async (req: Request, res: Response) => {
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as AuthRequest).user;
-    const tenantId = user?.tenantId || TenantContext.getTenantId() || 'tenant-vamos-pool';
+    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia' });
+    }
     const tables = await prisma.table.findMany({
       where: {
         deletedAt: null,
-        OR: [
-          { tenantId },
-          { tenantId: 'tenant-vamos-pool' },
-          { tenantId: null }
-        ]
+        tenantId
       },
       orderBy: { tableNo: 'asc' }
     });

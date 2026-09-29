@@ -226,6 +226,8 @@ import retailRoutes from './routes/retail';
 import laundryRoutes from './routes/laundry';
 import outletsRoutes from './routes/outlets';
 import tenantsRoutes from './routes/tenants';
+import platformAdminRoutes from './routes/platformAdmin';
+import fastProvisioningRoutes from './routes/fastProvisioning';
 
 app.use('/api/health', healthRoutes);
 app.use('/api/public-branding', publicBrandingRoutes);
@@ -285,6 +287,8 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/database', databaseRoutes);
 app.use('/api/warehouse', warehouseRoutes);
 app.use('/api/employee-loans', employeeLoansRoutes);
+app.use('/api/platform-admin', platformAdminRoutes);
+app.use('/api/fast-provisioning', fastProvisioningRoutes);
 
 // Error handling
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

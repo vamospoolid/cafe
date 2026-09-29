@@ -13,9 +13,31 @@ import { toast, confirmAlert, errorAlert } from '../utils/alert';
 import { offlineDb } from '../db/offlineDb';
 
 import { formatTableTitle, formatTableBadge } from '../utils/tableUtils';
+import { useVertical } from '../context/VerticalContext';
 
 const TableView = () => {
   const navigate = useNavigate();
+  const { profile } = useVertical();
+
+  if (!profile.enableTables) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[70vh] bg-slate-50/50">
+        <div className="w-16 h-16 rounded-3xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mb-4 shadow-sm">
+          <LayoutGrid size={32} />
+        </div>
+        <h2 className="text-xl font-black text-slate-800">Manajemen Meja Dine-In Tidak Aktif</h2>
+        <p className="text-sm text-slate-500 max-w-md mt-2 mb-6 leading-relaxed">
+          Bisnis vertikal Anda <strong>({profile.displayName})</strong> menggunakan alur transaksi langsung (Fast Checkout/Retail) tanpa pemesanan meja makan.
+        </p>
+        <button 
+          onClick={() => navigate('/pos')}
+          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 cursor-pointer"
+        >
+          Buka Kasir POS
+        </button>
+      </div>
+    );
+  }
 
   const [tables, setTables] = useState<any[]>([]);
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
