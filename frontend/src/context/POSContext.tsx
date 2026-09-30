@@ -410,15 +410,13 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     setFeatures([]);
     setTenantPlan(null);
 
-    // 4. Bersihkan LocalStorage sensitif
+    // 4. Bersihkan LocalStorage sensitif (auth only)
+    // ⚠️ JANGAN hapus bluetooth_printer_* — data ini diperlukan untuk auto-reconnect
+    // saat kasir login kembali (Opsi B: auto-reconnect via getDevices())
     localStorage.removeItem('pos_user');
     localStorage.removeItem('pos_token');
     localStorage.removeItem('pos_business_type');
     localStorage.removeItem('pos_active_shift');
-    localStorage.removeItem('bluetooth_printer_id');
-    localStorage.removeItem('bluetooth_printer_name');
-    localStorage.removeItem('bluetooth_printer_mac');
-    localStorage.removeItem('bluetooth_printer_type');
     localStorage.removeItem('pos_device_paired');
 
     // 5. Bersihkan Session Storage dan arahkan browser langsung ke /login
