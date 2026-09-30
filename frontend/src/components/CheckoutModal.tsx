@@ -16,7 +16,11 @@ import {
   printBluetoothReceipt,
   printBluetoothKitchenTicket,
   isKitchenItem,
-  isBarItem
+  isBarItem,
+  getActiveOrSavedDevice,
+  getActiveWebBluetoothDevice,
+  pairWebBluetoothPrinter,
+  isWebBluetoothSupported
 } from '../utils/printerBluetooth';
 import { generateWhatsAppReceiptUrl } from '../utils/receiptFormatter';
 
@@ -248,10 +252,25 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const quickAmounts = getSmartPresets(finalTotal);
 
   const handleDirectPrint = async (id: number) => {
-    const savedBt = getSavedBluetoothPrinter();
+    const savedBt = getSavedBluetoothPrinter('cashier');
     if (savedBt) {
       setPrintLoading(true);
       try {
+        // Cek koneksi Web Bluetooth sebelum fetch selagi user gesture aktif
+        if (isWebBluetoothSupported() && (localStorage.getItem('bluetooth_cashier_printer_type') === 'WEB_BLUETOOTH' || savedBt.type === 'WEB_BLUETOOTH')) {
+          let dev = await getActiveOrSavedDevice('cashier');
+          if (!dev) {
+            try {
+              toast('Menyambungkan printer Bluetooth Kasir...', 'info');
+              await pairWebBluetoothPrinter('cashier');
+            } catch (pairErr: any) {
+              console.warn('[Printer] Auto-reconnect Web Bluetooth Kasir memerlukan interaksi pengguna:', pairErr.message);
+              toast('Silakan klik tombol "Cetak Struk Kasir" untuk menyambungkan printer', 'info');
+              return;
+            }
+          }
+        }
+
         const orderRes = await fetch(`/api/orders/${id}`, {
           headers: { Authorization: `Bearer ${posContext?.token}` }
         });
@@ -363,7 +382,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const handlePrintSpecificTarget = async (id: number, target: 'kitchen' | 'bar') => {
-    const savedBt = getSavedBluetoothPrinter();
+    const isKitchen = target === 'kitchen';
+    const role: 'kitchen' | 'cashier' = isKitchen ? 'kitchen' : 'cashier';
+    const savedKitchen = getSavedBluetoothPrinter('kitchen');
+    const savedCashier = getSavedBluetoothPrinter('cashier');
+    const savedBt = (isKitchen && savedKitchen) ? savedKitchen : savedCashier;
+    const effectiveRole: 'kitchen' | 'cashier' = (isKitchen && savedKitchen) ? 'kitchen' : 'cashier';
     try {
       setPrintLoading(true);
       // 1. Ambil detail pesanan
@@ -391,6 +415,20 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       // 3. Prioritaskan cetak langsung via Bluetooth Thermal jika terhubung
       if (savedBt) {
+        if (isWebBluetoothSupported() && (savedBt.type === 'WEB_BLUETOOTH' || localStorage.getItem(`bluetooth_${effectiveRole}_printer_type`) === 'WEB_BLUETOOTH')) {
+          let dev = await getActiveOrSavedDevice(effectiveRole);
+          if (!dev) {
+            try {
+              toast(`Menyambungkan printer Bluetooth ${effectiveRole === 'kitchen' ? 'Dapur' : 'Kasir'}...`, 'info');
+              await pairWebBluetoothPrinter(effectiveRole);
+            } catch (pairErr: any) {
+              console.warn('[Printer] Auto-reconnect Web Bluetooth tiket memerlukan interaksi pengguna:', pairErr.message);
+              toast('Silakan sambungkan printer Bluetooth terlebih dahulu', 'info');
+              return;
+            }
+          }
+        }
+
         await printBluetoothKitchenTicket(orderData, target, {
           storeName: posContext?.settings?.storeName,
           paperWidth: (localStorage.getItem('printer_paper_width') as any) || '58mm'
@@ -576,6 +614,31 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <Printer size={18} />
                   <span>{printLoading ? 'Mencetak...' : 'Cetak Struk Kasir'}</span>
                 </button>
+
+                {(getSavedBluetoothPrinter('cashier') || getSavedBluetoothPrinter('kitchen')) && (
+                  <div className="flex flex-col gap-1 text-[11px] text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <span className={`w-2 h-2 rounded-full ${getActiveWebBluetoothDevice('cashier')?.gatt?.connected ? 'bg-emerald-500' : 'bg-indigo-400 animate-pulse'}`} />
+                        Kasir: <strong className="text-slate-700">{getSavedBluetoothPrinter('cashier')?.name || 'Belum diatur'}</strong>
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {getActiveWebBluetoothDevice('cashier')?.gatt?.connected ? 'Terhubung' : 'Siap Cetak'}
+                      </span>
+                    </div>
+                    {getSavedBluetoothPrinter('kitchen') && (
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-1">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <span className={`w-2 h-2 rounded-full ${getActiveWebBluetoothDevice('kitchen')?.gatt?.connected ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
+                          Dapur: <strong className="text-slate-700">{getSavedBluetoothPrinter('kitchen')?.name}</strong>
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {getActiveWebBluetoothDevice('kitchen')?.gatt?.connected ? 'Terhubung' : 'Siap Cetak'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <button

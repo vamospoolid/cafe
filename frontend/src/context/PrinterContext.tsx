@@ -129,51 +129,122 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [lastError, setLastError] = useState<string | null>(null);
   const deviceRef = useRef<any>(null);
 
-  // Auto-reconnect saat pertama kali load (jika ada printer tersimpan)
+  // ─── Auto-reconnect: Opsi B (watchAdvertisements + getDevices) ─────────────
+  // Cara kerja:
+  //   1. Panggil navigator.bluetooth.getDevices() untuk mendapat device yang sudah di-grant
+  //   2. Panggil device.watchAdvertisements() agar browser "mendengarkan" sinyal BLE printer
+  //   3. Saat printer menyala & mengirim iklan BLE → event advertisementreceived terpicu
+  //   4. Koneksi GATT dibuka otomatis → printer tersambung tanpa user klik apapun
   const reconnect = useCallback(async () => {
     const saved = getSavedBluetoothPrinter();
     if (!saved || !isWebBluetoothSupported()) return;
+
+    const bt = (navigator as any).bluetooth;
+    if (!bt) return;
 
     try {
       setStatus('connecting');
       setLastError(null);
 
-      // Chrome 85+: getDevices() mengembalikan device yang sudah di-grant sebelumnya
-      const bt = (navigator as any).bluetooth;
+      // ── Langkah 1: Ambil device yang sudah pernah di-grant permission ──
       let device: any = null;
-
       if (bt.getDevices) {
-        const devices = await bt.getDevices();
-        device = devices.find((d: any) => d.name === saved.name) || devices[0];
+        const granted = await bt.getDevices();
+        device = granted.find((d: any) => d.id === saved.id || d.name === saved.name)
+               || granted[0]
+               || null;
       }
 
       if (!device) {
+        // Belum ada device yang di-grant — perlu scan manual sekali
         setStatus('disconnected');
+        setLastError('Printer belum pernah dipasangkan di browser ini. Silakan scan printer dari Pengaturan.');
         return;
       }
 
       deviceRef.current = device;
       setActiveWebBluetoothDevice(device);
-      const gatt = await connectGattWithRetry(device, 2);
-      const detected = await detectPrinterBrand(gatt);
 
-      const paperWidth = (localStorage.getItem('printer_paper_width') === '80mm' ? 80 : 58) as 58 | 80;
+      // ── Langkah 2: Coba connect langsung dulu (jika printer sudah menyala) ──
+      if (device.gatt?.connected) {
+        // Sudah terkoneksi (misal tab tidak di-reload)
+        const gatt = device.gatt;
+        const detected = await detectPrinterBrand(gatt);
+        const paperWidth = (localStorage.getItem('printer_paper_width') === '80mm' ? 80 : 58) as 58 | 80;
+        setPrinterInfo({ name: device.name || saved.name, brand: detected.brand, model: detected.model, serviceUUID: detected.serviceUUID, writeCharUUID: detected.writeCharUUID, paperWidth });
+        setStatus('connected');
+        return;
+      }
 
-      setPrinterInfo({
-        name: device.name || saved.name,
-        brand: detected.brand,
-        model: detected.model,
-        serviceUUID: detected.serviceUUID,
-        writeCharUUID: detected.writeCharUUID,
-        paperWidth,
-      });
-      setStatus('connected');
+      try {
+        const gatt = await connectGattWithRetry(device, 2);
+        const detected = await detectPrinterBrand(gatt);
+        const paperWidth = (localStorage.getItem('printer_paper_width') === '80mm' ? 80 : 58) as 58 | 80;
+        setPrinterInfo({
+          name: device.name || saved.name,
+          brand: detected.brand,
+          model: detected.model,
+          serviceUUID: detected.serviceUUID,
+          writeCharUUID: detected.writeCharUUID,
+          paperWidth,
+        });
+        setStatus('connected');
 
-      // Handle jika device tiba-tiba disconnect
-      device.addEventListener('gattserverdisconnected', () => {
-        setStatus('disconnected');
-        setPrinterInfo(prev => prev ? { ...prev } : null);
-      });
+        device.addEventListener('gattserverdisconnected', () => {
+          setStatus('disconnected');
+        });
+        return;
+      } catch {
+        // Printer belum menyala / belum dalam jangkauan — pakai watchAdvertisements
+      }
+
+      // ── Langkah 3: watchAdvertisements — auto-connect saat printer menyala ──
+      if (device.watchAdvertisements) {
+        setStatus('disconnected'); // Tampilkan status menunggu
+        setLastError('Menunggu printer menyala… Koneksi otomatis saat printer terdeteksi.');
+
+        // Hentikan watch lama jika ada
+        try { device.unwatchAdvertisements?.(); } catch { /* ignore */ }
+
+        device.watchAdvertisements();
+
+        const onAdvert = async () => {
+          device.removeEventListener('advertisementreceived', onAdvert);
+          try { device.unwatchAdvertisements?.(); } catch { /* ignore */ }
+
+          try {
+            setStatus('connecting');
+            setLastError(null);
+            const gatt = await connectGattWithRetry(device, 3);
+            const detected = await detectPrinterBrand(gatt);
+            const paperWidth = (localStorage.getItem('printer_paper_width') === '80mm' ? 80 : 58) as 58 | 80;
+            setPrinterInfo({
+              name: device.name || saved.name,
+              brand: detected.brand,
+              model: detected.model,
+              serviceUUID: detected.serviceUUID,
+              writeCharUUID: detected.writeCharUUID,
+              paperWidth,
+            });
+            setStatus('connected');
+            setLastError(null);
+
+            device.addEventListener('gattserverdisconnected', () => {
+              setStatus('disconnected');
+            });
+          } catch (err: any) {
+            setStatus('error');
+            setLastError('Gagal konek setelah printer terdeteksi: ' + err.message);
+          }
+        };
+
+        device.addEventListener('advertisementreceived', onAdvert);
+        return;
+      }
+
+      // ── Fallback: browser tidak mendukung watchAdvertisements ──
+      setStatus('disconnected');
+      setLastError('Printer tidak terjangkau. Pastikan printer sudah menyala.');
 
     } catch (err: any) {
       console.warn('[PrinterContext] Auto-reconnect gagal:', err.message);

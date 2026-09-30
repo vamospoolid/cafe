@@ -7,15 +7,22 @@ export interface BluetoothDeviceInfo {
   address?: string;
 }
 
-// In-memory reference for Web Bluetooth device instance
-let activeWebBluetoothDevice: any = null;
+export type PrinterRole = 'cashier' | 'kitchen';
 
-export const setActiveWebBluetoothDevice = (device: any) => {
-  activeWebBluetoothDevice = device;
+// In-memory reference for Web Bluetooth device instances (Kasir & Dapur)
+let activeCashierDevice: any = null;
+let activeKitchenDevice: any = null;
+
+export const setActiveWebBluetoothDevice = (device: any, role: PrinterRole = 'cashier') => {
+  if (role === 'kitchen') {
+    activeKitchenDevice = device;
+  } else {
+    activeCashierDevice = device;
+  }
 };
 
-export const getActiveWebBluetoothDevice = (): any => {
-  return activeWebBluetoothDevice;
+export const getActiveWebBluetoothDevice = (role: PrinterRole = 'cashier'): any => {
+  return role === 'kitchen' ? activeKitchenDevice : activeCashierDevice;
 };
 
 // Common thermal printer Bluetooth Low Energy (BLE) / GATT Service UUIDs
@@ -54,47 +61,92 @@ export const isBluetoothSupported = (): boolean => {
   return isWebBluetoothSupported() || isNativeMobile();
 };
 
-export const getSavedBluetoothPrinter = (): BluetoothDeviceInfo | null => {
-  const id = localStorage.getItem('bluetooth_printer_id') || localStorage.getItem('bluetooth_printer_mac');
-  const name = localStorage.getItem('bluetooth_printer_name') || 'Printer Bluetooth';
-  const type = (localStorage.getItem('bluetooth_printer_type') as any) || (isWebBluetoothSupported() ? 'WEB_BLUETOOTH' : 'CORDOVA_SERIAL');
+export const getSavedBluetoothPrinter = (role: PrinterRole = 'cashier'): BluetoothDeviceInfo | null => {
+  const prefix = role === 'kitchen' ? 'bluetooth_kitchen_printer_' : 'bluetooth_printer_';
+  let id = localStorage.getItem(`${prefix}id`) || localStorage.getItem(`${prefix}mac`);
+  let name = localStorage.getItem(`${prefix}name`);
+  let type = (localStorage.getItem(`${prefix}type`) as any) || (isWebBluetoothSupported() ? 'WEB_BLUETOOTH' : 'CORDOVA_SERIAL');
   
+  // Fallback untuk cashier jika menggunakan prefix alternatif
+  if (!id && role === 'cashier') {
+    id = localStorage.getItem('bluetooth_cashier_printer_id') || localStorage.getItem('bluetooth_cashier_printer_mac');
+    name = localStorage.getItem('bluetooth_cashier_printer_name');
+    type = (localStorage.getItem('bluetooth_cashier_printer_type') as any) || type;
+  }
+
   if (!id) return null;
-  return { id, name, type };
+  return { 
+    id, 
+    name: name || (role === 'kitchen' ? 'Printer Dapur' : 'Printer Kasir'), 
+    type,
+    address: id
+  };
 };
 
-export const clearSavedBluetoothPrinter = () => {
-  localStorage.removeItem('bluetooth_printer_id');
-  localStorage.removeItem('bluetooth_printer_name');
-  localStorage.removeItem('bluetooth_printer_mac');
-  localStorage.removeItem('bluetooth_printer_type');
-  if (activeWebBluetoothDevice && activeWebBluetoothDevice.gatt?.connected) {
-    try {
-      activeWebBluetoothDevice.gatt.disconnect();
-    } catch {
-      // ignore
-    }
+export const saveSavedBluetoothPrinter = (role: PrinterRole, info: BluetoothDeviceInfo) => {
+  if (role === 'kitchen') {
+    localStorage.setItem('bluetooth_kitchen_printer_id', info.id);
+    localStorage.setItem('bluetooth_kitchen_printer_name', info.name);
+    localStorage.setItem('bluetooth_kitchen_printer_type', info.type);
+    localStorage.setItem('bluetooth_kitchen_printer_mac', info.address || info.id);
+  } else {
+    localStorage.setItem('bluetooth_printer_id', info.id);
+    localStorage.setItem('bluetooth_printer_name', info.name);
+    localStorage.setItem('bluetooth_printer_type', info.type);
+    localStorage.setItem('bluetooth_printer_mac', info.address || info.id);
+    localStorage.setItem('bluetooth_cashier_printer_id', info.id);
+    localStorage.setItem('bluetooth_cashier_printer_name', info.name);
+    localStorage.setItem('bluetooth_cashier_printer_type', info.type);
+    localStorage.setItem('bluetooth_cashier_printer_mac', info.address || info.id);
   }
-  activeWebBluetoothDevice = null;
+};
+
+export const clearSavedBluetoothPrinter = (role?: PrinterRole) => {
+  if (!role || role === 'cashier') {
+    localStorage.removeItem('bluetooth_printer_id');
+    localStorage.removeItem('bluetooth_printer_name');
+    localStorage.removeItem('bluetooth_printer_mac');
+    localStorage.removeItem('bluetooth_printer_type');
+    localStorage.removeItem('bluetooth_cashier_printer_id');
+    localStorage.removeItem('bluetooth_cashier_printer_name');
+    localStorage.removeItem('bluetooth_cashier_printer_mac');
+    localStorage.removeItem('bluetooth_cashier_printer_type');
+    if (activeCashierDevice && activeCashierDevice.gatt?.connected) {
+      try { activeCashierDevice.gatt.disconnect(); } catch {}
+    }
+    activeCashierDevice = null;
+  }
+  if (!role || role === 'kitchen') {
+    localStorage.removeItem('bluetooth_kitchen_printer_id');
+    localStorage.removeItem('bluetooth_kitchen_printer_name');
+    localStorage.removeItem('bluetooth_kitchen_printer_mac');
+    localStorage.removeItem('bluetooth_kitchen_printer_type');
+    if (activeKitchenDevice && activeKitchenDevice.gatt?.connected) {
+      try { activeKitchenDevice.gatt.disconnect(); } catch {}
+    }
+    activeKitchenDevice = null;
+  }
 };
 
 /**
  * Mencari instance BluetoothDevice aktif atau memulihkan dari granted devices di Chrome
  */
-export const getActiveOrSavedDevice = async (): Promise<any> => {
-  if (activeWebBluetoothDevice) return activeWebBluetoothDevice;
+export const getActiveOrSavedDevice = async (role: PrinterRole = 'cashier'): Promise<any> => {
+  const current = role === 'kitchen' ? activeKitchenDevice : activeCashierDevice;
+  if (current) return current;
 
-  const saved = getSavedBluetoothPrinter();
+  const saved = getSavedBluetoothPrinter(role);
   if (saved && (navigator as any).bluetooth?.getDevices) {
     try {
       const devices = await (navigator as any).bluetooth.getDevices();
       const match = devices.find((d: any) => d.id === saved.id || d.name === saved.name) || devices[0];
       if (match) {
-        activeWebBluetoothDevice = match;
+        if (role === 'kitchen') activeKitchenDevice = match;
+        else activeCashierDevice = match;
         return match;
       }
     } catch (e) {
-      console.warn('[Printer] Gagal membaca granted devices:', e);
+      console.warn(`[Printer ${role}] Gagal membaca granted devices:`, e);
     }
   }
   return null;
@@ -148,7 +200,7 @@ export const connectGattWithRetry = async (device: any, maxRetries = 2): Promise
 /**
  * Request pair via Web Bluetooth API (Chrome Android / Windows / Mac)
  */
-export const pairWebBluetoothPrinter = async (): Promise<BluetoothDeviceInfo> => {
+export const pairWebBluetoothPrinter = async (role: PrinterRole = 'cashier'): Promise<BluetoothDeviceInfo> => {
   if (!isWebBluetoothSupported()) {
     throw new Error('Browser ini tidak mendukung Web Bluetooth. Pastikan Anda menggunakan Google Chrome pada Android/Windows/Mac melalui HTTPS.');
   }
@@ -159,26 +211,27 @@ export const pairWebBluetoothPrinter = async (): Promise<BluetoothDeviceInfo> =>
       optionalServices: COMMON_PRINTER_SERVICES
     });
 
-    activeWebBluetoothDevice = device;
+    if (role === 'kitchen') {
+      activeKitchenDevice = device;
+    } else {
+      activeCashierDevice = device;
+    }
 
     // Uji koneksi awal seketika agar user tahu status perangkat
     try {
       await connectGattWithRetry(device, 2);
     } catch (connErr: any) {
-      console.warn('[Pair] Peringatan koneksi awal:', connErr.message);
+      console.warn(`[Pair ${role}] Peringatan koneksi awal:`, connErr.message);
     }
 
     const info: BluetoothDeviceInfo = {
       id: device.id,
-      name: device.name || 'Thermal Printer',
-      type: 'WEB_BLUETOOTH'
+      name: device.name || (role === 'kitchen' ? 'Printer Dapur' : 'Printer Kasir'),
+      type: 'WEB_BLUETOOTH',
+      address: device.id
     };
 
-    localStorage.setItem('bluetooth_printer_id', device.id);
-    localStorage.setItem('bluetooth_printer_name', info.name);
-    localStorage.setItem('bluetooth_printer_type', 'WEB_BLUETOOTH');
-    localStorage.setItem('bluetooth_printer_mac', device.id); // for backwards compat
-
+    saveSavedBluetoothPrinter(role, info);
     return info;
   } catch (err: any) {
     if (err.name === 'NotFoundError' || err.message?.includes('User cancelled')) {
@@ -285,6 +338,35 @@ export const listPairedBluetoothDevices = (): Promise<BluetoothDeviceInfo[]> => 
       },
       (err: any) => {
         reject(new Error(err || 'Gagal memindai perangkat Bluetooth'));
+      }
+    );
+  });
+};
+
+export const discoverUnpairedBluetoothDevices = (): Promise<BluetoothDeviceInfo[]> => {
+  return new Promise((resolve, reject) => {
+    const bt = getBluetoothSerial();
+    if (!bt) {
+      reject(new Error('Bluetooth serial plugin tidak tersedia di browser web.'));
+      return;
+    }
+
+    if (!bt.discoverUnpaired) {
+      reject(new Error('Modul scan perangkat baru tidak didukung di perangkat ini.'));
+      return;
+    }
+
+    bt.discoverUnpaired(
+      (devices: any[]) => {
+        resolve(devices.map(d => ({
+          id: d.id || d.address,
+          name: d.name || 'Perangkat Bluetooth Baru',
+          type: 'CORDOVA_SERIAL',
+          address: d.address
+        })));
+      },
+      (err: any) => {
+        reject(new Error(err || 'Gagal mencari perangkat Bluetooth baru. Pastikan izin lokasi & Bluetooth aktif di HP.'));
       }
     );
   });
@@ -439,16 +521,47 @@ export const disconnectBluetoothPrinter = (): Promise<void> => {
   });
 };
 
-export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
+// Lacak MAC yang saat ini sedang aktif terkoneksi di Cordova
+let currentConnectedMac: string | null = null;
+
+export const printRawBytes = async (bytes: Uint8Array, role: PrinterRole = 'cashier'): Promise<void> => {
   // 1. Web Bluetooth (Chrome Desktop / Android HTTPS)
-  if (isWebBluetoothSupported() && (activeWebBluetoothDevice || localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH' || localStorage.getItem('bluetooth_printer_id'))) {
-    let device = await getActiveOrSavedDevice();
+  const savedPrinter = getSavedBluetoothPrinter(role) || (role === 'kitchen' ? getSavedBluetoothPrinter('cashier') : null);
+  const effectiveRole: PrinterRole = getSavedBluetoothPrinter(role) ? role : 'cashier';
+
+  if (isWebBluetoothSupported() && (getActiveWebBluetoothDevice(effectiveRole) || savedPrinter?.type === 'WEB_BLUETOOTH' || localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH')) {
+    let device = await getActiveOrSavedDevice(effectiveRole);
+
+    // ── Auto-reconnect saat print: jika device ada tapi GATT terputus ──
     if (!device) {
-      throw new Error('Printer Bluetooth belum terhubung. Pastikan printer menyala atau sambungkan di menu Pengaturan > Printer Bluetooth.');
+      if (savedPrinter && (navigator as any).bluetooth?.getDevices) {
+        try {
+          const granted = await (navigator as any).bluetooth.getDevices();
+          device = granted.find((d: any) => d.id === savedPrinter.id || d.name === savedPrinter.name) || granted[0] || null;
+          if (device) {
+            setActiveWebBluetoothDevice(device, effectiveRole);
+          }
+        } catch { /* ignore */ }
+      }
     }
+
+    if (!device) {
+      throw new Error(`Printer Bluetooth ${effectiveRole === 'kitchen' ? 'Dapur' : 'Kasir'} belum terhubung. Pastikan printer menyala atau sambungkan di menu Pengaturan.`);
+    }
+
+    // Pastikan GATT terkoneksi sebelum kirim data
+    if (!device.gatt?.connected) {
+      try {
+        await connectGattWithRetry(device, 2);
+      } catch (reconnErr: any) {
+        throw new Error(`Printer ${effectiveRole === 'kitchen' ? 'Dapur' : 'Kasir'} ditemukan tapi gagal konek: ${reconnErr.message}. Pastikan printer menyala.`);
+      }
+    }
+
     await sendBytesWebBluetooth(device, bytes);
     return;
   }
+
 
   // 2. Cordova / Capacitor Bluetooth Serial (Native Android APK)
   const bt = getBluetoothSerial();
@@ -463,16 +576,50 @@ export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
       await new Promise(r => setTimeout(r, 1200));
     }
 
-    // B. Periksa status koneksi socket, lakukan silent auto-reconnect jika perlu
-    const connected = await isBluetoothConnected();
-    if (!connected) {
-      const savedMac = localStorage.getItem('bluetooth_printer_mac') || localStorage.getItem('bluetooth_printer_id');
-      if (savedMac) {
+    // B. Tentukan target MAC & Nama Printer sesuai role
+    const kitchenSaved = getSavedBluetoothPrinter('kitchen');
+    const cashierSaved = getSavedBluetoothPrinter('cashier');
+
+    let targetMac = '';
+    let targetName = '';
+
+    if (role === 'kitchen') {
+      if (kitchenSaved) {
+        targetMac = kitchenSaved.address || kitchenSaved.id;
+        targetName = kitchenSaved.name;
+      } else if (cashierSaved) {
+        // Fallback otomatis ke printer kasir jika printer dapur belum disetel terpisah
+        targetMac = cashierSaved.address || cashierSaved.id;
+        targetName = cashierSaved.name + ' (Fallback Dapur)';
+      }
+    } else {
+      if (cashierSaved) {
+        targetMac = cashierSaved.address || cashierSaved.id;
+        targetName = cashierSaved.name;
+      }
+    }
+
+    if (!targetMac) {
+      throw new Error(`Belum ada Printer ${role === 'kitchen' ? 'Dapur' : 'Kasir'} yang dihubungkan di Pengaturan.`);
+    }
+
+    // C. Auto-switch socket jika berpindah printer (Kasir vs Dapur) atau koneksi terputus
+    const isConn = await isBluetoothConnected();
+    if (!isConn || currentConnectedMac !== targetMac) {
+      if (isConn) {
         try {
-          await connectBluetoothPrinter(savedMac);
-        } catch (connErr) {
-          console.warn('[Printer] Auto-reconnect gagal, mencoba write langsung:', connErr);
-        }
+          await disconnectBluetoothPrinter();
+        } catch { /* ignore */ }
+        await new Promise(r => setTimeout(r, 250));
+      }
+
+      try {
+        console.log(`[Printer] Menghubungkan ke ${targetName} (${targetMac})...`);
+        await connectBluetoothPrinter(targetMac);
+        currentConnectedMac = targetMac;
+      } catch (connErr: any) {
+        console.warn(`[Printer] Gagal konek ke ${targetMac}:`, connErr);
+        throw new Error(`Gagal menyambung ke Printer ${role === 'kitchen' ? 'Dapur' : 'Kasir'} (${targetName}): ${connErr.message || connErr}`);
       }
     }
 
@@ -483,16 +630,15 @@ export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
         async (err: any) => {
           console.warn('[Printer] Write pertama gagal, mencoba reconnect:', err);
           try {
-            const savedMac = localStorage.getItem('bluetooth_printer_mac') || localStorage.getItem('bluetooth_printer_id');
-            if (savedMac) {
-              await connectBluetoothPrinter(savedMac);
-              bt.write(
-                bytes.buffer, 
-                () => resolve(), 
-                (retryErr: any) => reject(new Error(retryErr || 'Gagal mengirim data cetak ke printer Bluetooth'))
-              );
-              return;
-            }
+            await disconnectBluetoothPrinter();
+            await new Promise(r => setTimeout(r, 300));
+            await connectBluetoothPrinter(targetMac);
+            currentConnectedMac = targetMac;
+            bt.write(
+              bytes.buffer, 
+              () => resolve(), 
+              (retryErr: any) => reject(new Error(retryErr || 'Gagal mengirim data cetak ke printer Bluetooth'))
+            );
           } catch (retryErr: any) {
             reject(new Error(retryErr.message || 'Printer Bluetooth terputus dan gagal tersambung kembali'));
           }
@@ -521,35 +667,36 @@ export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
     }
   }
 
-  throw new Error('Tidak ada modul printer yang aktif. Silakan hubungkan printer Bluetooth atau USB di menu Pengaturan.');
+  throw new Error(`Tidak ada modul printer yang aktif untuk ${role === 'kitchen' ? 'Dapur' : 'Kasir'}. Silakan periksa di Pengaturan.`);
 };
 
 /**
- * Test Print Function
+ * Test Print Function (Kasir atau Dapur)
  */
-export const testPrintBluetooth = async (): Promise<void> => {
+export const testPrintBluetooth = async (role: PrinterRole = 'cashier'): Promise<void> => {
+  const isKitchen = role === 'kitchen';
   const encoder = new EscPosEncoder();
   const bytes = encoder
     .initialize()
     .align('center')
     .line('================================')
     .bold(true)
-    .line('STRUK UJI COBA PRINTER')
+    .line(isKitchen ? 'TIKET UJI COBA PRINTER DAPUR' : 'STRUK UJI COBA PRINTER KASIR')
     .bold(false)
-    .line('TEST PRINT BLUETOOTH OK')
+    .line(isKitchen ? 'TEST PRINTER DAPUR OK' : 'TEST PRINTER KASIR OK')
     .line('================================')
     .align('left')
     .line(`Waktu  : ${new Date().toLocaleString('id-ID')}`)
-    .line('Koneksi: Web Bluetooth / Serial')
+    .line(`Target : ${isKitchen ? 'Printer Dapur (Tiket Makanan)' : 'Printer Kasir (Struk Konsumen)'}`)
     .line('Status : Berhasil Terhubung!')
     .line('--------------------------------')
     .align('center')
-    .line('Printer Siap Digunakan')
+    .line(isKitchen ? 'Pesanan Siap Diproses Koki' : 'Printer Siap Digunakan Kasir')
     .line('\n\n\n')
     .cut()
     .encode();
 
-  await printRawBytes(bytes);
+  await printRawBytes(bytes, role);
 };
 
 /**
@@ -744,7 +891,7 @@ export const printBluetoothReceipt = async (
       .cut();
 
     const bytes = encoded.encode();
-    await printRawBytes(bytes);
+    await printRawBytes(bytes, 'cashier');
 
     // Otomatis kick laci kasir jika pembayaran tunai
     const shouldKick = options?.autoKickDrawer ?? (paymentMethod === 'TUNAI' || paymentMethod === 'CASH');
@@ -836,7 +983,7 @@ export const printBluetoothKitchenTicket = async (
       .cut();
 
     const bytes = encoded.encode();
-    await printRawBytes(bytes);
+    await printRawBytes(bytes, 'kitchen');
   } catch (err: any) {
     console.error(`Error printing ${target} ticket via Bluetooth:`, err);
     throw err;
