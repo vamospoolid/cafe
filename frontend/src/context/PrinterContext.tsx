@@ -282,7 +282,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setStatus('printing');
     try {
-      const paperWidth = printerInfo?.paperWidth === 80 ? '80mm' : '58mm';
+      const paperWidth: '58mm' | '80mm' = printerInfo?.paperWidth === 80 ? '80mm' : '58mm';
       const storeSettings = {
         name: settings.storeName || 'Kasir',
         storeName: settings.storeName || 'Kasir',
