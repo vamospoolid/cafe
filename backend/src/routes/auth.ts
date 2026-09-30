@@ -42,7 +42,9 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
 
   // Cari active membership
   let activeMembership = user.memberships.find(
-    m => requestedTenantId ? m.tenantId === requestedTenantId && m.status === 'ACTIVE' : m.status === 'ACTIVE'
+    m => requestedTenantId 
+      ? (m.tenantId === requestedTenantId && m.status === 'ACTIVE') 
+      : ((user as any).tenantId ? m.tenantId === (user as any).tenantId && m.status === 'ACTIVE' : m.status === 'ACTIVE')
   );
 
   // Jika belum ada membership terdaftar, fallback ke membership pertama atau user.tenantId

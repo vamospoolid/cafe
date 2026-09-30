@@ -330,6 +330,82 @@ export async function seedMultiTenantFoundation() {
     prisma.employeeLoanPayment.updateMany({ where: { tenantId: null }, data: { tenantId: masterTenant.id } }).catch(() => {})
   ]);
 
+  // 7. Jika masterTenant belum memiliki produk atau kategori, sinkronkan dari tenant-vamos-pool jika tersedia
+  try {
+    const targetCatsCount = await prisma.category.count({ where: { tenantId: masterTenant.id } });
+    const sourceTenantId = 'tenant-vamos-pool';
+    if (targetCatsCount === 0) {
+      const sourceCats = await prisma.category.findMany({ where: { tenantId: sourceTenantId } });
+      if (sourceCats.length > 0) {
+        console.log('📌 Menyinkronkan katalog produk ke Master Tenant...');
+        const catMap = new Map<number, number>();
+        const rootCats = sourceCats.filter(c => !c.parentId);
+        for (const cat of rootCats) {
+          const created = await prisma.category.create({
+            data: {
+              tenantId: masterTenant.id,
+              name: cat.name,
+              icon: cat.icon,
+              color: cat.color,
+              sortOrder: cat.sortOrder,
+              printerTarget: cat.printerTarget,
+              stationTarget: cat.stationTarget,
+              isActive: cat.isActive
+            }
+          });
+          catMap.set(cat.id, created.id);
+        }
+        const childCats = sourceCats.filter(c => !!c.parentId);
+        for (const cat of childCats) {
+          const parentId = cat.parentId ? catMap.get(cat.parentId) || null : null;
+          const created = await prisma.category.create({
+            data: {
+              tenantId: masterTenant.id,
+              name: cat.name,
+              icon: cat.icon,
+              color: cat.color,
+              sortOrder: cat.sortOrder,
+              printerTarget: cat.printerTarget,
+              stationTarget: cat.stationTarget,
+              isActive: cat.isActive,
+              parentId
+            }
+          });
+          catMap.set(cat.id, created.id);
+        }
+
+        const sourceProds = await prisma.product.findMany({ where: { tenantId: sourceTenantId, deletedAt: null } });
+        for (const prod of sourceProds) {
+          const newCatId = prod.categoryId ? catMap.get(prod.categoryId) || null : null;
+          const newSubCatId = prod.subCategoryId ? catMap.get(prod.subCategoryId) || null : null;
+          await prisma.product.create({
+            data: {
+              tenantId: masterTenant.id,
+              name: prod.name,
+              barcode: prod.barcode,
+              categoryId: newCatId,
+              subCategoryId: newSubCatId,
+              buyPrice: prod.buyPrice,
+              sellPrice: prod.sellPrice,
+              stock: prod.stock,
+              minStock: prod.minStock,
+              imageUrl: prod.imageUrl,
+              status: prod.status,
+              sellPriceRetail: prod.sellPriceRetail,
+              sellPriceMitra: prod.sellPriceMitra,
+              sellPriceGrosir: prod.sellPriceGrosir,
+              minQtyGrosir: prod.minQtyGrosir,
+              baseUom: prod.baseUom
+            }
+          });
+        }
+        console.log(`✅ Berhasil menyinkronkan ${sourceProds.length} produk ke Master Tenant.`);
+      }
+    }
+  } catch (err: any) {
+    console.warn('Sync products fallback warning:', err.message);
+  }
+
   console.log('🎉 [Phase 1 Complete] Inisialisasi fondasi SaaS multi-tenant berhasil diselesaikan!');
 }
 
