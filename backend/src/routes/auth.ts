@@ -681,11 +681,11 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       });
 
       // f. Inisialisasi Settings Toko Default — gunakan nested connect agar kompatibel semua versi Prisma
+      // NOTE: businessType TIDAK ada di model Settings, hanya ada di Tenant
       await tx.settings.create({
         data: {
           tenant: { connect: { id: tenant.id } },
           outlet: { connect: { id: primaryOutlet.id } },
-          businessType,
           storeName: businessName,
           receiptHeader: businessType === 'RETAIL'
             ? `TOKO GROSIR & RETAIL\n${businessName}`
