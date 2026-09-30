@@ -40,8 +40,8 @@ export class QuotaService {
     if (!tenant) throw new Error(`Tenant '${tenantId}' tidak ditemukan`);
 
     const maxOutlets = tenant.plan?.maxOutlets ?? 1;
-    const maxUsers = tenant.plan?.maxUsers ?? 3;
-    const maxProducts = tenant.plan?.maxProducts ?? 100;
+    const maxUsers = tenant.plan?.maxUsers ?? 2;
+    const maxProducts = tenant.plan?.maxProducts ?? 50;
 
     const usedOutlets = tenant._count.outlets;
     const usedUsers = tenant._count.memberships;

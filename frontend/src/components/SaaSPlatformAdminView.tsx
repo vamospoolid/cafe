@@ -385,13 +385,42 @@ export const SaaSPlatformAdminView: React.FC = () => {
   };
 
   const filteredTenants = tenants.filter(t => {
-    const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          t.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          t.ownerName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          t.phone?.includes(searchQuery) ||
-                          t.owner?.name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || 
+      t.name.toLowerCase().includes(q) || 
+      t.slug.toLowerCase().includes(q) ||
+      (t.ownerName && t.ownerName.toLowerCase().includes(q)) ||
+      (t.phone && t.phone.includes(q)) ||
+      (t.owner?.name && t.owner.name.toLowerCase().includes(q));
+
+    if (!matchesSearch) return false;
+    if (statusFilter === 'ALL') return true;
+
+    const now = Date.now();
+    const expiryTime = t.subscription?.currentPeriodEnd
+      ? new Date(t.subscription.currentPeriodEnd).getTime()
+      : (t.trialEndsAt ? new Date(t.trialEndsAt).getTime() : 0);
+    const daysLeft = expiryTime ? Math.ceil((expiryTime - now) / (1000 * 3600 * 24)) : 0;
+    const isSuspended = t.status === 'SUSPENDED' || t.status === 'CANCELLED';
+    const isExpired = !isSuspended && (t.status === 'GRACE_PERIOD' || t.status === 'PAST_DUE' || (expiryTime > 0 && daysLeft <= 0));
+
+    if (statusFilter === 'TRIAL') {
+      return t.status === 'TRIAL' && !isExpired && !isSuspended;
+    }
+    if (statusFilter === 'ACTIVE') {
+      return (t.status === 'ACTIVE' || t.subscription?.status === 'ACTIVE') && !isExpired && !isSuspended;
+    }
+    if (statusFilter === 'EXPIRING') {
+      return !isSuspended && !isExpired && daysLeft <= 7 && daysLeft > 0;
+    }
+    if (statusFilter === 'EXPIRED') {
+      return isExpired;
+    }
+    if (statusFilter === 'SUSPENDED') {
+      return isSuspended;
+    }
+
+    return t.status === statusFilter;
   });
 
   const m = overviewData?.metrics || {};
@@ -808,20 +837,49 @@ export const SaaSPlatformAdminView: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto">
-              {['ALL', 'ACTIVE', 'TRIAL', 'SUSPENDED'].map(st => (
-                <button
-                  key={st}
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    statusFilter === st
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+              {[
+                { key: 'ALL', label: 'Semua Tenant' },
+                { key: 'TRIAL', label: 'Masa Uji Coba' },
+                { key: 'ACTIVE', label: 'Langganan Aktif' },
+                { key: 'EXPIRING', label: 'Mendekati Habis (≤7 Hari)' },
+                { key: 'EXPIRED', label: 'Kedaluwarsa' },
+                { key: 'SUSPENDED', label: 'Ditangguhkan' }
+              ].map(st => {
+                const count = tenants.filter(t => {
+                  if (st.key === 'ALL') return true;
+                  const now = Date.now();
+                  const exp = t.subscription?.currentPeriodEnd ? new Date(t.subscription.currentPeriodEnd).getTime() : (t.trialEndsAt ? new Date(t.trialEndsAt).getTime() : 0);
+                  const dl = exp ? Math.ceil((exp - now) / (1000 * 3600 * 24)) : 0;
+                  const isSusp = t.status === 'SUSPENDED' || t.status === 'CANCELLED';
+                  const isExp = !isSusp && (t.status === 'GRACE_PERIOD' || t.status === 'PAST_DUE' || (exp > 0 && dl <= 0));
+                  if (st.key === 'TRIAL') return t.status === 'TRIAL' && !isExp && !isSusp;
+                  if (st.key === 'ACTIVE') return (t.status === 'ACTIVE' || t.subscription?.status === 'ACTIVE') && !isExp && !isSusp;
+                  if (st.key === 'EXPIRING') return !isSusp && !isExp && dl <= 7 && dl > 0;
+                  if (st.key === 'EXPIRED') return isExp;
+                  if (st.key === 'SUSPENDED') return isSusp;
+                  return t.status === st.key;
+                }).length;
+
+                return (
+                  <button
+                    key={st.key}
+                    onClick={() => setStatusFilter(st.key)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                      statusFilter === st.key
+                        ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-900/20'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{st.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                      statusFilter === st.key ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-700'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -886,8 +944,14 @@ export const SaaSPlatformAdminView: React.FC = () => {
                       {/* Plan & Quotas */}
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-1.5">
-                          <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px]">
-                            {t.subscription?.planName || 'Starter Plan'}
+                          <span className={`px-2.5 py-1 rounded-lg font-black text-[11px] ${
+                            t.subscription?.planCode === 'BUSINESS'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : t.subscription?.planCode === 'GROWTH'
+                              ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          }`}>
+                            {t.subscription?.planName || 'Paket Starter (UMKM)'}
                           </span>
                           <button
                             onClick={() => openChangePlan(t)}
@@ -898,26 +962,92 @@ export const SaaSPlatformAdminView: React.FC = () => {
                           </button>
                         </div>
                         <div className="text-[11px] text-slate-600 font-semibold mt-1">
-                          {t.outletsCount} / {t.subscription?.maxOutlets ?? 1} Cabang • {t.usersCount} Staff
+                          <span>{t.outletsCount} / {t.subscription?.maxOutlets ?? 1} Cabang</span>
+                          <span className="mx-1">•</span>
+                          <span>{t.usersCount} / {t.subscription?.maxUsers ?? 2} Staff</span>
+                          {t.usersCount >= (t.subscription?.maxUsers ?? 2) && (
+                            <span className="text-[10px] text-amber-600 font-bold ml-1">(Penuh)</span>
+                          )}
                         </div>
                       </td>
 
-                      {/* Status */}
+                      {/* Status & Trial Countdown */}
                       <td className="py-3.5 px-3">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          t.status === 'ACTIVE' 
-                            ? 'bg-emerald-100 text-emerald-800' 
-                            : t.status === 'TRIAL'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {t.status}
-                        </span>
-                        {t.trialEndsAt && t.status === 'TRIAL' && (
-                          <div className="text-[10px] text-slate-400 mt-1">
-                            Trial s/d {new Date(t.trialEndsAt).toLocaleDateString('id-ID')}
-                          </div>
-                        )}
+                        {(() => {
+                          const now = Date.now();
+                          const expiryTime = t.subscription?.currentPeriodEnd
+                            ? new Date(t.subscription.currentPeriodEnd).getTime()
+                            : (t.trialEndsAt ? new Date(t.trialEndsAt).getTime() : 0);
+                          const daysLeft = expiryTime ? Math.ceil((expiryTime - now) / (1000 * 3600 * 24)) : 0;
+                          const isSuspended = t.status === 'SUSPENDED' || t.status === 'CANCELLED';
+                          const isExpired = !isSuspended && (t.status === 'GRACE_PERIOD' || t.status === 'PAST_DUE' || (expiryTime > 0 && daysLeft <= 0));
+                          const isExpiringSoon = !isSuspended && !isExpired && daysLeft <= 5;
+
+                          if (isSuspended) {
+                            return (
+                              <div>
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-900 text-white">
+                                  DITANGGUHKAN
+                                </span>
+                                <div className="text-[10px] text-rose-500 font-semibold mt-1">Akses dinonaktifkan</div>
+                              </div>
+                            );
+                          }
+
+                          if (isExpired) {
+                            return (
+                              <div>
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-300">
+                                  KEDALUWARSA ({Math.abs(daysLeft)} hr lalu)
+                                </span>
+                                {expiryTime > 0 && (
+                                  <div className="text-[10px] text-slate-500 mt-1">
+                                    Habis: {new Date(expiryTime).toLocaleDateString('id-ID')}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          if (t.status === 'TRIAL') {
+                            return (
+                              <div>
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1 ${
+                                  isExpiringSoon
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-300 animate-pulse'
+                                    : 'bg-blue-100 text-blue-900 border border-blue-200'
+                                }`}>
+                                  <Clock size={11} />
+                                  TRIAL ({daysLeft} Hari Lagi)
+                                </span>
+                                {expiryTime > 0 && (
+                                  <div className="text-[10px] text-slate-500 mt-1">
+                                    Sampai: {new Date(expiryTime).toLocaleDateString('id-ID')}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // Status ACTIVE
+                          return (
+                            <div>
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1 ${
+                                isExpiringSoon
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              }`}>
+                                <CheckCircle2 size={11} />
+                                AKTIF {daysLeft > 0 ? `(${daysLeft} hr lagi)` : ''}
+                              </span>
+                              {expiryTime > 0 && (
+                                <div className="text-[10px] text-slate-500 mt-1">
+                                  Jatuh tempo: {new Date(expiryTime).toLocaleDateString('id-ID')}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Actions */}

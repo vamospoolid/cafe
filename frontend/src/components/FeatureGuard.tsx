@@ -16,7 +16,7 @@ export const FeatureGuard: React.FC<FeatureGuardProps> = ({
   const { hasFeature, user } = usePOS();
 
   // Platform admin & superadmin bypass feature gating
-  if (user?.role === 'SUPERADMIN' || user?.isPlatformAdmin || (user?.role === 'OWNER' && user?.username === 'admin')) {
+  if (user?.role === 'SUPERADMIN' || user?.isPlatformAdmin || user?.username === 'developer') {
     return <>{children}</>;
   }
 

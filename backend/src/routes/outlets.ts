@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import prisma from '../db';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { requireQuota } from '../middlewares/quotaMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
 
 const router = Router();
@@ -48,7 +49,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 });
 
 // ─── 2. POST /api/outlets - Tambah cabang / outlet baru (Owner / Admin) ───────
-router.post('/', async (req: AuthRequest, res: Response) => {
+router.post('/', requireQuota('outlet'), async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenantId;
     const userRole = (req.user?.role || '').toUpperCase();

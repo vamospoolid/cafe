@@ -106,10 +106,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const hasFeature = (featureKey: string): boolean => {
-    const roleLower = (user?.role || '').toLowerCase();
-    // If super admin / platform admin / owner, always true
-    if ((roleLower === 'owner' || roleLower === 'admin' || roleLower === 'superadmin') && (user?.username === 'admin' || roleLower === 'owner' || roleLower === 'admin')) return true;
-    // Core features always allowed
+    // Hanya Platform Admin / Super Admin yang bypass pembatasan fitur
+    if (user?.isPlatformAdmin || user?.role === 'SUPERADMIN' || user?.username === 'developer') return true;
+    // Core features selalu aktif untuk semua paket
     if (featureKey === 'pos.cashier' || featureKey === 'inventory.basic' || featureKey === 'finance.cashflow' || featureKey === 'pos.tables') return true;
     return features.includes(featureKey);
   };

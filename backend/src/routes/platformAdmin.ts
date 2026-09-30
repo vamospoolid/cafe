@@ -7,6 +7,7 @@ import { invalidateTenantCache } from '../middlewares/tenantResolver';
 import { BackupService } from '../services/BackupService';
 import { backupCronService } from '../services/BackupCronService';
 import { emitToTenant } from '../index';
+import { featureService } from '../services/FeatureService';
 import fs from 'fs';
 import path from 'path';
 
@@ -476,6 +477,11 @@ router.patch('/tenants/:id/plan', authenticateToken, requirePlatformAdmin, async
         }
       });
     }
+
+    // Invalidate tenant and feature cache agar perubahan paket efektif instan
+    invalidateTenantCache(id);
+    featureService.clearCache(id);
+    emitToTenant(id, 'tenant:status_changed', { planId, planName: plan.name, planCode: plan.code });
 
     await AuditLogger.log({
       tenantId: id,

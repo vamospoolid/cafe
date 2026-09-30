@@ -154,15 +154,16 @@ export const SYSTEM_PLANS = [
   {
     code: 'STARTER',
     name: 'Paket Starter (UMKM)',
-    description: 'Cocok untuk kedai / kafe pemula: 1 Staf, Kasir POS, Manajemen Meja, Reservasi, dan Layar Dapur (KDS).',
+    description: 'Cocok untuk kedai / kafe pemula: 1 Cabang, 2 User/Staf, Kasir POS, Bahan Baku & Resep, Manajemen Meja, Reservasi, dan Layar Dapur (KDS).',
     priceMonthly: 79000,
     priceYearly: 790000,
     maxOutlets: 1,
-    maxUsers: 1,
-    maxProducts: 25,
+    maxUsers: 2,
+    maxProducts: 50,
     featureKeys: [
       'pos.cashier',
       'inventory.basic',
+      'inventory.advanced',
       'finance.cashflow',
       'pos.kds',
       'pos.tables',
@@ -316,15 +317,15 @@ export async function seedFeaturesAndPlans() {
   }
   console.log(`✅ ${SYSTEM_PLANS.length} SaaS Plans berhasil didaftarkan.`);
 
-  // Pasangkan seluruh tenant yang ada ke paket ENTERPRISE agar semua fitur aktif
+  // Pasangkan tenant yang belum memiliki plan ke paket STARTER/ENTERPRISE
   if (enterprisePlanId) {
-    const allTenants = await prisma.tenant.findMany();
-    for (const t of allTenants) {
+    const unassignedTenants = await prisma.tenant.findMany({ where: { planId: null } });
+    for (const t of unassignedTenants) {
       await prisma.tenant.update({
         where: { id: t.id },
         data: { planId: enterprisePlanId }
       });
-      console.log(`✅ Tenant (${t.name} - ${t.id}) berhasil diasosiasikan dengan Paket ENTERPRISE.`);
+      console.log(`✅ Tenant (${t.name} - ${t.id}) diasosiasikan dengan Paket default.`);
     }
 
     // Buat/pastikan tenant-default-muki juga ada sebagai fallback safety

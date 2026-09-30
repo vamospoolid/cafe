@@ -46,9 +46,7 @@ export const SubscriptionBanner: React.FC = () => {
   } else if (status === 'TRIAL' && trialEndsAt) {
     const endMs = new Date(trialEndsAt).getTime();
     daysLeft = Math.ceil((endMs - now) / (1000 * 3600 * 24));
-    if (daysLeft <= 5) {
-      bannerType = 'TRIAL_EXPIRING';
-    }
+    bannerType = 'TRIAL_EXPIRING';
   } else if (status === 'ACTIVE' && currentPeriodEnd) {
     const endMs = new Date(currentPeriodEnd).getTime();
     daysLeft = Math.ceil((endMs - now) / (1000 * 3600 * 24));
@@ -111,15 +109,21 @@ export const SubscriptionBanner: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-500 text-white">
-                  TRIAL BERAKHIR
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                  daysLeft <= 0 ? 'bg-rose-500 text-white' : daysLeft <= 3 ? 'bg-amber-500 text-slate-950' : 'bg-indigo-500 text-white'
+                }`}>
+                  {daysLeft <= 0 ? 'TRIAL KEDALUWARSA' : daysLeft <= 3 ? 'TRIAL SEGERA BERAKHIR' : 'MASA UJI COBA GRATIS'}
                 </span>
                 <span className="font-extrabold text-white text-xs sm:text-sm">
-                  Masa Uji Coba Tersisa {daysLeft} Hari Lagi
+                  {daysLeft <= 0 
+                    ? 'Masa Uji Coba Anda Telah Berakhir' 
+                    : `Masa Uji Coba Tersisa ${daysLeft} Hari Lagi`}
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-indigo-200/90 mt-0.5">
-                Pilih paket bisnis Anda untuk terus menikmati fitur lengkap CodePOS tanpa jeda.
+                {daysLeft <= 0
+                  ? 'Tingkatkan ke paket Starter, Growth, atau Business untuk mengaktifkan kembali seluruh operasional kasir.'
+                  : 'Gunakan seluruh fitur unggulan CodePOS untuk memajukan bisnis Anda. Pilih paket untuk berlangganan tetap.'}
               </p>
             </div>
           </div>

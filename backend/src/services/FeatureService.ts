@@ -171,8 +171,8 @@ export class FeatureService {
         code: 'STARTER',
         name: 'Paket Starter Default',
         maxOutlets: 1,
-        maxUsers: 3,
-        maxProducts: 100
+        maxUsers: 2,
+        maxProducts: 50
       },
       usage: {
         outlets: tenant._count.outlets,
@@ -181,8 +181,8 @@ export class FeatureService {
       },
       limits: {
         maxOutlets: tenant.plan?.maxOutlets ?? 1,
-        maxUsers: tenant.plan?.maxUsers ?? 3,
-        maxProducts: tenant.plan?.maxProducts ?? 100
+        maxUsers: tenant.plan?.maxUsers ?? 2,
+        maxProducts: tenant.plan?.maxProducts ?? 50
       }
     };
   }
