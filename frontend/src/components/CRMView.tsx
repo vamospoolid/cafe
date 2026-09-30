@@ -26,8 +26,10 @@ import {
   Percent,
   CheckCircle,
   Clock,
-  MessageSquare
+  MessageSquare,
+  Star
 } from 'lucide-react';
+
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 import { useVertical } from '../context/VerticalContext';
@@ -1207,33 +1209,75 @@ const CRMView = () => {
                 <History size={16} className="text-primary" /> Riwayat Mutasi Poin
               </h4>
               {drawerLoading ? (
-                <div className="text-xs text-muted py-2 text-center">Memuat riwayat poin...</div>
+                <div className="text-xs text-muted py-2 text-center flex items-center justify-center gap-2">
+                  <div className="animate-spin w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full" />
+                  Memuat riwayat poin...
+                </div>
               ) : !customerDetail?.pointLogs || customerDetail.pointLogs.length === 0 ? (
-                <div className="text-xs text-muted py-4 text-center border border-dashed rounded-lg">Tidak ada riwayat perubahan poin</div>
+                <div className="text-xs text-muted py-6 text-center border border-dashed rounded-xl flex flex-col items-center gap-2">
+                  <Star size={20} className="text-slate-300" />
+                  <span>Belum ada riwayat perubahan poin</span>
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {customerDetail.pointLogs.map((log: any) => (
-                    <div key={log.id} className="p-3 border border-gray-50 rounded-lg bg-gray-50/50 flex justify-between items-start">
-                      <div className="flex-1 pr-2">
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border block w-max uppercase ${
-                          log.type === 'Earn' ? 'bg-green-50 text-green-700 border-green-200' :
-                          log.type === 'Redeem' ? 'bg-red-50 text-red-700 border-red-200' :
-                          log.type === 'Refund' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                          'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}>
-                          {log.type}
-                        </span>
-                        <p className="text-[11px] text-gray-600 mt-1.5 leading-relaxed">{log.description || 'Penyesuaian Poin'}</p>
-                        <span className="text-[9px] text-muted block mt-1">{formatDate(log.createdAt)}</span>
+                  {customerDetail.pointLogs.map((log: any) => {
+                    const isPositive = log.points > 0;
+                    const absPoints  = Math.abs(log.points);
+                    const settings   = posContext?.settings;
+                    const pv         = settings?.loyaltyPointValue || 100;
+                    const rupiah     = (absPoints * pv).toLocaleString('id-ID');
+
+                    const badgeCls =
+                      log.type === 'Earn'   ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      log.type === 'Redeem' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                      log.type === 'Refund' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                      log.type === 'Void'   ? 'bg-slate-100 text-slate-600 border-slate-300' :
+                                              'bg-amber-50 text-amber-700 border-amber-200';
+
+                    const icon =
+                      log.type === 'Earn'   ? '⭐' :
+                      log.type === 'Redeem' ? '🎁' :
+                      log.type === 'Refund' ? '↩️' :
+                      log.type === 'Void'   ? '🚫' : '✏️';
+
+                    return (
+                      <div key={log.id} className="p-3 border border-slate-100 rounded-xl bg-white shadow-sm flex justify-between items-start gap-2 hover:border-indigo-100 transition-colors">
+                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <div className="text-lg leading-none mt-0.5 shrink-0">{icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase ${badgeCls}`}>
+                                {log.type}
+                              </span>
+                              {log.order?.orderNumber && (
+                                <span className="text-[9px] text-slate-400 font-medium">
+                                  #{log.order.orderNumber}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-gray-600 mt-1 leading-relaxed truncate">
+                              {log.description || 'Penyesuaian Poin'}
+                            </p>
+                            <span className="text-[9px] text-slate-400 block mt-0.5">
+                              {formatDate(log.createdAt)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className={`text-sm font-black whitespace-nowrap ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {isPositive ? `+${log.points}` : log.points} pts
+                          </div>
+                          <div className="text-[9px] text-slate-400 font-medium mt-0.5">
+                            {isPositive ? '+' : '-'}Rp {rupiah}
+                          </div>
+                        </div>
                       </div>
-                      <span className={`text-sm font-black whitespace-nowrap ${log.points > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {log.points > 0 ? `+${log.points}` : log.points} pts
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
+
           </div>
         </div>
       </div>

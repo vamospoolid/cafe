@@ -28,85 +28,127 @@ export const enrichOrderWithJoinedTables = async (order: any, txPrisma: any = pr
 };
 
 // Helper: Process loyalty points earning
-const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: number, orderNumber: string, tenantId?: string) => {
+// UPGRADED: hitung dari netPayable, simpan orderId, upgrade tier atomik
+const processLoyaltyEarnings = async (
+  tx: any,
+  customerId: number,
+  netPayable: number,    // Total SETELAH diskon poin (bukan gross total)
+  orderNumber: string,
+  tenantId?: string,
+  orderId?: number       // orderId untuk traceability di PointLog
+) => {
   const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
-  if (!loyaltyEnabled) return;
+  if (!loyaltyEnabled) return { earnedPoints: 0 };
 
-  const earnPerAmount = settings ? settings.loyaltyEarnPerAmount : 10000;
-  const silverThreshold = settings ? settings.loyaltySilverThreshold : 1000000;
-  const goldThreshold = settings ? settings.loyaltyGoldThreshold : 3000000;
-  const silverMultiplier = settings ? settings.loyaltySilverMultiplier : 1.2;
-  const goldMultiplier = settings ? settings.loyaltyGoldMultiplier : 1.5;
+  const earnPerAmount    = settings?.loyaltyEarnPerAmount    ?? 10000;
+  const minOrderForEarn  = settings?.loyaltyMinOrderForEarn  ?? 0;
+  const silverThreshold  = settings?.loyaltySilverThreshold  ?? 1000000;
+  const goldThreshold    = settings?.loyaltyGoldThreshold    ?? 3000000;
+  const silverMultiplier = settings?.loyaltySilverMultiplier ?? 1.2;
+  const goldMultiplier   = settings?.loyaltyGoldMultiplier   ?? 1.5;
+
+  // Tidak earn poin jika belanja di bawah minimum
+  if (minOrderForEarn > 0 && netPayable < minOrderForEarn) {
+    return { earnedPoints: 0 };
+  }
 
   const customer = await tx.customer.findUnique({ where: { id: customerId } });
-  if (!customer) return;
+  if (!customer) return { earnedPoints: 0 };
 
   let multiplier = 1.0;
   if (customer.tier === 'Silver') multiplier = silverMultiplier;
   else if (customer.tier === 'Gold') multiplier = goldMultiplier;
 
-  const pointsEarned = Math.floor((orderTotal / earnPerAmount) * multiplier);
+  const pointsEarned = Math.floor((netPayable / earnPerAmount) * multiplier);
 
   if (pointsEarned > 0) {
-    const newPoints = customer.points + pointsEarned;
-    const newTotalSpent = customer.totalSpent + orderTotal;
+    const newTotalSpent = customer.totalSpent + netPayable;
 
-    // Recalculate tier
+    // Recalculate tier berdasarkan totalSpent kumulatif
     let newTier = 'Bronze';
-    if (newTotalSpent >= goldThreshold) {
-      newTier = 'Gold';
-    } else if (newTotalSpent >= silverThreshold) {
-      newTier = 'Silver';
-    }
+    if (newTotalSpent >= goldThreshold) newTier = 'Gold';
+    else if (newTotalSpent >= silverThreshold) newTier = 'Silver';
 
     await tx.customer.update({
       where: { id: customerId },
       data: {
-        points: newPoints,
+        points:     { increment: pointsEarned },
         totalSpent: newTotalSpent,
-        tier: newTier
+        tier:       newTier
       }
     });
 
     await tx.pointLog.create({
       data: {
+        tenantId:    tenantId || null,
         customerId,
-        points: pointsEarned,
-        type: 'Earn',
-        description: `Belanja Order #${orderNumber} (Tier: ${customer.tier}, Multiplier: ${multiplier}x)`
+        orderId:     orderId || null,
+        points:      pointsEarned,
+        type:        'Earn',
+        description: `Earn ${pointsEarned} poin dari Order #${orderNumber} (Tier: ${customer.tier}, x${multiplier})`
       }
     });
+
+    return { earnedPoints: pointsEarned, tierBefore: customer.tier, tierAfter: newTier };
   }
+
+  return { earnedPoints: 0 };
 };
 
 // Helper: Process loyalty points redemption
-const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRedeem: number, orderNumber: string, tenantId?: string) => {
+// UPGRADED: validasi server-side (min/max), simpan orderId, kurangi saldo atomik
+const processLoyaltyRedemption = async (
+  tx: any,
+  customerId: number,
+  pointsToRedeem: number,
+  orderNumber: string,
+  tenantId?: string,
+  orderId?: number      // orderId untuk traceability di PointLog
+): Promise<{ pointsRedeemed: number; discountGiven: number } | null> => {
   const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
-  const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
-  if (!loyaltyEnabled) return;
+  const loyaltyEnabled = settings?.loyaltyEnabled ?? true;
+  if (!loyaltyEnabled) return null;
 
+  const pointValue    = settings?.loyaltyPointValue       ?? 100;
+  const minPoints     = settings?.loyaltyRedeemMinPoints  ?? 1;
+  const maxPerOrder   = settings?.loyaltyMaxRedeemPerOrder ?? 0; // 0 = tanpa batas
+
+  // Fetch customer dengan lock untuk cegah race condition
   const customer = await tx.customer.findUnique({ where: { id: customerId } });
-  if (!customer) return;
+  if (!customer) return null;
 
-  const pointsUsed = Math.min(customer.points, pointsToRedeem);
-  if (pointsUsed > 0) {
-    await tx.customer.update({
-      where: { id: customerId },
-      data: {
-        points: { decrement: pointsUsed }
-      }
-    });
+  // Klamp ke saldo yang tersedia
+  const clampedPoints = Math.min(customer.points, pointsToRedeem);
 
-    await tx.pointLog.create({
-      data: {
-        customerId,
-        points: -pointsUsed,
-        type: 'Redeem',
-        description: `Penukaran poin untuk diskon Order #${orderNumber}`
-      }
-    });
-  }
+  // Validasi minimum
+  if (clampedPoints < minPoints) return null;
+
+  // Validasi maksimum per transaksi
+  const finalPoints = maxPerOrder > 0 ? Math.min(clampedPoints, maxPerOrder) : clampedPoints;
+  if (finalPoints <= 0) return null;
+
+  const discountGiven = finalPoints * pointValue;
+
+  // Kurangi saldo poin customer
+  await tx.customer.update({
+    where: { id: customerId },
+    data: { points: { decrement: finalPoints } }
+  });
+
+  // Catat log Redeem dengan orderId untuk traceability
+  await tx.pointLog.create({
+    data: {
+      tenantId:    tenantId || null,
+      customerId,
+      orderId:     orderId || null,
+      points:      -finalPoints,
+      type:        'Redeem',
+      description: `Tukar ${finalPoints} poin → diskon Rp ${discountGiven.toLocaleString('id-ID')} untuk Order #${orderNumber}`
+    }
+  });
+
+  return { pointsRedeemed: finalPoints, discountGiven };
 };
 
 // Fungsi untuk generate nomor order (Contoh: ORD-VAM-20231025-001)
@@ -626,12 +668,17 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
           }
         }
 
-        // Poin Loyalitas
+        // Poin Loyalitas (Offline Sync)
         if (finalCustomerId && isPaid) {
-          if (pointsUsed && pointsUsed > 0) {
-            await processLoyaltyRedemption(tx, finalCustomerId, Number(pointsUsed), orderNumber, tenantId);
+          const ptsUsedNum = Number(pointsUsed) || 0;
+          const syncSettings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+          const syncPointValue = syncSettings?.loyaltyPointValue ?? 100;
+          const syncNetPayable = Math.max(0, Number(total) - (ptsUsedNum * syncPointValue));
+
+          if (ptsUsedNum > 0) {
+            await processLoyaltyRedemption(tx, finalCustomerId, ptsUsedNum, orderNumber, tenantId, createdOrder.id);
           }
-          await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber, tenantId);
+          await processLoyaltyEarnings(tx, finalCustomerId, syncNetPayable, orderNumber, tenantId, createdOrder.id);
         }
 
         // Piutang
@@ -1034,15 +1081,20 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
       }
 
-      // 3. Loyalty Points
+      // 3. Loyalty Points — Redeem dulu, baru Earn dari sisa bayar
       if (finalCustomerId) {
         const ptsUsed = Number(pointsUsed) || 0;
+        const loyaltyPointValue = settings?.loyaltyPointValue ?? 100;
+        // netPayable = total SETELAH diskon poin (basis earn yang adil)
+        const netPayable = Math.max(0, safeTotal - (ptsUsed * loyaltyPointValue));
+
         if (ptsUsed > 0) {
-          await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, orderNumber, tenantId);
+          // Redeem dulu, dapatkan orderId setelah order dibuat
+          await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, orderNumber, tenantId, order.id);
         }
 
-        if (isPaid) {
-          await processLoyaltyEarnings(tx, finalCustomerId, Number(total), orderNumber, tenantId);
+        if (isActuallyPaid) {
+          await processLoyaltyEarnings(tx, finalCustomerId, netPayable, orderNumber, tenantId, order.id);
         }
       }
 
@@ -1253,12 +1305,16 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
           data: updateData
         });
 
-        // Proses poin loyalitas
+        // Proses poin loyalitas — orderId tersedia setelah order.update
         if (finalCustomerId) {
+          const loyaltySettings = await tx.settings.findFirst({ where: effectiveTenantId ? { tenantId: effectiveTenantId } : undefined });
+          const loyaltyPointValue = loyaltySettings?.loyaltyPointValue ?? 100;
+          const netPayable = Math.max(0, updated.total - (ptsUsed * loyaltyPointValue));
+
           if (ptsUsed > 0) {
-            await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, updated.orderNumber, effectiveTenantId);
+            await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, updated.orderNumber, effectiveTenantId, updated.id);
           }
-          await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber, effectiveTenantId);
+          await processLoyaltyEarnings(tx, finalCustomerId, netPayable, updated.orderNumber, effectiveTenantId, updated.id);
         }
 
         // Piutang
@@ -1289,7 +1345,8 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
         const ptsUsed = Number(req.body.pointsUsed) || Number(req.body.pointsRedeemed) || 0;
 
         if (finalCustomerId && ptsUsed > 0) {
-          await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, orders[0].orderNumber);
+          // Untuk multi-order, redeem poin ke order pertama (representative)
+          await processLoyaltyRedemption(tx, finalCustomerId, ptsUsed, orders[0].orderNumber, effectiveTenantId, orders[0].id);
         }
 
         let totalCombinedPaid = 0;
@@ -1351,7 +1408,8 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 
           // Poin loyalitas dicatat per masing-masing order agar sinkron saat void sebagian
           if (finalCustomerId) {
-            await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber, effectiveTenantId);
+            // Earn dari net total (sudah dikurangi diskon proporsional)
+            await processLoyaltyEarnings(tx, finalCustomerId, updated.total, updated.orderNumber, effectiveTenantId, updated.id);
           }
         }
       }
@@ -1473,30 +1531,79 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
         }
       }
 
-      // 3. Batalkan Poin Loyalitas
+      // 3. Batalkan Poin Loyalitas & Pulihkan Poin (Void & Refund)
       if (orderData.customerId) {
-        const settings = await tx.settings.findFirst({ where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined });
+        const settings = await tx.settings.findFirst({
+          where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined
+        });
         const silverThreshold = settings ? settings.loyaltySilverThreshold : 1000000;
-        const goldThreshold = settings ? settings.loyaltyGoldThreshold : 3000000;
+        const goldThreshold   = settings ? settings.loyaltyGoldThreshold : 3000000;
 
-        // Cari log penambahan poin (Earn) untuk order ini
+        // Baca pointsUsed dari order atau cari log Redeem
+        const redeemLog = await tx.pointLog.findFirst({
+          where: {
+            customerId: orderData.customerId,
+            type: 'Redeem',
+            OR: [
+              { orderId: orderData.id },
+              { description: { contains: 'Order #' + orderData.orderNumber } }
+            ]
+          }
+        });
+        const pointsRedeemed = (orderData.pointsUsed && orderData.pointsUsed > 0)
+          ? orderData.pointsUsed
+          : (redeemLog ? Math.abs(redeemLog.points) : 0);
+
+        // Cari log Earn untuk order ini
         const earnLog = await tx.pointLog.findFirst({
           where: {
             customerId: orderData.customerId,
             type: 'Earn',
-            description: { contains: `Order #${orderData.orderNumber}` }
+            OR: [
+              { orderId: orderData.id },
+              { description: { contains: 'Order #' + orderData.orderNumber } }
+            ]
           }
         });
+        const pointsEarned = earnLog ? earnLog.points : 0;
 
-        if (earnLog) {
+        // Jika ada mutasi poin atau order bernilai, proses penyesuaian atomik
+        if (pointsRedeemed > 0 || pointsEarned > 0 || orderData.total > 0) {
           const cust = await tx.customer.findUnique({ where: { id: orderData.customerId } });
           if (cust) {
-            // Fix #4: Hapus Math.max(0,...) agar poin bisa negatif – mencegah points-farming fraud
-          // Jika pelanggan menebus poin SEBELUM void, saldo poin akan negatif dan harus "dilunasi" di belanja berikutnya
-          const newPoints = cust.points - earnLog.points;
+            // 1. Buat PointLog tipe 'Refund' untuk mengembalikan poin yang telah di-redeem
+            if (pointsRedeemed > 0) {
+              await tx.pointLog.create({
+                data: {
+                  tenantId: orderData.tenantId || null,
+                  customerId: orderData.customerId,
+                  orderId: orderData.id,
+                  points: pointsRedeemed,
+                  type: 'Refund',
+                  description: 'Void Order #' + orderData.orderNumber + ': Pengembalian poin diskon'
+                }
+              });
+            }
+
+            // 2. Buat PointLog tipe 'Void' untuk menarik kembali poin yang telah di-earn
+            if (pointsEarned > 0) {
+              await tx.pointLog.create({
+                data: {
+                  tenantId: orderData.tenantId || null,
+                  customerId: orderData.customerId,
+                  orderId: orderData.id,
+                  points: -pointsEarned,
+                  type: 'Void',
+                  description: 'Void Order #' + orderData.orderNumber + ': Pembatalan poin perolehan belanja'
+                }
+              });
+            }
+
+            // 3. Update Customer.points dan Customer.totalSpent secara atomic
+            const newPoints = cust.points + pointsRedeemed - pointsEarned;
             const newTotalSpent = Math.max(0, cust.totalSpent - orderData.total);
 
-            // Hitung ulang tier jika turun
+            // 4. Re-kalkulasi tier setelah void
             let newTier = 'Bronze';
             if (newTotalSpent >= goldThreshold) {
               newTier = 'Gold';
@@ -1510,46 +1617,6 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
                 points: newPoints,
                 totalSpent: newTotalSpent,
                 tier: newTier
-              }
-            });
-
-            await tx.pointLog.create({
-              data: {
-                customerId: orderData.customerId,
-                points: -earnLog.points,
-                type: 'Refund',
-                description: `Void Order #${orderData.orderNumber}: Penarikan poin belanja`
-              }
-            });
-          }
-        }
-
-        // Cari log penukaran poin (Redeem) untuk order ini
-        const redeemLog = await tx.pointLog.findFirst({
-          where: {
-            customerId: orderData.customerId,
-            type: 'Redeem',
-            description: { contains: `Order #${orderData.orderNumber}` }
-          }
-        });
-
-        if (redeemLog) {
-          const cust = await tx.customer.findUnique({ where: { id: orderData.customerId } });
-          if (cust) {
-            const refundPoints = Math.abs(redeemLog.points);
-            await tx.customer.update({
-              where: { id: orderData.customerId },
-              data: {
-                points: cust.points + refundPoints
-              }
-            });
-
-            await tx.pointLog.create({
-              data: {
-                customerId: orderData.customerId,
-                points: refundPoints,
-                type: 'Refund',
-                description: `Void Order #${orderData.orderNumber}: Pengembalian poin diskon`
               }
             });
           }

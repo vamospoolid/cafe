@@ -667,12 +667,15 @@ model PointLog {
   customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerId  Int
   points      Int // Positif untuk Earn/Refund, Negatif untuk Redeem/Void
-  type        String // 'Earn', 'Redeem', 'Refund', 'Manual'
+  type        String // 'Earn', 'Redeem', 'Refund', 'Void', 'Manual'
   description String?
+  orderId     Int?     // Referensi order sumber (untuk traceability redeem/earn)
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
   @@index([tenantId])
   @@index([customerId])
+  @@index([orderId])
 }
 
 model Order {
@@ -715,6 +718,7 @@ model Order {
   debt                Debt?
   paymentTransactions PaymentTransaction[]
   deliveryOrders      DeliveryOrder[]
+  pointLogs           PointLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -856,6 +860,9 @@ model Settings {
   loyaltyGoldThreshold    Float   @default(3000000)
   loyaltySilverMultiplier Float   @default(1.2)
   loyaltyGoldMultiplier   Float   @default(1.5)
+  loyaltyMaxRedeemPerOrder Int    @default(0)    // 0 = tanpa batas per transaksi
+  loyaltyRedeemMinPoints   Int    @default(1)    // min poin yang bisa ditukar sekaligus
+  loyaltyMinOrderForEarn   Float  @default(0)    // min total belanja (setelah diskon) untuk earn poin
 
   // Mode Inventaris: false = Simple (HPP manual), true = Advanced (HPP dari resep bahan baku)
   ingredientTrackingEnabled Boolean @default(false)

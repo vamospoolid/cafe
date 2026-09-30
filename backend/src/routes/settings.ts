@@ -185,6 +185,9 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.loyaltyGoldThreshold !== undefined) updateData.loyaltyGoldThreshold = Number(updateData.loyaltyGoldThreshold);
     if (updateData.loyaltySilverMultiplier !== undefined) updateData.loyaltySilverMultiplier = Number(updateData.loyaltySilverMultiplier);
     if (updateData.loyaltyGoldMultiplier !== undefined) updateData.loyaltyGoldMultiplier = Number(updateData.loyaltyGoldMultiplier);
+    if (updateData.loyaltyMaxRedeemPerOrder !== undefined) updateData.loyaltyMaxRedeemPerOrder = Number(updateData.loyaltyMaxRedeemPerOrder);
+    if (updateData.loyaltyRedeemMinPoints !== undefined) updateData.loyaltyRedeemMinPoints = Number(updateData.loyaltyRedeemMinPoints);
+    if (updateData.loyaltyMinOrderForEarn !== undefined) updateData.loyaltyMinOrderForEarn = Number(updateData.loyaltyMinOrderForEarn);
     
     if (updateData.ingredientTrackingEnabled !== undefined) updateData.ingredientTrackingEnabled = Boolean(updateData.ingredientTrackingEnabled);
     if (updateData.enableKitchenAuditMode !== undefined) updateData.enableKitchenAuditMode = Boolean(updateData.enableKitchenAuditMode);
@@ -288,7 +291,8 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
       'taxRate', 'serviceCharge', 'includeTax', 'bankName', 'accountNumber', 'accountName',
       'qrisUrl', 'qrCodeBaseUrl', 'enableDrinkCustomization', 'loyaltyEnabled', 'loyaltyEarnPerAmount',
       'loyaltyPointValue', 'loyaltySilverThreshold', 'loyaltyGoldThreshold', 'loyaltySilverMultiplier',
-      'loyaltyGoldMultiplier', 'ingredientTrackingEnabled', 'enableKitchenAuditMode', 'enableStaffMealTracking',
+      'loyaltyGoldMultiplier', 'loyaltyMaxRedeemPerOrder', 'loyaltyRedeemMinPoints', 'loyaltyMinOrderForEarn',
+      'ingredientTrackingEnabled', 'enableKitchenAuditMode', 'enableStaffMealTracking',
       'printerIp', 'printerPort', 'windowsPrinterName', 'autoPrintKDS', 'autoPrintReceipt',
       'kitchenPrinterIp', 'kitchenPrinterPort', 'autoPrintKitchen', 'barPrinterIp', 'barPrinterPort',
       'autoPrintBar', 'enableKDS', 'autoCompleteKDSOnPay', 'storeLatitude', 'storeLongitude',

@@ -166,6 +166,9 @@ const SettingsView = () => {
     loyaltyGoldThreshold: 3000000,
     loyaltySilverMultiplier: 1.2,
     loyaltyGoldMultiplier: 1.5,
+    loyaltyMaxRedeemPerOrder: 0,
+    loyaltyRedeemMinPoints: 1,
+    loyaltyMinOrderForEarn: 0,
     ingredientTrackingEnabled: false,
     enableKitchenAuditMode: false,
     enableStaffMealTracking: true,
@@ -1688,7 +1691,56 @@ const SettingsView = () => {
                       <p className="text-[9px] font-semibold text-slate-400 mt-1">Level Bronze didapatkan secara default (multiplier 1.0x). Multiplier perolehan poin berlaku otomatis setelah pelanggan melewati batas akumulasi belanja.</p>
                     </div>
 
+                    {/* ── Konfigurasi Penukaran Poin ──────────────────────── */}
+                    <div className="border border-emerald-200/70 bg-emerald-50/40 rounded-xl p-3.5 space-y-3">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-emerald-600 text-base">🎁</span>
+                        <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">Aturan Penukaran Poin (Redeem)</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Maks. Poin per Transaksi</label>
+                          <input
+                            type="number"
+                            name="loyaltyMaxRedeemPerOrder"
+                            min={0}
+                            className="form-control font-bold text-xs bg-white"
+                            value={formData.loyaltyMaxRedeemPerOrder ?? 0}
+                            onChange={handleChange}
+                          />
+                          <p className="text-[9px] text-slate-400 mt-0.5">0 = tanpa batas per transaksi</p>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Min. Poin untuk Tukar</label>
+                          <input
+                            type="number"
+                            name="loyaltyRedeemMinPoints"
+                            min={1}
+                            className="form-control font-bold text-xs bg-white"
+                            value={formData.loyaltyRedeemMinPoints ?? 1}
+                            onChange={handleChange}
+                          />
+                          <p className="text-[9px] text-slate-400 mt-0.5">Min. poin yang wajib dimiliki sebelum boleh tukar</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Min. Belanja untuk Earn Poin (Rp)</label>
+                        <input
+                          type="number"
+                          name="loyaltyMinOrderForEarn"
+                          min={0}
+                          className="form-control font-bold text-xs bg-white"
+                          value={formData.loyaltyMinOrderForEarn ?? 0}
+                          onChange={handleChange}
+                        />
+                        <p className="text-[9px] text-slate-400 mt-0.5">0 = semua transaksi dapat poin. Jika diisi, hanya belanja di atas nominal ini yang earn poin.</p>
+                      </div>
+                    </div>
+
                   </div>
+
                 )}
               </div>
             </div>

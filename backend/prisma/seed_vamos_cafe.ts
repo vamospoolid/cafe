@@ -122,6 +122,7 @@ async function main() {
       ownerName: 'Owner Vamos Pool'
     },
     create: {
+      id: 'tenant-vamos-pool',
       name: 'VAMOS POOL & CAFE',
       slug: 'vamospool',
       status: 'ACTIVE',
@@ -278,6 +279,51 @@ async function main() {
           tenantId: tenant.id,
           outletId: outlet.id,
           status: 'Tersedia'
+        }
+      });
+    }
+  }
+
+  // 8. Produk & Menu Awal
+  console.log('📌 [8/8] Menyiapkan Menu Produk Awal...');
+  const catDrinks = await prisma.category.findFirst({ where: { name: 'Kopi & Minuman', tenantId: tenant.id } });
+  const catFoods = await prisma.category.findFirst({ where: { name: 'Makanan & Snack', tenantId: tenant.id } });
+  const catPool = await prisma.category.findFirst({ where: { name: 'Biliar & Game', tenantId: tenant.id } });
+
+  const initialProducts = [
+    // Minuman
+    { name: 'Kopi Susu Gula Aren', categoryId: catDrinks?.id, buyPrice: 8000, sellPrice: 18000, stock: 150 },
+    { name: 'Americano / Long Black', categoryId: catDrinks?.id, buyPrice: 5000, sellPrice: 15000, stock: 150 },
+    { name: 'Caffe Latte', categoryId: catDrinks?.id, buyPrice: 9000, sellPrice: 20000, stock: 150 },
+    { name: 'Matcha Latte Ice', categoryId: catDrinks?.id, buyPrice: 10000, sellPrice: 22000, stock: 150 },
+    { name: 'Lemon Tea Ice', categoryId: catDrinks?.id, buyPrice: 4000, sellPrice: 12000, stock: 150 },
+    { name: 'Air Mineral 600ml', categoryId: catDrinks?.id, buyPrice: 2500, sellPrice: 5000, stock: 200 },
+    // Makanan
+    { name: 'Nasi Goreng Spesial Vamos', categoryId: catFoods?.id, buyPrice: 12000, sellPrice: 25000, stock: 50 },
+    { name: 'Mie Goreng Telur', categoryId: catFoods?.id, buyPrice: 10000, sellPrice: 20000, stock: 50 },
+    { name: 'Kentang Goreng (French Fries)', categoryId: catFoods?.id, buyPrice: 7000, sellPrice: 15000, stock: 80 },
+    { name: 'Cireng Crispy Bumbu Rujak', categoryId: catFoods?.id, buyPrice: 6000, sellPrice: 15000, stock: 80 },
+    { name: 'Roti Bakar Coklat Keju', categoryId: catFoods?.id, buyPrice: 8000, sellPrice: 18000, stock: 60 },
+    // Biliar
+    { name: 'Sewa Meja Regular (1 Jam)', categoryId: catPool?.id, buyPrice: 0, sellPrice: 35000, stock: 999 },
+    { name: 'Sewa Meja VIP (1 Jam)', categoryId: catPool?.id, buyPrice: 0, sellPrice: 60000, stock: 999 }
+  ];
+
+  for (const prod of initialProducts) {
+    if (!prod.categoryId) continue;
+    const exists = await prisma.product.findFirst({
+      where: { name: prod.name, tenantId: tenant.id }
+    });
+    if (!exists) {
+      await prisma.product.create({
+        data: {
+          name: prod.name,
+          categoryId: prod.categoryId,
+          tenantId: tenant.id,
+          buyPrice: prod.buyPrice,
+          sellPrice: prod.sellPrice,
+          stock: prod.stock,
+          status: 'Aktif'
         }
       });
     }
