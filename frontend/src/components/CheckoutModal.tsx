@@ -16,7 +16,11 @@ import {
   printBluetoothReceipt,
   printBluetoothKitchenTicket,
   isKitchenItem,
-  isBarItem
+  isBarItem,
+  getActiveOrSavedDevice,
+  getActiveWebBluetoothDevice,
+  pairWebBluetoothPrinter,
+  isWebBluetoothSupported
 } from '../utils/printerBluetooth';
 import { generateWhatsAppReceiptUrl } from '../utils/receiptFormatter';
 
@@ -252,6 +256,21 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (savedBt) {
       setPrintLoading(true);
       try {
+        // Cek koneksi Web Bluetooth sebelum fetch selagi user gesture aktif
+        if (isWebBluetoothSupported() && (localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH' || savedBt.type === 'WEB_BLUETOOTH')) {
+          let dev = await getActiveOrSavedDevice();
+          if (!dev) {
+            try {
+              toast('Menyambungkan printer Bluetooth...', 'info');
+              await pairWebBluetoothPrinter();
+            } catch (pairErr: any) {
+              console.warn('[Printer] Auto-reconnect Web Bluetooth memerlukan interaksi pengguna:', pairErr.message);
+              toast('Silakan klik tombol "Cetak Struk Kasir" untuk menyambungkan printer', 'info');
+              return;
+            }
+          }
+        }
+
         const orderRes = await fetch(`/api/orders/${id}`, {
           headers: { Authorization: `Bearer ${posContext?.token}` }
         });
@@ -391,6 +410,20 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       // 3. Prioritaskan cetak langsung via Bluetooth Thermal jika terhubung
       if (savedBt) {
+        if (isWebBluetoothSupported() && (localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH' || savedBt.type === 'WEB_BLUETOOTH')) {
+          let dev = await getActiveOrSavedDevice();
+          if (!dev) {
+            try {
+              toast('Menyambungkan printer Bluetooth...', 'info');
+              await pairWebBluetoothPrinter();
+            } catch (pairErr: any) {
+              console.warn('[Printer] Auto-reconnect Web Bluetooth tiket memerlukan interaksi pengguna:', pairErr.message);
+              toast('Silakan sambungkan printer Bluetooth terlebih dahulu', 'info');
+              return;
+            }
+          }
+        }
+
         await printBluetoothKitchenTicket(orderData, target, {
           storeName: posContext?.settings?.storeName,
           paperWidth: (localStorage.getItem('printer_paper_width') as any) || '58mm'
@@ -576,6 +609,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <Printer size={18} />
                   <span>{printLoading ? 'Mencetak...' : 'Cetak Struk Kasir'}</span>
                 </button>
+
+                {getSavedBluetoothPrinter() && (
+                  <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 py-0.5">
+                    <span className={`w-2 h-2 rounded-full ${getActiveWebBluetoothDevice()?.gatt?.connected ? 'bg-emerald-500' : 'bg-indigo-400 animate-pulse'}`} />
+                    <span>Printer: {getSavedBluetoothPrinter()?.name} {getActiveWebBluetoothDevice()?.gatt?.connected ? '(Terhubung)' : '(Siap Cetak)'}</span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <button

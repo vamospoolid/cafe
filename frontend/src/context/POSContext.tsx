@@ -419,9 +419,15 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem('pos_active_shift');
     localStorage.removeItem('pos_device_paired');
 
-    // 5. Bersihkan Session Storage dan arahkan browser langsung ke /login
+    // 5. Bersihkan Session Storage
     sessionStorage.clear();
-    window.location.href = '/login';
+    
+    // ⚠️ HINDARI window.location.href = '/login' (hard reload) agar koneksi Web Bluetooth
+    // ke printer thermal tetap bertahan di RAM tab browser saat pergantian kasir/shift.
+    // React Router di AppRoutes otomatis merender LoginView karena token bernilai null.
+    try {
+      window.history.pushState(null, '', '/login');
+    } catch { /* ignore */ }
   };
 
   // Dynamic GUI Morphing: Terapkan warna brand tenant secara dinamis
