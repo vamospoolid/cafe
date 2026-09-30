@@ -368,7 +368,7 @@ export async function seedMultiTenantFoundation() {
               printerTarget: cat.printerTarget,
               stationTarget: cat.stationTarget,
               isActive: cat.isActive,
-              parentId
+              parentId: parentId || undefined
             }
           });
           catMap.set(cat.id, created.id);
@@ -383,8 +383,8 @@ export async function seedMultiTenantFoundation() {
               tenantId: masterTenant.id,
               name: prod.name,
               barcode: prod.barcode,
-              categoryId: newCatId,
-              subCategoryId: newSubCatId,
+              categoryId: newCatId || undefined,
+              subCategoryId: newSubCatId || undefined,
               buyPrice: prod.buyPrice,
               sellPrice: prod.sellPrice,
               stock: prod.stock,
