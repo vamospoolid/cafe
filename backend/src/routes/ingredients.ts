@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 import { emitToTenant } from '../index';
 import { TenantContext } from '../utils/tenantContext';
+import { STARTER_PACKS_BY_VERTICAL } from '../utils/starterPacksData';
 import prisma from '../db';
 
 // Helper: apakah role punya akses bahan baku (read)
@@ -1769,6 +1770,117 @@ router.get('/:id/logs', authenticateToken, async (req: Request, res: Response) =
     res.json(logs);
   } catch (error) {
     res.status(500).json({ error: 'Gagal mengambil riwayat stok' });
+  }
+});
+
+/**
+ * GET /api/ingredients/starter-pack-preview
+ * Pratinjau daftar bahan baku starter pack berdasarkan vertikal (CAFE, BAKERY, LAUNDRY)
+ */
+router.get('/starter-pack-preview', async (req: Request, res: Response) => {
+  try {
+    const vertical = ((req.query.vertical as string) || 'CAFE').toUpperCase() as 'CAFE' | 'BAKERY' | 'LAUNDRY';
+    const pack = STARTER_PACKS_BY_VERTICAL[vertical] || STARTER_PACKS_BY_VERTICAL.CAFE;
+    return res.json({
+      success: true,
+      vertical: pack.id,
+      name: pack.name,
+      tagline: pack.tagline,
+      icon: pack.icon,
+      badgeColor: pack.badgeColor,
+      items: pack.items
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Gagal memuat pratinjau starter pack' });
+  }
+});
+
+/**
+ * POST /api/ingredients/apply-starter-pack
+ * Terapkan starter pack bahan baku ke database tenant (stok awal = 0)
+ * Double-key security & anti-duplikasi
+ */
+router.post('/apply-starter-pack', authenticateToken, requireRole(...INGREDIENT_ADMIN_ROLES), async (req: Request, res: Response) => {
+  try {
+    const tenantId = (req as any).tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak ditemukan' });
+    }
+
+    const { vertical = 'CAFE', selectedItemNames } = req.body;
+    const vKey = (String(vertical).toUpperCase()) as 'CAFE' | 'BAKERY' | 'LAUNDRY';
+    const pack = STARTER_PACKS_BY_VERTICAL[vKey];
+
+    if (!pack) {
+      return res.status(400).json({ error: 'Vertikal tidak valid. Pilihan: CAFE, BAKERY, LAUNDRY' });
+    }
+
+    // Ambil bahan baku yang sudah ada di tenant agar tidak duplikat
+    const existing = await prisma.ingredient.findMany({
+      where: { tenantId, deletedAt: null },
+      select: { name: true }
+    });
+    const existingNames = new Set(existing.map(e => e.name.trim().toLowerCase()));
+
+    // Filter item yang akan dimasukkan
+    let targetItems = pack.items;
+    if (Array.isArray(selectedItemNames) && selectedItemNames.length > 0) {
+      const selectedSet = new Set(selectedItemNames.map((s: string) => s.trim().toLowerCase()));
+      targetItems = targetItems.filter(item => selectedSet.has(item.name.trim().toLowerCase()));
+    }
+
+    // Hanya masukkan item yang belum pernah ada
+    const itemsToInsert = targetItems
+      .filter(item => !existingNames.has(item.name.trim().toLowerCase()))
+      .map(item => ({
+        tenantId,
+        name: item.name,
+        category: item.category,
+        subCategory: item.subCategory,
+        unit: item.unit,
+        stock: 0, // ALWAYS 0
+        warehouseStock: 0, // ALWAYS 0
+        minStock: item.minStock || 0,
+        buyPrice: 0, // ALWAYS 0
+        purchaseUnit: item.purchaseUnit,
+        conversionRatio: item.conversionRatio || 1
+      }));
+
+    if (itemsToInsert.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Seluruh bahan baku dari paket ini sudah ada di inventori Anda.',
+        insertedCount: 0,
+        skippedCount: targetItems.length
+      });
+    }
+
+    await prisma.ingredient.createMany({
+      data: itemsToInsert
+    });
+
+    // Ambil daftar bahan baku aktif terbaru untuk sinkronisasi
+    const allIngredients = await prisma.ingredient.findMany({
+      where: { tenantId, deletedAt: null },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Real-time emit ke tenant
+    emitToTenant(tenantId, 'ingredient:bulk_created', {
+      count: itemsToInsert.length,
+      vertical: vKey
+    });
+
+    return res.json({
+      success: true,
+      message: `Berhasil menambahkan ${itemsToInsert.length} bahan baku baru (Stok 0) ke inventori Anda!`,
+      insertedCount: itemsToInsert.length,
+      skippedCount: targetItems.length - itemsToInsert.length,
+      ingredients: allIngredients
+    });
+  } catch (error: any) {
+    console.error('[Apply Starter Pack Error]', error);
+    return res.status(500).json({ error: error.message || 'Gagal menerapkan starter pack bahan baku' });
   }
 });
 

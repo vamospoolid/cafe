@@ -53,7 +53,9 @@ const ProductModal: React.FC<ProductModalProps> = ({
   const isAdvancedMode = posContext?.settings?.ingredientTrackingEnabled;
   const businessType = (posContext?.user as any)?.businessType || posContext?.settings?.businessType || 'CAFE';
   const isRetail = ['RETAIL', 'GROSIR', 'BANGUNAN'].includes(String(businessType).toUpperCase());
+  const isBengkel = String(businessType).toUpperCase() === 'BENGKEL';
 
+  const [aiLoading, setAiLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -228,6 +230,68 @@ const ProductModal: React.FC<ProductModalProps> = ({
   };
 
   const handleRemoveRecipeItem = (id: number) => setRecipeItems(prev => prev.filter(r => r.ingredientId !== id));
+
+  const handleAiRecipeSuggest = async () => {
+    if (!formData.name.trim()) {
+      toast('Ketik nama produk terlebih dahulu di tab Info Produk', 'warning');
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/recipes/ai-suggest', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({
+          productName: formData.name,
+          category: selectedCat?.name || 'DRINK'
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.suggestedItems)) {
+        if (data.suggestedItems.length === 0) {
+          toast('Belum ada rekomendasi otomatis untuk menu ini. Silakan pilih bahan manual.', 'info');
+          return;
+        }
+
+        const newItems: typeof recipeItems = [];
+        let missingIngredients: string[] = [];
+
+        for (const item of data.suggestedItems) {
+          if (item.ingredientId) {
+            const ing = ingredients.find(i => i.id === item.ingredientId);
+            if (ing) {
+              newItems.push({
+                ingredientId: ing.id,
+                qtyPerServing: Number(item.qtyPerServing),
+                ingredientName: ing.name,
+                unit: ing.unit,
+                buyPrice: ing.buyPrice
+              });
+            }
+          } else {
+            missingIngredients.push(item.ingredientName);
+          }
+        }
+
+        if (newItems.length > 0) {
+          setRecipeItems(newItems);
+          const sourceText = data.source === 'GEMINI_AI' ? 'Gemini AI' : 'Standar Industri';
+          toast(`✨ Resep ${sourceText} berhasil diterapkan (${newItems.length} bahan terhubung)!`, 'success');
+        } else if (missingIngredients.length > 0) {
+          toast(`Bahan rekomendasi (${missingIngredients.slice(0, 2).join(', ')}) belum ada di inventori Anda. Silakan muat Starter Pack terlebih dahulu.`, 'warning');
+        }
+      } else {
+        toast(data.error || 'Gagal menghasilkan rekomendasi resep', 'error');
+      }
+    } catch (e: any) {
+      toast('Terjadi kesalahan memanggil AI Resep', 'error');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   // ─── Margin calculator realtime ───────────────────────────────────────────
   const marginInfo = (() => {
@@ -813,9 +877,24 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
                   {/* Form tambah bahan */}
                   <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
-                    <span className="font-black text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <Plus size={14} className="text-indigo-600" /> Tambah Bahan ke Resep
-                    </span>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-black text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Plus size={14} className="text-indigo-600" /> Tambah Bahan ke Resep
+                      </span>
+
+                      {!isBengkel && !isRetail && (
+                        <button
+                          type="button"
+                          onClick={handleAiRecipeSuggest}
+                          disabled={aiLoading || !formData.name}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-[11px] font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
+                          title="Generate komposisi bahan baku otomatis dari nama produk menggunakan AI"
+                        >
+                          <Sparkles size={13} className={aiLoading ? 'animate-spin' : 'text-amber-300'} />
+                          <span>{aiLoading ? 'Menganalisis...' : '✨ Rekomendasi Resep AI'}</span>
+                        </button>
+                      )}
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                       <div className="sm:col-span-6">
                         <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">

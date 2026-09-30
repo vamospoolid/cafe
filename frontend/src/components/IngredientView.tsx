@@ -8,6 +8,8 @@ import {
   Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target, X
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
+import { StarterPackModal } from './StarterPackModal';
 import { toast, confirmAlert } from '../utils/alert';
 import { 
   exportIngredientValuationPDF, 
@@ -108,7 +110,10 @@ export const IngredientView: React.FC = () => {
   const token = posContext?.token;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
-  // Role-based access control
+  // Role-based access control & Vertical guard
+  const { isBengkel, isRetail, isLaundry } = useVertical();
+  const [showStarterPackModal, setShowStarterPackModal] = useState(false);
+
   const userRole = posContext?.user?.role || 'Admin';
   const userRoleUpper = userRole.toUpperCase();
   const isKitchenRole = userRoleUpper === 'DAPUR' || userRoleUpper === 'KITCHEN';
@@ -1671,13 +1676,26 @@ export const IngredientView: React.FC = () => {
               {/* ACTION BUTTONS: + TAMBAH BAHAN & REFRESH */}
               <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                 {isAdminRole && (
-                  <button
-                    onClick={handleOpenAdd}
-                    className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-purple-600/20 active:scale-95 flex items-center gap-1.5 shrink-0"
-                  >
-                    <Plus size={15} />
-                    <span>Tambah Bahan</span>
-                  </button>
+                  <>
+                    {!isBengkel && !isRetail && (
+                      <button
+                        onClick={() => setShowStarterPackModal(true)}
+                        className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-orange-500/20 active:scale-95 flex items-center gap-1.5 shrink-0 cursor-pointer"
+                        title="Muat Template Bahan Baku Standar Industri (Stok 0)"
+                      >
+                        <Sparkles size={14} className="text-amber-100" />
+                        <span>Starter Pack AI</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={handleOpenAdd}
+                      className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-purple-600/20 active:scale-95 flex items-center gap-1.5 shrink-0"
+                    >
+                      <Plus size={15} />
+                      <span>Tambah Bahan</span>
+                    </button>
+                  </>
                 )}
                 {isKitchenRole && (
                   <span className="px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0">
@@ -5763,6 +5781,15 @@ export const IngredientView: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {showStarterPackModal && (
+        <StarterPackModal
+          isOpen={showStarterPackModal}
+          onClose={() => setShowStarterPackModal(false)}
+          onSuccess={() => fetchData()}
+          defaultVertical={isLaundry ? 'LAUNDRY' : 'CAFE'}
+        />
       )}
     </div>
   );
