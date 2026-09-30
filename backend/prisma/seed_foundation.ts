@@ -398,17 +398,18 @@ export async function seedMultiTenantFoundation() {
           catMap.set(cat.id, created.id);
         }
 
+        const defaultCatId = Array.from(catMap.values())[0] || 1;
         const sourceProds = await prisma.product.findMany({ where: { tenantId: sourceTenantId, deletedAt: null } });
         for (const prod of sourceProds) {
-          const newCatId = prod.categoryId ? catMap.get(prod.categoryId) || null : null;
-          const newSubCatId = prod.subCategoryId ? catMap.get(prod.subCategoryId) || null : null;
+          const newCatId = prod.categoryId ? (catMap.get(prod.categoryId) || defaultCatId) : defaultCatId;
+          const newSubCatId = prod.subCategoryId ? (catMap.get(prod.subCategoryId) || null) : null;
           await prisma.product.create({
             data: {
               tenantId: masterTenant.id,
               name: prod.name,
               barcode: prod.barcode,
-              categoryId: newCatId || undefined,
-              subCategoryId: newSubCatId || undefined,
+              categoryId: newCatId,
+              subCategoryId: newSubCatId,
               buyPrice: prod.buyPrice,
               sellPrice: prod.sellPrice,
               stock: prod.stock,
