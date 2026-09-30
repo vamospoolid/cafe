@@ -27,6 +27,7 @@ import { usePOS } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
 import { RetailCustomerPicker, type CustomerData } from './RetailCustomerPicker';
 import { RetailCheckoutModal } from './RetailCheckoutModal';
+import { RetailReceiptPrinter } from './RetailReceiptPrinter';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import { initHardwareBarcodeListener, playScannerBeep } from '../../utils/hardwareBarcodeListener';
 
@@ -111,6 +112,7 @@ export const POSRetail: React.FC = () => {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState<boolean>(false);
   const [showShortcutHelp, setShowShortcutHelp] = useState<boolean>(false);
   const [lastOrderResult, setLastOrderResult] = useState<any | null>(null);
+  const [showReceipt, setShowReceipt] = useState<boolean>(false);
 
   const scannerInputRef = useRef<HTMLInputElement>(null);
 
@@ -1152,6 +1154,7 @@ export const POSRetail: React.FC = () => {
         customer={selectedCustomer}
         onSuccessCheckout={(result: any) => {
           setLastOrderResult(result);
+          setShowReceipt(true);
           setCart([]);
           // ── Reset pelanggan & tier setelah transaksi selesai ──
           setSelectedCustomer(null);
@@ -1161,7 +1164,19 @@ export const POSRetail: React.FC = () => {
         }}
       />
 
-      {/* 3. Barcode Scanner Camera Modal */}
+      {/* 3. Modal Struk Thermal Retail / Grosir 58/80mm */}
+      {showReceipt && lastOrderResult && (
+        <RetailReceiptPrinter
+          order={lastOrderResult}
+          autoPrint={true}
+          onClose={() => {
+            setShowReceipt(false);
+            setLastOrderResult(null);
+          }}
+        />
+      )}
+
+      {/* 4. Barcode Scanner Camera Modal */}
       {isScannerOpen && (
         <BarcodeScannerModal
           onClose={() => setIsScannerOpen(false)}

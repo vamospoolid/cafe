@@ -27,6 +27,25 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
+  // Stop scanner yang sedang aktif secara aman tanpa uncaught rejection/exception
+  const stopCurrentScanner = async () => {
+    const scanner = scannerRef.current;
+    if (!scanner) return;
+    scannerRef.current = null;
+    try {
+      if (scanner.isScanning) {
+        await scanner.stop();
+      }
+    } catch {
+      // Abaikan jika sudah tidak scanning
+    }
+    try {
+      scanner.clear();
+    } catch {
+      // Abaikan jika container DOM sudah dibersihkan
+    }
+  };
+
   // Pastikan hidden DOM container untuk scanFile selalu ada di DOM
   const ensureFileContainer = () => {
     let el = document.getElementById(FILE_SCANNER_DIV_ID);
@@ -50,32 +69,40 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
       setHasTorch(false);
       setTorchOn(false);
 
-      // 1. Cek ketersediaan navigator.mediaDevices
+      // 1. Cek ketersediaan mediaDevices
       if (!navigator?.mediaDevices?.getUserMedia) {
         if (!mounted) return;
         setCameraError(
-          'Browser tidak mendukung akses kamera langsung, atau koneksi tidak menggunakan HTTPS.\n\nGunakan tab "Scan dari Foto" atau "Input Manual".'
+          'Browser tidak mendukung akses kamera langsung, atau halaman tidak dibuka lewat HTTPS.\n\nSilakan gunakan tab "Scan dari Foto" atau "Input Manual".'
         );
         setIsStarting(false);
         return;
       }
 
-      // 2. Cek perangkat video fisik jika didukung browser
+      // 2. Deteksi kamera fisik yang tersedia
+      let selectedCamera: string | { facingMode: string } = { facingMode: 'environment' };
       try {
-        if (navigator.mediaDevices.enumerateDevices) {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoInputs = devices.filter(d => d.kind === 'videoinput');
-          if (videoInputs.length === 0) {
-            if (!mounted) return;
-            setCameraError(
-              'Perangkat ini tidak memiliki kamera (atau webcam tidak terdeteksi).\n\nSilakan gunakan opsi "Scan dari Foto" atau "Input Manual".'
-            );
-            setIsStarting(false);
-            return;
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 0) {
+          // Cari kamera belakang jika ada (untuk HP / tablet)
+          const backCam = devices.find(d => /back|rear|belakang|environment/i.test(d.label));
+          if (backCam) {
+            selectedCamera = backCam.id;
+          } else {
+            // Jika di laptop/PC atau kamera tunggal, gunakan kamera pertama
+            selectedCamera = devices[0].id;
           }
+        } else {
+          if (!mounted) return;
+          setCameraError(
+            'Kamera tidak ditemukan di perangkat ini (tidak ada webcam/kamera terpasang).\n\nSilakan gunakan opsi "Scan dari Foto" atau "Input Manual".'
+          );
+          setIsStarting(false);
+          return;
         }
       } catch {
-        // EnumerateDevices mungkin diblokir sebelum user mengizinkan kamera; lanjutkan coba start
+        // Jika getCameras() gagal sebelum izin diberikan, gunakan standar facingMode string
+        selectedCamera = { facingMode: 'environment' };
       }
 
       // 3. Pastikan elemen container live ada dan bersih
@@ -86,20 +113,28 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
         const scanner = new Html5Qrcode(SCANNER_DIV_ID, { verbose: false });
         scannerRef.current = scanner;
 
-        await scanner.start(
-          { facingMode: { ideal: 'environment' } },
-          {
-            fps: 15,
-            qrbox: { width: 260, height: 140 },
-            aspectRatio: 1.7,
-          },
-          (decodedText: string) => {
-            if (!mounted) return;
-            if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
-            onDetected(decodedText);
-          },
-          (_err: any) => {}
-        );
+        const scanConfig = {
+          fps: 15,
+          qrbox: { width: 260, height: 140 },
+          aspectRatio: 1.7,
+        };
+
+        const onScanSuccess = (decodedText: string) => {
+          if (!mounted) return;
+          if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+          onDetected(decodedText);
+        };
+
+        try {
+          await scanner.start(selectedCamera, scanConfig, onScanSuccess, () => {});
+        } catch (firstErr: any) {
+          // Fallback jika facingMode environment ditolak browser laptop (hanya ada front webcam)
+          if (typeof selectedCamera === 'object' && selectedCamera.facingMode === 'environment') {
+            await scanner.start({ facingMode: 'user' }, scanConfig, onScanSuccess, () => {});
+          } else {
+            throw firstErr;
+          }
+        }
 
         if (!mounted) return;
         setIsStarting(false);
@@ -113,6 +148,8 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
         } catch {}
       } catch (err: any) {
         if (!mounted) return;
+        await stopCurrentScanner();
+
         const msg = String(err?.message || err || '');
         const errName = String(err?.name || '');
 
@@ -123,7 +160,7 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
           msg.toLowerCase().includes('denied')
         ) {
           setCameraError(
-            'Izin akses kamera diblokir oleh browser.\n\nKlik ikon gembok di sebelah URL / address bar untuk mengaktifkan izin kamera, lalu muat ulang.'
+            'Izin akses kamera diblokir oleh browser.\n\nKlik ikon gembok/pengaturan situs di sebelah URL address bar untuk mengaktifkan izin kamera, lalu muat ulang.'
           );
         } else if (
           errName === 'NotFoundError' ||
@@ -152,10 +189,7 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
 
     return () => {
       mounted = false;
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
-        scannerRef.current = null;
-      }
+      stopCurrentScanner();
     };
   }, [mode]);
 
@@ -174,10 +208,7 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
 
   // ─── Switch mode ──────────────────────────────────────────────────────────
   const switchMode = (targetMode: 'camera' | 'file' | 'manual') => {
-    if (scannerRef.current) {
-      scannerRef.current.stop().catch(() => {});
-      scannerRef.current = null;
-    }
+    stopCurrentScanner();
     setFileScanResult(null);
     setMode(targetMode);
   };
@@ -235,7 +266,7 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
     <div className="fixed inset-0 z-[100] flex flex-col bg-black select-none">
 
       {/* Hidden file inputs */}
-      {/* 1. Kamera HP native via browser file input */}
+      {/* 1. Kamera HP native via browser file input (bekerja tanpa perlu WebRTC live) */}
       <input
         type="file"
         ref={fileInputRef}

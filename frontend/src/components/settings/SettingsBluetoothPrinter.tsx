@@ -14,9 +14,12 @@ import {
   ChevronDown,
   Receipt,
   Utensils,
-  ChefHat
+  ChefHat,
+  Wrench,
+  Boxes
 } from 'lucide-react';
 import { toast } from '../../utils/alert';
+import { useVertical } from '../../context/VerticalContext';
 import {
   type PrinterRole,
   isWebBluetoothSupported,
@@ -108,8 +111,21 @@ const StatusBadge = ({ status, lastError }: { status: string; lastError?: string
 
 export const SettingsBluetoothPrinter: React.FC = () => {
   const printer = usePrinter();
+  const { isBengkel, isRetail, businessType } = useVertical();
 
-  // Tab Role Aktif: Kasir vs Dapur
+  const secondaryRoleLabel = isBengkel 
+    ? 'Printer Gudang Part' 
+    : isRetail 
+      ? 'Printer Gudang / Packing' 
+      : 'Printer Tiket Dapur';
+
+  const secondaryRoleShort = isBengkel 
+    ? 'Gudang Part' 
+    : isRetail 
+      ? 'Gudang' 
+      : 'Dapur';
+
+  // Tab Role Aktif: Kasir vs Dapur / Gudang
   const [activeRole, setActiveRole] = useState<PrinterRole>('cashier');
 
   // Perangkat tersimpan per role
@@ -215,13 +231,13 @@ export const SettingsBluetoothPrinter: React.FC = () => {
 
   const handleTestPrint = async () => {
     if (!currentSaved) {
-      toast(`Belum ada printer ${activeRole === 'kitchen' ? 'Dapur' : 'Kasir'} yang tersambung`, 'warning');
+      toast(`Belum ada printer ${activeRole === 'kitchen' ? secondaryRoleShort : 'Kasir'} yang tersambung`, 'warning');
       return;
     }
     setPrinting(true);
     try {
-      await testPrintBluetooth(activeRole);
-      toast(`✅ Struk tes ${activeRole === 'kitchen' ? 'Dapur' : 'Kasir'} berhasil dicetak!`, 'success');
+      await testPrintBluetooth(activeRole, businessType);
+      toast(`✅ Struk tes ${activeRole === 'kitchen' ? secondaryRoleShort : 'Kasir'} berhasil dicetak!`, 'success');
     } catch (err: any) {
       toast(err.message || 'Gagal tes cetak. Pastikan printer nyala.', 'error');
     } finally {
@@ -332,8 +348,8 @@ export const SettingsBluetoothPrinter: React.FC = () => {
               : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
           }`}
         >
-          <Utensils size={16} />
-          <span>Printer Tiket Dapur</span>
+          {isBengkel ? <Wrench size={16} /> : isRetail ? <Boxes size={16} /> : <Utensils size={16} />}
+          <span>{secondaryRoleLabel}</span>
           {kitchenPrinter ? (
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs" title="Terhubung" />
           ) : cashierPrinter ? (
@@ -590,7 +606,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
                       )}
                       {isSelectedKitchen && (
                         <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-extrabold rounded-md border border-amber-200">
-                          🍜 Dapur Aktif
+                          {isBengkel ? '🔧 Gudang Part' : isRetail ? '📦 Gudang' : '🍜 Dapur'} Aktif
                         </span>
                       )}
                     </div>
@@ -622,8 +638,8 @@ export const SettingsBluetoothPrinter: React.FC = () => {
                           : 'border border-amber-200 bg-amber-50/50 text-amber-700 hover:bg-amber-100'
                       }`}
                     >
-                      <Utensils size={13} />
-                      <span>{isSelectedKitchen ? '✓ Terpilih Dapur' : '+ Set Dapur'}</span>
+                      {isBengkel ? <Wrench size={13} /> : isRetail ? <Boxes size={13} /> : <Utensils size={13} />}
+                      <span>{isSelectedKitchen ? `✓ Terpilih ${secondaryRoleShort}` : `+ Set ${secondaryRoleShort}`}</span>
                     </button>
                   </div>
                 </div>

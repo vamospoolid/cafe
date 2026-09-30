@@ -1278,6 +1278,7 @@ export const POSBengkel: React.FC = () => {
       {showReceipt && completedOrder && (
         <WorkOrderReceiptPrinter
           workOrder={completedOrder}
+          autoPrint={true}
           onClose={() => {
             setShowReceipt(false);
             setCompletedOrder(null);

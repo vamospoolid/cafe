@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import {
   getSavedBluetoothPrinter,
   printBluetoothReceipt,
+  printBluetoothBengkelWorkOrder,
+  printBluetoothRetailReceipt,
   COMMON_PRINTER_SERVICES,
   isWebBluetoothSupported,
   connectGattWithRetry,
@@ -280,15 +282,24 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setStatus('printing');
     try {
-      await printBluetoothReceipt(order, {
+      const paperWidth = printerInfo?.paperWidth === 80 ? '80mm' : '58mm';
+      const storeSettings = {
         name: settings.storeName || 'Kasir',
+        storeName: settings.storeName || 'Kasir',
         address: settings.address,
         phone: settings.phone,
         footer: settings.receiptFooter,
-        paperWidth: printerInfo?.paperWidth === 80 ? '80mm' : '58mm',
-      }, {
-        autoKickDrawer: true,
-      });
+        paperWidth,
+      };
+
+      // Deteksi jenis transaksi secara polimorfis (Bengkel vs Retail vs Kafe)
+      if (order.spkNumber || order.services || order.vehiclePlate) {
+        await printBluetoothBengkelWorkOrder(order, storeSettings, { autoKickDrawer: true });
+      } else if (order.priceTier || (order.items && order.items.some((it: any) => it.uomName))) {
+        await printBluetoothRetailReceipt(order, storeSettings, { autoKickDrawer: true });
+      } else {
+        await printBluetoothReceipt(order, storeSettings, { autoKickDrawer: true });
+      }
       setStatus('connected');
     } catch (err: any) {
       setStatus('error');

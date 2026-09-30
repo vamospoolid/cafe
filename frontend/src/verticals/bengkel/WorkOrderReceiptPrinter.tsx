@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from 'react';
-import { Printer, X, CheckCircle, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Printer, X, CheckCircle, ShieldCheck, RefreshCw } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
+import { getSavedBluetoothPrinter, printBluetoothBengkelWorkOrder } from '../../utils/printerBluetooth';
+import { toast } from '../../utils/alert';
 
 interface WorkOrderReceiptPrinterProps {
   workOrder: any;
@@ -15,6 +17,7 @@ export const WorkOrderReceiptPrinter: React.FC<WorkOrderReceiptPrinterProps> = (
 }) => {
   const { settings, user } = usePOS();
   const printRef = useRef<HTMLDivElement>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
@@ -35,15 +38,50 @@ export const WorkOrderReceiptPrinter: React.FC<WorkOrderReceiptPrinterProps> = (
     });
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    setIsPrinting(true);
+
+    // 1. Cek printer Electron POS jika ada
+    const win = window as any;
+    if (win.electronPOS?.printer?.printReceipt) {
+      try {
+        await win.electronPOS.printer.printReceipt(workOrder, settings);
+        setIsPrinting(false);
+        return;
+      } catch (e) {
+        console.warn('Electron print failed, falling back:', e);
+      }
+    }
+
+    // 2. Cek printer Bluetooth / ESC/POS thermal terhubung
+    const savedBt = getSavedBluetoothPrinter();
+    if (savedBt || localStorage.getItem('bluetooth_printer_mac')) {
+      try {
+        await printBluetoothBengkelWorkOrder(workOrder, {
+          storeName: settings?.storeName || 'BENGKEL REPARASI RESMI',
+          address: settings?.address || '',
+          phone: settings?.phone || '',
+          footer: settings?.receiptFooter || 'Harap simpan struk untuk klaim garansi servis.'
+        }, { autoKickDrawer: true });
+        toast('Struk berhasil dicetak ke printer Bluetooth thermal', 'success');
+        setIsPrinting(false);
+        return;
+      } catch (btErr: any) {
+        console.warn('Bluetooth print failed, falling back to window.print():', btErr);
+        toast(`Printer bluetooth gagal: ${btErr.message || btErr}. Menggunakan dialog cetak browser.`, 'warning');
+      }
+    }
+
+    // 3. Fallback browser window.print()
+    setIsPrinting(false);
     window.print();
   };
 
   useEffect(() => {
     if (autoPrint) {
       const timer = setTimeout(() => {
-        window.print();
-      }, 300);
+        handlePrint();
+      }, 400);
       return () => clearTimeout(timer);
     }
   }, [autoPrint]);
@@ -275,10 +313,11 @@ export const WorkOrderReceiptPrinter: React.FC<WorkOrderReceiptPrinterProps> = (
           <button
             type="button"
             onClick={handlePrint}
-            className="flex-1 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition"
+            disabled={isPrinting}
+            className="flex-1 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition"
           >
-            <Printer size={15} />
-            Cetak Struk Thermal
+            {isPrinting ? <RefreshCw size={15} className="animate-spin" /> : <Printer size={15} />}
+            {isPrinting ? 'Mencetak...' : 'Cetak Struk Thermal'}
           </button>
         </div>
       </div>

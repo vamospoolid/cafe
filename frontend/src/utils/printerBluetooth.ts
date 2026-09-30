@@ -671,27 +671,45 @@ export const printRawBytes = async (bytes: Uint8Array, role: PrinterRole = 'cash
 };
 
 /**
- * Test Print Function (Kasir atau Dapur)
+ * Test Print Function (Kasir atau Dapur / Gudang)
  */
-export const testPrintBluetooth = async (role: PrinterRole = 'cashier'): Promise<void> => {
+export const testPrintBluetooth = async (role: PrinterRole = 'cashier', businessType: string = 'CAFE'): Promise<void> => {
   const isKitchen = role === 'kitchen';
   const encoder = new EscPosEncoder();
+
+  let headerTitle = isKitchen ? 'TIKET UJI COBA PRINTER DAPUR' : 'STRUK UJI COBA PRINTER KASIR';
+  let subTitle = isKitchen ? 'TEST PRINTER DAPUR OK' : 'TEST PRINTER KASIR OK';
+  let targetDesc = isKitchen ? 'Printer Dapur (Tiket Pesanan)' : 'Printer Kasir (Struk Konsumen)';
+  let footerDesc = isKitchen ? 'Pesanan Siap Diproses' : 'Printer Siap Digunakan Kasir';
+
+  if (businessType === 'BENGKEL') {
+    headerTitle = isKitchen ? 'TEST PRINTER GUDANG PART' : 'STRUK TEST PRINTER BENGKEL';
+    subTitle = isKitchen ? 'GUDANG SPAREPART OK' : 'KASIR BENGKEL OK';
+    targetDesc = isKitchen ? 'Printer Gudang / Part Desk' : 'Printer Kasir Bengkel';
+    footerDesc = isKitchen ? 'Pengambilan Part Siap' : 'Sistem Servis & SPK Aktif';
+  } else if (businessType === 'RETAIL') {
+    headerTitle = isKitchen ? 'TEST PRINTER GUDANG' : 'STRUK TEST PRINTER GROSIR';
+    subTitle = isKitchen ? 'GUDANG PACKING OK' : 'KASIR RETAIL/GROSIR OK';
+    targetDesc = isKitchen ? 'Printer Gudang / Packing' : 'Printer Kasir Retail';
+    footerDesc = isKitchen ? 'Surat Jalan / Packing Siap' : 'Sistem Kasir & Bon Siap';
+  }
+
   const bytes = encoder
     .initialize()
     .align('center')
     .line('================================')
     .bold(true)
-    .line(isKitchen ? 'TIKET UJI COBA PRINTER DAPUR' : 'STRUK UJI COBA PRINTER KASIR')
+    .line(headerTitle)
     .bold(false)
-    .line(isKitchen ? 'TEST PRINTER DAPUR OK' : 'TEST PRINTER KASIR OK')
+    .line(subTitle)
     .line('================================')
     .align('left')
     .line(`Waktu  : ${new Date().toLocaleString('id-ID')}`)
-    .line(`Target : ${isKitchen ? 'Printer Dapur (Tiket Makanan)' : 'Printer Kasir (Struk Konsumen)'}`)
+    .line(`Target : ${targetDesc}`)
     .line('Status : Berhasil Terhubung!')
     .line('--------------------------------')
     .align('center')
-    .line(isKitchen ? 'Pesanan Siap Diproses Koki' : 'Printer Siap Digunakan Kasir')
+    .line(footerDesc)
     .line('\n\n\n')
     .cut()
     .encode();
@@ -989,4 +1007,277 @@ export const printBluetoothKitchenTicket = async (
     throw err;
   }
 };
+
+/**
+ * Print Work Order / SPK Bengkel Receipt to Bluetooth Thermal Printer (Struk Bengkel)
+ */
+export const printBluetoothBengkelWorkOrder = async (
+  workOrder: any,
+  settings: { name?: string; storeName?: string; address?: string; phone?: string; footer?: string; paperWidth?: '58mm' | '80mm' },
+  options?: { autoKickDrawer?: boolean }
+): Promise<void> => {
+  try {
+    const is80mm = settings.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
+    const lineWidth = is80mm ? 48 : 32;
+    const divider = '='.repeat(lineWidth);
+    const subDivider = '-'.repeat(lineWidth);
+
+    const encoder = new EscPosEncoder();
+    const storeName = settings.storeName || settings.name || 'BENGKEL REPARASI RESMI';
+
+    let encoded = encoder
+      .initialize()
+      .align('center')
+      .bold(true)
+      .line(storeName)
+      .bold(false);
+
+    if (settings.address) encoded = encoded.line(settings.address);
+    if (settings.phone) encoded = encoded.line(`Telp/WA: ${settings.phone}`);
+
+    const formatDate = (iso: string) => {
+      if (!iso) return '-';
+      return new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+    const formatTime = (iso: string) => {
+      if (!iso) return '-';
+      return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    };
+    const fmt = (n: number) => `Rp ${Math.round(n || 0).toLocaleString('id-ID')}`;
+
+    encoded = encoded
+      .line(divider)
+      .align('left')
+      .line(`No. SPK   : ${workOrder.spkNumber || workOrder.id || '-'}`)
+      .line(`Waktu     : ${formatDate(workOrder.createdAt)} ${formatTime(workOrder.createdAt)}`)
+      .line(`Kasir     : ${workOrder.user?.name || workOrder.cashierName || 'Kasir'}`)
+      .bold(true)
+      .line(`No. Polisi: ${workOrder.vehiclePlate || 'WALK-IN'}`)
+      .bold(false);
+
+    if (workOrder.vehicleBrand || workOrder.vehicleModel) {
+      encoded = encoded.line(`Kendaraan : ${[workOrder.vehicleBrand, workOrder.vehicleModel].filter(Boolean).join(' ')}`);
+    }
+    if (workOrder.odometer) {
+      encoded = encoded.line(`Kilometer : ${workOrder.odometer.toLocaleString('id-ID')} km`);
+    }
+    if (workOrder.customerName) {
+      encoded = encoded.line(`Konsumen  : ${workOrder.customerName}`);
+    }
+    if (workOrder.mechanicName) {
+      encoded = encoded.line(`Mekanik   : ${workOrder.mechanicName}`);
+    }
+
+    // Jasa Servis
+    if (workOrder.services && workOrder.services.length > 0) {
+      encoded = encoded.line(subDivider).bold(true).line('[ JASA REPARASI & SERVIS ]').bold(false);
+      workOrder.services.forEach((s: any) => {
+        const name = s.serviceName || s.name || 'Jasa';
+        const qty = s.qty || 1;
+        const price = s.price || 0;
+        const subtotal = s.subtotal || (qty * price);
+        const qtyStr = `${qty}x${Math.round(price).toLocaleString('id-ID')}`;
+        const totalStr = Math.round(subtotal).toLocaleString('id-ID');
+
+        const maxNameLen = is80mm ? 24 : 14;
+        const shortName = name.length > maxNameLen ? name.substring(0, maxNameLen) : name.padEnd(maxNameLen, ' ');
+        const paddedQty = qtyStr.padStart(is80mm ? 12 : 9, ' ');
+        const paddedTotal = totalStr.padStart(is80mm ? 12 : 9, ' ');
+
+        encoded = encoded.line(`${shortName} ${paddedQty} ${paddedTotal}`);
+      });
+    }
+
+    // Suku Cadang / Oli
+    if (workOrder.parts && workOrder.parts.length > 0) {
+      encoded = encoded.line(subDivider).bold(true).line('[ SUKU CADANG / OLI ]').bold(false);
+      workOrder.parts.forEach((p: any) => {
+        const name = p.partName || p.productName || p.name || 'Part';
+        const qty = p.qty || 1;
+        const price = p.price || 0;
+        const subtotal = p.subtotal || (qty * price);
+        const qtyStr = `${qty}x${Math.round(price).toLocaleString('id-ID')}`;
+        const totalStr = Math.round(subtotal).toLocaleString('id-ID');
+
+        const maxNameLen = is80mm ? 24 : 14;
+        const shortName = name.length > maxNameLen ? name.substring(0, maxNameLen) : name.padEnd(maxNameLen, ' ');
+        const paddedQty = qtyStr.padStart(is80mm ? 12 : 9, ' ');
+        const paddedTotal = totalStr.padStart(is80mm ? 12 : 9, ' ');
+
+        encoded = encoded.line(`${shortName} ${paddedQty} ${paddedTotal}`);
+      });
+    }
+
+    // Totals
+    const subtotal = (workOrder.totalServices || 0) + (workOrder.totalParts || 0);
+    const discount = workOrder.discount || 0;
+    const tax = workOrder.taxAmount || 0;
+    const grandTotal = workOrder.totalAmount || (subtotal - discount + tax);
+    const paidAmount = workOrder.paidAmount || grandTotal;
+    const changeAmount = Math.max(0, paidAmount - grandTotal);
+    const paymentMethod = (workOrder.paymentMethod || 'TUNAI').toUpperCase();
+
+    encoded = encoded
+      .line(subDivider)
+      .align('right')
+      .line(`Subtotal: ${fmt(subtotal)}`);
+
+    if (discount > 0) encoded = encoded.line(`Diskon: -${fmt(discount)}`);
+    if (tax > 0) encoded = encoded.line(`PPN: ${fmt(tax)}`);
+
+    encoded = encoded
+      .bold(true)
+      .line(`TOTAL: ${fmt(grandTotal)}`)
+      .bold(false)
+      .line(`Bayar (${paymentMethod}): ${fmt(paidAmount)}`);
+
+    if (changeAmount > 0) {
+      encoded = encoded.line(`Kembali: ${fmt(changeAmount)}`);
+    }
+    if (paidAmount < grandTotal) {
+      encoded = encoded.bold(true).line(`Sisa Piutang: ${fmt(grandTotal - paidAmount)}`).bold(false);
+    }
+
+    encoded = encoded
+      .line(divider)
+      .align('center')
+      .bold(true)
+      .line('GARANSI SERVIS 7 HARI KERJA')
+      .bold(false)
+      .line('Simpan struk ini sebagai bukti garansi.')
+      .line(settings.footer || 'Terima Kasih Atas Kepercayaan Anda!')
+      .line('\n\n\n')
+      .cut();
+
+    const bytes = encoded.encode();
+    await printRawBytes(bytes, 'cashier');
+
+    const shouldKick = options?.autoKickDrawer ?? (paymentMethod === 'TUNAI' || paymentMethod === 'CASH');
+    if (shouldKick) {
+      await kickCashDrawer();
+    }
+  } catch (err: any) {
+    console.error('Error printing Bengkel work order via Bluetooth:', err);
+    throw err;
+  }
+};
+
+/**
+ * Print Retail / Grosir Order Receipt to Bluetooth Thermal Printer (Struk Retail & Grosir)
+ */
+export const printBluetoothRetailReceipt = async (
+  order: any,
+  settings: { name?: string; storeName?: string; address?: string; phone?: string; footer?: string; paperWidth?: '58mm' | '80mm' },
+  options?: { autoKickDrawer?: boolean }
+): Promise<void> => {
+  try {
+    const is80mm = settings.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
+    const lineWidth = is80mm ? 48 : 32;
+    const divider = '='.repeat(lineWidth);
+    const subDivider = '-'.repeat(lineWidth);
+
+    const encoder = new EscPosEncoder();
+    const storeName = settings.storeName || settings.name || 'TOKO GROSIR & SEMBAKO';
+
+    let encoded = encoder
+      .initialize()
+      .align('center')
+      .bold(true)
+      .line(storeName)
+      .bold(false);
+
+    if (settings.address) encoded = encoded.line(settings.address);
+    if (settings.phone) encoded = encoded.line(`Telp/WA: ${settings.phone}`);
+
+    const fmt = (n: number) => `Rp ${Math.round(n || 0).toLocaleString('id-ID')}`;
+
+    encoded = encoded
+      .line(divider)
+      .align('left')
+      .line(`No Faktur : ${order.orderNumber || order.id || '-'}`)
+      .line(`Tanggal   : ${new Date(order.paidAt || order.createdAt || Date.now()).toLocaleString('id-ID')}`)
+      .line(`Kasir     : ${order.user?.name || order.cashierName || 'Kasir'}`)
+      .line(`Pelanggan : ${order.customer?.name || order.customerName || 'Pelanggan Umum'}`);
+
+    if (order.priceTier && order.priceTier !== 'UMUM') {
+      encoded = encoded.line(`Tier Harga: ${order.priceTier}`);
+    }
+
+    encoded = encoded.line(subDivider);
+
+    const items = order.items || [];
+    items.forEach((item: any) => {
+      const productName = item.productName || item.product?.name || item.name || 'Item';
+      const qty = item.qty || item.quantity || 1;
+      const uom = item.uomName ? ` ${item.uomName}` : '';
+      const price = item.price || item.unitPrice || 0;
+      const total = item.subtotal || (qty * price);
+
+      const qtyPriceStr = `${qty}${uom}x${Math.round(price).toLocaleString('id-ID')}`;
+      const totalStr = Math.round(total).toLocaleString('id-ID');
+
+      const maxNameLen = is80mm ? 22 : 13;
+      const shortName = productName.length > maxNameLen ? productName.substring(0, maxNameLen) : productName.padEnd(maxNameLen, ' ');
+      const paddedQty = qtyPriceStr.padStart(is80mm ? 13 : 9, ' ');
+      const paddedTotal = totalStr.padStart(is80mm ? 13 : 10, ' ');
+
+      encoded = encoded.line(`${shortName} ${paddedQty} ${paddedTotal}`);
+    });
+
+    const subtotal = order.subtotal || order.total || 0;
+    const discount = order.discount || order.discountAmount || 0;
+    const tax = order.tax || order.taxAmount || 0;
+    const grandTotal = order.total || order.grandTotal || (subtotal - discount + tax);
+    const cashReceived = order.cashReceived || order.paidAmount || grandTotal;
+    const changeDue = Math.max(0, cashReceived - grandTotal);
+    const paymentMethod = (order.paymentMethod || 'TUNAI').toUpperCase();
+
+    encoded = encoded
+      .line(subDivider)
+      .align('right')
+      .line(`Subtotal: ${fmt(subtotal)}`);
+
+    if (discount > 0) encoded = encoded.line(`Diskon: -${fmt(discount)}`);
+    if (tax > 0) encoded = encoded.line(`PPN: ${fmt(tax)}`);
+
+    encoded = encoded
+      .bold(true)
+      .line(`TOTAL: ${fmt(grandTotal)}`)
+      .bold(false);
+
+    if (paymentMethod === 'BON' || paymentMethod === 'TEMPO') {
+      encoded = encoded
+        .bold(true)
+        .line('PEMBAYARAN: BON TEMPO (HUTANG)')
+        .bold(false);
+      if (order.dueDate) {
+        encoded = encoded.line(`Jatuh Tempo: ${new Date(order.dueDate).toLocaleDateString('id-ID')}`);
+      }
+    } else {
+      encoded = encoded
+        .line(`Bayar (${paymentMethod}): ${fmt(cashReceived)}`)
+        .line(`Kembali: ${fmt(changeDue)}`);
+    }
+
+    encoded = encoded
+      .line(divider)
+      .align('center')
+      .line(settings.footer || 'Barang yang sudah dibeli tidak dapat ditukar.')
+      .line('Terima Kasih Atas Kunjungan Anda!')
+      .line('\n\n\n')
+      .cut();
+
+    const bytes = encoded.encode();
+    await printRawBytes(bytes, 'cashier');
+
+    const shouldKick = options?.autoKickDrawer ?? (paymentMethod === 'TUNAI' || paymentMethod === 'CASH');
+    if (shouldKick) {
+      await kickCashDrawer();
+    }
+  } catch (err: any) {
+    console.error('Error printing Retail order via Bluetooth:', err);
+    throw err;
+  }
+};
+
 
