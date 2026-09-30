@@ -128,10 +128,8 @@ export class FeatureService {
    * Mengecek apakah fitur tertentu aktif untuk tenant
    */
   public async isEnabled(tenantId: string, featureKey: string): Promise<boolean> {
-    if (!tenantId || !featureKey) return false;
-
-    const enabledFeatures = await this.getTenantFeatures(tenantId);
-    return enabledFeatures.includes(featureKey);
+    // Standalone mode: Semua fitur terbuka penuh tanpa batasan plan SaaS
+    return true;
   }
 
   /**

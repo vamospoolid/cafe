@@ -41,30 +41,23 @@ router.get('/my-subscription', authenticateToken, async (req: AuthRequest, res: 
       return res.status(404).json({ error: 'Data tenant tidak ditemukan' });
     }
 
-    const currentSub = tenant.subscriptions[0];
-    const plan = currentSub?.plan || tenant.plan || {
-      id: 'plan-starter-default',
-      name: 'Paket Starter UMKM',
-      code: 'STARTER',
-      priceMonthly: 99000,
-      priceYearly: 990000,
-      maxOutlets: 1,
-      maxUsers: 3,
-      maxProducts: 100
+    const plan = {
+      id: 'plan-standalone-enterprise',
+      name: 'Lisensi Standalone Enterprise (Permanen)',
+      code: 'STANDALONE',
+      priceMonthly: 0,
+      priceYearly: 0,
+      maxOutlets: 999999,
+      maxUsers: 999999,
+      maxProducts: 999999
     };
 
-    // Hitung sisa hari aktif
-    const now = new Date();
-    const expiryDate = currentSub?.currentPeriodEnd || tenant.trialEndsAt || new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const diffTime = new Date(expiryDate).getTime() - now.getTime();
-    const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-
-    // Ambil pemakaian kuota saat ini
+    // Ambil pemakaian kuota saat ini (Unlimited)
     const usageData = await quotaService.getUsageAndLimits(tenantId).catch(() => ({
       quotas: {
-        outlets: { used: tenant._count.outlets, max: plan.maxOutlets, remaining: Math.max(0, plan.maxOutlets - tenant._count.outlets), isExceeded: tenant._count.outlets >= plan.maxOutlets },
-        users: { used: tenant._count.memberships, max: plan.maxUsers, remaining: Math.max(0, plan.maxUsers - tenant._count.memberships), isExceeded: tenant._count.memberships >= plan.maxUsers },
-        products: { used: tenant._count.products, max: plan.maxProducts, remaining: Math.max(0, plan.maxProducts - tenant._count.products), isExceeded: tenant._count.products >= plan.maxProducts }
+        outlets: { used: tenant._count.outlets, max: plan.maxOutlets, remaining: 999999, isExceeded: false },
+        users: { used: tenant._count.memberships, max: plan.maxUsers, remaining: 999999, isExceeded: false },
+        products: { used: tenant._count.products, max: plan.maxProducts, remaining: 999999, isExceeded: false }
       }
     }));
 
@@ -77,25 +70,25 @@ router.get('/my-subscription', authenticateToken, async (req: AuthRequest, res: 
         id: tenant.id,
         name: tenant.name,
         slug: tenant.slug,
-        status: tenant.status,
+        status: 'ACTIVE',
         ownerName: tenant.ownerName,
         phone: tenant.phone,
         email: tenant.email,
-        trialEndsAt: tenant.trialEndsAt
+        trialEndsAt: null
       },
       subscription: {
-        status: currentSub?.status || tenant.status,
+        status: 'ACTIVE',
         planName: plan.name,
         planCode: plan.code,
-        priceMonthly: plan.priceMonthly,
-        priceYearly: plan.priceYearly,
-        billingCycle: currentSub?.billingCycle || 'MONTHLY',
-        currentPeriodStart: currentSub?.currentPeriodStart || tenant.createdAt,
-        currentPeriodEnd: expiryDate,
-        daysRemaining,
-        isTrial: tenant.status === 'TRIAL',
-        isSuspended: tenant.status === 'SUSPENDED',
-        isGracePeriod: tenant.status === 'GRACE_PERIOD'
+        priceMonthly: 0,
+        priceYearly: 0,
+        billingCycle: 'LIFETIME',
+        currentPeriodStart: tenant.createdAt,
+        currentPeriodEnd: null,
+        daysRemaining: 999999,
+        isTrial: false,
+        isSuspended: false,
+        isGracePeriod: false
       },
       quotas: usageData.quotas,
       features: activeFeatures

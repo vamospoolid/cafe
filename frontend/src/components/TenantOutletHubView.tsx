@@ -177,12 +177,7 @@ export const TenantOutletHubView: React.FC = () => {
         setIsAddModalOpen(false);
         fetchHubData();
       } else {
-        if (data.error === 'QUOTA_EXCEEDED') {
-          setIsAddModalOpen(false);
-          setIsUpgradeModalOpen(true);
-        } else {
-          toast(data.error || 'Gagal menambahkan cabang', 'error');
-        }
+        toast(data.error || 'Gagal menambahkan cabang', 'error');
       }
     } catch (e: any) {
       toast(e.message || 'Terjadi kesalahan sistem', 'error');
@@ -263,7 +258,7 @@ export const TenantOutletHubView: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto pb-32 animate-fade-in">
       
-      {/* ─── 1. TOP HERO & SUBSCRIPTION BANNER ────────────────────────────── */}
+      {/* ─── 1. TOP HERO BANNER (STANDALONE OPERATIONAL) ────────────────────────────── */}
       <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white shadow-2xl border border-indigo-500/20 relative overflow-hidden">
         <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         
@@ -271,119 +266,74 @@ export const TenantOutletHubView: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
-                {tenantInfo?.name || 'Workspace Bisnis'}
+                {posContext?.settings?.storeName || tenantInfo?.name || 'MUKI RAMEN'}
               </span>
-              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                subscription?.status === 'ACTIVE' 
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' 
-                  : 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
-              }`}>
-                {subscription?.status === 'ACTIVE' ? 'Paket Aktif' : 'Masa Percobaan (Trial)'}
+              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                Lisensi Standalone Aktif
               </span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-              Manajemen Multi-Cabang &amp; Kuota Paket
+              Manajemen Cabang &amp; Outlet
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Pantau seluruh performa cabang, alokasi staf kasir, dan kapasitas kuota paket langganan bisnis Anda secara terpusat.
+              Pantau seluruh cabang toko, informasi operasional, dan alokasi sesi kasir bisnis Anda secara terpusat tanpa batasan kuota.
             </p>
           </div>
 
-          {/* Subscription Action Box */}
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-start justify-between gap-3 shrink-0">
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Paket Saat Ini</div>
-              <div className="text-lg font-black text-white flex items-center gap-1.5 mt-0.5">
-                <Crown size={16} className="text-amber-400" />
-                <span>{subscription?.planName || 'Paket Starter'}</span>
-              </div>
-              <div className="text-xs font-semibold text-indigo-300 mt-1 flex items-center gap-1">
-                <Clock size={12} />
-                <span>Sisa {subscription?.daysRemaining ?? 14} Hari Masa Aktif</span>
-              </div>
-            </div>
-
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsUpgradeModalOpen(true)}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02]"
+              onClick={() => setIsAddModalOpen(true)}
+              className="py-3 px-5 rounded-2xl bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-extrabold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-500/25 transition-all hover:scale-[1.02]"
             >
-              <Sparkles size={14} /> Upgrade Paket Bisnis
+              <Plus size={16} /> Tambah Cabang Baru
             </button>
           </div>
         </div>
 
-        {/* ─── Realtime Quota Utilization Meters ─── */}
+        {/* ─── Operational Metrics Summary (No Quotas, Pure Stats) ─── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-6 relative z-10 pt-6 border-t border-white/10">
-          
-          {/* Outlets Quota */}
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
             <div className="flex justify-between items-center text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1.5">
-                <Store size={14} className="text-indigo-400" /> Kuota Cabang Aktif
+                <Store size={14} className="text-indigo-400" /> Total Cabang Outlet
               </span>
-              <span className="font-mono text-white">
-                {quotas?.outlets.used ?? outlets.length} / {quotas?.outlets.max ?? 1}
+              <span className="font-mono text-white text-base font-black">
+                {outlets.length} Cabang
               </span>
             </div>
-            <div className="w-full bg-white/10 h-2 rounded-full mt-2.5 overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all duration-500 ${
-                  quotas?.outlets.isExceeded ? 'bg-amber-400' : 'bg-indigo-500'
-                }`}
-                style={{ width: `${Math.min(100, (((quotas?.outlets.used ?? outlets.length) / (quotas?.outlets.max ?? 1)) * 100))}%` }}
-              />
-            </div>
-            <div className="text-[10px] font-semibold text-slate-400 mt-1.5 flex justify-between">
-              <span>{quotas?.outlets.isExceeded ? '⚠️ Kuota Cabang Penuh' : `${quotas?.outlets.remaining ?? 0} cabang tersisa`}</span>
-              <span className="text-indigo-300 font-bold">{Math.round(((quotas?.outlets.used ?? outlets.length) / (quotas?.outlets.max ?? 1)) * 100)}%</span>
+            <div className="text-[10px] font-semibold text-emerald-400 mt-1.5">
+              ● Operasional Aktif
             </div>
           </div>
 
-          {/* Users / Staff Quota */}
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
             <div className="flex justify-between items-center text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1.5">
-                <Users size={14} className="text-cyan-400" /> Kuota Akun Staff
+                <Users size={14} className="text-cyan-400" /> Total Akun Staf
               </span>
-              <span className="font-mono text-white">
-                {quotas?.users.used ?? 0} / {quotas?.users.max ?? 3}
+              <span className="font-mono text-white text-base font-black">
+                {quotas?.users.used ?? 0} Staf
               </span>
             </div>
-            <div className="w-full bg-white/10 h-2 rounded-full mt-2.5 overflow-hidden">
-              <div 
-                className="h-full rounded-full bg-cyan-400 transition-all duration-500"
-                style={{ width: `${Math.min(100, (((quotas?.users.used ?? 0) / (quotas?.users.max ?? 3)) * 100))}%` }}
-              />
-            </div>
-            <div className="text-[10px] font-semibold text-slate-400 mt-1.5 flex justify-between">
-              <span>{quotas?.users.remaining ?? 0} akun staf tersisa</span>
-              <span className="text-cyan-300 font-bold">{Math.round(((quotas?.users.used ?? 0) / (quotas?.users.max ?? 3)) * 100)}%</span>
+            <div className="text-[10px] font-semibold text-cyan-300 mt-1.5">
+              Kapasitas Tanpa Batas (Unlimited)
             </div>
           </div>
 
-          {/* Products / Menu Quota */}
           <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
             <div className="flex justify-between items-center text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1.5">
-                <Package size={14} className="text-emerald-400" /> Kuota Menu Produk
+                <Package size={14} className="text-emerald-400" /> Total Menu Produk
               </span>
-              <span className="font-mono text-white">
-                {quotas?.products.used ?? 0} / {quotas?.products.max ?? 100}
+              <span className="font-mono text-white text-base font-black">
+                {quotas?.products.used ?? 0} Menu
               </span>
             </div>
-            <div className="w-full bg-white/10 h-2 rounded-full mt-2.5 overflow-hidden">
-              <div 
-                className="h-full rounded-full bg-emerald-400 transition-all duration-500"
-                style={{ width: `${Math.min(100, (((quotas?.products.used ?? 0) / (quotas?.products.max ?? 100)) * 100))}%` }}
-              />
-            </div>
-            <div className="text-[10px] font-semibold text-slate-400 mt-1.5 flex justify-between">
-              <span>{quotas?.products.remaining ?? 0} slot menu tersisa</span>
-              <span className="text-emerald-300 font-bold">{Math.round(((quotas?.products.used ?? 0) / (quotas?.products.max ?? 100)) * 100)}%</span>
+            <div className="text-[10px] font-semibold text-emerald-300 mt-1.5">
+              Katalog Tanpa Batas (Unlimited)
             </div>
           </div>
-
         </div>
       </div>
 
@@ -729,76 +679,7 @@ export const TenantOutletHubView: React.FC = () => {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* MODAL: UPGRADE KE PAKET MULTI-CABANG (GROWTH / ENTERPRISE)             */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {isUpgradeModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white w-full max-w-xl rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative border border-slate-200">
-            <button 
-              onClick={() => setIsUpgradeModalOpen(false)}
-              className="absolute right-5 top-5 p-1.5 rounded-xl text-slate-400 hover:bg-slate-100 cursor-pointer"
-            >
-              <X size={18} />
-            </button>
 
-            <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto shadow-md shadow-amber-500/10">
-                <Sparkles size={24} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900">
-                Kembangkan Bisnis Anda ke Multi-Cabang!
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Batas kuota <strong>{subscription?.planName || 'Paket Starter'}</strong> Anda telah mencapai batas maksimal ({quotas?.outlets.max} Cabang).
-              </p>
-            </div>
-
-            {/* Feature Comparison */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200/60 space-y-3">
-              <div className="text-xs font-black text-amber-900 uppercase tracking-wider">
-                Keuntungan Upgrade ke Paket Growth (Multi-Outlet):
-              </div>
-              <ul className="space-y-2 text-xs text-slate-700">
-                <li className="flex items-center gap-2 font-bold text-slate-900">
-                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                  <span>Kelola hingga <strong>3 Cabang / Outlet</strong> dalam satu dashboard terintegrasi</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                  <span>Kapasitas hingga <strong>15 Akun Staf &amp; Kasir</strong></span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                  <span>Modul Analisis Resep BOM &amp; Tingkat Keberhasilan Bahan Baku (Yield)</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                  <span>Integrasi Manajemen Multi-Gudang Pusat &amp; Transfer Stok Cabang</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                type="button"
-                onClick={() => setIsUpgradeModalOpen(false)}
-                className="py-3 px-5 rounded-xl font-bold text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-              >
-                Tutup
-              </button>
-              <a
-                href="https://wa.me/6281234567890?text=Halo%20Tim%20CodePOS,%20saya%20ingin%20upgrade%20ke%20Paket%20Growth%20Multi-Cabang"
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 py-3 px-5 rounded-xl font-black text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 cursor-pointer"
-              >
-                Hubungi Kami untuk Upgrade Paket Instan <ArrowUpRight size={16} />
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

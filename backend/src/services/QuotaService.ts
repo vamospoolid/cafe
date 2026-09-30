@@ -39,9 +39,9 @@ export class QuotaService {
 
     if (!tenant) throw new Error(`Tenant '${tenantId}' tidak ditemukan`);
 
-    const maxOutlets = tenant.plan?.maxOutlets ?? 1;
-    const maxUsers = tenant.plan?.maxUsers ?? 3;
-    const maxProducts = tenant.plan?.maxProducts ?? 100;
+    const maxOutlets = 999999;
+    const maxUsers = 999999;
+    const maxProducts = 999999;
 
     const usedOutlets = tenant._count.outlets;
     const usedUsers = tenant._count.memberships;
@@ -50,73 +50,67 @@ export class QuotaService {
     return {
       tenantId: tenant.id,
       tenantName: tenant.name,
-      planCode: tenant.plan?.code || 'STARTER',
-      planName: tenant.plan?.name || 'Paket Starter',
+      planCode: 'STANDALONE',
+      planName: 'Lisensi Standalone (Permanen)',
       quotas: {
         outlets: {
           used: usedOutlets,
           max: maxOutlets,
           remaining: Math.max(0, maxOutlets - usedOutlets),
-          isExceeded: usedOutlets >= maxOutlets
+          isExceeded: false
         },
         users: {
           used: usedUsers,
           max: maxUsers,
           remaining: Math.max(0, maxUsers - usedUsers),
-          isExceeded: usedUsers >= maxUsers
+          isExceeded: false
         },
         products: {
           used: usedProducts,
           max: maxProducts,
           remaining: Math.max(0, maxProducts - usedProducts),
-          isExceeded: usedProducts >= maxProducts
+          isExceeded: false
         }
       }
     };
   }
 
   /**
-   * Validasi kuota penambahan Cabang / Outlet
+   * Validasi kuota penambahan Cabang / Outlet (Unlimited untuk Standalone)
    */
   public async canCreateOutlet(tenantId: string): Promise<QuotaCheckResult> {
     const data = await this.getUsageAndLimits(tenantId);
-    const { used, max, isExceeded } = data.quotas.outlets;
     return {
-      allowed: !isExceeded,
-      current: used,
-      max,
-      resource: 'outlet',
-      message: isExceeded ? `Batas maksimal cabang (${max} outlet) telah tercapai.` : undefined
+      allowed: true,
+      current: data.quotas.outlets.used,
+      max: 999999,
+      resource: 'outlet'
     };
   }
 
   /**
-   * Validasi kuota penambahan Akun Staff / Karyawan
+   * Validasi kuota penambahan Akun Staff / Karyawan (Unlimited untuk Standalone)
    */
   public async canCreateUser(tenantId: string): Promise<QuotaCheckResult> {
     const data = await this.getUsageAndLimits(tenantId);
-    const { used, max, isExceeded } = data.quotas.users;
     return {
-      allowed: !isExceeded,
-      current: used,
-      max,
-      resource: 'user',
-      message: isExceeded ? `Batas maksimal staff (${max} akun) telah tercapai.` : undefined
+      allowed: true,
+      current: data.quotas.users.used,
+      max: 999999,
+      resource: 'user'
     };
   }
 
   /**
-   * Validasi kuota penambahan Menu / Produk
+   * Validasi kuota penambahan Menu / Produk (Unlimited untuk Standalone)
    */
   public async canCreateProduct(tenantId: string): Promise<QuotaCheckResult> {
     const data = await this.getUsageAndLimits(tenantId);
-    const { used, max, isExceeded } = data.quotas.products;
     return {
-      allowed: !isExceeded,
-      current: used,
-      max,
-      resource: 'product',
-      message: isExceeded ? `Batas maksimal menu (${max} produk) telah tercapai.` : undefined
+      allowed: true,
+      current: data.quotas.products.used,
+      max: 999999,
+      resource: 'product'
     };
   }
 

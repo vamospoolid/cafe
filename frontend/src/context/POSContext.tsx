@@ -105,13 +105,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const hasFeature = (featureKey: string): boolean => {
-    const roleLower = (user?.role || '').toLowerCase();
-    // If super admin / platform admin / owner, always true
-    if ((roleLower === 'owner' || roleLower === 'admin' || roleLower === 'superadmin') && (user?.username === 'admin' || roleLower === 'owner' || roleLower === 'admin')) return true;
-    // Core features always allowed
-    if (featureKey === 'pos.cashier' || featureKey === 'inventory.basic' || featureKey === 'finance.cashflow' || featureKey === 'pos.tables') return true;
-    return features.includes(featureKey);
+  const hasFeature = (_featureKey: string): boolean => {
+    // Standalone: Semua modul & fitur terbuka penuh tanpa batasan paket
+    return true;
   };
 
   const hasPermission = (permissionKey: string): boolean => {

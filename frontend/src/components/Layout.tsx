@@ -413,16 +413,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <Settings size={20} className="shrink-0" />
                   <span>Pengaturan Sistem</span>
                 </NavLink>
-                <NavLink to="/cabang" title="Cabang & Tenant Hub" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <NavLink to="/cabang" title="Manajemen Cabang" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Store size={20} className="shrink-0" />
-                  <span>Cabang &amp; Tenant Hub</span>
+                  <span>Manajemen Cabang</span>
                 </NavLink>
-                {Boolean((posContext?.user as any)?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user?.role === 'OWNER' && (posContext?.user?.username === 'admin' || posContext?.user?.username === 'ahmad')) || posContext?.user?.username === 'admin') && (
-                  <NavLink to="/platform-admin" title="Master SaaS Console" className={({isActive}) => `nav-item ${isActive ? 'active' : ''} text-indigo-400 hover:text-indigo-300 font-bold`}>
-                    <Sliders size={20} className="shrink-0 text-indigo-400" />
-                    <span>Master SaaS Console</span>
-                  </NavLink>
-                )}
               </>
             )}
           </nav>
@@ -558,16 +552,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <p className="text-xs font-extrabold text-slate-900 truncate">{posContext?.user?.name || posContext?.user?.username}</p>
                   <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">{posContext?.user?.role || 'Staff'}</p>
                 </div>
-                {Boolean((posContext?.user as any)?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user?.role === 'OWNER' && (posContext?.user?.username === 'admin' || posContext?.user?.username === 'ahmad')) || posContext?.user?.username === 'admin') && (
-                  <NavLink
-                    to="/platform-admin"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="w-full text-left px-4 py-2.5 text-xs text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 font-extrabold transition-colors border-b border-indigo-100 flex items-center gap-2"
-                  >
-                    <Sparkles size={15} className="text-amber-500 shrink-0" />
-                    <span>Master SaaS Console</span>
-                  </NavLink>
-                )}
+
                 <button 
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); setIsPinModalOpen(true); }}
