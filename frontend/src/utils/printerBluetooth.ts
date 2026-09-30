@@ -443,12 +443,39 @@ export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
   // 1. Web Bluetooth (Chrome Desktop / Android HTTPS)
   if (isWebBluetoothSupported() && (activeWebBluetoothDevice || localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH' || localStorage.getItem('bluetooth_printer_id'))) {
     let device = await getActiveOrSavedDevice();
+
+    // ── Auto-reconnect saat print: jika device ada tapi GATT terputus ──
+    if (!device) {
+      // Coba ambil ulang dari granted devices
+      const saved = getSavedBluetoothPrinter();
+      if (saved && (navigator as any).bluetooth?.getDevices) {
+        try {
+          const granted = await (navigator as any).bluetooth.getDevices();
+          device = granted.find((d: any) => d.id === saved.id || d.name === saved.name) || granted[0] || null;
+          if (device) {
+            activeWebBluetoothDevice = device;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
     if (!device) {
       throw new Error('Printer Bluetooth belum terhubung. Pastikan printer menyala atau sambungkan di menu Pengaturan > Printer Bluetooth.');
     }
+
+    // Pastikan GATT terkoneksi sebelum kirim data
+    if (!device.gatt?.connected) {
+      try {
+        await connectGattWithRetry(device, 2);
+      } catch (reconnErr: any) {
+        throw new Error(`Printer ditemukan tapi gagal konek: ${reconnErr.message}. Pastikan printer menyala dan dalam jangkauan.`);
+      }
+    }
+
     await sendBytesWebBluetooth(device, bytes);
     return;
   }
+
 
   // 2. Cordova / Capacitor Bluetooth Serial (Native Android APK)
   const bt = getBluetoothSerial();

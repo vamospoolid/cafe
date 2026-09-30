@@ -1,9 +1,9 @@
 {
-  "appId": "id.codenusa.mukiramen.staff",
-  "appName": "Kopi Kenangan Senja 6569 Staf",
+  "appId": "id.codenusa.mukiramen.pos",
+  "appName": "MUKI RAMEN - Master POS",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://mukiramen.codenusa.id/staff",
+    "url": "https://mukiramen.codenusa.id/pos",
     "cleartext": true
   }
 }

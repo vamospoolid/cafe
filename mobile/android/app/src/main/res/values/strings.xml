@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Kopi Kenangan Senja 6569 Staf</string>
-    <string name="title_activity_main">Kopi Kenangan Senja 6569 Staf</string>
-    <string name="package_name">id.codenusa.mukiramen.staff</string>
-    <string name="custom_url_scheme">id.codenusa.mukiramen.staff</string>
+    <string name="app_name">MUKI RAMEN - Master POS</string>
+    <string name="title_activity_main">MUKI RAMEN - Master POS</string>
+    <string name="package_name">id.codenusa.mukiramen.pos</string>
+    <string name="custom_url_scheme">id.codenusa.mukiramen.pos</string>
 </resources>

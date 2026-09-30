@@ -7,7 +7,9 @@
     "deploy:codenusa": "node scripts/prepare_and_push_vps.js"
   },
   "dependencies": {
-    "sharp": "^0.35.4",
     "ssh2": "^1.17.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.5"
   }
 }
