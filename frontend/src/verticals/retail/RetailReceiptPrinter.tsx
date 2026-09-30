@@ -221,7 +221,7 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-rose-600">
-                  <span>Diskon:</span>
+                  <span>{actualOrder.voucher?.code || actualOrder.voucherCode ? `Voucher (${actualOrder.voucher?.code || actualOrder.voucherCode}):` : 'Diskon:'}</span>
                   <span>- {formatCurrency(discount)}</span>
                 </div>
               )}

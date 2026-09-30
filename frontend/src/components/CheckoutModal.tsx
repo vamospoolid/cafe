@@ -473,6 +473,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       : paymentMethod === 'piutang' ? 'Piutang'
       : 'Card';
 
+    const pointsToRedeem = redeemPoints 
+      ? Math.ceil(pointsDiscount / loyaltyPointValue) 
+      : (currentCustomer?.pointsUsed || 0);
+
     // Handler Mode Offline
     if (!navigator.onLine || !posContext?.isOnline) {
       try {
@@ -490,8 +494,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             notes: item.notes || ''
           })),
           subtotal,
-          discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
-          pointsUsed: currentCustomer?.pointsUsed || 0,
+          discount: totalDiscount,
+          voucherId: appliedVoucher?.voucher?.id || null,
+          voucherCode: appliedVoucher?.voucher?.code || null,
+          pointsUsed: pointsToRedeem,
           tax,
           serviceCharge,
           total: finalTotal,
@@ -523,12 +529,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${posContext?.token}` },
           body: JSON.stringify({ 
             paymentMethod: pmString, 
-            discount: (currentCustomer?.discountAmount || 0) + manualDiscount, 
+            discount: totalDiscount, 
             total: finalTotal,
             customerId: currentCustomer?.id || null,
             customerName: currentCustomer?.name,
             customerPhone: currentCustomer?.phone,
-            pointsUsed: currentCustomer?.pointsUsed || 0,
+            voucherId: appliedVoucher?.voucher?.id || null,
+            pointsUsed: pointsToRedeem,
             dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
             debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined
           }),
@@ -547,8 +554,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             joinedTableIds: customer?.joinedTableIds || undefined,
             items: cart.map((item: any) => ({ productId: item.product.id, qty: item.qty, price: item.product.sellPrice, notes: item.notes || '' })),
             subtotal,
-            discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
-            pointsUsed: currentCustomer?.pointsUsed || 0,
+            discount: totalDiscount,
+            voucherId: appliedVoucher?.voucher?.id || null,
+            pointsUsed: pointsToRedeem,
             tax, serviceCharge, total: finalTotal, paymentMethod: pmString, isPaid: true,
             dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
             debtNotes: paymentMethod === 'piutang' ? debtNotes : undefined

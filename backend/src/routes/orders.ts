@@ -1046,6 +1046,19 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
       }
 
+      // 4. Voucher Usage Tracking (Catat penggunaan voucher promo jika ada)
+      if (voucherId) {
+        const v = await tx.voucher.findFirst({
+          where: { id: Number(voucherId), ...(tenantId ? { tenantId } : {}) }
+        });
+        if (v && v.status === 'Aktif') {
+          await tx.voucher.update({
+            where: { id: v.id },
+            data: { usedCount: { increment: 1 } }
+          });
+        }
+      }
+
       // Piutang
       if (isPaid && paymentMethod === 'Piutang') {
         if (!finalCustomerId) {
@@ -1235,6 +1248,12 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
           paymentMethod,
           paidAt: paidNow // Fix #1: rekam waktu bayar
         };
+        if (resolvedVoucherId) {
+          updateData.voucherId = resolvedVoucherId;
+        }
+        if (ptsUsed > 0) {
+          updateData.pointsUsed = ptsUsed;
+        }
         if (shouldAutoServe) {
           updateData.kdsStatus = 'Served';
           updateData.servedAt = paidNow;
@@ -1302,6 +1321,12 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
             paymentMethod,
             paidAt: paidNow // Fix #1: rekam waktu bayar
           };
+          if (resolvedVoucherId && i === 0) {
+            updateData.voucherId = resolvedVoucherId;
+          }
+          if (ptsUsed > 0 && i === 0) {
+            updateData.pointsUsed = ptsUsed;
+          }
           if (shouldAutoServe) {
             updateData.kdsStatus = 'Served';
             updateData.servedAt = paidNow;

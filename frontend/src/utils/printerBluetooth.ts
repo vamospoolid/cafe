@@ -878,8 +878,8 @@ export const printBluetoothReceipt = async (
     // Totals Section
     const subtotal = order.subtotal || order.total || 0;
     const tax = order.tax || 0;
-    const discount = order.discountAmount || 0;
-    const grandTotal = order.total || order.grandTotal || subtotal;
+    const discount = order.discount !== undefined ? order.discount : (order.discountAmount || 0);
+    const grandTotal = order.total || order.grandTotal || (subtotal - discount + tax);
     const cashReceived = order.cashReceived || grandTotal;
     const changeDue = order.changeDue || Math.max(0, cashReceived - grandTotal);
     const paymentMethod = (order.paymentMethod || 'TUNAI').toUpperCase();
@@ -889,7 +889,10 @@ export const printBluetoothReceipt = async (
       .align('right')
       .line(`Subtotal: Rp ${Math.round(subtotal).toLocaleString('id-ID')}`);
 
-    if (discount > 0) {
+    const voucherCode = order.voucher?.code || order.voucherCode;
+    if (voucherCode) {
+      encoded = encoded.line(`Voucher (${voucherCode}): -Rp ${Math.round(discount).toLocaleString('id-ID')}`);
+    } else if (discount > 0) {
       encoded = encoded.line(`Diskon: -Rp ${Math.round(discount).toLocaleString('id-ID')}`);
     }
     if (tax > 0) {

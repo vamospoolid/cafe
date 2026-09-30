@@ -396,7 +396,11 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
       <table style={{ ...tbl, fontSize: '10pt', margin: '1mm 0' }}>
         <tbody>
           {row('Subtotal', fmt(order.subtotal || order.total))}
-          {order.discount > 0 && row('Diskon', `-${fmt(order.discount)}`)}
+          {order.voucher?.code || order.voucherCode ? (
+            row(`Voucher (${order.voucher?.code || order.voucherCode})`, `-${fmt(order.discount)}`)
+          ) : order.discount > 0 ? (
+            row('Diskon', `-${fmt(order.discount)}`)
+          ) : null}
           {order.tax > 0 && row('Pajak', fmt(order.tax))}
           {order.serviceCharge > 0 && row('Service', fmt(order.serviceCharge))}
         </tbody>
