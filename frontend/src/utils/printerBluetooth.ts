@@ -290,6 +290,35 @@ export const listPairedBluetoothDevices = (): Promise<BluetoothDeviceInfo[]> => 
   });
 };
 
+export const discoverUnpairedBluetoothDevices = (): Promise<BluetoothDeviceInfo[]> => {
+  return new Promise((resolve, reject) => {
+    const bt = getBluetoothSerial();
+    if (!bt) {
+      reject(new Error('Bluetooth serial plugin tidak tersedia di browser web.'));
+      return;
+    }
+
+    if (!bt.discoverUnpaired) {
+      reject(new Error('Modul scan perangkat baru tidak didukung di perangkat ini.'));
+      return;
+    }
+
+    bt.discoverUnpaired(
+      (devices: any[]) => {
+        resolve(devices.map(d => ({
+          id: d.id || d.address,
+          name: d.name || 'Perangkat Bluetooth Baru',
+          type: 'CORDOVA_SERIAL',
+          address: d.address
+        })));
+      },
+      (err: any) => {
+        reject(new Error(err || 'Gagal mencari perangkat Bluetooth baru. Pastikan izin lokasi & Bluetooth aktif di HP.'));
+      }
+    );
+  });
+};
+
 export const isBluetoothConnected = (): Promise<boolean> => {
   return new Promise((resolve) => {
     const bt = getBluetoothSerial();

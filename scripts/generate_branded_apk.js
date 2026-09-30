@@ -64,9 +64,13 @@ const env = {
 
 // 3. Resolusi Data Tenant & Logo dari Pengaturan
 async function resolveTenantInfo(slug) {
-  let storeName = 'CodePOS Cashier';
+  let storeName = 'MUKI RAMEN';
   let logoFile = path.join(rootDir, 'frontend', 'public', 'logo.png');
-  let baseUrl = envMode === 'dev' ? 'http://192.168.100.197:5173' : `https://${slug}.codenusa.id`;
+  let baseUrl = args.url 
+    ? args.url.replace(/\/$/, '')
+    : args.domain 
+    ? `https://${args.domain.replace(/^https?:\/\//, '').replace(/\/$/, '')}`
+    : (envMode === 'dev' ? 'http://192.168.100.197:5173' : 'https://cafe.codenusa.id');
 
   try {
     const { PrismaClient } = require(path.join(rootDir, 'backend', 'node_modules', '@prisma/client'));
@@ -79,7 +83,7 @@ async function resolveTenantInfo(slug) {
 
     if (tenant) {
       storeName = tenant.name || storeName;
-      if (tenant.customDomain) {
+      if (tenant.customDomain && !args.url && !args.domain) {
         baseUrl = `https://${tenant.customDomain}`;
       }
       if (tenant.logoUrl && !settings?.logoUrl) {

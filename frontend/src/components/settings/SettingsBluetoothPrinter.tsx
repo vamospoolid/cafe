@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   Printer,
   BluetoothSearching,
@@ -25,6 +25,7 @@ import {
   clearSavedBluetoothPrinter,
   testPrintBluetooth,
   listPairedBluetoothDevices,
+  discoverUnpairedBluetoothDevices,
   connectBluetoothPrinter,
   disconnectBluetoothPrinter
 } from '../../utils/printerBluetooth';
@@ -141,10 +142,30 @@ export const SettingsBluetoothPrinter: React.FC = () => {
     try {
       const list = await listPairedBluetoothDevices();
       setNativeDevices(list);
-      if (list.length === 0) toast('Tidak ada perangkat Bluetooth yang sudah dipasangkan.', 'warning');
-      else toast(`Menemukan ${list.length} perangkat Bluetooth.`, 'success');
+      if (list.length === 0) toast('Tidak ada perangkat Bluetooth yang sudah dipasangkan di HP.', 'warning');
+      else toast(`Menemukan ${list.length} perangkat Bluetooth dipasangkan.`, 'success');
     } catch (err: any) {
       toast(err.message || 'Gagal memindai Bluetooth', 'error');
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleScanUnpaired = async () => {
+    setScanning(true);
+    try {
+      toast('Mencari perangkat Bluetooth di sekitar...', 'info');
+      const list = await discoverUnpairedBluetoothDevices();
+      setNativeDevices(prev => {
+        // Gabungkan list tanpa duplikat ID
+        const map = new Map(prev.map(d => [d.id, d]));
+        list.forEach(d => map.set(d.id, d));
+        return Array.from(map.values());
+      });
+      if (list.length === 0) toast('Tidak menemukan perangkat Bluetooth baru. Pastikan printer menyala & Bluetooth aktif.', 'warning');
+      else toast(`Menemukan ${list.length} perangkat Bluetooth baru.`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal mencari perangkat baru', 'error');
     } finally {
       setScanning(false);
     }
@@ -429,15 +450,26 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         )}
 
         {isNative && (
-          <button
-            type="button"
-            onClick={handleScanNative}
-            disabled={scanning}
-            className="flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
-          >
-            <Bluetooth size={15} />
-            {scanning ? 'Memindai...' : 'Scan Perangkat Paired'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleScanNative}
+              disabled={scanning}
+              className="flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
+            >
+              <Bluetooth size={15} />
+              {scanning ? 'Memindai...' : 'Scan Perangkat Paired'}
+            </button>
+            <button
+              type="button"
+              onClick={handleScanUnpaired}
+              disabled={scanning}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
+            >
+              <BluetoothSearching size={15} />
+              {scanning ? 'Mencari...' : 'Cari Perangkat Baru'}
+            </button>
+          </div>
         )}
 
         {isUsb && (
@@ -453,11 +485,11 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         )}
       </div>
 
-      {/* â”€â”€â”€ Native Device List â”€â”€â”€ */}
+      {/* ─── Native Device List ─── */}
       {isNative && nativeDevices.length > 0 && (
         <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs bg-white">
           <div className="bg-slate-50 px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100">
-            Perangkat Bluetooth Tersedia
+            Perangkat Bluetooth Tersedia ({nativeDevices.length})
           </div>
           <div className="divide-y divide-slate-100">
             {nativeDevices.map(d => (
@@ -476,7 +508,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
                       : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  {savedPrinter?.id === d.id ? 'âœ“ Terpilih' : 'Hubungkan'}
+                  {savedPrinter?.id === d.id ? '✓ Terpilih' : 'Hubungkan'}
                 </button>
               </div>
             ))}
@@ -484,19 +516,30 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         </div>
       )}
 
-      {/* â”€â”€â”€ Petunjuk â”€â”€â”€ */}
-      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+      {/* ─── Petunjuk ─── */}
+      <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 text-xs space-y-2">
         <div className="font-bold flex items-center gap-1.5 text-slate-800">
-          <Info size={14} className="text-indigo-500" />
-          Langkah Setup Printer di Tablet / Chrome Android
+          <Info size={14} className="text-indigo-600" />
+          {isNative ? 'Cara Menghubungkan Printer di Aplikasi HP / Tablet Android' : 'Langkah Setup Printer di Chrome'}
         </div>
-        <ol className="list-decimal list-inside space-y-1 text-slate-600 pl-1 leading-relaxed">
-          <li>Nyalakan printer dan pastikan Bluetooth di tablet <strong>aktif</strong>.</li>
-          <li>Klik tombol <strong>"Scan & Pilih Printer Bluetooth"</strong> di atas.</li>
-          <li>Pilih nama printer Anda dari dialog Chrome (<em>contoh: RPP02N_BLE, XP-P300</em>).</li>
-          <li>Klik <strong>"Tes Cetak"</strong> untuk memastikan printer berfungsi.</li>
-          <li>Setelah terhubung, setiap selesai transaksi kasir akan langsung muncul tombol cetak struk!</li>` + "`n" + `          <li>&#10003; Mulai sekarang, <strong>setiap login atau buka kasir, printer otomatis tersambung kembali</strong> &mdash; tanpa scan ulang!</li>` + "`n" + `          <li>Jika printer sempat mati lalu dinyalakan, sistem akan mendeteksi dan konek otomatis dalam beberapa detik.</li>
-        </ol>
+        {isNative ? (
+          <ol className="list-decimal list-inside space-y-1.5 text-slate-600 pl-1 leading-relaxed text-[11px]">
+            <li>Nyalakan printer thermal Bluetooth Anda.</li>
+            <li>
+              <strong>Langkah Termudah:</strong> Buka <strong>Pengaturan HP Android &gt; Bluetooth</strong>, cari nama printer (contoh: <em>RPP02N_BLE</em>), lalu klik untuk memasangkan/pair (PIN default: <code>0000</code> atau <code>1234</code>).
+            </li>
+            <li>Setelah dipasangkan di HP, kembali ke aplikasi POS dan klik tombol <strong>"Scan Perangkat Paired"</strong>.</li>
+            <li>Klik tombol <strong>"Hubungkan"</strong> pada nama printer Anda.</li>
+            <li>✅ <strong>Printer akan terhubung dan otomatis reconnect 100%</strong> di HP kasir tanpa perlu scan lagi!</li>
+          </ol>
+        ) : (
+          <ol className="list-decimal list-inside space-y-1 text-slate-600 pl-1 leading-relaxed">
+            <li>Nyalakan printer dan pastikan Bluetooth di tablet <strong>aktif</strong>.</li>
+            <li>Klik tombol <strong>"Scan &amp; Pilih Printer Bluetooth"</strong> di atas.</li>
+            <li>Pilih nama printer Anda dari dialog Chrome (<em>contoh: RPP02N_BLE, XP-P300</em>).</li>
+            <li>Klik <strong>"Tes Cetak"</strong> untuk memastikan printer berfungsi.</li>
+          </ol>
+        )}
       </div>
     </div>
   );

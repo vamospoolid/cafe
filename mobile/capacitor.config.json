@@ -3,7 +3,7 @@
   "appName": "MUKI RAMEN - Master POS",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://mukiramen.codenusa.id/pos",
+    "url": "https://cafe.codenusa.id/pos",
     "cleartext": true
   }
 }
