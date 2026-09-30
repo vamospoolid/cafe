@@ -191,45 +191,63 @@ async function main() {
   const passAdmin = await bcrypt.hash('admin123', 10);
   const passKasir = await bcrypt.hash('kasir123', 10);
 
-  const adminUser = await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: {
-      name: 'Owner Vamos',
-      role: 'admin',
-      passwordHash: passAdmin,
-      permissions: JSON.stringify(['*']),
-      status: 'Aktif'
-    },
-    create: {
-      username: 'admin',
-      name: 'Owner Vamos',
-      role: 'admin',
-      passwordHash: passAdmin,
-      pin: '123456',
-      permissions: JSON.stringify(['*']),
-      status: 'Aktif'
-    }
+  let adminUser = await prisma.user.findFirst({
+    where: { tenantId: tenant.id, username: 'admin' }
   });
+  if (adminUser) {
+    adminUser = await prisma.user.update({
+      where: { id: adminUser.id },
+      data: {
+        name: 'Owner Vamos',
+        role: 'admin',
+        passwordHash: passAdmin,
+        permissions: JSON.stringify(['*']),
+        status: 'Aktif'
+      }
+    });
+  } else {
+    adminUser = await prisma.user.create({
+      data: {
+        tenantId: tenant.id,
+        username: 'admin',
+        name: 'Owner Vamos',
+        role: 'admin',
+        passwordHash: passAdmin,
+        pin: '123456',
+        permissions: JSON.stringify(['*']),
+        status: 'Aktif'
+      }
+    });
+  }
 
-  const kasirUser = await prisma.user.upsert({
-    where: { username: 'kasir' },
-    update: {
-      name: 'Kasir Vamos',
-      role: 'kasir',
-      passwordHash: passKasir,
-      permissions: JSON.stringify(['pos.*', 'tables.*', 'shifts.*']),
-      status: 'Aktif'
-    },
-    create: {
-      username: 'kasir',
-      name: 'Kasir Vamos',
-      role: 'kasir',
-      passwordHash: passKasir,
-      pin: '112233',
-      permissions: JSON.stringify(['pos.*', 'tables.*', 'shifts.*']),
-      status: 'Aktif'
-    }
+  let kasirUser = await prisma.user.findFirst({
+    where: { tenantId: tenant.id, username: 'kasir' }
   });
+  if (kasirUser) {
+    kasirUser = await prisma.user.update({
+      where: { id: kasirUser.id },
+      data: {
+        name: 'Kasir Vamos',
+        role: 'kasir',
+        passwordHash: passKasir,
+        permissions: JSON.stringify(['pos.*', 'tables.*', 'shifts.*']),
+        status: 'Aktif'
+      }
+    });
+  } else {
+    kasirUser = await prisma.user.create({
+      data: {
+        tenantId: tenant.id,
+        username: 'kasir',
+        name: 'Kasir Vamos',
+        role: 'kasir',
+        passwordHash: passKasir,
+        pin: '112233',
+        permissions: JSON.stringify(['pos.*', 'tables.*', 'shifts.*']),
+        status: 'Aktif'
+      }
+    });
+  }
 
   await prisma.tenantMembership.upsert({
     where: { userId_tenantId: { userId: adminUser.id, tenantId: tenant.id } },
