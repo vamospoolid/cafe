@@ -504,6 +504,53 @@ router.post('/switch-outlet', authenticateToken, async (req: AuthRequest, res: R
   }
 });
 
+// GET /api/auth/check-slug - Realtime slug availability check (dipakai TenantRegisterWizard)
+router.get('/check-slug', async (req: Request, res: Response) => {
+  try {
+    const rawSlug = (req.query.slug as string || '').trim().toLowerCase();
+    if (!rawSlug) {
+      return res.status(400).json({ available: false, error: 'Slug tidak boleh kosong.' });
+    }
+
+    const cleanSlug = rawSlug.replace(/[^a-z0-9-]/g, '');
+    if (cleanSlug.length < 3) {
+      return res.status(400).json({ available: false, error: 'Slug minimal 3 karakter.' });
+    }
+    if (cleanSlug.length > 40) {
+      return res.status(400).json({ available: false, error: 'Slug maksimal 40 karakter.' });
+    }
+
+    const reserved = ['admin', 'api', 'app', 'www', 'mail', 'blog', 'demo', 'test', 'dev', 'staging', 'platform', 'pos', 'cafe', 'codenusa'];
+    if (reserved.includes(cleanSlug)) {
+      return res.status(200).json({ available: false, error: `Slug '${cleanSlug}' adalah nama reserved dan tidak dapat digunakan.` });
+    }
+
+    const existing = await prisma.tenant.findUnique({ where: { slug: cleanSlug } });
+    if (existing) {
+      // Beri 3 saran slug otomatis
+      const suggestions = [
+        `${cleanSlug}1`,
+        `${cleanSlug}-toko`,
+        `toko-${cleanSlug}`
+      ];
+      return res.status(200).json({
+        available: false,
+        error: `Subdomain '${cleanSlug}.codenusa.id' sudah digunakan bisnis lain.`,
+        suggestions
+      });
+    }
+
+    return res.status(200).json({
+      available: true,
+      slug: cleanSlug,
+      message: `✅ '${cleanSlug}.codenusa.id' tersedia!`
+    });
+  } catch (error) {
+    console.error('Check Slug Error:', error);
+    res.status(500).json({ available: false, error: 'Gagal memeriksa ketersediaan slug.' });
+  }
+});
+
 // POST /api/auth/register-tenant - Pendaftaran mandiri tenant baru (Onboarding Wizard)
 router.post('/register-tenant', async (req: Request, res: Response) => {
   try {
@@ -536,9 +583,9 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       return res.status(400).json({ error: `Subdomain slug '${cleanSlug}' sudah digunakan oleh bisnis lain.` });
     }
 
-    // 2. Validasi keunikan Username dalam tenant (atau existing)
-    const existingUser = await prisma.user.findFirst({ where: { username: ownerUsername } });
-    if (existingUser && existingUser.tenantId === null) {
+    // 2. Validasi keunikan Username (global uniqueness)
+    const existingUser = await prisma.user.findFirst({ where: { username: ownerUsername.toLowerCase() } });
+    if (existingUser) {
       return res.status(400).json({ error: `Username '${ownerUsername}' sudah terdaftar. Silakan gunakan username lain.` });
     }
 
@@ -581,7 +628,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       const user = await tx.user.create({
         data: {
           name: ownerName,
-          username: ownerUsername,
+          username: ownerUsername.toLowerCase().trim(),
           passwordHash,
           pin,
           tenantId: tenant.id,
@@ -598,16 +645,24 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
         }
       });
 
-      // d. Hubungkan Membership Owner
-      const ownerRole = await tx.role.findFirst({
-        where: { OR: [{ id: 'role-system-owner' }, { name: 'OWNER' }] }
+      // d. Hubungkan Membership Owner — cari role global OWNER, fallback ke upsert
+      let ownerRole = await tx.role.findFirst({
+        where: { OR: [{ id: 'role-system-owner' }, { name: 'OWNER', tenantId: null }] }
       });
+      if (!ownerRole) {
+        // Fallback: buat role system OWNER jika belum ada (idempotent)
+        ownerRole = await tx.role.upsert({
+          where: { id: 'role-system-owner' },
+          update: {},
+          create: { id: 'role-system-owner', name: 'OWNER', tenantId: null }
+        });
+      }
 
       await tx.tenantMembership.create({
         data: {
           userId: user.id,
           tenantId: tenant.id,
-          roleId: ownerRole?.id || 'role-system-owner',
+          roleId: ownerRole.id,
           pin,
           employmentType: 'FULL_TIME',
           status: 'ACTIVE'
@@ -625,16 +680,20 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
         }
       });
 
-      // f. Inisialisasi Settings Toko Default
+      // f. Inisialisasi Settings Toko Default — gunakan nested connect agar kompatibel semua versi Prisma
       await tx.settings.create({
         data: {
-          tenantId: tenant.id,
-          outletId: primaryOutlet.id,
+          tenant: { connect: { id: tenant.id } },
+          outlet: { connect: { id: primaryOutlet.id } },
           businessType,
           storeName: businessName,
-          receiptHeader: businessType === 'RETAIL' 
-            ? `TOKO GROSIR & RETAIL\n${businessName}` 
-            : (businessType === 'BENGKEL' ? `BENGKEL MOTOR & MOBIL\n${businessName}` : (businessType === 'LAUNDRY' ? `LAUNDRY KILOAN & SATUAN\n${businessName}` : `Selamat Datang di ${businessName}`)),
+          receiptHeader: businessType === 'RETAIL'
+            ? `TOKO GROSIR & RETAIL\n${businessName}`
+            : (businessType === 'BENGKEL'
+              ? `BENGKEL MOTOR & MOBIL\n${businessName}`
+              : (businessType === 'LAUNDRY'
+                ? `LAUNDRY KILOAN & SATUAN\n${businessName}`
+                : `Selamat Datang di ${businessName}`)),
           receiptFooter: 'Terima kasih atas kunjungan Anda!'
         }
       });
