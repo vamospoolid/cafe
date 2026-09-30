@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+﻿import React, { useState, useEffect, useContext } from 'react';
 import {
   Printer,
   BluetoothSearching,
@@ -30,7 +30,7 @@ import {
 } from '../../utils/printerBluetooth';
 import { usePrinter } from '../../context/PrinterContext';
 
-// ─── Brand Config ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Brand Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const PRINTER_BRANDS = [
   {
@@ -38,55 +38,57 @@ const PRINTER_BRANDS = [
     label: 'Auto-Detect (Disarankan)',
     description: 'Sistem mengenali jenis printer otomatis',
     models: '',
-    icon: '🔍',
+    icon: 'ðŸ”',
   },
   {
     key: 'RONGTA',
     label: 'Rongta',
     description: 'RPP02N, RPP300, RPP02B, RPP320',
     models: 'RPP02N, RPP300',
-    icon: '🖨️',
+    icon: 'ðŸ–¨ï¸',
   },
   {
     key: 'XPRINTER',
     label: 'Xprinter',
     description: 'XP-P300, XP-58, XP-80, XP-T81',
     models: 'XP-P300, XP-58',
-    icon: '🖨️',
+    icon: 'ðŸ–¨ï¸',
   },
   {
     key: 'HPRT',
     label: 'HPRT',
     description: 'HM-E200, HM-E300, HPRT-58',
     models: 'HM-E200, HM-E300',
-    icon: '🖨️',
+    icon: 'ðŸ–¨ï¸',
   },
   {
     key: 'BIXOLON',
     label: 'Bixolon',
     description: 'SPP-R200, SPP-R210, SPP-R300',
     models: 'SPP-R200',
-    icon: '🖨️',
+    icon: 'ðŸ–¨ï¸',
   },
   {
     key: 'GENERIC',
     label: 'Generic / Lainnya',
     description: 'Mini POS 58mm/80mm, Iware, PT-210, dan lainnya',
     models: '',
-    icon: '🖨️',
+    icon: 'ðŸ–¨ï¸',
   },
 ];
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Status Badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const StatusBadge = ({ status }: { status: string }) => {
+const StatusBadge = ({ status, lastError }: { status: string; lastError?: string | null }) => {
   const map: Record<string, { label: string; cls: string; dot: string }> = {
-    connected: { label: 'Terhubung', cls: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
-    connecting: { label: 'Menghubungkan...', cls: 'bg-amber-100 text-amber-800 border-amber-200', dot: 'bg-amber-500 animate-spin' },
-    printing: { label: 'Mencetak...', cls: 'bg-indigo-100 text-indigo-800 border-indigo-200', dot: 'bg-indigo-500 animate-pulse' },
-    disconnected: { label: 'Terputus', cls: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
-    error: { label: 'Error', cls: 'bg-rose-100 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
-    idle: { label: 'Belum dikonfigurasi', cls: 'bg-slate-100 text-slate-500 border-slate-200', dot: 'bg-slate-300' },
+    connected:    { label: 'Terhubung',              cls: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
+    connecting:   { label: 'Menghubungkan...',        cls: 'bg-amber-100 text-amber-800 border-amber-200',   dot: 'bg-amber-500 animate-spin' },
+    printing:     { label: 'Mencetak...',             cls: 'bg-indigo-100 text-indigo-800 border-indigo-200', dot: 'bg-indigo-500 animate-pulse' },
+    disconnected: { label: lastError?.includes('Menunggu') ? 'Menunggu Printerâ€¦' : 'Terputus',
+                    cls: lastError?.includes('Menunggu') ? 'bg-sky-100 text-sky-700 border-sky-200' : 'bg-slate-100 text-slate-600 border-slate-200',
+                    dot: lastError?.includes('Menunggu') ? 'bg-sky-400 animate-pulse' : 'bg-slate-400' },
+    error:        { label: 'Error',                  cls: 'bg-rose-100 text-rose-700 border-rose-200',        dot: 'bg-rose-500' },
+    idle:         { label: 'Belum dikonfigurasi',     cls: 'bg-slate-100 text-slate-500 border-slate-200',    dot: 'bg-slate-300' },
   };
   const s = map[status] || map.idle;
   return (
@@ -97,7 +99,7 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const SettingsBluetoothPrinter: React.FC = () => {
   const printer = usePrinter();
@@ -124,7 +126,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
       localStorage.setItem('printer_brand', selectedBrand);
       localStorage.setItem('printer_paper_width', paperWidth);
       localStorage.setItem('printer_auto_connect', autoConnect ? 'true' : 'false');
-      toast(`✅ Printer "${paired.name}" berhasil disambungkan!`, 'success');
+      toast(`âœ… Printer "${paired.name}" berhasil disambungkan!`, 'success');
       // Trigger auto-reconnect di context
       setTimeout(() => printer.reconnect(), 500);
     } catch (err: any) {
@@ -174,7 +176,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
     setPrinting(true);
     try {
       await testPrintBluetooth();
-      toast('✅ Struk tes berhasil dicetak!', 'success');
+      toast('âœ… Struk tes berhasil dicetak!', 'success');
     } catch (err: any) {
       toast(err.message || 'Gagal tes cetak. Pastikan printer nyala.', 'error');
     } finally {
@@ -187,7 +189,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
     try {
       const dev = await pairWebUsbPrinter();
       setSavedPrinter({ id: 'USB-DIRECT', name: dev.productName || 'USB Thermal Printer', type: 'USB_DIRECT' });
-      toast(`✅ Printer USB "${dev.productName || 'Thermal'}" terhubung!`, 'success');
+      toast(`âœ… Printer USB "${dev.productName || 'Thermal'}" terhubung!`, 'success');
     } catch (err: any) {
       toast(err.message || 'Gagal menyambungkan printer USB.', 'error');
     } finally {
@@ -226,12 +228,12 @@ export const SettingsBluetoothPrinter: React.FC = () => {
   return (
     <div className="space-y-5">
 
-      {/* ─── Browser Support Banner ─── */}
+      {/* â”€â”€â”€ Browser Support Banner â”€â”€â”€ */}
       {isWebBt ? (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
           <BluetoothConnected className="text-emerald-600 shrink-0 mt-0.5" size={18} />
           <div className="text-xs space-y-0.5">
-            <p className="font-bold text-emerald-900">Chrome Web Bluetooth Aktif ✓</p>
+            <p className="font-bold text-emerald-900">Chrome Web Bluetooth Aktif âœ“</p>
             <p className="text-emerald-700 leading-relaxed">
               Browser ini mendukung koneksi langsung ke printer Bluetooth BLE tanpa instalasi tambahan.
             </p>
@@ -249,14 +251,14 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         </div>
       ) : null}
 
-      {/* ─── Status Card ─── */}
+      {/* â”€â”€â”€ Status Card â”€â”€â”€ */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
         <div className="px-4 pt-4 pb-3 flex items-center justify-between border-b border-slate-100">
           <div className="flex items-center gap-2">
             <Printer size={16} className="text-slate-500" />
             <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Status Printer</span>
           </div>
-          <StatusBadge status={printer.status} />
+          <StatusBadge status={printer.status} lastError={printer.lastError} />
         </div>
 
         <div className="p-4">
@@ -281,10 +283,12 @@ export const SettingsBluetoothPrinter: React.FC = () => {
                     )}
                   </div>
                   <div className="text-[11px] text-slate-400 mt-0.5 font-medium">
-                    Kertas {paperWidth} · {savedPrinter.type === 'WEB_BLUETOOTH' ? 'Chrome Web Bluetooth' : savedPrinter.type === 'USB_DIRECT' ? 'USB OTG' : 'Bluetooth Serial'}
+                    Kertas {paperWidth} Â· {savedPrinter.type === 'WEB_BLUETOOTH' ? 'Chrome Web Bluetooth' : savedPrinter.type === 'USB_DIRECT' ? 'USB OTG' : 'Bluetooth Serial'}
                   </div>
                   {printer.lastError && (
-                    <div className="text-[11px] text-rose-500 mt-0.5">⚠ {printer.lastError}</div>
+                    <div className={`text-[11px] mt-0.5 ${printer.lastError.includes('Menunggu') ? 'text-sky-500' : 'text-rose-500'}`}>
+                      {printer.lastError.includes('Menunggu') ? 'ðŸ”µ ' : 'âš  '}{printer.lastError}
+                    </div>
                   )}
                 </div>
               </div>
@@ -327,7 +331,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── Konfigurasi ─── */}
+      {/* â”€â”€â”€ Konfigurasi â”€â”€â”€ */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center gap-2">
           <Zap size={15} className="text-slate-500" />
@@ -410,7 +414,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── Action Buttons ─── */}
+      {/* â”€â”€â”€ Action Buttons â”€â”€â”€ */}
       <div className="flex flex-wrap gap-3">
         {isWebBt && (
           <button
@@ -449,7 +453,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         )}
       </div>
 
-      {/* ─── Native Device List ─── */}
+      {/* â”€â”€â”€ Native Device List â”€â”€â”€ */}
       {isNative && nativeDevices.length > 0 && (
         <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs bg-white">
           <div className="bg-slate-50 px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100">
@@ -472,7 +476,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
                       : 'border border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  {savedPrinter?.id === d.id ? '✓ Terpilih' : 'Hubungkan'}
+                  {savedPrinter?.id === d.id ? 'âœ“ Terpilih' : 'Hubungkan'}
                 </button>
               </div>
             ))}
@@ -480,7 +484,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         </div>
       )}
 
-      {/* ─── Petunjuk ─── */}
+      {/* â”€â”€â”€ Petunjuk â”€â”€â”€ */}
       <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
         <div className="font-bold flex items-center gap-1.5 text-slate-800">
           <Info size={14} className="text-indigo-500" />
@@ -491,7 +495,7 @@ export const SettingsBluetoothPrinter: React.FC = () => {
           <li>Klik tombol <strong>"Scan & Pilih Printer Bluetooth"</strong> di atas.</li>
           <li>Pilih nama printer Anda dari dialog Chrome (<em>contoh: RPP02N_BLE, XP-P300</em>).</li>
           <li>Klik <strong>"Tes Cetak"</strong> untuk memastikan printer berfungsi.</li>
-          <li>Setelah terhubung, setiap selesai transaksi kasir akan langsung muncul tombol cetak struk!</li>
+          <li>Setelah terhubung, setiap selesai transaksi kasir akan langsung muncul tombol cetak struk!</li>` + "`n" + `          <li>&#10003; Mulai sekarang, <strong>setiap login atau buka kasir, printer otomatis tersambung kembali</strong> &mdash; tanpa scan ulang!</li>` + "`n" + `          <li>Jika printer sempat mati lalu dinyalakan, sistem akan mendeteksi dan konek otomatis dalam beberapa detik.</li>
         </ol>
       </div>
     </div>
