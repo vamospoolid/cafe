@@ -95,6 +95,13 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
       ENTERPRISE: 0
     };
 
+    const verticalDistribution: Record<string, number> = {
+      CAFE: 0,
+      BENGKEL: 0,
+      LAUNDRY: 0,
+      RETAIL: 0
+    };
+
     for (const sub of subscriptions) {
       if (sub.status === 'ACTIVE') {
         activeSubscriptionsCount++;
@@ -116,6 +123,13 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
       if (t.status === 'ACTIVE') activeTenantsCount++;
       else if (t.status === 'TRIAL') trialTenantsCount++;
       else if (t.status === 'SUSPENDED') suspendedTenantsCount++;
+
+      const vType = (t.businessType || 'CAFE').toUpperCase();
+      if (verticalDistribution[vType] !== undefined) {
+        verticalDistribution[vType]++;
+      } else {
+        verticalDistribution[vType] = 1;
+      }
 
       const currentSub = t.subscriptions[0];
       const plan = currentSub?.plan || t.plan;
@@ -249,6 +263,7 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
         activeSubscriptionsCount
       },
       planDistribution,
+      verticalDistribution,
       renewalRadar: renewalRadar.sort((a, b) => a.daysLeft - b.daysLeft),
       upsellRadar: upsellRadar.slice(0, 10),
       topMerchants: tenantGMVList.sort((a, b) => b.ordersCount - a.ordersCount).slice(0, 5),
@@ -257,6 +272,7 @@ router.get('/overview', authenticateToken, requirePlatformAdmin, async (_req: Au
         name: t.name,
         slug: t.slug,
         status: t.status,
+        businessType: (t.businessType || 'CAFE').toUpperCase(),
         createdAt: t.createdAt,
         outletsCount: t._count.outlets,
         usersCount: t._count.memberships,
@@ -320,6 +336,7 @@ router.get('/tenants', authenticateToken, requirePlatformAdmin, async (_req: Aut
         name: t.name,
         slug: t.slug,
         status: t.status,
+        businessType: (t.businessType || 'CAFE').toUpperCase(),
         ownerName: t.ownerName || ownerMember?.user?.name || ownerMember?.user?.username || 'Owner',
         phone: t.phone || outletPhone || '',
         waNumber: waNumber || null,
@@ -509,7 +526,7 @@ router.patch('/tenants/:id/plan', authenticateToken, requirePlatformAdmin, async
 router.patch('/tenants/:id/contact', authenticateToken, requirePlatformAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { ownerName, phone, email, notes } = req.body;
+    const { ownerName, phone, email, notes, businessType } = req.body;
 
     const updated = await prisma.tenant.update({
       where: { id },
@@ -517,9 +534,14 @@ router.patch('/tenants/:id/contact', authenticateToken, requirePlatformAdmin, as
         ...(ownerName !== undefined ? { ownerName } : {}),
         ...(phone !== undefined ? { phone } : {}),
         ...(email !== undefined ? { email } : {}),
-        ...(notes !== undefined ? { notes } : {})
+        ...(notes !== undefined ? { notes } : {}),
+        ...(businessType !== undefined ? { businessType: String(businessType).toUpperCase() } : {})
       }
     });
+
+    if (businessType !== undefined) {
+      invalidateTenantCache(id);
+    }
 
     await AuditLogger.log({
       tenantId: id,

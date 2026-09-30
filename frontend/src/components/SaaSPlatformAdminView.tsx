@@ -35,7 +35,11 @@ import {
   Wallet,
   Target,
   BarChart3,
-  Award
+  Award,
+  Coffee,
+  Wrench,
+  Shirt,
+  ShoppingBag
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -46,6 +50,7 @@ interface TenantItem {
   name: string;
   slug: string;
   status: string;
+  businessType?: string;
   ownerName: string;
   phone: string;
   waNumber: string | null;
@@ -84,6 +89,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
   const [plansList, setPlansList] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [verticalFilter, setVerticalFilter] = useState('ALL');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Modals state
@@ -100,6 +106,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [editBusinessType, setEditBusinessType] = useState('CAFE');
 
   const formatCurrency = (amount: number) => `Rp ${(amount || 0).toLocaleString('id-ID')}`;
 
@@ -246,6 +253,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
     setEditPhone(tenant.phone || '');
     setEditEmail(tenant.email || '');
     setEditNotes(tenant.notes || '');
+    setEditBusinessType((tenant.businessType || 'CAFE').toUpperCase());
   };
 
   // Save Contact Details
@@ -263,16 +271,17 @@ export const SaaSPlatformAdminView: React.FC = () => {
           ownerName: editOwnerName,
           phone: editPhone,
           email: editEmail,
-          notes: editNotes
+          notes: editNotes,
+          businessType: editBusinessType
         })
       });
       const data = await res.json();
       if (res.ok) {
-        toast('Data kontak berhasil disimpan', 'success');
+        toast('Data profil & klasifikasi tenant berhasil disimpan', 'success');
         setSelectedTenantForEdit(null);
         fetchPlatformData();
       } else {
-        toast(data.error || 'Gagal menyimpan kontak', 'error');
+        toast(data.error || 'Gagal menyimpan data tenant', 'error');
       }
     } catch (e: any) {
       toast(e.message || 'Terjadi kesalahan', 'error');
@@ -394,6 +403,13 @@ export const SaaSPlatformAdminView: React.FC = () => {
       (t.owner?.name && t.owner.name.toLowerCase().includes(q));
 
     if (!matchesSearch) return false;
+
+    // Filter Vertikal Bisnis (Kafe, Bengkel, Laundry, Retail)
+    if (verticalFilter !== 'ALL') {
+      const vType = (t.businessType || 'CAFE').toUpperCase();
+      if (vType !== verticalFilter) return false;
+    }
+
     if (statusFilter === 'ALL') return true;
 
     const now = Date.now();
@@ -528,7 +544,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
       {/* ─── TAB 1: EXECUTIVE OVERVIEW & REVENUE BREAKDOWN ─────────────────── */}
       {activeTab === 'overview' && (
         <div className="space-y-6 animate-fade-in">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Plan Distribution */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
@@ -560,8 +576,44 @@ export const SaaSPlatformAdminView: React.FC = () => {
               </div>
             </div>
 
-            {/* Top Merchants by GMV / Transaction Volume */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            {/* Vertical / Business Type Distribution */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                <Store size={16} className="text-emerald-600" /> Distribusi Vertikal Usaha
+              </h3>
+              <div className="space-y-3">
+                {[
+                  { code: 'CAFE', label: 'Kafe, Resto & F&B', color: 'bg-rose-500', icon: Coffee },
+                  { code: 'BENGKEL', label: 'Bengkel Motor & Mobil', color: 'bg-amber-500', icon: Wrench },
+                  { code: 'LAUNDRY', label: 'Jasa Laundry Kiloan/Satuan', color: 'bg-sky-500', icon: Shirt },
+                  { code: 'RETAIL', label: 'Retail, Toko Grosir & Bangunan', color: 'bg-emerald-600', icon: ShoppingBag }
+                ].map(v => {
+                  const count = overviewData?.verticalDistribution?.[v.code] || 
+                    tenants.filter(t => (t.businessType || 'CAFE').toUpperCase() === v.code).length;
+                  const total = m.totalTenants || 1;
+                  const percent = Math.round((count / total) * 100);
+                  const Icon = v.icon;
+                  return (
+                    <div key={v.code} className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold text-slate-700">
+                        <span className="flex items-center gap-1.5">
+                          <Icon size={13} className="text-slate-500" />
+                          {v.label}
+                        </span>
+                        <span>{count} Bisnis ({percent}%)</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div className={`h-full ${v.color} rounded-full transition-all`} style={{ width: `${percent}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Top Merchants by GMV / Transaction Volume */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
                   <Award size={16} className="text-amber-500" /> Top Kafe Teraktif (Volume Transaksi POS)
@@ -619,7 +671,6 @@ export const SaaSPlatformAdminView: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
       )}
 
       {/* ─── TAB 2: PROACTIVE RENEWAL RADAR (H-7 s/d H-1) ──────────────────── */}
@@ -883,6 +934,47 @@ export const SaaSPlatformAdminView: React.FC = () => {
             </div>
           </div>
 
+          {/* ─── Filter Vertikal Usaha (Baris 2) ─── */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 border-t border-slate-100">
+            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider whitespace-nowrap">
+              Vertikal:
+            </span>
+            {[
+              { key: 'ALL', label: 'Semua Vertikal', icon: Layers },
+              { key: 'CAFE', label: 'Kafe & F&B', icon: Coffee },
+              { key: 'BENGKEL', label: 'Bengkel', icon: Wrench },
+              { key: 'LAUNDRY', label: 'Laundry', icon: Shirt },
+              { key: 'RETAIL', label: 'Retail & Grosir', icon: ShoppingBag }
+            ].map(vf => {
+              const count = tenants.filter(t => {
+                if (vf.key === 'ALL') return true;
+                return (t.businessType || 'CAFE').toUpperCase() === vf.key;
+              }).length;
+              const IconComponent = vf.icon;
+              const isSelected = verticalFilter === vf.key;
+
+              return (
+                <button
+                  key={vf.key}
+                  onClick={() => setVerticalFilter(vf.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
+                  }`}
+                >
+                  <IconComponent size={13} className={isSelected ? 'text-white' : 'text-slate-500'} />
+                  <span>{vf.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
@@ -907,7 +999,38 @@ export const SaaSPlatformAdminView: React.FC = () => {
                       
                       {/* Business & Domain */}
                       <td className="py-3.5 px-3">
-                        <div className="font-black text-sm text-slate-900">{t.name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-black text-sm text-slate-900">{t.name}</span>
+                          {(() => {
+                            const vType = (t.businessType || 'CAFE').toUpperCase();
+                            if (vType === 'BENGKEL') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
+                                  <Wrench size={10} className="text-amber-600" /> BENGKEL
+                                </span>
+                              );
+                            }
+                            if (vType === 'LAUNDRY') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-sky-50 text-sky-800 border border-sky-300 inline-flex items-center gap-1">
+                                  <Shirt size={10} className="text-sky-600" /> LAUNDRY
+                                </span>
+                              );
+                            }
+                            if (vType === 'RETAIL') {
+                              return (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-50 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                                  <ShoppingBag size={10} className="text-emerald-600" /> RETAIL
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-50 text-rose-800 border border-rose-300 inline-flex items-center gap-1">
+                                <Coffee size={10} className="text-rose-600" /> KAFE
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <a 
                           href={`https://${t.slug}.codenusa.id`} 
                           target="_blank" 
@@ -1412,6 +1535,20 @@ export const SaaSPlatformAdminView: React.FC = () => {
             </div>
 
             <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Klasifikasi Vertikal Bisnis:</label>
+                <select
+                  className="form-control text-xs font-bold bg-slate-50 text-slate-800"
+                  value={editBusinessType}
+                  onChange={e => setEditBusinessType(e.target.value)}
+                >
+                  <option value="CAFE">☕ Kafe, Resto &amp; F&amp;B</option>
+                  <option value="BENGKEL">🔧 Bengkel Motor &amp; Mobil</option>
+                  <option value="LAUNDRY">🧺 Jasa Laundry Kiloan / Satuan</option>
+                  <option value="RETAIL">🏪 Retail, Toko Grosir &amp; Bangunan</option>
+                </select>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">Nama Pemilik (Owner):</label>
                 <input
