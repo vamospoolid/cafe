@@ -193,11 +193,11 @@ export const requirePlatformAdmin = (req: AuthRequest, res: Response, next: Next
     });
   }
 
+  // ⚠️ SECURITY: Hanya flag isPlatformAdmin dari database atau role SUPERADMIN yang valid.
+  // Jangan pernah menggunakan hardcoded username sebagai penentu akses platform.
   const isSuper = Boolean(
     req.user.isPlatformAdmin === true || 
-    req.user.role === 'SUPERADMIN' || 
-    req.user.username === 'admin' || 
-    req.user.username === 'ahmad'
+    req.user.role === 'SUPERADMIN'
   );
   if (!isSuper) {
     return res.status(403).json({

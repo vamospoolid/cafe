@@ -104,14 +104,14 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
     role: activeRoleName,
     roleId: activeRoleId,
     permissions: permissionKeys,
-    isPlatformAdmin: Boolean(user.isPlatformAdmin || user.role === 'SUPERADMIN' || user.username === 'admin' || user.username === 'ahmad'),
+    isPlatformAdmin: Boolean(user.isPlatformAdmin || user.role === 'SUPERADMIN'),
     businessType: activeMembership?.tenant?.businessType || (user as any).businessType || 'CAFE'
   };
 
   const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
 
   const { passwordHash, ...safeUser } = user;
-  (safeUser as any).isPlatformAdmin = Boolean(user.isPlatformAdmin || user.role === 'SUPERADMIN' || user.username === 'admin' || user.username === 'ahmad');
+  (safeUser as any).isPlatformAdmin = Boolean(user.isPlatformAdmin || user.role === 'SUPERADMIN');
   const effectiveBusinessType = activeMembership?.tenant?.businessType || (user as any).businessType || 'CAFE';
 
   const membershipsList = (user.memberships || []).map(m => ({
