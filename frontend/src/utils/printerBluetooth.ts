@@ -1012,11 +1012,12 @@ export const printBluetoothKitchenTicket = async (
  * Print Work Order / SPK Bengkel Receipt to Bluetooth Thermal Printer (Struk Bengkel)
  */
 export const printBluetoothBengkelWorkOrder = async (
-  workOrder: any,
+  rawWorkOrder: any,
   settings: { name?: string; storeName?: string; address?: string; phone?: string; footer?: string; paperWidth?: '58mm' | '80mm' },
   options?: { autoKickDrawer?: boolean }
 ): Promise<void> => {
   try {
+    const workOrder = rawWorkOrder?.order ? { ...rawWorkOrder.order, ...rawWorkOrder } : rawWorkOrder;
     const is80mm = settings.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
     const lineWidth = is80mm ? 48 : 32;
     const divider = '='.repeat(lineWidth);
@@ -1166,11 +1167,12 @@ export const printBluetoothBengkelWorkOrder = async (
  * Print Retail / Grosir Order Receipt to Bluetooth Thermal Printer (Struk Retail & Grosir)
  */
 export const printBluetoothRetailReceipt = async (
-  order: any,
+  rawOrder: any,
   settings: { name?: string; storeName?: string; address?: string; phone?: string; footer?: string; paperWidth?: '58mm' | '80mm' },
   options?: { autoKickDrawer?: boolean }
 ): Promise<void> => {
   try {
+    const order = rawOrder?.order ? { ...rawOrder.order, ...rawOrder } : rawOrder;
     const is80mm = settings.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
     const lineWidth = is80mm ? 48 : 32;
     const divider = '='.repeat(lineWidth);

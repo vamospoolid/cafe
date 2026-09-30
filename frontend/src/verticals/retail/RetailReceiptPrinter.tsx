@@ -19,6 +19,9 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
   const printRef = useRef<HTMLDivElement>(null);
   const [isPrinting, setIsPrinting] = useState(false);
 
+  // Normalisasi order: ekstrak apakah data mentah atau terbungkus { order: ... }
+  const actualOrder = order?.order ? { ...order.order, ...order } : (order || {});
+
   const formatCurrency = (val: number) => `Rp ${(Math.round(val || 0)).toLocaleString('id-ID')}`;
 
   const formatDate = (iso: string) => {
@@ -45,7 +48,7 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
     const win = window as any;
     if (win.electronPOS?.printer?.printReceipt) {
       try {
-        await win.electronPOS.printer.printReceipt(order, settings);
+        await win.electronPOS.printer.printReceipt(actualOrder, settings);
         setIsPrinting(false);
         return;
       } catch (e) {
@@ -57,7 +60,7 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
     const savedBt = getSavedBluetoothPrinter();
     if (savedBt || localStorage.getItem('bluetooth_printer_mac')) {
       try {
-        await printBluetoothRetailReceipt(order, {
+        await printBluetoothRetailReceipt(actualOrder, {
           storeName: settings?.storeName || 'TOKO GROSIR & SEMBAKO',
           address: settings?.address || '',
           phone: settings?.phone || '',
@@ -88,14 +91,14 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
 
   if (!order) return null;
 
-  const items = order.items || [];
-  const subtotal = order.subtotal || order.total || 0;
-  const discount = order.discount || order.discountAmount || 0;
-  const tax = order.tax || order.taxAmount || 0;
-  const grandTotal = order.total || order.grandTotal || (subtotal - discount + tax);
-  const cashReceived = order.cashReceived || order.paidAmount || grandTotal;
-  const changeDue = Math.max(0, cashReceived - grandTotal);
-  const paymentMethod = (order.paymentMethod || 'TUNAI').toUpperCase();
+  const items = actualOrder.items || [];
+  const subtotal = actualOrder.subtotal ?? actualOrder.total ?? 0;
+  const discount = actualOrder.discount ?? actualOrder.discountAmount ?? 0;
+  const tax = actualOrder.tax ?? actualOrder.taxAmount ?? 0;
+  const grandTotal = actualOrder.total ?? actualOrder.grandTotal ?? (subtotal - discount + tax);
+  const cashReceived = actualOrder.cashReceived ?? actualOrder.paidAmount ?? grandTotal;
+  const changeDue = actualOrder.changeDue ?? Math.max(0, cashReceived - grandTotal);
+  const paymentMethod = (actualOrder.paymentMethod || 'TUNAI').toUpperCase();
   const isBon = paymentMethod === 'BON' || paymentMethod === 'TEMPO';
 
   return (
@@ -157,26 +160,26 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
             <div className="space-y-1 text-[10px] mb-2">
               <div className="flex justify-between">
                 <span>No. Faktur:</span>
-                <span className="font-bold">{order.orderNumber || order.id || '-'}</span>
+                <span className="font-bold">{actualOrder.orderNumber || actualOrder.id || '-'}</span>
               </div>
               <div className="flex justify-between">
                 <span>Waktu:</span>
-                <span>{formatDate(order.paidAt || order.createdAt)} {formatTime(order.paidAt || order.createdAt)}</span>
+                <span>{formatDate(actualOrder.paidAt || actualOrder.createdAt)} {formatTime(actualOrder.paidAt || actualOrder.createdAt)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Kasir:</span>
-                <span>{order.user?.name || user?.name || order.cashierName || 'Kasir'}</span>
+                <span>{actualOrder.user?.name || user?.name || actualOrder.cashierName || 'Kasir'}</span>
               </div>
               <div className="flex justify-between border-t border-dashed border-slate-300 pt-1 mt-1">
                 <span>Pelanggan:</span>
                 <span className="font-bold truncate max-w-[150px]">
-                  {order.customer?.name || order.customerName || 'Pelanggan Umum'}
+                  {actualOrder.customer?.name || actualOrder.customerName || 'Pelanggan Umum'}
                 </span>
               </div>
-              {order.priceTier && order.priceTier !== 'UMUM' && (
+              {actualOrder.priceTier && actualOrder.priceTier !== 'UMUM' && (
                 <div className="flex justify-between text-indigo-700 font-bold">
                   <span>Tier Harga:</span>
-                  <span>{order.priceTier}</span>
+                  <span>{actualOrder.priceTier}</span>
                 </div>
               )}
             </div>
@@ -239,10 +242,10 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
                     <span>STATUS:</span>
                     <span>BON TEMPO (HUTANG)</span>
                   </div>
-                  {order.dueDate && (
+                  {actualOrder.dueDate && (
                     <div className="flex justify-between text-[9px]">
                       <span>Jatuh Tempo:</span>
-                      <span>{formatDate(order.dueDate)}</span>
+                      <span>{formatDate(actualOrder.dueDate)}</span>
                     </div>
                   )}
                 </div>

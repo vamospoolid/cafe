@@ -187,7 +187,31 @@ export const RetailCheckoutModal: React.FC<RetailCheckoutModalProps> = ({
       }
 
       toast('🎉 Transaksi Grosir & Retail Berhasil Dibukukan!', 'success');
-      onSuccessCheckout(json.data);
+
+      const rawOrder = json.data?.order || json.data || {};
+      const fullOrder = {
+        ...rawOrder,
+        items: (rawOrder.items && rawOrder.items.length > 0) ? rawOrder.items : items.map(i => ({
+          productName: i.productName,
+          qty: i.qty,
+          price: i.price,
+          subtotal: i.subtotal,
+          uomName: i.uomName
+        })),
+        customer,
+        customerName: customer?.name || rawOrder.customerName || 'Pelanggan Umum',
+        subtotal: rawOrder.subtotal ?? subtotal,
+        discount: rawOrder.discount ?? manualDiscount,
+        tax: rawOrder.tax ?? tax,
+        total: rawOrder.total ?? finalTotal,
+        cashReceived: cashReceived || finalTotal,
+        changeDue: Math.max(0, (cashReceived || finalTotal) - (rawOrder.total ?? finalTotal)),
+        paymentMethod: rawOrder.paymentMethod || paymentMethod,
+        priceTier: customer?.priceTier || 'UMUM',
+        createdAt: rawOrder.createdAt || new Date().toISOString()
+      };
+
+      onSuccessCheckout(fullOrder);
       onClose();
     } catch (err: any) {
       toast(err.message || 'Terjadi kesalahan sistem.', 'error');

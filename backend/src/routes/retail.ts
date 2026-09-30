@@ -349,8 +349,17 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
         });
       }
 
+      const fullOrder = await tx.order.findUnique({
+        where: { id: newOrder.id },
+        include: {
+          items: true,
+          debt: true,
+          deliveryOrders: true
+        }
+      });
+
       return {
-        order: newOrder,
+        order: fullOrder || newOrder,
         debt: debtRecord,
         deliveryOrder: deliveryOrderRecord
       };
