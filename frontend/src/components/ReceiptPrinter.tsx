@@ -183,6 +183,15 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
     </tr>
   );
 
+  const getTableDisplay = () => {
+    if (order.table?.tableNo) return `MEJA ${order.table.tableNo}`;
+    if (order.table?.name) return order.table.name.toUpperCase();
+    if (order.tableName) return order.tableName.toUpperCase();
+    if (order.tableId) return `MEJA ${order.tableId}`;
+    if (order.orderType === 'Dine In' || order.orderType === 'DINE IN') return 'DINE IN';
+    return (order.orderType || 'TAKE AWAY').toUpperCase();
+  };
+
   // ── Sub-component: Kitchen Ticket ──
   const renderKitchenTicket = () => (
     <div style={{ marginBottom: '6mm' }}>
@@ -199,7 +208,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
         <tbody>
           <tr>
             <td style={{ ...tdL, width: '16mm', fontSize: '13pt', fontWeight: 900 }}>MEJA</td>
-            <td style={{ ...tdL, fontSize: '14pt', fontWeight: 900 }}>: {order.table?.tableNo || order.orderType || 'Take Away'}</td>
+            <td style={{ ...tdL, fontSize: '14pt', fontWeight: 900 }}>: {getTableDisplay()}</td>
           </tr>
           <tr>
             <td style={{ ...tdL, fontSize: '9pt' }}>No. Ord</td>
@@ -271,7 +280,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
         <tbody>
           <tr>
             <td style={{ ...tdL, width: '16mm', fontSize: '13pt', fontWeight: 900 }}>MEJA</td>
-            <td style={{ ...tdL, fontSize: '14pt', fontWeight: 900 }}>: {order.table?.tableNo || order.orderType || 'Take Away'}</td>
+            <td style={{ ...tdL, fontSize: '14pt', fontWeight: 900 }}>: {getTableDisplay()}</td>
           </tr>
           <tr>
             <td style={{ ...tdL, fontSize: '9pt' }}>No. Ord</td>
@@ -349,8 +358,8 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
           <tr><td style={{ ...tdL, width: '14mm' }}>No</td><td style={tdL}>: {order.orderNumber}</td></tr>
           <tr><td style={{ ...tdL, width: '14mm' }}>Kasir</td><td style={tdL}>: {order.user?.name || '-'}</td></tr>
           <tr><td style={{ ...tdL, width: '14mm' }}>Plgn</td><td style={tdL}>: {order.customerName || 'Umum'}</td></tr>
-          {order.table?.tableNo && (
-            <tr><td style={{ ...tdL, width: '14mm' }}>Meja</td><td style={tdL}>: {order.table.tableNo}</td></tr>
+          {getTableDisplay() !== 'TAKE AWAY' && (
+            <tr><td style={{ ...tdL, width: '14mm', fontWeight: 900 }}>Meja</td><td style={{ ...tdL, fontWeight: 900 }}>: {getTableDisplay()}</td></tr>
           )}
         </tbody>
       </table>

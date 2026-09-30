@@ -13,7 +13,10 @@ import ReceiptPrinter from './ReceiptPrinter';
 import SplitPrintModal from './SplitPrintModal';
 import { 
   getSavedBluetoothPrinter,
-  printBluetoothReceipt 
+  printBluetoothReceipt,
+  printBluetoothKitchenTicket,
+  isKitchenItem,
+  isBarItem
 } from '../utils/printerBluetooth';
 import { generateWhatsAppReceiptUrl } from '../utils/receiptFormatter';
 
@@ -255,6 +258,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         if (!orderRes.ok) throw new Error('Gagal mengambil detail order untuk cetak Bluetooth');
         const orderData = await orderRes.json();
         
+        if (!orderData.table && customer) {
+          orderData.tableName = customer.tableName || orderData.tableName;
+          orderData.tableId = customer.tableId || orderData.tableId;
+          orderData.orderType = customer.orderType || orderData.orderType;
+        }
+
         await printBluetoothReceipt(orderData, {
           name: posContext?.settings?.storeName || 'KAFE & RESTORAN',
           address: posContext?.settings?.address || '',
@@ -354,8 +363,44 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const handlePrintSpecificTarget = async (id: number, target: 'kitchen' | 'bar') => {
+    const savedBt = getSavedBluetoothPrinter();
     try {
       setPrintLoading(true);
+      // 1. Ambil detail pesanan
+      const orderRes = await fetch(`/api/orders/${id}`, {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (!orderRes.ok) throw new Error('Gagal mengambil rincian pesanan untuk cetak tiket');
+      const orderData = await orderRes.json();
+
+      if (!orderData.table && customer) {
+        orderData.tableName = customer.tableName || orderData.tableName;
+        orderData.tableId = customer.tableId || orderData.tableId;
+        orderData.orderType = customer.orderType || orderData.orderType;
+      }
+
+      // 2. Validasi apakah order memiliki menu untuk stasiun ini (Dapur/Bar)
+      const allItems = orderData.items || [];
+      const filterFn = target === 'kitchen' ? isKitchenItem : isBarItem;
+      const matchingItems = allItems.filter(filterFn);
+
+      if (matchingItems.length === 0) {
+        toast(`Pesanan ini tidak memiliki menu ${target === 'kitchen' ? 'makanan untuk Tiket Dapur' : 'minuman untuk Tiket Bar'}.`, 'warning');
+        return;
+      }
+
+      // 3. Prioritaskan cetak langsung via Bluetooth Thermal jika terhubung
+      if (savedBt) {
+        await printBluetoothKitchenTicket(orderData, target, {
+          storeName: posContext?.settings?.storeName,
+          paperWidth: (localStorage.getItem('printer_paper_width') as any) || '58mm'
+        });
+
+        toast(`Tiket ${target === 'kitchen' ? 'Dapur (Makanan)' : 'Bar (Minuman)'} berhasil dicetak via Bluetooth!`, 'success');
+        return;
+      }
+
+      // 4. Kirim ke backend network printer jika tidak menggunakan Bluetooth
       const res = await fetch(`/api/printer/${target}`, {
         method: 'POST',
         headers: {
@@ -369,8 +414,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       } else {
         await handleOpenSplitPrint(id);
       }
-    } catch (e) {
-      await handleOpenSplitPrint(id);
+    } catch (e: any) {
+      console.warn('Gagal cetak tiket:', e.message);
+      if (savedBt) {
+        toast(e.message || 'Gagal mencetak tiket via Bluetooth', 'warning');
+      } else {
+        await handleOpenSplitPrint(id);
+      }
     } finally {
       setPrintLoading(false);
     }
@@ -453,6 +503,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             customerName: currentCustomer?.name || 'Pelanggan Umum',
             customerPhone: currentCustomer?.phone || '',
             customerId: currentCustomer?.id || null,
+            orderType: customer?.orderType || (customer?.tableId ? 'Dine In' : 'Take Away'),
+            tableName: customer?.tableName || undefined,
             tableId: customer?.tableId || null,
             joinedTableIds: customer?.joinedTableIds || undefined,
             items: cart.map((item: any) => ({ productId: item.product.id, qty: item.qty, price: item.product.sellPrice, notes: item.notes || '' })),

@@ -10,17 +10,36 @@ export interface BluetoothDeviceInfo {
 // In-memory reference for Web Bluetooth device instance
 let activeWebBluetoothDevice: any = null;
 
+export const setActiveWebBluetoothDevice = (device: any) => {
+  activeWebBluetoothDevice = device;
+};
+
+export const getActiveWebBluetoothDevice = (): any => {
+  return activeWebBluetoothDevice;
+};
+
 // Common thermal printer Bluetooth Low Energy (BLE) / GATT Service UUIDs
-export const COMMON_PRINTER_SERVICES = [
+export const COMMON_PRINTER_SERVICES: (string | number)[] = [
   '000018f0-0000-1000-8000-00805f9b34fb', // Standard ESC/POS printer service
   '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC transparent UART (very common in 58mm/80mm mini POS)
   '0000e781-0000-1000-8000-00805f9b34fb',
-  'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-  '0000fee7-0000-1000-8000-00805f9b34fb',
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Rongta / Goojprt / PT-210 RPP02N
+  '0000fee7-0000-1000-8000-00805f9b34fb', // HPRT
   '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART Service (NUS)
   '0000fff0-0000-1000-8000-00805f9b34fb', // Generic POS
-  '0000ff00-0000-1000-8000-00805f9b34fb',
+  '0000ff00-0000-1000-8000-00805f9b34fb', // Xprinter / Bixolon
+  '0000ffe0-0000-1000-8000-00805f9b34fb', // HM-10 UART
+  '0000180a-0000-1000-8000-00805f9b34fb', // Device Information Service (0x180A)
   '00001101-0000-1000-8000-00805f9b34fb', // Serial Port Profile
+  '0000ae30-0000-1000-8000-00805f9b34fb', // Other POS
+  '0000ae01-0000-1000-8000-00805f9b34fb',
+  '0000af30-0000-1000-8000-00805f9b34fb',
+  0x18f0,
+  0xffe0,
+  0xff00,
+  0xfee7,
+  0x180a,
+  0xfff0
 ];
 
 export const isWebBluetoothSupported = (): boolean => {
@@ -60,6 +79,73 @@ export const clearSavedBluetoothPrinter = () => {
 };
 
 /**
+ * Mencari instance BluetoothDevice aktif atau memulihkan dari granted devices di Chrome
+ */
+export const getActiveOrSavedDevice = async (): Promise<any> => {
+  if (activeWebBluetoothDevice) return activeWebBluetoothDevice;
+
+  const saved = getSavedBluetoothPrinter();
+  if (saved && (navigator as any).bluetooth?.getDevices) {
+    try {
+      const devices = await (navigator as any).bluetooth.getDevices();
+      const match = devices.find((d: any) => d.id === saved.id || d.name === saved.name) || devices[0];
+      if (match) {
+        activeWebBluetoothDevice = match;
+        return match;
+      }
+    } catch (e) {
+      console.warn('[Printer] Gagal membaca granted devices:', e);
+    }
+  }
+  return null;
+};
+
+/**
+ * Koneksi GATT server dengan pembersihan socket dan auto-retry tangguh
+ */
+export const connectGattWithRetry = async (device: any, maxRetries = 2): Promise<any> => {
+  if (!device) throw new Error('Perangkat printer Bluetooth tidak ditemukan.');
+
+  if (device.gatt?.connected) {
+    return device.gatt;
+  }
+
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Disconnect socket lama jika dalam keadaan hanging / half-open
+      if (device.gatt) {
+        try {
+          device.gatt.disconnect();
+        } catch { /* ignore */ }
+      }
+
+      await new Promise(r => setTimeout(r, 350));
+
+      const server = await device.gatt.connect();
+      if (server && server.connected) {
+        return server;
+      }
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[GATT Connect] Percobaan ${attempt}/${maxRetries} gagal:`, err.message);
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+  }
+
+  const errDesc = lastError?.message || 'Connection attempt failed';
+  throw new Error(
+    `Koneksi Bluetooth ke "${device.name || 'Printer'}" gagal (${errDesc}).\n\n` +
+    `💡 Solusi Cepat:\n` +
+    `1. Matikan dan hidupkan kembali printer Anda (Power restart).\n` +
+    `2. Jika printer sudah terpasang di "Bluetooth Windows", buka Windows Settings > Bluetooth dan klik "Remove Device", lalu sambungkan langsung dari tombol Scan di sini (agar koneksi tidak diblokir OS Windows).\n` +
+    `3. Pastikan printer tidak sedang terhubung ke HP / tablet lain.`
+  );
+};
+
+/**
  * Request pair via Web Bluetooth API (Chrome Android / Windows / Mac)
  */
 export const pairWebBluetoothPrinter = async (): Promise<BluetoothDeviceInfo> => {
@@ -74,6 +160,14 @@ export const pairWebBluetoothPrinter = async (): Promise<BluetoothDeviceInfo> =>
     });
 
     activeWebBluetoothDevice = device;
+
+    // Uji koneksi awal seketika agar user tahu status perangkat
+    try {
+      await connectGattWithRetry(device, 2);
+    } catch (connErr: any) {
+      console.warn('[Pair] Peringatan koneksi awal:', connErr.message);
+    }
+
     const info: BluetoothDeviceInfo = {
       id: device.id,
       name: device.name || 'Thermal Printer',
@@ -102,60 +196,57 @@ const sendBytesWebBluetooth = async (device: any, bytes: Uint8Array): Promise<vo
     throw new Error('Perangkat Bluetooth tidak ditemukan. Silakan sambungkan ulang di Pengaturan.');
   }
 
-  let server = device.gatt;
-  if (!server?.connected) {
-    server = await device.gatt.connect();
-  }
+  const server = await connectGattWithRetry(device, 2);
 
-  // Find any primary service that has a writable characteristic
+  // Cari characteristic write (kirim data)
   let writeChar: any = null;
   
-  // Try searching through known common services first
-  for (const sUuid of COMMON_PRINTER_SERVICES) {
-    try {
-      const service = await server.getPrimaryService(sUuid);
-      const chars = await service.getCharacteristics();
-      for (const c of chars) {
-        if (c.properties.write || c.properties.writeWithoutResponse) {
-          writeChar = c;
-          break;
-        }
-      }
-      if (writeChar) break;
-    } catch {
-      // Continue to next service
-    }
-  }
-
-  // If not found in known list, discover all primary services
-  if (!writeChar) {
-    try {
-      const services = await server.getPrimaryServices();
-      for (const service of services) {
-        try {
-          const chars = await service.getCharacteristics();
-          for (const c of chars) {
-            if (c.properties.write || c.properties.writeWithoutResponse) {
-              writeChar = c;
-              break;
-            }
+  // 1. Coba getPrimaryServices() sekaligus (paling cepat dan hemat round-trip)
+  try {
+    const services = await server.getPrimaryServices();
+    for (const service of services) {
+      try {
+        const chars = await service.getCharacteristics();
+        for (const c of chars) {
+          if (c.properties.write || c.properties.writeWithoutResponse) {
+            writeChar = c;
+            break;
           }
-          if (writeChar) break;
-        } catch {
-          // ignore
         }
+        if (writeChar) break;
+      } catch {
+        // continue
       }
-    } catch (e: any) {
-      console.warn('Could not list all primary services:', e);
+    }
+  } catch (e: any) {
+    console.warn('[BLE Discovery] getPrimaryServices warning:', e);
+  }
+
+  // 2. Fallback: Telusuri known services
+  if (!writeChar) {
+    for (const sUuid of COMMON_PRINTER_SERVICES) {
+      try {
+        const service = await server.getPrimaryService(sUuid);
+        const chars = await service.getCharacteristics();
+        for (const c of chars) {
+          if (c.properties.write || c.properties.writeWithoutResponse) {
+            writeChar = c;
+            break;
+          }
+        }
+        if (writeChar) break;
+      } catch {
+        // continue
+      }
     }
   }
 
   if (!writeChar) {
-    throw new Error('Tidak dapat menemukan characteristic cetak pada printer Bluetooth ini.');
+    throw new Error('Tidak dapat menemukan characteristic kirim data (write) pada printer Bluetooth ini.');
   }
 
-  // Send bytes in safe chunks (MTU safe: 80 bytes)
-  const chunkSize = 80;
+  // Kirim data dalam ukuran chunk aman (20 byte MTU standar BLE universal)
+  const chunkSize = 20;
   for (let i = 0; i < bytes.length; i += chunkSize) {
     const chunk = bytes.slice(i, i + chunkSize);
     if (writeChar.properties.writeWithoutResponse) {
@@ -163,8 +254,8 @@ const sendBytesWebBluetooth = async (device: any, bytes: Uint8Array): Promise<vo
     } else {
       await writeChar.writeValue(chunk);
     }
-    // Small delay to let thermal printer buffer process
-    await new Promise(res => setTimeout(res, 20));
+    // Delay 15ms antar potongan agar buffer printer thermal tidak overload
+    await new Promise(res => setTimeout(res, 15));
   }
 };
 
@@ -350,14 +441,12 @@ export const disconnectBluetoothPrinter = (): Promise<void> => {
 
 export const printRawBytes = async (bytes: Uint8Array): Promise<void> => {
   // 1. Web Bluetooth (Chrome Desktop / Android HTTPS)
-  if (isWebBluetoothSupported() && (activeWebBluetoothDevice || localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH')) {
-    if (!activeWebBluetoothDevice) {
-      activeWebBluetoothDevice = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: COMMON_PRINTER_SERVICES
-      });
+  if (isWebBluetoothSupported() && (activeWebBluetoothDevice || localStorage.getItem('bluetooth_printer_type') === 'WEB_BLUETOOTH' || localStorage.getItem('bluetooth_printer_id'))) {
+    let device = await getActiveOrSavedDevice();
+    if (!device) {
+      throw new Error('Printer Bluetooth belum terhubung. Pastikan printer menyala atau sambungkan di menu Pengaturan > Printer Bluetooth.');
     }
-    await sendBytesWebBluetooth(activeWebBluetoothDevice, bytes);
+    await sendBytesWebBluetooth(device, bytes);
     return;
   }
 
@@ -476,7 +565,83 @@ export const kickCashDrawer = async (): Promise<void> => {
 };
 
 /**
- * Print Order Receipt to Bluetooth Thermal Printer
+ * Helper deteksi apakah item ditujukan untuk Bar Minuman
+ */
+export const isBarItem = (item: any): boolean => {
+  const target = item.product?.category?.stationTarget || item.product?.category?.printerTarget || item.product?.printerTarget;
+  if (target === 'BAR' || target === 'BEVERAGE') return true;
+  if (target === 'KITCHEN' || target === 'GRILL') return false;
+  const catName = (item.product?.category?.name || item.categoryName || '').toLowerCase();
+  const prodName = (item.product?.name || item.name || '').toLowerCase();
+  return (
+    catName.includes('minum') || catName.includes('beverage') || catName.includes('drink') ||
+    catName.includes('tea') || catName.includes('kopi') || catName.includes('coffee') ||
+    catName.includes('jus') || catName.includes('juice') || catName.includes('boba') ||
+    catName.includes('mocktail') || catName.includes('cocktail') || catName.includes('bar') ||
+    prodName.includes('ocha') || prodName.includes('juice') || prodName.includes('jus ') ||
+    prodName.includes('ice') || prodName.includes('es ') || prodName.includes('soda') ||
+    prodName.includes('latte') || prodName.includes('tea') || prodName.includes('teh') ||
+    prodName.includes('kopi') || prodName.includes('coffee') || prodName.includes('americano') ||
+    prodName.includes('cappuccino') || prodName.includes('espresso') || prodName.includes('machiatto') ||
+    prodName.includes('macchiato') || prodName.includes('frappe') || prodName.includes('smoothie') ||
+    prodName.includes('milkshake') || prodName.includes('shake') || prodName.includes('boba') ||
+    prodName.includes('syrup') || prodName.includes('sirup') || prodName.includes('mineral') ||
+    prodName.includes('aqua') || prodName.includes('cola') || prodName.includes('fanta') ||
+    prodName.includes('sprite') || prodName.includes('lemonade') || prodName.includes('squash') ||
+    prodName.includes('beer') || prodName.includes('mocktail')
+  );
+};
+
+export const isKitchenItem = (item: any): boolean => {
+  const target = item.product?.category?.stationTarget || item.product?.category?.printerTarget || item.product?.printerTarget;
+  if (target === 'KITCHEN' || target === 'GRILL' || target === 'DESSERT') return true;
+  if (target === 'BAR' || target === 'BEVERAGE') return false;
+  return !isBarItem(item);
+};
+
+/**
+ * Format label meja secara seragam & jelas (Meja 1, Meja 2 + Meja 3, atau Take Away)
+ */
+export const formatOrderTableLabel = (order: any): { isDineIn: boolean; label: string } => {
+  if (!order) return { isDineIn: false, label: 'TAKE AWAY' };
+
+  let tablePart = '';
+
+  if (order.table?.tableNo) {
+    tablePart = `MEJA ${order.table.tableNo}`;
+    if (order.table.name && !order.table.name.toLowerCase().includes('meja')) {
+      tablePart += ` (${order.table.name})`;
+    }
+  } else if (order.table?.name) {
+    tablePart = order.table.name.toUpperCase();
+  } else if (order.tableName) {
+    tablePart = order.tableName.toUpperCase();
+  } else if (order.tableNo) {
+    tablePart = `MEJA ${order.tableNo}`;
+  } else if (order.tableId) {
+    tablePart = `MEJA ${order.tableId}`;
+  }
+
+  // Handle joined tables
+  if (order.joinedTables && Array.isArray(order.joinedTables) && order.joinedTables.length > 0) {
+    const extra = order.joinedTables.map((t: any) => t.tableNo ? `MEJA ${t.tableNo}` : t.name).join(' + ');
+    tablePart = tablePart ? `${tablePart} + ${extra}` : extra;
+  }
+
+  if (tablePart) {
+    return { isDineIn: true, label: tablePart };
+  }
+
+  const isDineIn = order.orderType === 'Dine In' || order.orderType === 'DINE IN' || order.orderType === 'dine_in';
+  if (isDineIn) {
+    return { isDineIn: true, label: 'DINE IN' };
+  }
+
+  return { isDineIn: false, label: (order.orderType || 'TAKE AWAY').toUpperCase() };
+};
+
+/**
+ * Print Order Receipt to Bluetooth Thermal Printer (Struk Kasir Konsumen)
  */
 export const printBluetoothReceipt = async (
   order: any, 
@@ -490,8 +655,9 @@ export const printBluetoothReceipt = async (
     const subDivider = '-'.repeat(lineWidth);
 
     const encoder = new EscPosEncoder();
+    const { isDineIn, label: tableLabel } = formatOrderTableLabel(order);
     
-    // Header
+    // Header Toko
     let encoded = encoder
       .initialize()
       .align('center')
@@ -506,15 +672,21 @@ export const printBluetoothReceipt = async (
       encoded = encoded.line(`Telp: ${settings.phone}`);
     }
 
+    // Informasi Order & NOMOR MEJA
     encoded = encoded
       .line(divider)
       .align('left')
       .line(`No Struk : ${order.orderNumber || order.id}`)
-      .line(`Tanggal  : ${new Date(order.createdAt || Date.now()).toLocaleString('id-ID')}`)
+      .line(`Tanggal  : ${new Date(order.paidAt || order.createdAt || Date.now()).toLocaleString('id-ID')}`)
       .line(`Kasir    : ${order.user?.name || order.cashierName || 'Kasir'}`)
-      .line(`Meja     : ${order.tableName || order.table?.name || 'Take Away'}`)
-      .line(`Pesanan  : ${order.customerName ? order.customerName : '-'}`)
-      .line(subDivider);
+      .bold(true)
+      .line(`${isDineIn ? 'Meja     ' : 'Tipe     '}: ${tableLabel}`)
+      .bold(false);
+
+    if (order.customerName) {
+      encoded = encoded.line(`Pelanggan: ${order.customerName}`);
+    }
+    encoded = encoded.line(subDivider);
 
     // Items list (formatted for 32 chars 58mm or 48 chars 80mm)
     const items = order.items || [];
@@ -527,7 +699,6 @@ export const printBluetoothReceipt = async (
       const qtyPriceStr = `${qty}x${Math.round(price).toLocaleString('id-ID')}`;
       const totalStr = Math.round(total).toLocaleString('id-ID');
       
-      // Calculate layout spaces based on 58mm vs 80mm
       const maxNameLen = is80mm ? 24 : 14;
       const shortName = productName.length > maxNameLen ? productName.substring(0, maxNameLen) : productName.padEnd(maxNameLen, ' ');
       const paddedQty = qtyPriceStr.padStart(is80mm ? 12 : 9, ' ');
@@ -582,6 +753,92 @@ export const printBluetoothReceipt = async (
     }
   } catch (err: any) {
     console.error('Error printing receipt via Bluetooth:', err);
+    throw err;
+  }
+};
+
+/**
+ * Print Kitchen / Bar Ticket to Bluetooth Thermal Printer (Tiket Dapur & Bar)
+ */
+export const printBluetoothKitchenTicket = async (
+  order: any,
+  target: 'kitchen' | 'bar',
+  settings?: { storeName?: string; paperWidth?: '58mm' | '80mm' }
+): Promise<void> => {
+  try {
+    const is80mm = settings?.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
+    const lineWidth = is80mm ? 48 : 32;
+    const divider = '='.repeat(lineWidth);
+    const subDivider = '-'.repeat(lineWidth);
+
+    const encoder = new EscPosEncoder();
+    const isKitchen = target === 'kitchen';
+    const title = isKitchen ? '*** TIKET DAPUR (MAKANAN) ***' : '*** TIKET BAR (MINUMAN) ***';
+
+    // Filter items
+    const allItems = order.items || [];
+    const filterFn = isKitchen ? isKitchenItem : isBarItem;
+    const filteredItems = allItems.filter(filterFn);
+    
+    // Jangan pernah fallback mencetak seluruh item! Jika tidak ada menu yang sesuai, beri peringatan
+    if (filteredItems.length === 0) {
+      throw new Error(`Pesanan ini tidak memiliki menu ${isKitchen ? 'makanan untuk Tiket Dapur' : 'minuman untuk Tiket Bar'}.`);
+    }
+
+    const { isDineIn, label: tableLabel } = formatOrderTableLabel(order);
+
+    let encoded = encoder
+      .initialize()
+      .align('center')
+      .line(divider)
+      .bold(true)
+      .line(title)
+      .bold(false)
+      .line(divider)
+      .align('left')
+      // TAMPILKAN NOMOR MEJA TEBAL & BESAR DI TIKET DAPUR
+      .bold(true)
+      .line(`${isDineIn ? 'MEJA     ' : 'TIPE     '}: ${tableLabel}`)
+      .bold(false)
+      .line(`No Order : ${order.orderNumber || `#${order.id}`}`)
+      .line(`Waktu    : ${new Date(order.createdAt || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} (${new Date(order.createdAt || Date.now()).toLocaleDateString('id-ID')})`)
+      .line(`Pelayan  : ${order.user?.name || order.cashierName || 'Kasir'}`);
+
+    if (order.customerName) {
+      encoded = encoded.line(`Tamu     : ${order.customerName}`);
+    }
+
+    encoded = encoded
+      .line(subDivider)
+      .bold(true)
+      .line(isKitchen ? 'DAFTAR PESANAN MAKANAN:' : 'DAFTAR PESANAN MINUMAN:')
+      .bold(false);
+
+    filteredItems.forEach((item: any) => {
+      const productName = item.product?.name || item.productName || item.name || 'Item';
+      const qty = item.quantity || item.qty || 1;
+      
+      encoded = encoded
+        .bold(true)
+        .line(`[${qty}x] ${productName}`)
+        .bold(false);
+
+      if (item.notes) {
+        encoded = encoded.line(`   * Catatan: ${item.notes}`);
+      }
+    });
+
+    encoded = encoded
+      .line(divider)
+      .align('center')
+      .line(isKitchen ? 'Mohon segera diproses & disajikan!' : 'Sajikan dingin & segar!')
+      .line('\n\n\n')
+      .cut();
+
+    const bytes = encoded.encode();
+    await printRawBytes(bytes);
+  } catch (err: any) {
+    console.error(`Error printing ${target} ticket via Bluetooth:`, err);
     throw err;
   }
 };

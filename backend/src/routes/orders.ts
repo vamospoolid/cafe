@@ -232,7 +232,11 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
         voucher: true,
         items: {
           include: {
-            product: true
+            product: {
+              include: {
+                category: true
+              }
+            }
           }
         }
       }
@@ -767,7 +771,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         if (settings) {
           const fullOrder = await prisma.order.findUnique({
             where: { id: result.id },
-            include: { items: { include: { product: true } } }
+            include: { items: { include: { product: { include: { category: true } } } } }
           });
           if (fullOrder) {
             if (settings.autoPrintKDS && settings.printerIp) {
@@ -1390,7 +1394,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
     if (paySettings?.autoPrintReceipt && result.length > 0) {
       const fullOrder = await prisma.order.findUnique({
         where: { id: result[0].id },
-        include: { items: { include: { product: true } }, table: true, user: { select: { name: true } }, customer: true }
+        include: { items: { include: { product: { include: { category: true } } } }, table: true, user: { select: { name: true } }, customer: true }
       });
       if (fullOrder) {
         await enrichOrderWithJoinedTables(fullOrder, prisma);

@@ -3,7 +3,9 @@ import {
   getSavedBluetoothPrinter,
   printBluetoothReceipt,
   COMMON_PRINTER_SERVICES,
-  isWebBluetoothSupported
+  isWebBluetoothSupported,
+  connectGattWithRetry,
+  setActiveWebBluetoothDevice
 } from '../utils/printerBluetooth';
 import { POSContext } from './POSContext';
 
@@ -66,39 +68,39 @@ async function detectPrinterBrand(gattServer: any): Promise<{ brand: string; mod
   let serviceUUID = '';
   let writeCharUUID = '';
 
-  // 1. Coba baca Device Information Service 0x180A (paling akurat)
   try {
-    const infoService = await gattServer.getPrimaryService(DEVICE_INFO_SERVICE);
-    try {
-      const mfChar = await infoService.getCharacteristic(MANUFACTURER_CHAR);
-      const mfVal = await mfChar.readValue();
-      brand = new TextDecoder().decode(mfVal).trim();
-    } catch { /* tidak semua printer implement */ }
-    try {
-      const modelChar = await infoService.getCharacteristic(MODEL_NUMBER_CHAR);
-      const modelVal = await modelChar.readValue();
-      model = new TextDecoder().decode(modelVal).trim();
-    } catch { /* ignore */ }
-  } catch { /* printer tidak punya 0x180A */ }
+    const services = await gattServer.getPrimaryServices();
+    const serviceUuids = services.map((s: any) => s.uuid.toLowerCase());
 
-  // 2. Match UUID dengan tabel known brands
-  for (const [uuid, info] of Object.entries(UUID_BRAND_MAP)) {
-    try {
-      await gattServer.getPrimaryService(uuid);
-      // Service ditemukan!
-      if (!brand || brand === 'Generic ESC/POS') {
-        brand = info.brand;
+    // 1. Coba baca Device Information Service 0x180A jika ada
+    const infoService = services.find((s: any) => s.uuid.toLowerCase() === DEVICE_INFO_SERVICE.toLowerCase());
+    if (infoService) {
+      try {
+        const mfChar = await infoService.getCharacteristic(MANUFACTURER_CHAR);
+        const mfVal = await mfChar.readValue();
+        brand = new TextDecoder().decode(mfVal).trim();
+      } catch { /* ignore */ }
+      try {
+        const modelChar = await infoService.getCharacteristic(MODEL_NUMBER_CHAR);
+        const modelVal = await modelChar.readValue();
+        model = new TextDecoder().decode(modelVal).trim();
+      } catch { /* ignore */ }
+    }
+
+    // 2. Match UUID dengan tabel known brands (in-memory)
+    for (const [uuid, info] of Object.entries(UUID_BRAND_MAP)) {
+      if (serviceUuids.includes(uuid.toLowerCase())) {
+        if (!brand || brand === 'Generic ESC/POS') {
+          brand = info.brand;
+        }
+        serviceUUID = uuid;
+        writeCharUUID = info.writeCharUUID;
+        break;
       }
-      serviceUUID = uuid;
-      writeCharUUID = info.writeCharUUID;
-      break;
-    } catch { /* tidak support UUID ini */ }
-  }
+    }
 
-  // 3. Fallback: scan semua service untuk cari writable characteristic
-  if (!writeCharUUID) {
-    try {
-      const services = await gattServer.getPrimaryServices();
+    // 3. Fallback: scan characteristic write jika belum ketemu
+    if (!writeCharUUID) {
       for (const svc of services) {
         try {
           const chars = await svc.getCharacteristics();
@@ -110,7 +112,9 @@ async function detectPrinterBrand(gattServer: any): Promise<{ brand: string; mod
           }
         } catch { /* skip */ }
       }
-    } catch { /* ignore */ }
+    }
+  } catch (err) {
+    console.warn('[detectPrinterBrand] Service discovery warning:', err);
   }
 
   return { brand, model, serviceUUID, writeCharUUID };
@@ -149,7 +153,8 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       deviceRef.current = device;
-      const gatt = await device.gatt.connect();
+      setActiveWebBluetoothDevice(device);
+      const gatt = await connectGattWithRetry(device, 2);
       const detected = await detectPrinterBrand(gatt);
 
       const paperWidth = (localStorage.getItem('printer_paper_width') === '80mm' ? 80 : 58) as 58 | 80;
@@ -193,6 +198,7 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     } catch { /* ignore */ }
     deviceRef.current = null;
+    setActiveWebBluetoothDevice(null);
     setStatus('disconnected');
     setPrinterInfo(null);
   }, []);

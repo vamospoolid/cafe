@@ -1455,8 +1455,15 @@ export const POSView = () => {
         cart={cart}
         customer={{ 
           ...customer, 
-          tableId: selectedTableIds[0] || null,
-          joinedTableIds: selectedTableIds.length > 1 ? selectedTableIds.slice(1) : undefined
+          orderType,
+          tableId: orderType === 'Dine In' ? (selectedTableIds[0] || null) : null,
+          tableName: orderType === 'Dine In' 
+            ? (() => {
+                const sel = tables.find(t => t.id === selectedTableIds[0]);
+                return sel ? (sel.name || `Meja ${sel.tableNo}`) : (selectedTableIds[0] ? `Meja ${selectedTableIds[0]}` : null);
+              })()
+            : null,
+          joinedTableIds: orderType === 'Dine In' && selectedTableIds.length > 1 ? selectedTableIds.slice(1) : undefined
         }}
       />
 
