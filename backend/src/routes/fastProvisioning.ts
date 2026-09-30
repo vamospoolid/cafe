@@ -718,7 +718,7 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
       businessType = 'CAFE'
     } = req.body;
 
-    const finalBusinessType = businessType === 'BENGKEL' ? 'BENGKEL' : (businessType === 'RETAIL' ? 'RETAIL' : (businessType === 'LAUNDRY' ? 'LAUNDRY' : 'CAFE'));
+    const finalBusinessType = businessType === 'BENGKEL' ? 'BENGKEL' : (businessType === 'RETAIL' ? 'RETAIL' : (businessType === 'LAUNDRY' ? 'LAUNDRY' : (businessType === 'RENTAL' ? 'RENTAL' : 'CAFE')));
 
     // Validation
     if (!tenantName || !slug || !username || !password) {
@@ -848,19 +848,21 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
               ? 'Barang yang sudah dibeli dapat ditukar maksimal 2x24 jam dengan nota resmi.'
               : (finalBusinessType === 'LAUNDRY'
                 ? 'Nota laundry wajib dibawa saat pengambilan cucian. Klaim maksimal 1x24 jam setelah serah terima.'
-                : 'Terima kasih atas kunjungan Anda!')),
+                : (finalBusinessType === 'RENTAL'
+                  ? 'Maksimal masa sewa 3 hari kerja. Kembalikan busana & aksesoris dalam keadaan baik. Terima kasih!'
+                  : 'Terima kasih atas kunjungan Anda!'))),
           storeLatitude: latVal,
           storeLongitude: lngVal,
           gpsRadiusMeters: 100,
           enableGpsValidation: true,
           enableCameraPhoto: true,
-          ingredientTrackingEnabled: (finalBusinessType === 'BENGKEL' || finalBusinessType === 'RETAIL') ? false : (planCode === 'GROWTH' || planCode === 'BUSINESS' || planCode === 'ENTERPRISE'),
+          ingredientTrackingEnabled: (finalBusinessType === 'BENGKEL' || finalBusinessType === 'RETAIL' || finalBusinessType === 'RENTAL') ? false : (planCode === 'GROWTH' || planCode === 'BUSINESS' || planCode === 'ENTERPRISE'),
           taxRate: 0,
           serviceCharge: 0
         }
       });
 
-      // 7. Create Default Tables (Kafe), Service Pits (Bengkel), Shelves/Racks (Retail), or Laundry Shelves (Laundry)
+      // 7. Create Default Tables (Kafe), Service Pits (Bengkel), Shelves/Racks (Retail), Laundry Shelves (Laundry), or Fitting Rooms (Rental)
       const tableData = finalBusinessType === 'BENGKEL'
         ? [
             { tableNo: 'PIT-01', name: 'Pit 01 (Servis Ringan / Fast)', capacity: 1 },
@@ -883,13 +885,21 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
                 { tableNo: 'RAK-B2', name: 'Rak B2 (Cucian Siap Ambil)', capacity: 1 },
                 { tableNo: 'HANGER-01', name: 'Gantungan Jas & Bedcover', capacity: 1 }
               ]
-            : [
-                { tableNo: '01', name: 'Area Indoor (2 Org)', capacity: 2 },
-                { tableNo: '02', name: 'Area Indoor (4 Org)', capacity: 4 },
-                { tableNo: '03', name: 'Area Indoor (4 Org)', capacity: 4 },
-                { tableNo: '04', name: 'Area Outdoor (4 Org)', capacity: 4 },
-                { tableNo: '05', name: 'Sofa VIP (6 Org)', capacity: 6 }
-              ]));
+            : (finalBusinessType === 'RENTAL'
+              ? [
+                  { tableNo: 'FIT-01', name: 'Kamar Pas / Fitting Room 1', capacity: 2 },
+                  { tableNo: 'FIT-02', name: 'Kamar Pas / Fitting Room 2', capacity: 2 },
+                  { tableNo: 'MAN-01', name: 'Display Manekin Utama', capacity: 1 },
+                  { tableNo: 'HNG-01', name: 'Rak Gantung Siap Sewa', capacity: 10 },
+                  { tableNo: 'AKS-01', name: 'Etalase Aksesoris Adat', capacity: 20 }
+                ]
+              : [
+                  { tableNo: '01', name: 'Area Indoor (2 Org)', capacity: 2 },
+                  { tableNo: '02', name: 'Area Indoor (4 Org)', capacity: 4 },
+                  { tableNo: '03', name: 'Area Indoor (4 Org)', capacity: 4 },
+                  { tableNo: '04', name: 'Area Outdoor (4 Org)', capacity: 4 },
+                  { tableNo: '05', name: 'Sofa VIP (6 Org)', capacity: 6 }
+                ])));
 
       for (const t of tableData) {
         await tx.table.create({

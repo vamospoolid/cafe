@@ -28,7 +28,7 @@ model Tenant {
   trialEndsAt  DateTime?
 
   // W1-A-1: Business Vertical Type — locked at registration, only Platform Admin can change
-  businessType String   @default("CAFE") // CAFE | BENGKEL | LAUNDRY | GALON | RETAIL
+  businessType String   @default("CAFE") // CAFE | BENGKEL | LAUNDRY | GALON | RETAIL | RENTAL
 
   // Platform & Hierarchy Relations
   outlets             Outlet[]
@@ -91,6 +91,9 @@ model Tenant {
   // Laundry Vertical Relations
   laundryOrders     LaundryOrder[]
 
+  // Rental Vertical Relations
+  rentalOrders      RentalOrder[]
+
   // WhatsApp CRM Relations
   whatsAppConfig    TenantWhatsAppConfig?
   whatsAppTemplates WhatsAppTemplate[]
@@ -137,6 +140,7 @@ model Outlet {
   wasteLogs            WasteLog[]
   workOrders           WorkOrder[]
   laundryOrders        LaundryOrder[]
+  rentalOrders         RentalOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -650,6 +654,7 @@ model Customer {
   workOrders   WorkOrder[]
   woInvoices   WorkOrderInvoice[]
   laundryOrders LaundryOrder[]
+  rentalOrders  RentalOrder[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -2084,6 +2089,100 @@ model LaundryOrderItem {
   createdAt      DateTime     @default(now())
 
   @@index([orderId])
+}
+
+// ─── RENTAL VERTICAL MODELS (PENYEWAAN BUSANA ADAT & BAJU BODO) ───────────────
+
+model RentalOrder {
+  id                  String            @id @default(uuid())
+  tenantId            String
+  tenant              Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  outletId            String?
+  outlet              Outlet?           @relation(fields: [outletId], references: [id], onDelete: SetNull)
+
+  orderNumber         String            // e.g. "RNT-202610-0001"
+  customerId          Int?
+  customer            Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName        String
+  customerPhone       String?
+  idCardPhotoUrl      String?           // Foto KTP/SIM Penyewa
+  eventLocation       String?           // Gedung / Rumah Acara
+
+  // Jadwal & Waktu
+  eventDate           DateTime          // Tanggal Hari H Acara
+  pickupDate          DateTime          // Tanggal Baju Diambil
+  returnDeadline      DateTime          // Batas Waktu Pengembalian
+  actualReturnDate    DateTime?         // Waktu Realisasi Pengembalian
+
+  // State Machine Siklus Pakaian
+  status              String            @default("BOOKED")
+  // BOOKED | FITTING | PICKED_UP | RETURNED | QC_CHECK | LAUNDRY | COMPLETED | CANCELLED
+
+  // Finansial & Uang Jaminan (Deposit)
+  rentalSubtotal      Float             @default(0)
+  discount            Float             @default(0)
+  totalAmount         Float             @default(0) // rentalSubtotal - discount
+  paidAmount          Float             @default(0) // Uang sewa terbayar (DP / Lunas)
+  paymentStatus       String            @default("UNPAID") // UNPAID | DP_PAID | FULL_PAID
+  paymentMethod       String?           // CASH | QRIS | TRANSFER
+
+  // Uang Jaminan / Deposit (Aset Titipan - Terpisah dari Omset Sewa)
+  depositAmount       Float             @default(0)
+  depositRefunded     Float             @default(0)
+  depositStatus       String            @default("NONE") // NONE | HELD | PARTIAL_REFUND | FULL_REFUND | FORFEITED
+  
+  // Denda Keterlambatan & Kerusakan
+  lateFee             Float             @default(0)
+  damageFee           Float             @default(0)
+
+  // Catatan Operasional & Serah Terima
+  fittingNotes        String?           // Catatan permak/penyesuaian ukuran
+  fittingDone         Boolean           @default(false)
+  pickupProofPhotoUrl String?           // Bukti foto kondisi saat diambil
+  returnProofPhotoUrl String?           // Bukti foto kondisi saat kembali
+  accessoryChecklist  Json?             // Array perhiasan/aksesoris yang dipinjam & dicek
+
+  // WhatsApp Notification Flags
+  notifBookingSent    Boolean           @default(false)
+  notifFittingSent    Boolean           @default(false)
+  notifPickupSent     Boolean           @default(false)
+  notifReturnDueSent  Boolean           @default(false)
+
+  items               RentalOrderItem[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, paymentStatus])
+  @@index([tenantId, eventDate])
+  @@index([tenantId, pickupDate])
+  @@index([tenantId, returnDeadline])
+  @@index([tenantId, createdAt])
+}
+
+model RentalOrderItem {
+  id             String       @id @default(uuid())
+  orderId        String
+  order          RentalOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId      Int?         // Relasi opsional ke master produk
+  attireName     String       // e.g. "Baju Bodo Modern Organza Payet"
+  attireCode     String       // SKU e.g. "BBM-ORG-MRH-M-01"
+  rackHangerCode String?      // e.g. "Hanger A-12"
+  color          String?      // e.g. "Merah Marun"
+  size           String?      // e.g. "M", "L", "All Size"
+  price          Float        @default(0)
+  
+  isReturned     Boolean      @default(false)
+  returnCondition String      @default("GOOD") // GOOD | DIRTY | DAMAGED | LOST
+  damageNotes    String?
+
+  createdAt      DateTime     @default(now())
+
+  @@index([orderId])
+  @@index([attireCode])
 }
 
 // ─── WHATSAPP CRM & MULTI-TENANT GATEWAY ───────────────────────────────────

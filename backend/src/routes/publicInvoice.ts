@@ -180,6 +180,92 @@ router.get('/order/:orderNumber', async (req: Request, res: Response) => {
       });
     }
 
+    // ─── 3. CEK KONTRAK SEWA RENTAL BUSANA ADAT (BAJU BODO) ─────────────────
+    const rental = await prisma.rentalOrder.findFirst({
+      where: { orderNumber },
+      include: {
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            businessType: true,
+            phone: true,
+            logoUrl: true,
+            settings: {
+              select: {
+                storeName: true,
+                address: true,
+                phone: true,
+                logoUrl: true,
+                receiptFooter: true
+              }
+            }
+          }
+        },
+        customer: {
+          select: {
+            name: true,
+            phone: true
+          }
+        },
+        items: true
+      }
+    });
+
+    if (rental) {
+      const storeSettings = (rental.tenant as any)?.settings?.[0] || (rental.tenant as any)?.settings || {};
+      return res.json({
+        success: true,
+        type: 'RENTAL',
+        data: {
+          orderNumber: rental.orderNumber,
+          createdAt: rental.createdAt,
+          eventDate: rental.eventDate,
+          pickupDate: rental.pickupDate,
+          returnDeadline: rental.returnDeadline,
+          actualReturnDate: rental.actualReturnDate,
+          eventLocation: rental.eventLocation,
+          status: rental.status,
+          paymentStatus: rental.paymentStatus,
+          customerName: rental.customerName || rental.customer?.name || 'Penyewa Busana',
+          customerPhone: rental.customerPhone || rental.customer?.phone || null,
+          paymentMethod: rental.paymentMethod || 'Tunai',
+          subtotal: rental.rentalSubtotal,
+          discount: rental.discount,
+          total: rental.totalAmount,
+          paidAmount: rental.paidAmount,
+          depositAmount: rental.depositAmount,
+          depositStatus: rental.depositStatus,
+          depositRefunded: rental.depositRefunded,
+          lateFee: rental.lateFee,
+          damageFee: rental.damageFee,
+          fittingNotes: rental.fittingNotes,
+          accessoryChecklist: rental.accessoryChecklist,
+          items: rental.items.map((it: any) => ({
+            id: it.id,
+            name: it.attireName,
+            attireCode: it.attireCode,
+            rackHangerCode: it.rackHangerCode,
+            color: it.color,
+            size: it.size,
+            qty: 1,
+            unit: 'Set',
+            price: it.price || 0,
+            subtotal: it.price || 0,
+            returnCondition: it.returnCondition
+          })),
+          store: {
+            name: storeSettings.storeName || rental.tenant?.name || 'Butik Busana Adat',
+            address: storeSettings.address || null,
+            phone: storeSettings.phone || rental.tenant?.phone || null,
+            logoUrl: storeSettings.logoUrl || rental.tenant?.logoUrl || null,
+            receiptFooter: storeSettings.receiptFooter || 'Harap mengembalikan busana tepat waktu beserta kelengkapan aksesoris.',
+            businessType: 'RENTAL'
+          }
+        }
+      });
+    }
+
     return res.status(404).json({ error: 'Struk atau nomor nota tidak ditemukan' });
   } catch (error: any) {
     console.error('[Public Order Invoice Error]:', error);

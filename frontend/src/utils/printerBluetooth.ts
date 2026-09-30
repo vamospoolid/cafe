@@ -1285,4 +1285,132 @@ export const printBluetoothRetailReceipt = async (
   }
 };
 
+/**
+ * Print Rental Busana Adat / Baju Bodo Receipt to Bluetooth Thermal Printer
+ */
+export const printBluetoothRentalOrder = async (
+  rawOrder: any,
+  settings: { name?: string; storeName?: string; address?: string; phone?: string; footer?: string; paperWidth?: '58mm' | '80mm' },
+  options?: { autoKickDrawer?: boolean }
+): Promise<void> => {
+  try {
+    const order = rawOrder?.order ? { ...rawOrder.order, ...rawOrder } : rawOrder;
+    const is80mm = settings.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
+    const lineWidth = is80mm ? 48 : 32;
+    const divider = '='.repeat(lineWidth);
+    const subDivider = '-'.repeat(lineWidth);
+
+    const encoder = new EscPosEncoder();
+    const storeName = settings.storeName || settings.name || 'SANGGAR SEWA BUSANA ADAT';
+
+    let encoded = encoder
+      .initialize()
+      .align('center')
+      .bold(true)
+      .line(storeName)
+      .bold(false);
+
+    if (settings.address) encoded = encoded.line(settings.address);
+    if (settings.phone) encoded = encoded.line(`Telp/WA: ${settings.phone}`);
+
+    const formatDate = (iso: string) => {
+      if (!iso) return '-';
+      return new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+    const fmt = (n: number) => `Rp ${Math.round(n || 0).toLocaleString('id-ID')}`;
+
+    encoded = encoded
+      .line(divider)
+      .align('left')
+      .line(`No. Nota  : ${order.orderNumber || order.id || '-'}`)
+      .line(`Tanggal   : ${formatDate(order.createdAt)}`)
+      .line(`Penyewa   : ${order.customerName || 'Pelanggan'}`)
+      .line(`No. HP    : ${order.customerPhone || '-'}`)
+      .line(subDivider)
+      .line(`Tgl Acara : ${formatDate(order.eventDate)}`)
+      .line(`Tgl Ambil : ${formatDate(order.pickupDate)}`)
+      .bold(true)
+      .line(`Batas Kemb: ${formatDate(order.returnDeadline)}`)
+      .bold(false);
+
+    if (order.eventLocation) {
+      encoded = encoded.line(`Lokasi    : ${order.eventLocation}`);
+    }
+
+    // Daftar Busana
+    if (order.items && order.items.length > 0) {
+      encoded = encoded.line(subDivider).bold(true).line('[ BUSANA & AKSESORIS ]').bold(false);
+      order.items.forEach((it: any) => {
+        const name = it.attireName || it.name || 'Baju Bodo';
+        const price = it.price || 0;
+        const totalStr = Math.round(price).toLocaleString('id-ID');
+        const hanger = it.rackHangerCode ? ` [${it.rackHangerCode}]` : '';
+        const sizeColor = [it.size, it.color].filter(Boolean).join('/');
+
+        const maxNameLen = is80mm ? 26 : 16;
+        const shortName = name.length > maxNameLen ? name.substring(0, maxNameLen) : name.padEnd(maxNameLen, ' ');
+        const paddedTotal = totalStr.padStart(is80mm ? 14 : 10, ' ');
+
+        encoded = encoded.line(`${shortName}${paddedTotal}`);
+        if (hanger || sizeColor) {
+          encoded = encoded.line(` > ${hanger} ${sizeColor}`.trim());
+        }
+      });
+    }
+
+    // Fitting Notes
+    if (order.fittingNotes) {
+      encoded = encoded.line(subDivider).line(`Catatan: ${order.fittingNotes}`);
+    }
+
+    const subtotal = order.rentalSubtotal || order.subtotal || 0;
+    const discount = order.discount || 0;
+    const deposit = order.depositAmount || 0;
+    const paid = order.paidAmount || 0;
+    const total = order.totalAmount || (subtotal - discount);
+    const sisa = Math.max(0, total - paid);
+
+    encoded = encoded
+      .line(subDivider)
+      .align('right')
+      .line(`Subtotal Sewa: ${fmt(subtotal)}`);
+
+    if (discount > 0) encoded = encoded.line(`Diskon: -${fmt(discount)}`);
+    encoded = encoded.bold(true).line(`TOTAL SEWA: ${fmt(total)}`).bold(false);
+
+    if (deposit > 0) {
+      encoded = encoded.line(`Uang Jaminan (Deposit): ${fmt(deposit)}`);
+    }
+
+    encoded = encoded
+      .line(`Uang Muka (DP) Dibayar: ${fmt(paid)}`)
+      .bold(true)
+      .line(`Sisa Pelunasan: ${fmt(sisa)}`)
+      .bold(false);
+
+    encoded = encoded
+      .line(divider)
+      .align('center')
+      .line('KETENTUAN SEWA:')
+      .line('1. Maksimal sewa 3 hari kerja.')
+      .line('2. Jangan cuci baju sendiri (sutera).')
+      .line('3. Aksesoris wajib kembali lengkap.')
+      .line('4. Deposit kembali saat barang OK.')
+      .line('--------------------------------')
+      .line(settings.footer || 'Terima kasih telah mempercayai kami!')
+      .line('\n\n\n')
+      .cut();
+
+    const bytes = encoded.encode();
+    await printRawBytes(bytes, 'cashier');
+
+    if (options?.autoKickDrawer) {
+      await kickCashDrawer();
+    }
+  } catch (err: any) {
+    console.error('Error printing Rental order via Bluetooth:', err);
+    throw err;
+  }
+};
+
 

@@ -291,6 +291,30 @@ export async function seedMultiTenantFoundation() {
         status: user.status === 'Aktif' ? 'ACTIVE' : 'SUSPENDED'
       }
     });
+
+    // Juga pastikan membership pada tenant asal (user.tenantId) memiliki roleId yang sesuai
+    if (user.tenantId && user.tenantId !== masterTenant.id) {
+      await prisma.tenantMembership.upsert({
+        where: {
+          userId_tenantId: {
+            userId: user.id,
+            tenantId: user.tenantId
+          }
+        },
+        update: {
+          roleId: targetRoleId,
+          pin: user.pin,
+          status: user.status === 'Aktif' ? 'ACTIVE' : 'SUSPENDED'
+        },
+        create: {
+          userId: user.id,
+          tenantId: user.tenantId,
+          roleId: targetRoleId,
+          pin: user.pin,
+          status: user.status === 'Aktif' ? 'ACTIVE' : 'SUSPENDED'
+        }
+      });
+    }
   }
   console.log(`✅ Berhasil menghubungkan ${existingUsers.length} user ke Master Tenant.`);
 

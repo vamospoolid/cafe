@@ -47,6 +47,10 @@ const REMOTE_DIR = '/var/www/codenusa';
 const PM2_NAME = 'codenusa-backend';
 const REPO_URL = 'https://github.com/vamospoolid/cafe.git';
 const ROOT_DIR = path.resolve(__dirname, '..');
+let activeBranch = 'saas';
+try {
+  activeBranch = execSync('git branch --show-current', { cwd: ROOT_DIR, encoding: 'utf8' }).trim() || 'saas';
+} catch {}
 
 // ─── PARSING ARGUMEN CLI ──────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -88,12 +92,7 @@ async function runLocalPreflightChecks() {
 
   // 1. Cek Branch Git
   try {
-    const branch = execSync('git branch --show-current', { cwd: ROOT_DIR, encoding: 'utf8' }).trim();
-    if (branch !== 'main') {
-      logWarn(`Anda saat ini berada di branch "${branch}", bukan "main".`);
-    } else {
-      logSuccess(`Branch Git aktif: ${branch}`);
-    }
+    logSuccess(`Branch Git aktif: ${activeBranch}`);
   } catch (err) {
     logError(`Gagal memeriksa branch Git: ${err.message}`);
     process.exit(1);
@@ -179,15 +178,15 @@ async function runGitPush() {
     execSync(`git commit -m "${commitMsg}"`, { cwd: ROOT_DIR, stdio: 'inherit' });
     logSuccess('Git Commit berhasil dibuat.');
 
-    console.log('   -> Mengunggah (git push origin main) ke GitHub...');
+    console.log(`   -> Mengunggah (git push origin ${activeBranch}) ke GitHub...`);
     try {
-      execSync('git push origin main', { cwd: ROOT_DIR, stdio: 'inherit' });
+      execSync(`git push origin ${activeBranch}`, { cwd: ROOT_DIR, stdio: 'inherit' });
     } catch (pushErr) {
       logWarn('Push gagal, mencoba flush DNS dan mengulang push...');
       execSync('ipconfig /flushdns', { stdio: 'ignore' });
-      execSync('git push origin main', { cwd: ROOT_DIR, stdio: 'inherit' });
+      execSync(`git push origin ${activeBranch}`, { cwd: ROOT_DIR, stdio: 'inherit' });
     }
-    logSuccess('Git Push ke origin/main BERHASIL!');
+    logSuccess(`Git Push ke origin/${activeBranch} BERHASIL!`);
   } catch (err) {
     logError(`Gagal melakukan operasi Git: ${err.message}`);
     process.exit(1);
@@ -219,13 +218,14 @@ async function runRemoteVpsDeploy() {
         if [ ! -d "${REMOTE_DIR}/.git" ]; then
           echo "📦 [1/7] Menginisialisasi direktori baru: ${REMOTE_DIR}..."
           mkdir -p "${REMOTE_DIR}"
-          git clone "${REPO_URL}" "${REMOTE_DIR}"
+          git clone -b "${activeBranch}" "${REPO_URL}" "${REMOTE_DIR}"
           cd "${REMOTE_DIR}"
         else
           echo "📦 [1/7] Direktori ${REMOTE_DIR} ditemukan. Mengambil update terbaru..."
           cd "${REMOTE_DIR}"
           git fetch origin
-          git reset --hard origin/main
+          git checkout "${activeBranch}" || git checkout -b "${activeBranch}" "origin/${activeBranch}"
+          git reset --hard "origin/${activeBranch}"
           git clean -fd -e uploads/ -e backups/ -e backend/.env
         fi
 

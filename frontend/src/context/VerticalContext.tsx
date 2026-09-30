@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo } from 'react';
 import { usePOS } from './POSContext';
 
-export type BusinessType = 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY';
+export type BusinessType = 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' | 'RENTAL';
 
 export interface VerticalNavItem {
   to: string;
@@ -37,6 +37,7 @@ interface VerticalContextType {
   isCafe: boolean;
   isRetail: boolean;
   isLaundry: boolean;
+  isRental: boolean;
   profile: VerticalProfile;
   orderTerm: string;
 }
@@ -109,6 +110,23 @@ const VERTICAL_PROFILES: Record<BusinessType, VerticalProfile> = {
     enableMultiUom: false,
     enableDeliveryOrders: false,
     barcodeFirstUX: false,
+  },
+  RENTAL: {
+    businessType: 'RENTAL',
+    displayName: 'Penyewaan Baju Bodo & Busana Adat',
+    orderTerm: 'Kontrak Sewa',
+    itemTerm: 'Koleksi Busana & Aksesoris',
+    tableTerm: 'Nomor Hanger / Rak',
+    customerTerm: 'Penyewa / Calon Pengantin',
+    enableKds: false,
+    enableTables: false,
+    enableVehicles: false,
+    enableMechanics: false,
+    enableInvoices: true,
+    enablePriceTiers: false,
+    enableMultiUom: false,
+    enableDeliveryOrders: false,
+    barcodeFirstUX: false,
   }
 };
 
@@ -137,7 +155,7 @@ export const VerticalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       raw = pos.settings?.businessType || localStorage.getItem('pos_business_type');
     }
 
-    if (raw && (raw === 'BENGKEL' || raw === 'CAFE' || raw === 'RETAIL' || raw === 'LAUNDRY')) {
+    if (raw && (raw === 'BENGKEL' || raw === 'CAFE' || raw === 'RETAIL' || raw === 'LAUNDRY' || raw === 'RENTAL')) {
       return raw as BusinessType;
     }
     return 'CAFE';
@@ -153,6 +171,7 @@ export const VerticalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     isCafe: businessType === 'CAFE',
     isRetail: businessType === 'RETAIL',
     isLaundry: businessType === 'LAUNDRY',
+    isRental: businessType === 'RENTAL',
     profile,
     orderTerm: profile.orderTerm,
   }), [businessType, profile]);

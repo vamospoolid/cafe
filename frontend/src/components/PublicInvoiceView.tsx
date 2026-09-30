@@ -17,7 +17,8 @@ import {
   ShoppingBag,
   ExternalLink,
   Copy,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 
 interface InvoiceData {
@@ -46,6 +47,11 @@ interface InvoiceData {
     notes?: string;
     imageUrl?: string;
     unit?: string;
+    attireCode?: string;
+    rackHangerCode?: string;
+    color?: string;
+    size?: string;
+    returnCondition?: string;
   }>;
   // Bengkel specific
   vehiclePlate?: string;
@@ -77,6 +83,19 @@ interface InvoiceData {
   perfume?: string;
   totalWeightKg?: number;
   speedTier?: string;
+  // Rental specific
+  eventDate?: string;
+  pickupDate?: string;
+  returnDeadline?: string;
+  actualReturnDate?: string;
+  eventLocation?: string;
+  depositAmount?: number;
+  depositStatus?: string;
+  depositRefunded?: number;
+  lateFee?: number;
+  damageFee?: number;
+  fittingNotes?: string;
+  accessoryChecklist?: Array<{ name: string; checked: boolean }>;
   // Store details
   store: {
     name: string;
@@ -273,6 +292,8 @@ export default function PublicInvoiceView() {
                   <Wrench size={26} />
                 ) : invoice.store.businessType === 'LAUNDRY' ? (
                   <Shirt size={26} />
+                ) : invoice.store.businessType === 'RENTAL' ? (
+                  <Sparkles size={26} className="text-amber-300" />
                 ) : (
                   <Coffee size={26} />
                 )}
@@ -399,13 +420,102 @@ export default function PublicInvoiceView() {
             </div>
           )}
 
+          {/* Rental Details (Jika Sewa Busana Adat) */}
+          {(invoice.eventDate || invoice.store.businessType === 'RENTAL') && (
+            <div className="bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-amber-50/60 border border-amber-200/80 rounded-2xl p-4 space-y-3 text-xs text-amber-950 shadow-sm">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200/60">
+                <span className="font-extrabold text-amber-900 flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
+                  <Sparkles size={14} className="text-amber-600" /> Kontrak Sewa Busana Adat
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-900">
+                  {invoice.status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {invoice.eventDate && (
+                  <div>
+                    <span className="text-amber-700/80 block font-medium">Tanggal Acara:</span>
+                    <span className="font-bold text-slate-800">{new Date(invoice.eventDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span>
+                  </div>
+                )}
+                {invoice.returnDeadline && (
+                  <div>
+                    <span className="text-amber-700/80 block font-medium">Batas Pengembalian:</span>
+                    <span className="font-bold text-rose-700">{new Date(invoice.returnDeadline).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span>
+                  </div>
+                )}
+                {invoice.pickupDate && (
+                  <div>
+                    <span className="text-amber-700/80 block font-medium">Jadwal Ambil:</span>
+                    <span className="font-bold text-slate-800">{new Date(invoice.pickupDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span>
+                  </div>
+                )}
+                {invoice.eventLocation && (
+                  <div>
+                    <span className="text-amber-700/80 block font-medium">Lokasi Acara:</span>
+                    <span className="font-bold text-slate-800">{invoice.eventLocation}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Deposit Uang Jaminan Card */}
+              {invoice.depositAmount !== undefined && invoice.depositAmount > 0 && (
+                <div className="bg-white/80 rounded-xl p-2.5 border border-amber-200/60 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Uang Jaminan (Deposit)</div>
+                    <div className="font-black text-slate-900">{formatRupiah(invoice.depositAmount)}</div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                      invoice.depositStatus === 'REFUNDED' 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : (invoice.depositStatus === 'PARTIAL_REFUNDED' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700')
+                    }`}>
+                      {invoice.depositStatus === 'REFUNDED' ? 'Telah Dikembalikan' : (invoice.depositStatus === 'HELD' ? 'Tertahan di Toko' : (invoice.depositStatus || 'Deposit'))}
+                    </span>
+                    {invoice.depositRefunded !== undefined && invoice.depositRefunded > 0 && (
+                      <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                        Refund: {formatRupiah(invoice.depositRefunded)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Fitting Notes */}
+              {invoice.fittingNotes && (
+                <div className="bg-white/80 rounded-xl p-2.5 border border-amber-200/60 text-[11px]">
+                  <span className="font-bold text-slate-700 block mb-0.5">Catatan Ukuran / Fitting:</span>
+                  <span className="text-slate-600">{invoice.fittingNotes}</span>
+                </div>
+              )}
+
+              {/* Accessories Checklist */}
+              {invoice.accessoryChecklist && invoice.accessoryChecklist.length > 0 && (
+                <div className="bg-white/80 rounded-xl p-2.5 border border-amber-200/60 text-[11px]">
+                  <span className="font-bold text-slate-700 block mb-1">Checklist Kelengkapan Aksesoris:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {invoice.accessoryChecklist.map((acc: any, i: number) => (
+                      <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold ${
+                        acc.checked !== false ? 'bg-amber-100/80 text-amber-900 border border-amber-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
+                        ✓ {acc.name || acc}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Itemized Table */}
           <div className="space-y-3 pt-2">
             <div className="text-[11px] font-black text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100">
               Rincian Item Pesanan
             </div>
 
-            {/* POS Standard / Laundry Items */}
+            {/* POS Standard / Laundry / Rental Items */}
             {invoice.items && invoice.items.length > 0 && (
               <div className="space-y-2.5">
                 {invoice.items.map((item, idx) => (
@@ -415,6 +525,25 @@ export default function PublicInvoiceView() {
                       <div className="text-slate-400 text-[11px]">
                         {item.qty} {item.unit || 'x'} @ {formatRupiah(item.price)}
                       </div>
+                      {(item.rackHangerCode || item.size || item.color) && (
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          {item.rackHangerCode && (
+                            <span className="text-[9px] font-mono font-bold bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded">
+                              Hanger: {item.rackHangerCode}
+                            </span>
+                          )}
+                          {item.size && (
+                            <span className="text-[9px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                              Size: {item.size}
+                            </span>
+                          )}
+                          {item.color && (
+                            <span className="text-[9px] font-medium text-slate-500">
+                              Warna: {item.color}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {item.notes && (
                         <div className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded inline-block mt-0.5">
                           Catatan: {item.notes}
@@ -497,6 +626,27 @@ export default function PublicInvoiceView() {
               </div>
             )}
 
+            {Boolean(invoice.depositAmount && invoice.depositAmount > 0) && (
+              <div className="flex items-center justify-between text-slate-500">
+                <span>Uang Jaminan (Deposit)</span>
+                <span className="font-semibold text-slate-700">{formatRupiah(invoice.depositAmount!)}</span>
+              </div>
+            )}
+
+            {Boolean(invoice.lateFee && invoice.lateFee > 0) && (
+              <div className="flex items-center justify-between text-rose-600">
+                <span>Denda Keterlambatan</span>
+                <span className="font-semibold">+ {formatRupiah(invoice.lateFee!)}</span>
+              </div>
+            )}
+
+            {Boolean(invoice.damageFee && invoice.damageFee > 0) && (
+              <div className="flex items-center justify-between text-rose-600">
+                <span>Biaya Kerusakan/Hilang</span>
+                <span className="font-semibold">+ {formatRupiah(invoice.damageFee!)}</span>
+              </div>
+            )}
+
             {/* Total Grand Amount */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-900/10 text-sm">
               <span className="font-black text-slate-900 uppercase">Total Tagihan</span>
@@ -507,8 +657,15 @@ export default function PublicInvoiceView() {
 
             {Boolean(invoice.paidAmount && invoice.paidAmount > 0) && (
               <div className="flex items-center justify-between text-slate-500 text-xs">
-                <span>Jumlah Dibayar</span>
+                <span>Uang Muka (DP) / Dibayar</span>
                 <span className="font-bold text-slate-800">{formatRupiah(invoice.paidAmount!)}</span>
+              </div>
+            )}
+
+            {invoice.total - (invoice.paidAmount || 0) > 0 && (
+              <div className="flex items-center justify-between text-rose-600 text-xs font-bold pt-1 border-t border-slate-100">
+                <span>Sisa Pelunasan</span>
+                <span>{formatRupiah(invoice.total - (invoice.paidAmount || 0))}</span>
               </div>
             )}
           </div>

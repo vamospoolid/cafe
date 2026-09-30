@@ -256,6 +256,28 @@ export class WANotifService {
       payload.orderNumber
     );
   }
+
+  /**
+   * Kirim pesan WhatsApp kustom (misal: Rental Busana, dsb)
+   */
+  public static async sendCustomNotification(payload: {
+    tenantId: string;
+    customerPhone?: string;
+    phone?: string;
+    message: string;
+    triggerKey?: string;
+    referenceId?: string;
+  }): Promise<boolean> {
+    const targetPhone = payload.customerPhone || payload.phone;
+    if (!targetPhone) return false;
+    return this.sendTenantOrFonnte(
+      payload.tenantId,
+      targetPhone,
+      payload.message,
+      payload.triggerKey || 'CUSTOM_NOTIF',
+      payload.referenceId
+    );
+  }
 }
 
 export default WANotifService;

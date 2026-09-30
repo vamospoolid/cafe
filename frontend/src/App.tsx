@@ -29,6 +29,8 @@ const POSBengkel = React.lazy(() => import('./verticals/bengkel/POSBengkel'));
 const POSRetail = React.lazy(() => import('./verticals/retail/POSRetail'));
 const POSLaundry = React.lazy(() => import('./verticals/laundry/POSLaundry'));
 const LaundryKanbanView = React.lazy(() => import('./verticals/laundry/LaundryKanbanView'));
+const POSRental = React.lazy(() => import('./verticals/rental/POSRental'));
+const RentalKanbanView = React.lazy(() => import('./verticals/rental/RentalKanbanView'));
 const ReportViewAdaptive = React.lazy(() => import('./components/ReportViewAdaptive'));
 const ProductView = React.lazy(() => import('./components/ProductView'));
 const TransactionHistoryView = React.lazy(() => import('./components/TransactionHistoryView'));
@@ -58,7 +60,7 @@ const RouteSuspenseFallback = () => (
 );
 
 const POSViewAdaptive = () => {
-  const { isBengkel, isRetail, isLaundry } = useVertical();
+  const { isBengkel, isRetail, isLaundry, isRental } = useVertical();
   if (isBengkel) {
     return (
       <Suspense fallback={<div className="p-8 text-center text-purple-600 font-bold text-xs">Memuat POS Kasir Bengkel...</div>}>
@@ -77,6 +79,13 @@ const POSViewAdaptive = () => {
     return (
       <Suspense fallback={<div className="p-8 text-center text-cyan-600 font-bold text-xs">Memuat POS Kasir Laundry...</div>}>
         <POSLaundry />
+      </Suspense>
+    );
+  }
+  if (isRental) {
+    return (
+      <Suspense fallback={<div className="p-8 text-center text-amber-600 font-bold text-xs">Memuat POS Kasir Rental Busana...</div>}>
+        <POSRental />
       </Suspense>
     );
   }
@@ -275,6 +284,16 @@ const AppRoutes = () => {
                       <VerticalGuard allow="LAUNDRY">
                         <Suspense fallback={<div className="p-8 text-center text-cyan-600 font-bold text-xs">Memuat Papan Status Cucian...</div>}>
                           <LaundryKanbanView />
+                        </Suspense>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
+                    path="/rental-kanban"
+                    element={
+                      <VerticalGuard allow="RENTAL">
+                        <Suspense fallback={<div className="p-8 text-center text-amber-600 font-bold text-xs">Memuat Papan Status Sewa...</div>}>
+                          <RentalKanbanView />
                         </Suspense>
                       </VerticalGuard>
                     }

@@ -224,6 +224,7 @@ import devicePairingRoutes from './routes/devicePairing';
 import bengkelRoutes from './routes/bengkel';
 import retailRoutes from './routes/retail';
 import laundryRoutes from './routes/laundry';
+import rentalRoutes from './routes/rental';
 import whatsappRoutes from './routes/whatsapp';
 import outletsRoutes from './routes/outlets';
 import tenantsRoutes from './routes/tenants';
@@ -240,6 +241,7 @@ app.use('/api/outlets', outletsRoutes);
 app.use('/api/bengkel', bengkelRoutes);
 app.use('/api/retail', retailRoutes);
 app.use('/api/laundry', laundryRoutes);
+app.use('/api/rental', rentalRoutes);
 app.use('/api/recycle-bin', recycleBinRoutes);
 app.use('/api/devices', devicePairingRoutes);
 app.get('/api/app/version', (_req, res) => {

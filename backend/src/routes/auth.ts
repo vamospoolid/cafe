@@ -568,7 +568,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     } = req.body;
 
     const normalizedType = String(rawBusinessType || 'CAFE').toUpperCase();
-    const businessType = ['RETAIL', 'BENGKEL', 'LAUNDRY', 'CAFE'].includes(normalizedType) ? normalizedType : 'CAFE';
+    const businessType = ['RETAIL', 'BENGKEL', 'LAUNDRY', 'RENTAL', 'CAFE'].includes(normalizedType) ? normalizedType : 'CAFE';
 
     if (!businessName || !slug || !ownerName || !ownerUsername || !ownerPassword) {
       return res.status(400).json({
@@ -693,8 +693,12 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
               ? `BENGKEL MOTOR & MOBIL\n${businessName}`
               : (businessType === 'LAUNDRY'
                 ? `LAUNDRY KILOAN & SATUAN\n${businessName}`
-                : `Selamat Datang di ${businessName}`)),
-          receiptFooter: 'Terima kasih atas kunjungan Anda!'
+                : (businessType === 'RENTAL'
+                  ? `PENYEWAAN BAJU BODO & BUSANA ADAT\n${businessName}`
+                  : `Selamat Datang di ${businessName}`))),
+          receiptFooter: businessType === 'RENTAL'
+            ? 'Maksimal sewa 3 hari kerja. Mohon kembalikan busana & aksesoris dalam keadaan baik. Terima kasih!'
+            : 'Terima kasih atas kunjungan Anda!'
         }
       });
 
@@ -753,6 +757,32 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
             { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Cuci Komplit Reguler (2 Hari)', barcode: '899300100001', buyPrice: 2000, sellPrice: 8000, stock: 999, status: 'Aktif' },
             { tenantId: tenant.id, categoryId: catKiloan.id, name: 'Cuci Kilat Express (1 Hari)', barcode: '899300100002', buyPrice: 3000, sellPrice: 14000, stock: 999, status: 'Aktif' },
             { tenantId: tenant.id, categoryId: catSatuan.id, name: 'Cuci Bedcover Besar', barcode: '899300100003', buyPrice: 5000, sellPrice: 35000, stock: 999, status: 'Aktif' }
+          ]
+        });
+      } else if (businessType === 'RENTAL') {
+        const catBodo = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Baju Bodo Modern (Wanita)', icon: '👘', sortOrder: 1, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catJas = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Jas Tutup & Passapu (Pria)', icon: '👑', sortOrder: 2, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catAksesoris = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Aksesoris & Perhiasan Adat', icon: '📿', sortOrder: 3, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+        const catRias = await tx.category.create({
+          data: { tenantId: tenant.id, name: 'Paket Rias & Make Up Adat', icon: '💄', sortOrder: 4, printerTarget: 'NONE', stationTarget: 'NONE' }
+        });
+
+        await tx.product.createMany({
+          data: [
+            { tenantId: tenant.id, categoryId: catBodo.id, name: 'Baju Bodo Sutera Merah Cabe (M/L) [BBD-01]', barcode: '899400100001', buyPrice: 400000, sellPrice: 200000, stock: 1, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catBodo.id, name: 'Baju Bodo Modern Pastel Lilac Emas (All Size) [BBD-02]', barcode: '899400100002', buyPrice: 500000, sellPrice: 250000, stock: 1, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catBodo.id, name: 'Baju La\'bu Sutera Hijau Sage (XL) [BLB-01]', barcode: '899400100003', buyPrice: 550000, sellPrice: 275000, stock: 1, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catJas.id, name: 'Jas Tutup Sutera Bugis Hitam Emas (L) [JTP-01]', barcode: '899400100004', buyPrice: 450000, sellPrice: 200000, stock: 1, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catJas.id, name: 'Jas Tutup Bugis Merah Marun Pria (XL) [JTP-02]', barcode: '899400100005', buyPrice: 450000, sellPrice: 200000, stock: 1, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catAksesoris.id, name: 'Set Lengkap Bando Emas & Gelang Ponto Adat [AKS-01]', barcode: '899400100006', buyPrice: 150000, sellPrice: 50000, stock: 5, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catAksesoris.id, name: 'Sarung Sutera Corak Lagosi Tradisional [SRG-01]', barcode: '899400100007', buyPrice: 200000, sellPrice: 75000, stock: 3, status: 'Aktif' },
+            { tenantId: tenant.id, categoryId: catRias.id, name: 'Paket Rias & Make Up Pengantin / Wisuda [JSA-01]', barcode: '899400100008', buyPrice: 0, sellPrice: 350000, stock: 999, status: 'Aktif' }
           ]
         });
       } else {

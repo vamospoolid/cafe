@@ -20,6 +20,7 @@ import {
   Calendar, 
   Grid, 
   QrCode,
+  Layers,
   Bell,
   ChevronDown,
   ChevronLeft,
@@ -67,7 +68,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     setIsUserMenuOpen(false);
   }, [location.pathname]);
   const posContext = useContext(POSContext);
-  const { businessType, isBengkel, isCafe, isRetail, isLaundry, profile } = useVertical();
+  const { businessType, isBengkel, isCafe, isRetail, isLaundry, isRental, profile } = useVertical();
   const [kdsCount, setKdsCount] = useState(0);
   const socket = useSocket();
 
@@ -125,6 +126,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const titleMap: Record<string, string> = {
     '/dashboard': 'Dashboard',
     '/pos': `POS - ${profile.orderTerm || 'Penjualan'}`,
+    '/rental-kanban': 'Papan Status Sewa Busana',
     '/meja': profile.tableTerm || 'Manajemen Meja',
     '/riwayat': 'Riwayat Transaksi',
     '/produk': profile.itemTerm || 'Katalog Produk',
@@ -268,6 +270,12 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <NavLink to="/pos" title="POS / Penjualan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <ShoppingCart size={20} className="shrink-0" />
                 <span>POS / Penjualan</span>
+              </NavLink>
+            )}
+            {isRental && checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/rental-kanban" title="Papan Status Sewa" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Layers size={20} className="shrink-0 text-amber-400" />
+                <span>Status Sewa (Kanban)</span>
               </NavLink>
             )}
             {isKDSEnabled && checkAccess(['Admin', 'Dapur']) && (

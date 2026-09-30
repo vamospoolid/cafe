@@ -120,44 +120,55 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
     const isBengkelSelected = chosenType === 'bengkel';
     const isRetailSelected = ['grosir', 'retail', 'bangunan', 'umkm'].includes(chosenType);
     const isLaundrySelected = chosenType === 'laundry';
+    const isRentalSelected = chosenType === 'rental';
 
-    const sampleName = isBengkelSelected 
-      ? `Bengkel Jaya Motor ${randomNum}` 
-      : (isRetailSelected 
-        ? `Toko Grosir Berkah Sembako ${randomNum}` 
-        : (isLaundrySelected
-          ? `Berkah Laundry Kiloan ${randomNum}`
-          : `Kafe Senja ${randomNum}`));
-    const sampleSlug = isBengkelSelected 
-      ? `bengkeljaya${randomNum}` 
-      : (isRetailSelected 
-        ? `grosirberkah${randomNum}` 
-        : (isLaundrySelected
-          ? `berkahlaundry${randomNum}`
-          : `senjacafe${randomNum}`));
-    const sampleUser = isBengkelSelected 
-      ? `owner_bengkel${randomNum}` 
-      : (isRetailSelected 
-        ? `owner_grosir${randomNum}` 
-        : (isLaundrySelected
-          ? `owner_laundry${randomNum}`
-          : `owner_senja${randomNum}`));
-    const sampleOwnerName = isBengkelSelected 
-      ? 'Hendra Wijaya' 
-      : (isRetailSelected 
-        ? 'H. Suwandi' 
-        : (isLaundrySelected
-          ? 'Hj. Maryam'
-          : 'Budi Hartono'));
+    const sampleName = isRentalSelected
+      ? `Sanggar Busana Adat Bugis ${randomNum}`
+      : (isBengkelSelected 
+        ? `Bengkel Jaya Motor ${randomNum}` 
+        : (isRetailSelected 
+          ? `Toko Grosir Berkah Sembako ${randomNum}` 
+          : (isLaundrySelected
+            ? `Berkah Laundry Kiloan ${randomNum}`
+            : `Kafe Senja ${randomNum}`)));
+    const sampleSlug = isRentalSelected
+      ? `sanggartengki${randomNum}`
+      : (isBengkelSelected 
+        ? `bengkeljaya${randomNum}` 
+        : (isRetailSelected 
+          ? `grosirberkah${randomNum}` 
+          : (isLaundrySelected
+            ? `berkahlaundry${randomNum}`
+            : `senjacafe${randomNum}`)));
+    const sampleUser = isRentalSelected
+      ? `owner_rental${randomNum}`
+      : (isBengkelSelected 
+        ? `owner_bengkel${randomNum}` 
+        : (isRetailSelected 
+          ? `owner_grosir${randomNum}` 
+          : (isLaundrySelected
+            ? `owner_laundry${randomNum}`
+            : `owner_senja${randomNum}`)));
+    const sampleOwnerName = isRentalSelected
+      ? 'Andi Tenri Bau'
+      : (isBengkelSelected 
+        ? 'Hendra Wijaya' 
+        : (isRetailSelected 
+          ? 'H. Suwandi' 
+          : (isLaundrySelected
+            ? 'Hj. Maryam'
+            : 'Budi Hartono')));
 
     setFormData({
       businessName: sampleName,
       slug: sampleSlug,
-      outletName: isBengkelSelected 
-        ? `${sampleName} - Workshop Pusat` 
-        : (isLaundrySelected 
-          ? `${sampleName} - Outlet Utama`
-          : `${sampleName} - Toko Utama`),
+      outletName: isRentalSelected
+        ? `${sampleName} - Butik Utama`
+        : (isBengkelSelected 
+          ? `${sampleName} - Workshop Pusat` 
+          : (isLaundrySelected 
+            ? `${sampleName} - Outlet Utama`
+            : `${sampleName} - Toko Utama`)),
       outletCode: 'OUT-01',
       ownerName: sampleOwnerName,
       ownerUsername: sampleUser,
@@ -165,7 +176,7 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
       ownerPin: '123456',
       planCode: 'GROWTH'
     });
-    toast(`Data contoh ${isBengkelSelected ? 'bengkel' : (isRetailSelected ? 'toko grosir & retail' : (isLaundrySelected ? 'laundry kiloan & satuan' : 'kafe'))} berhasil diisi otomatis!`, 'info');
+    toast(`Data contoh ${isRentalSelected ? 'sewa busana & baju bodo' : (isBengkelSelected ? 'bengkel' : (isRetailSelected ? 'toko grosir & retail' : (isLaundrySelected ? 'laundry kiloan & satuan' : 'kafe')))} berhasil diisi otomatis!`, 'info');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -187,9 +198,11 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          businessType: businessType === 'bengkel' 
-            ? 'BENGKEL' 
-            : (isRetailType ? 'RETAIL' : (businessType === 'laundry' ? 'LAUNDRY' : 'CAFE'))
+          businessType: businessType === 'rental'
+            ? 'RENTAL'
+            : (businessType === 'bengkel' 
+              ? 'BENGKEL' 
+              : (isRetailType ? 'RETAIL' : (businessType === 'laundry' ? 'LAUNDRY' : 'CAFE')))
         })
       });
 
@@ -216,6 +229,7 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
   const isRetailCurrent = ['grosir', 'retail', 'bangunan', 'umkm'].includes(businessType);
   const isBengkelCurrent = businessType === 'bengkel';
   const isLaundryCurrent = businessType === 'laundry';
+  const isRentalCurrent = businessType === 'rental';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
@@ -292,6 +306,19 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
 
                   <button
                     type="button"
+                    onClick={() => handleFastFillSample('rental')}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
+                      isRentalCurrent 
+                        ? 'bg-amber-600 text-white ring-2 ring-amber-300' 
+                        : 'bg-white border border-slate-200 hover:bg-amber-50 text-slate-700'
+                    }`}
+                  >
+                    <Sparkles size={13} className="text-amber-400" />
+                    <span>Contoh Sewa Busana</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => handleFastFillSample('grosir')}
                     className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
                       isRetailCurrent 
@@ -336,8 +363,9 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
                   Pilih Jenis Usaha Anda
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                   {[
+                    { id: 'rental', label: 'Sewa Busana', sub: 'Baju Bodo & Adat', icon: Sparkles, isRental: true },
                     { id: 'laundry', label: 'Laundry Kiloan', sub: 'Kiloan & Satuan', icon: Shirt, isLaundry: true },
                     { id: 'coffee', label: 'Coffee & Kafe', sub: 'Minuman & Cafe', icon: Coffee },
                     { id: 'grosir', label: 'Toko Grosir', sub: 'Sembako & Ritel', icon: Package, isRetail: true },
@@ -353,11 +381,13 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
                         onClick={() => setBusinessType(item.id)}
                         className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1 relative ${
                           isSelected 
-                            ? (item.isLaundry
-                                ? 'border-cyan-500 bg-cyan-50/80 text-cyan-950 shadow-md ring-2 ring-cyan-300'
-                                : (item.isRetail 
-                                    ? 'border-amber-500 bg-amber-50/80 text-amber-950 shadow-md ring-2 ring-amber-300' 
-                                    : 'border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-sm'))
+                            ? (item.isRental
+                                ? 'border-amber-600 bg-amber-50 text-amber-950 shadow-md ring-2 ring-amber-300'
+                                : (item.isLaundry
+                                    ? 'border-cyan-500 bg-cyan-50/80 text-cyan-950 shadow-md ring-2 ring-cyan-300'
+                                    : (item.isRetail 
+                                        ? 'border-amber-500 bg-amber-50/80 text-amber-950 shadow-md ring-2 ring-amber-300' 
+                                        : 'border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-sm')))
                             : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-600'
                         }`}
                       >
@@ -365,7 +395,7 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
                           size={22} 
                           className={
                             isSelected 
-                              ? (item.isLaundry ? 'text-cyan-600' : (item.isRetail ? 'text-amber-600' : 'text-indigo-600')) 
+                              ? (item.isRental ? 'text-amber-600' : (item.isLaundry ? 'text-cyan-600' : (item.isRetail ? 'text-amber-600' : 'text-indigo-600'))) 
                               : 'text-slate-400'
                           } 
                         />
@@ -380,13 +410,15 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
               {/* Nama Bisnis */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                  {businessType === 'bengkel'
-                    ? 'Nama Bengkel / Workshop Usaha *'
-                    : (isRetailCurrent
-                      ? 'Nama Toko Grosir / Retail *'
-                      : (isLaundryCurrent
-                        ? 'Nama Laundry / Usaha Cuci *'
-                        : 'Nama Kafe / Resto / Brand Usaha *'))}
+                  {isRentalCurrent
+                    ? 'Nama Butik / Sanggar Sewa Busana *'
+                    : (businessType === 'bengkel'
+                      ? 'Nama Bengkel / Workshop Usaha *'
+                      : (isRetailCurrent
+                        ? 'Nama Toko Grosir / Retail *'
+                        : (isLaundryCurrent
+                          ? 'Nama Laundry / Usaha Cuci *'
+                          : 'Nama Kafe / Resto / Brand Usaha *')))}
                 </label>
                 <div className="relative">
                   <Store size={18} className="absolute left-3.5 top-3.5 text-slate-400" />
@@ -394,13 +426,15 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
                     type="text"
                     required
                     placeholder={
-                      isRetailCurrent 
-                        ? "Contoh: Toko Grosir Sembako Berkah" 
-                        : (isBengkelCurrent 
-                          ? "Contoh: Bengkel Jaya Motor" 
-                          : (isLaundryCurrent
-                            ? "Contoh: Berkah Laundry Kiloan & Satuan"
-                            : "Contoh: Kopi Kenangan Bahagia"))
+                      isRentalCurrent
+                        ? "Contoh: Sanggar Busana Baju Bodo Bugis"
+                        : (isRetailCurrent 
+                          ? "Contoh: Toko Grosir Sembako Berkah" 
+                          : (isBengkelCurrent 
+                            ? "Contoh: Bengkel Jaya Motor" 
+                            : (isLaundryCurrent
+                              ? "Contoh: Berkah Laundry Kiloan & Satuan"
+                              : "Contoh: Kopi Kenangan Bahagia")))
                     }
                     className="w-full pl-10 pr-4 py-3 bg-slate-50/50 focus:bg-white border border-slate-200 rounded-2xl text-sm font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
                     value={formData.businessName}
@@ -432,11 +466,13 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
                     type="text"
                     required
                     placeholder={
-                      isRetailCurrent 
-                        ? "tokogrosir" 
-                        : (isBengkelCurrent 
-                          ? "bengkeljaya" 
-                          : (isLaundryCurrent ? "berkahlaundry" : "namakafe"))
+                      isRentalCurrent
+                        ? "sanggartengki"
+                        : (isRetailCurrent 
+                          ? "tokogrosir" 
+                          : (isBengkelCurrent 
+                            ? "bengkeljaya" 
+                            : (isLaundryCurrent ? "berkahlaundry" : "namakafe")))
                     }
                     className="w-full pl-10 pr-28 py-3 bg-slate-50/50 focus:bg-white border border-slate-200 rounded-2xl text-sm font-mono font-bold text-slate-800 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all"
                     value={formData.slug}
@@ -447,7 +483,7 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Otomatis terisi dari nama {isRetailCurrent ? "toko grosir" : (isBengkelCurrent ? "bengkel" : (isLaundryCurrent ? "laundry" : "kafe"))} Anda.
+                  Otomatis terisi dari nama {isRentalCurrent ? "sanggar busana" : (isRetailCurrent ? "toko grosir" : (isBengkelCurrent ? "bengkel" : (isLaundryCurrent ? "laundry" : "kafe")))} Anda.
                 </p>
               </div>
 

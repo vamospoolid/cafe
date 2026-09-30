@@ -378,8 +378,8 @@ router.post('/migrate-vertical', authenticateToken, requirePermission('settings.
 
     const { targetBusinessType, password, migrationStrategy = 'CLEAN_PIVOT' } = req.body;
 
-    if (!['CAFE', 'BENGKEL', 'RETAIL', 'LAUNDRY'].includes(targetBusinessType)) {
-      return res.status(400).json({ error: 'Jenis bisnis target tidak valid. Pilihan: CAFE, BENGKEL, RETAIL, LAUNDRY.' });
+    if (!['CAFE', 'BENGKEL', 'RETAIL', 'LAUNDRY', 'RENTAL'].includes(targetBusinessType)) {
+      return res.status(400).json({ error: 'Jenis bisnis target tidak valid. Pilihan: CAFE, BENGKEL, RETAIL, LAUNDRY, RENTAL.' });
     }
 
     // Layer 2: Password Challenge
@@ -494,6 +494,26 @@ router.post('/migrate-vertical', authenticateToken, requirePermission('settings.
             data: {
               receiptHeader: `Selamat Datang di ${tenant.name}`,
               receiptFooter: 'Terima kasih atas kunjungan Anda!'
+            }
+          });
+        } else if (targetBusinessType === 'RENTAL') {
+          // Buat kategori bawaan rental busana
+          await tx.category.createMany({
+            data: [
+              { tenantId, name: 'Baju Bodo Modern', printerTarget: 'NONE' },
+              { tenantId, name: 'Baju La\'bu (Hijab)', printerTarget: 'NONE' },
+              { tenantId, name: 'Pengantin Glamour', printerTarget: 'NONE' },
+              { tenantId, name: 'Jas Tutup Pria', printerTarget: 'NONE' },
+              { tenantId, name: 'Aksesoris & Perhiasan Adat', printerTarget: 'NONE' }
+            ]
+          });
+          newCategoriesCount = 5;
+
+          await tx.settings.updateMany({
+            where: { tenantId },
+            data: {
+              receiptHeader: `Butik Penyewaan Busana Adat - ${tenant.name}`,
+              receiptFooter: 'Harap mengembalikan busana tepat waktu beserta kelengkapan aksesoris. Terima kasih!'
             }
           });
         }
