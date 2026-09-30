@@ -17,6 +17,7 @@ import { POSProvider, POSContext } from './context/POSContext';
 import { seedLocalCatalogCache } from './utils/catalogCacheSeeder';
 import FeatureGuard from './components/FeatureGuard';
 import { VerticalProvider, useVertical } from './context/VerticalContext';
+import { PrinterProvider } from './context/PrinterContext';
 import VerticalGuard from './components/VerticalGuard';
 import ChunkErrorBoundary from './components/ChunkErrorBoundary';
 import { updatePwaManifestForRoute } from './utils/pwaManager';
@@ -315,9 +316,11 @@ function App() {
   return (
     <POSProvider>
       <VerticalProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <PrinterProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </PrinterProvider>
       </VerticalProvider>
     </POSProvider>
   );

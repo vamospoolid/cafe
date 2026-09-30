@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   Camera, Plus, Trash2, Minus, Search, CreditCard, User, Edit2, 
   ShoppingCart, Package, ArrowRight, X, Save, Lock, Play,
   Maximize2, Minimize2, Download, RefreshCw, Wifi, WifiOff, Smartphone,
-  Clock, AlertTriangle
+  Clock, AlertTriangle, Printer
 } from 'lucide-react';
 import CheckoutModal from './CheckoutModal';
 import CustomerModal from './CustomerModal';
@@ -19,6 +19,7 @@ import { isNativePlatform, startNativeBarcodeScan } from '../utils/barcodeScanne
 import { initHardwareBarcodeListener, playScannerBeep } from '../utils/hardwareBarcodeListener';
 import useSocket from '../hooks/useSocket';
 import { formatTableTitle, formatTableBadge } from '../utils/tableUtils';
+import { PrinterStatusBadge } from './pos/PrinterStatusBadge';
 
 export interface CartItem {
   product: any;
@@ -37,6 +38,7 @@ export const getCategoryIcon = (name: string) => {
 };
 
 export const POSView = () => {
+  const navigate = useNavigate();
   const posContext = useContext(POSContext);
   const socket = useSocket();
   const [activeCategory, setActiveCategory] = useState<number | 'Semua'>('Semua');
@@ -665,6 +667,11 @@ export const POSView = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* 🖨️ Printer Bluetooth Status Badge */}
+            <PrinterStatusBadge onClick={() => {
+              navigate('/pengaturan?tab=printer_bt');
+            }} />
+
             {/* Install PWA Button */}
             {installPrompt && (
               <button

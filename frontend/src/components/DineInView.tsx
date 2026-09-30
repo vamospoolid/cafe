@@ -525,7 +525,7 @@ const DineInView = () => {
       
       {/* 1. Frosted Glass Sticky Header */}
       <header className="sticky top-0 z-30 bg-white/85 backdrop-blur-md border-b border-stone-200/70 shadow-[0_2px_12px_rgba(0,0,0,0.02)] px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
+        <div className="max-w-screen-xl mx-auto flex items-center justify-between">
           
           {/* Brand Info */}
           <div className="flex items-center gap-3">
@@ -585,111 +585,189 @@ const DineInView = () => {
       </header>
 
       {/* 2. Main Content Container */}
-      <main className="flex-1 max-w-2xl w-full mx-auto px-4 pt-4 space-y-4">
+      <main className="flex-1 max-w-screen-xl w-full mx-auto px-4 lg:px-8 pt-4">
+        {/* Desktop: 2-col layout — Sidebar kiri + Produk Grid kanan */}
+        <div className="flex flex-col lg:flex-row gap-6">
         
-        {/* Soft Hero Welcome Card */}
-        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-500/15 border border-amber-200/60 p-5 shadow-[0_8px_30px_rgb(217,119,6,0.06)]">
-          <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 rounded-full bg-amber-400/20 blur-2xl pointer-events-none"></div>
-          <div className="relative z-10 flex justify-between items-center">
-            <div className="space-y-1">
+        {/* ─── Sidebar Kiri (Info Meja + Sticky di Desktop) ─── */}
+        <aside className="lg:w-72 xl:w-80 flex-shrink-0 space-y-4 lg:sticky lg:top-20 lg:self-start">
+
+          {/* Soft Hero Welcome Card */}
+          <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-500/15 border border-amber-200/60 p-5 shadow-[0_8px_30px_rgb(217,119,6,0.06)]">
+            <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 rounded-full bg-amber-400/20 blur-2xl pointer-events-none"></div>
+            <div className="relative z-10 space-y-1">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/90 text-amber-800 border border-amber-200/70 shadow-xs">
                 <Sparkles size={10} className="text-amber-600" /> Dine-In Order
               </span>
               <h2 className="text-base sm:text-lg font-black text-stone-900 tracking-tight">
-                Pesan Hidangan dari Meja Anda
+                Pesan dari Meja Anda
               </h2>
-              <p className="text-xs text-stone-500 max-w-sm leading-relaxed">
+              <p className="text-xs text-stone-500 leading-relaxed">
                 Pilih menu favorit, tentukan catatan sesuai selera, dan makanan disajikan langsung ke meja Anda.
               </p>
             </div>
-            <div className="hidden sm:flex w-14 h-14 rounded-2xl bg-white/80 border border-amber-200/70 shadow-xs items-center justify-center text-amber-700 flex-shrink-0">
-              <ChefHat size={28} />
-            </div>
           </div>
-        </div>
 
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={17} />
-          <input 
-            type="text" 
-            placeholder="Cari makanan lezat atau minuman segar..." 
-            className="w-full pl-10 pr-10 py-3 bg-white border border-stone-200/80 rounded-2xl text-xs sm:text-sm font-medium text-stone-800 placeholder-stone-400 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-500/10 shadow-xs transition-all"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
-            >
-              <X size={15} />
-            </button>
-          )}
-        </div>
-
-        {/* Category Filter Pills (Smooth Horizontal Scroll) */}
-        <div className="flex gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-none -mx-4 px-4">
-          <button 
-            onClick={() => setSelectedCategoryId(null)}
-            className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-              selectedCategoryId === null 
-                ? 'bg-stone-900 text-white shadow-md shadow-stone-900/10 scale-[1.02]' 
-                : 'bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50 shadow-xs'
-            }`}
-          >
-            <span>Semua Menu</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedCategoryId === null ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
-              {products.length}
-            </span>
-          </button>
-          
-          {categories.map(cat => {
-            const count = products.filter(p => p.categoryId === cat.id).length;
-            const isSelected = selectedCategoryId === cat.id;
-            return (
-              <button 
-                key={cat.id}
-                onClick={() => setSelectedCategoryId(cat.id)}
-                className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                  isSelected 
-                    ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20 scale-[1.02]' 
-                    : 'bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50 shadow-xs'
-                }`}
-              >
-                {cat.icon && <span>{cat.icon}</span>}
-                <span>{cat.name}</span>
-                {count > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Product Catalog Grid */}
-        {filteredProducts.length === 0 ? (
-          <div className="bg-white rounded-3xl p-10 text-center border border-stone-200/70 shadow-xs space-y-3">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
-              <Utensils size={24} />
+          {/* Meja Info Card */}
+          <div className="bg-white rounded-2xl border border-stone-200/70 p-4 space-y-3 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/60 text-amber-700 flex items-center justify-center flex-shrink-0">
+                <MapPin size={18} />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Meja Aktif</div>
+                <div className="text-sm font-black text-stone-900">{tableInfo?.tableNo || tableInfo?.name || `Meja ${tableRef}`}</div>
+              </div>
             </div>
-            <h3 className="text-sm font-bold text-stone-800">Menu Tidak Ditemukan</h3>
-            <p className="text-xs text-stone-400 max-w-xs mx-auto">
-              Tidak ada menu yang sesuai dengan pencarian "{searchQuery}". Coba kata kunci lainnya.
-            </p>
-            {searchQuery && (
+            {storeBranding.address && (
+              <div className="text-[11px] text-stone-400 leading-snug border-t border-stone-100 pt-2.5">
+                {storeBranding.address}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleCallWaiter}
+              className="w-full py-2 bg-stone-100 hover:bg-stone-200 active:scale-[0.98] text-stone-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+            >
+              <MessageSquare size={13} /> Panggil Pelayan
+            </button>
+          </div>
+
+          {/* Cart Summary (Visible di Sidebar Desktop saat ada item) */}
+          {cart.length > 0 && (
+            <div className="hidden lg:block bg-stone-900 rounded-2xl p-4 text-white space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-stone-300">Pesanan Saya</span>
+                <span className="text-xs font-black bg-amber-500 text-stone-900 px-2 py-0.5 rounded-full">{totalCartItems} item</span>
+              </div>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                {cart.map(item => (
+                  <div key={item.productId} className="flex justify-between items-center text-xs">
+                    <span className="text-stone-300 line-clamp-1 flex-1 pr-2">{item.qty}x {item.name}</span>
+                    <span className="text-white font-bold whitespace-nowrap">{formatCurrency(item.price * item.qty)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-white/10 pt-2.5 flex justify-between items-center">
+                <span className="text-xs text-stone-400">Subtotal</span>
+                <span className="text-sm font-black text-amber-400">{formatCurrency(cartSubtotal)}</span>
+              </div>
               <button
-                onClick={() => setSearchQuery('')}
-                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all"
+                type="button"
+                onClick={() => setIsCartOpen(true)}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
               >
-                Reset Pencarian
+                <ShoppingCart size={14} /> Lihat &amp; Pesan
+              </button>
+            </div>
+          )}
+        </aside>
+
+        {/* ─── Konten Kanan (Search + Grid Produk) ─── */}
+        <section className="flex-1 space-y-4 min-w-0">
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" size={17} />
+            <input 
+              type="text" 
+              placeholder="Cari makanan lezat atau minuman segar..." 
+              className="w-full pl-10 pr-10 py-3 bg-white border border-stone-200/80 rounded-2xl text-xs sm:text-sm font-medium text-stone-800 placeholder-stone-400 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-500/10 shadow-xs transition-all"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
+              >
+                <X size={15} />
               </button>
             )}
           </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3.5 sm:gap-4">
+
+          {/* Category Filter Pills (Smooth Horizontal Scroll) */}
+          <div className="flex gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-none -mx-4 px-4 lg:mx-0 lg:px-0 lg:flex-wrap">
+            <button 
+              onClick={() => setSelectedCategoryId(null)}
+              className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                selectedCategoryId === null 
+                  ? 'bg-stone-900 text-white shadow-md shadow-stone-900/10 scale-[1.02]' 
+                  : 'bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50 shadow-xs'
+              }`}
+            >
+              <span>Semua Menu</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedCategoryId === null ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
+                {products.length}
+              </span>
+            </button>
+            
+            {categories.map(cat => {
+              const count = products.filter(p => p.categoryId === cat.id).length;
+              const isSelected = selectedCategoryId === cat.id;
+              return (
+                <button 
+                  key={cat.id}
+                  onClick={() => setSelectedCategoryId(cat.id)}
+                  className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                    isSelected 
+                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20 scale-[1.02]' 
+                      : 'bg-white text-stone-600 border border-stone-200/80 hover:bg-stone-50 shadow-xs'
+                  }`}
+                >
+                  {cat.icon && <span>{cat.icon}</span>}
+                  <span>{cat.name}</span>
+                  {count > 0 && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Product Catalog Grid */}
+          {filteredProducts.length === 0 ? (
+            <div className="bg-white rounded-3xl p-10 text-center border border-stone-200/70 shadow-xs space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                <Utensils size={24} />
+              </div>
+              {products.length === 0 ? (
+                // Tidak ada produk sama sekali dari tenant ini
+                <>
+                  <h3 className="text-sm font-bold text-stone-800">Menu Belum Tersedia</h3>
+                  <p className="text-xs text-stone-400 max-w-xs mx-auto leading-relaxed">
+                    Restoran ini belum memiliki menu yang aktif saat ini. Silakan hubungi kasir untuk memesan.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleCallWaiter}
+                    className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5"
+                  >
+                    <MessageSquare size={13} /> Panggil Pelayan
+                  </button>
+                </>
+              ) : (
+                // Ada produk, tapi tidak ada hasil pencarian
+                <>
+                  <h3 className="text-sm font-bold text-stone-800">Menu Tidak Ditemukan</h3>
+                  <p className="text-xs text-stone-400 max-w-xs mx-auto">
+                    {searchQuery
+                      ? `Tidak ada menu yang sesuai dengan pencarian "${searchQuery}".`
+                      : 'Tidak ada menu di kategori ini.'}
+                  </p>
+                  <button
+                    onClick={() => { setSearchQuery(''); setSelectedCategoryId(null); }}
+                    className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all"
+                  >
+                    Reset Filter
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5 sm:gap-4">
             {filteredProducts.map(prod => {
               const isSoldOut = Boolean(prod.isSoldOut || (prod.stock !== undefined && prod.stock <= 0 && !prod.hasRecipe));
               const cartItem = cart.find(item => item.productId === prod.id);
@@ -797,13 +875,15 @@ const DineInView = () => {
                 </div>
               );
             })}
-          </div>
-        )}
+            </div>
+          )}
+        </section>
+        </div>{/* end flex layout */}
       </main>
 
-      {/* 3. Floating Bottom Island (Cart Trigger) */}
+      {/* 3. Floating Bottom Island (Cart Trigger) — Hanya tampil di mobile/tablet */}
       {cart.length > 0 && (
-        <div className="fixed bottom-3 inset-x-0 z-40 max-w-xl mx-auto px-4">
+        <div className="lg:hidden fixed bottom-3 inset-x-0 z-40 max-w-xl mx-auto px-4">
           <button 
             onClick={() => setIsCartOpen(true)}
             className="w-full py-3.5 px-5 bg-stone-900/95 backdrop-blur-xl hover:bg-stone-900 text-white font-bold rounded-3xl shadow-[0_12px_35px_-5px_rgba(28,25,23,0.35)] border border-white/10 flex justify-between items-center transition-transform active:scale-[0.98]"

@@ -256,7 +256,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         const orderData = await orderRes.json();
         
         await printBluetoothReceipt(orderData, {
-          name: posContext?.settings?.storeName || 'MUKI RAMEN',
+          name: posContext?.settings?.storeName || 'KAFE & RESTORAN',
           address: posContext?.settings?.address || '',
           phone: posContext?.settings?.phone || '',
           footer: posContext?.settings?.receiptFooter || 'Terima kasih atas kunjungan Anda!'
