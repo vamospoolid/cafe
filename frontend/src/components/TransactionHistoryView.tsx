@@ -8,8 +8,21 @@ import OrderDetailModal from './OrderDetailModal';
 import { exportFinancialPDF } from '../utils/pdfGenerator';
 import { getTodayStr, getYesterdayStr, getLast7DaysRange, getThisMonthRange, formatLocalDate } from '../utils/dateUtils';
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
+import { useVertical } from '../context/VerticalContext';
+
+const RentalTransactionHistoryView = React.lazy(() => import('../verticals/rental/RentalTransactionHistoryView'));
 
 const TransactionHistoryView = () => {
+  const { isRental } = useVertical();
+
+  if (isRental) {
+    return (
+      <React.Suspense fallback={<div className="p-8 text-center text-amber-600 font-bold text-xs">Memuat Riwayat Kontrak Sewa Busana...</div>}>
+        <RentalTransactionHistoryView />
+      </React.Suspense>
+    );
+  }
+
   const [isFilterOpen, setIsFilterOpen] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

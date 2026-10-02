@@ -31,18 +31,31 @@ interface WizardProps {
   onClose: () => void;
   onSuccess?: () => void;
   initialPlan?: string;
+  initialBusinessType?: string;
 }
+
+const resolveBusinessType = (raw?: string): string => {
+  if (!raw) return 'coffee';
+  const norm = raw.toLowerCase();
+  if (['cafe', 'coffee', 'resto', 'kuliner'].includes(norm)) return 'coffee';
+  if (['bengkel', 'otomotif'].includes(norm)) return 'bengkel';
+  if (['retail', 'grosir', 'sembako', 'bangunan', 'umkm'].includes(norm)) return 'grosir';
+  if (['laundry'].includes(norm)) return 'laundry';
+  if (['rental', 'baju_bodo'].includes(norm)) return 'rental';
+  return 'coffee';
+};
 
 export const TenantRegisterWizard: React.FC<WizardProps> = ({ 
   isOpen, 
   onClose, 
   onSuccess,
-  initialPlan = 'GROWTH'
+  initialPlan = 'GROWTH',
+  initialBusinessType = 'coffee'
 }) => {
   const posContext = useContext(POSContext);
   const [step, setStep] = useState<number>(1);
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [businessType, setBusinessType] = useState<string>('coffee');
+  const [businessType, setBusinessType] = useState<string>(() => resolveBusinessType(initialBusinessType));
 
   const [formData, setFormData] = useState({
     businessName: '',
@@ -69,6 +82,13 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
       setFormData(prev => ({ ...prev, planCode: initialPlan }));
     }
   }, [initialPlan]);
+
+  // Update businessType jika initialBusinessType berubah
+  React.useEffect(() => {
+    if (initialBusinessType) {
+      setBusinessType(resolveBusinessType(initialBusinessType));
+    }
+  }, [initialBusinessType]);
 
   // Realtime Slug Check
   React.useEffect(() => {
@@ -282,95 +302,19 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
           {step === 1 && (
             <div className="space-y-5 animate-fade-in">
               
-              {/* Quick Fill Helpers (Opsi Cepat Sesuai Model Bisnis) */}
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600 font-semibold flex items-center gap-1.5">
-                    <Zap size={14} className="text-amber-500" />
-                    <span>Coba langsung demo terisi otomatis:</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => handleFastFillSample('laundry')}
-                    className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
-                      isLaundryCurrent 
-                        ? 'bg-cyan-600 hover:bg-cyan-700 text-white ring-2 ring-cyan-300' 
-                        : 'bg-white border border-slate-200 hover:bg-cyan-50 text-slate-700'
-                    }`}
-                  >
-                    <Shirt size={13} className={isLaundryCurrent ? 'text-white' : 'text-cyan-600'} />
-                    <span>⚡ Isi Contoh Laundry</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleFastFillSample('rental')}
-                    className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
-                      isRentalCurrent 
-                        ? 'bg-amber-600 text-white ring-2 ring-amber-300' 
-                        : 'bg-white border border-slate-200 hover:bg-amber-50 text-slate-700'
-                    }`}
-                  >
-                    <Sparkles size={13} className="text-amber-400" />
-                    <span>Contoh Sewa Busana</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleFastFillSample('grosir')}
-                    className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
-                      isRetailCurrent 
-                        ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 ring-2 ring-amber-300' 
-                        : 'bg-white border border-slate-200 hover:bg-amber-50 text-slate-700'
-                    }`}
-                  >
-                    <Package size={13} className="text-amber-700" />
-                    <span>Contoh Toko Grosir</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleFastFillSample('coffee')}
-                    className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
-                      businessType === 'coffee'
-                        ? 'bg-indigo-600 text-white ring-2 ring-indigo-300' 
-                        : 'bg-white border border-slate-200 hover:bg-indigo-50 text-slate-700'
-                    }`}
-                  >
-                    <Coffee size={13} />
-                    <span>Contoh Kafe</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleFastFillSample('bengkel')}
-                    className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
-                      isBengkelCurrent 
-                        ? 'bg-purple-600 text-white ring-2 ring-purple-300' 
-                        : 'bg-white border border-slate-200 hover:bg-purple-50 text-slate-700'
-                    }`}
-                  >
-                    <Wrench size={13} />
-                    <span>Contoh Bengkel</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Pilihan Jenis Bidang Usaha / Vertikal */}
+              {/* 1. Pilihan Bidang Usaha (5 Pilar Utama UMKM) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
-                  Pilih Jenis Usaha Anda
+                <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider flex items-center justify-between">
+                  <span>1. Pilih Bidang Usaha Anda</span>
+                  <span className="text-[10px] text-indigo-600 font-bold lowercase">fitur & katalog otomatis menyesuaikan</span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {[
-                    { id: 'rental', label: 'Sewa Busana', sub: 'Baju Bodo & Adat', icon: Sparkles, isRental: true },
-                    { id: 'laundry', label: 'Laundry Kiloan', sub: 'Kiloan & Satuan', icon: Shirt, isLaundry: true },
-                    { id: 'coffee', label: 'Coffee & Kafe', sub: 'Minuman & Cafe', icon: Coffee },
-                    { id: 'grosir', label: 'Toko Grosir', sub: 'Sembako & Ritel', icon: Package, isRetail: true },
-                    { id: 'bengkel', label: 'Bengkel Servis', sub: 'Motor & Mobil', icon: Wrench },
-                    { id: 'resto', label: 'Resto Kuliner', sub: 'Makanan & Saji', icon: Utensils }
+                    { id: 'coffee', label: 'Kafe & Resto', sub: 'Meja QR & Dapur', icon: Coffee, accent: 'indigo' },
+                    { id: 'bengkel', label: 'Bengkel Servis', sub: 'SPK & Komisi Montir', icon: Wrench, accent: 'rose' },
+                    { id: 'grosir', label: 'Grosir & Retail', sub: 'Barcode & Satuan Dus', icon: Package, accent: 'blue' },
+                    { id: 'laundry', label: 'Laundry Kiloan', sub: 'Timbangan Kg & Rak', icon: Shirt, accent: 'cyan' },
+                    { id: 'rental', label: 'Sewa Busana', sub: 'Baju Bodo & Deposit', icon: Sparkles, accent: 'amber' }
                   ].map(item => {
                     const IconComp = item.icon;
                     const isSelected = businessType === item.id;
@@ -379,32 +323,37 @@ export const TenantRegisterWizard: React.FC<WizardProps> = ({
                         key={item.id}
                         type="button"
                         onClick={() => setBusinessType(item.id)}
-                        className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1 relative ${
+                        className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 relative cursor-pointer ${
                           isSelected 
-                            ? (item.isRental
-                                ? 'border-amber-600 bg-amber-50 text-amber-950 shadow-md ring-2 ring-amber-300'
-                                : (item.isLaundry
-                                    ? 'border-cyan-500 bg-cyan-50/80 text-cyan-950 shadow-md ring-2 ring-cyan-300'
-                                    : (item.isRetail 
-                                        ? 'border-amber-500 bg-amber-50/80 text-amber-950 shadow-md ring-2 ring-amber-300' 
-                                        : 'border-indigo-600 bg-indigo-50/70 text-indigo-900 shadow-sm')))
-                            : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-600'
+                            ? 'border-indigo-600 bg-indigo-50/90 text-indigo-950 shadow-md ring-2 ring-indigo-400 scale-[1.02]' 
+                            : 'border-slate-200 hover:border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
                         }`}
                       >
-                        <IconComp 
-                          size={22} 
-                          className={
-                            isSelected 
-                              ? (item.isRental ? 'text-amber-600' : (item.isLaundry ? 'text-cyan-600' : (item.isRetail ? 'text-amber-600' : 'text-indigo-600'))) 
-                              : 'text-slate-400'
-                          } 
-                        />
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                          <IconComp size={18} />
+                        </div>
                         <span className="text-xs font-black leading-tight">{item.label}</span>
                         <span className="text-[10px] text-slate-400 font-medium leading-none">{item.sub}</span>
                       </button>
                     );
                   })}
                 </div>
+              </div>
+
+              {/* 2. Contextual Quick Fill Helper */}
+              <div className="flex items-center justify-between p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 text-xs">
+                <span className="text-indigo-900 font-semibold flex items-center gap-1.5">
+                  <Zap size={14} className="text-amber-500 fill-amber-500" />
+                  <span>Ingin langsung uji coba cepat?</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleFastFillSample(businessType)}
+                  className="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Sparkles size={13} className="text-amber-300" />
+                  <span>Isi Otomatis Contoh {isRentalCurrent ? 'Busana Adat' : (isBengkelCurrent ? 'Bengkel' : (isRetailCurrent ? 'Toko Grosir' : (isLaundryCurrent ? 'Laundry' : 'Kafe')))}</span>
+                </button>
               </div>
 
               {/* Nama Bisnis */}

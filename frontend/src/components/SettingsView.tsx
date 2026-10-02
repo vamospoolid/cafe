@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Shirt, AlertCircle } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -416,13 +416,14 @@ const SettingsView = () => {
     }
   };
 
-  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' = ((formData as any).businessType || posContext?.settings?.businessType || 'CAFE').toUpperCase() as any;
+  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' | 'RENTAL' = ((formData as any).businessType || posContext?.settings?.businessType || 'CAFE').toUpperCase() as any;
   const isBengkel = businessType === 'BENGKEL';
   const isRetail = businessType === 'RETAIL';
   const isLaundry = businessType === 'LAUNDRY';
+  const isRental = businessType === 'RENTAL';
   const isCafe = businessType === 'CAFE';
-  const verticalStore = isBengkel ? 'Bengkel' : isRetail ? 'Toko Retail' : isLaundry ? 'Laundry' : 'Kafe';
-  const verticalPrinter = isBengkel ? 'SPK & Printer' : isRetail ? 'Struk & Barcode' : isLaundry ? 'Nota Laundry' : 'Printer & KDS';
+  const verticalStore = isRental ? 'Sanggar Busana' : (isBengkel ? 'Bengkel' : isRetail ? 'Toko Retail' : isLaundry ? 'Laundry' : 'Kafe');
+  const verticalPrinter = isRental ? 'Nota Sewa & Printer' : (isBengkel ? 'SPK & Printer' : isRetail ? 'Struk & Barcode' : isLaundry ? 'Nota Laundry' : 'Printer & KDS');
 
   const allTabs = [
     { 
@@ -452,7 +453,7 @@ const SettingsView = () => {
     { 
       id: 'struk', 
       label: verticalPrinter, 
-      desc: isBengkel ? 'Format SPK, estimasi biaya & struk thermal' : (isRetail ? 'Format struk belanja & barcode thermal' : (isLaundry ? 'Format nota timbangan & label rak cuci' : 'Format nota thermal, target dapur/bar & KDS')), 
+      desc: isRental ? 'Format lembar kontrak sewa, jaminan & printer kasir' : (isBengkel ? 'Format SPK, estimasi biaya & struk thermal' : (isRetail ? 'Format struk belanja & barcode thermal' : (isLaundry ? 'Format nota timbangan & label rak cuci' : 'Format nota thermal, target dapur/bar & KDS'))), 
       icon: Receipt, 
       category: 'pos', 
       show: true 
@@ -531,8 +532,8 @@ const SettingsView = () => {
     },
     { 
       id: 'inventaris', 
-      label: 'Mode Inventaris', 
-      desc: isBengkel ? 'Pelacakan stok sparepart & audit fisik' : (isRetail ? 'Pelacakan stok barang dagangan & multi-gudang' : (isLaundry ? 'Pelacakan deterjen, pewangi & konsumabel' : 'Pelacakan bahan baku, resep BOM & transfer gudang')), 
+      label: isRental ? 'Aset Busana & Perawatan' : 'Mode Inventaris', 
+      desc: isRental ? 'Pelacakan aset busana, nomor gantungan & perawatan' : (isBengkel ? 'Pelacakan stok sparepart & audit fisik' : (isRetail ? 'Pelacakan stok barang dagangan & multi-gudang' : (isLaundry ? 'Pelacakan deterjen, pewangi & konsumabel' : 'Pelacakan bahan baku, resep BOM & transfer gudang'))), 
       icon: PackageSearch, 
       category: 'system', 
       show: true 
@@ -594,7 +595,7 @@ const SettingsView = () => {
           </div>
           <div>
             <h2 className="text-xs font-black text-slate-800 leading-tight">{currentTab.label}</h2>
-            <p className="text-[10px] text-slate-400">Pengaturan Sistem Kafe</p>
+            <p className="text-[10px] text-slate-400">Pengaturan Sistem {verticalStore}</p>
           </div>
         </div>
 
@@ -727,8 +728,14 @@ const SettingsView = () => {
                   <Store size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">Informasi Profil Kafe</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Atur nama, nomor kontak, alamat kafe, dan logo resmi usaha.</p>
+                  <h3 className="text-base font-bold text-slate-800">
+                    {isRental ? 'Informasi Profil Sanggar & Butik Busana' : `Informasi Profil ${verticalStore}`}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {isRental 
+                      ? 'Atur nama sanggar, nomor WhatsApp butik, alamat galeri/fitting, dan logo resmi usaha.' 
+                      : `Atur nama, nomor kontak, alamat ${verticalStore.toLowerCase()}, dan logo resmi usaha.`}
+                  </p>
                 </div>
               </div>
               
@@ -745,7 +752,7 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.storeName} 
                         onChange={handleChange} 
-                        placeholder="Nama Kafe Anda"
+                        placeholder={isRental ? "Nama Sanggar / Galeri Busana Anda" : `Nama ${verticalStore} Anda`}
                       />
                     </div>
                   </div>
@@ -871,62 +878,72 @@ const SettingsView = () => {
                     <Printer size={20} />
                   </div>
                   <div>
-                    <h3 className="text-base font-black text-slate-800">Multi-Printer, Split Struk & KDS</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Pengaturan cetak struk otomatis (Payment-First) dan kontrol fitur Layar Dapur (KDS).</p>
+                    <h3 className="text-base font-black text-slate-800">
+                      {isRental ? 'Nota Kontrak Sewa & Printer Kasir' : isCafe ? 'Multi-Printer, Split Struk & KDS' : 'Printer Struk Kasir'}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {isRental 
+                        ? 'Format lembar kontrak sewa busana, uang jaminan/deposit, dan printer kasir.' 
+                        : isCafe
+                        ? 'Pengaturan cetak struk otomatis (Payment-First) dan kontrol fitur Layar Dapur (KDS).'
+                        : 'Pengaturan cetak struk otomatis dan konfigurasi printer kasir.'}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* PENGATURAN KDS (KITCHEN DISPLAY SYSTEM) */}
-              <div className="bg-gradient-to-r from-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
-                      <ChefHat size={22} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-black text-sm text-white">Layar Dapur (Kitchen Display System / KDS)</h4>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${formData.enableKDS ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
-                          {formData.enableKDS ? 'KDS Aktif' : 'KDS Dinonaktifkan'}
-                        </span>
+              {/* PENGATURAN KDS (KITCHEN DISPLAY SYSTEM) - HANYA UNTUK KAFE / F&B */}
+              {isCafe && (
+                <div className="bg-gradient-to-r from-indigo-900 to-slate-900 rounded-2xl p-5 text-white shadow-md relative overflow-hidden">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+                        <ChefHat size={22} />
                       </div>
-                      <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
-                        Jika Anda ingin operasional 100% menggunakan tiket fisik cetak tanpa layar monitor dapur, Anda dapat menonaktifkan KDS agar kasir tidak terbebani proses manual di dapur.
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-black text-sm text-white">Layar Dapur (Kitchen Display System / KDS)</h4>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${formData.enableKDS ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
+                            {formData.enableKDS ? 'KDS Aktif' : 'KDS Dinonaktifkan'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                          Jika Anda ingin operasional 100% menggunakan tiket fisik cetak tanpa layar monitor dapur, Anda dapat menonaktifkan KDS agar kasir tidak terbebani proses manual di dapur.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-white/5 p-3.5 rounded-xl border border-white/10 shrink-0">
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox" 
+                          name="enableKDS" 
+                          className="w-4 h-4 rounded border-slate-400 text-indigo-500 focus:ring-indigo-400" 
+                          checked={formData.enableKDS ?? true} 
+                          onChange={handleChange}
+                        />
+                        <span className="text-xs font-bold text-white">Tampilkan Menu KDS</span>
+                      </label>
+
+                      <div className="hidden sm:block w-px h-6 bg-white/20"></div>
+
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox" 
+                          name="autoCompleteKDSOnPay" 
+                          className="w-4 h-4 rounded border-slate-400 text-amber-400 focus:ring-amber-400" 
+                          checked={formData.autoCompleteKDSOnPay ?? true} 
+                          onChange={handleChange}
+                        />
+                        <span className="text-xs font-bold text-amber-300">Auto Selesaikan saat Bayar</span>
+                      </label>
                     </div>
                   </div>
-
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-white/5 p-3.5 rounded-xl border border-white/10 shrink-0">
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        name="enableKDS" 
-                        className="w-4 h-4 rounded border-slate-400 text-indigo-500 focus:ring-indigo-400" 
-                        checked={formData.enableKDS ?? true} 
-                        onChange={handleChange}
-                      />
-                      <span className="text-xs font-bold text-white">Tampilkan Menu KDS</span>
-                    </label>
-
-                    <div className="hidden sm:block w-px h-6 bg-white/20"></div>
-
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                      <input 
-                        type="checkbox" 
-                        name="autoCompleteKDSOnPay" 
-                        className="w-4 h-4 rounded border-slate-400 text-amber-400 focus:ring-amber-400" 
-                        checked={formData.autoCompleteKDSOnPay ?? true} 
-                        onChange={handleChange}
-                      />
-                      <span className="text-xs font-bold text-amber-300">Auto Selesaikan saat Bayar</span>
-                    </label>
-                  </div>
                 </div>
-              </div>
+              )}
               
-              {/* 3 PRINTER CARDS: KASIR, DAPUR, BAR */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* PRINTER CARDS: KASIR, DAPUR, BAR */}
+              <div className={`grid grid-cols-1 ${!isCafe ? 'max-w-xl' : 'md:grid-cols-3'} gap-5`}>
                 
                 {/* 1. PRINTER KASIR */}
                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
@@ -991,8 +1008,10 @@ const SettingsView = () => {
                   </div>
                 </div>
 
-                {/* 2. PRINTER DAPUR (FOOD) */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
+                {/* 2. PRINTER DAPUR & BAR (ONLY FOR CAFE / F&B) */}
+                {isCafe && (
+                  <>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 relative overflow-hidden">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
@@ -1116,110 +1135,162 @@ const SettingsView = () => {
                     </label>
                   </div>
                 </div>
+              </>
+            )}
 
               </div>
 
-              {/* MAPPING KATEGORI MENU KE TARGET PRINTER */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
-                      <Layers size={18} className="text-indigo-600" />
-                      Routing Kategori Menu ke Printer Tujuan
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">Tentukan kemana struk pesanan per kategori menu akan otomatis diarahkan.</p>
+              {/* MAPPING KATEGORI MENU KE TARGET PRINTER (ONLY FOR CAFE / F&B) */}
+              {isCafe && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                        <Layers size={18} className="text-indigo-600" />
+                        Routing Kategori Menu ke Printer Tujuan
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Tentukan kemana struk pesanan per kategori menu akan otomatis diarahkan.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {categories.map((cat) => {
+                      const target = cat.printerTarget || 'KITCHEN';
+                      return (
+                        <div key={cat.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3">
+                          <div className="font-bold text-xs text-slate-800">{cat.name}</div>
+                          <select 
+                            className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border cursor-pointer outline-none transition-all ${
+                              target === 'KITCHEN' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                              (target === 'BAR' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-300')
+                            }`}
+                            value={target}
+                            onChange={(e) => handleUpdateCategoryTarget(cat.id, e.target.value)}
+                          >
+                            <option value="KITCHEN">🍳 Dapur (Makanan)</option>
+                            <option value="BAR">🍹 Bar (Minuman Racikan)</option>
+                            <option value="NONE">🥤 Showcase / Kasir Saja</option>
+                          </select>
+                        </div>
+                      );
+                    })}
+                    {categories.length === 0 && (
+                      <div className="col-span-full text-center py-4 text-xs text-slate-400">
+                        Memuat daftar kategori menu...
+                      </div>
+                    )}
                   </div>
                 </div>
+              )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {categories.map((cat) => {
-                    const target = cat.printerTarget || 'KITCHEN';
-                    return (
-                      <div key={cat.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 flex items-center justify-between gap-3">
-                        <div className="font-bold text-xs text-slate-800">{cat.name}</div>
-                        <select 
-                          className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border cursor-pointer outline-none transition-all ${
-                            target === 'KITCHEN' ? 'bg-amber-100 text-amber-800 border-amber-300' :
-                            (target === 'BAR' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-700 border-slate-300')
-                          }`}
-                          value={target}
-                          onChange={(e) => handleUpdateCategoryTarget(cat.id, e.target.value)}
-                        >
-                          <option value="KITCHEN">🍳 Dapur (Makanan)</option>
-                          <option value="BAR">🍹 Bar (Minuman Racikan)</option>
-                          <option value="NONE">🥤 Showcase / Kasir Saja</option>
-                        </select>
-                      </div>
-                    );
-                  })}
-                  {categories.length === 0 && (
-                    <div className="col-span-full text-center py-4 text-xs text-slate-400">
-                      Memuat daftar kategori menu...
-                    </div>
-                  )}
-                </div>
-              </div>
               
               {/* HEADER & FOOTER FORMAT STRUK */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <div className="space-y-5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Pembuka Struk (Header)</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+                      {isRental ? 'Pesan Pembuka Nota Kontrak Sewa (Header)' : 'Pesan Pembuka Struk (Header)'}
+                    </label>
                     <textarea 
                       name="receiptHeader" 
                       rows={3} 
                       className="form-control text-sm" 
                       value={formData.receiptHeader} 
                       onChange={handleChange}
-                      placeholder="Contoh: Selamat Datang di MUKI RAMEN! Nikmati hidangan autentik kami."
+                      placeholder={isRental ? "Contoh: SANGGAR BUSANA ADAT BUGIS — Syarat: Wajib menjaga keutuhan kain & aksesoris adat." : "Contoh: Selamat Datang di MUKI RAMEN! Nikmati hidangan autentik kami."}
                     ></textarea>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris teratas struk printer setelah nama restoran.</p>
+                    <p className="text-[10px] font-semibold text-slate-400 mt-1">
+                      {isRental ? 'Muncul di baris teratas nota kontrak sewa setelah nama sanggar busana.' : 'Muncul di baris teratas struk printer setelah nama restoran.'}
+                    </p>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pesan Penutup Struk (Footer)</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+                      {isRental ? 'Pesan Penutup & Klausul Nota (Footer)' : 'Pesan Penutup Struk (Footer)'}
+                    </label>
                     <textarea 
                       name="receiptFooter" 
                       rows={3} 
                       className="form-control text-sm" 
                       value={formData.receiptFooter} 
                       onChange={handleChange}
-                      placeholder="Contoh: Arigatou Gozaimasu! Follow Instagram @mukiramen.id"
+                      placeholder={isRental ? "Contoh: Pengembalian H+1 maks pukul 17:00 WITA. Busana sutra dicuci khusus oleh sanggar (penyewa tidak perlu mencuci)." : "Contoh: Arigatou Gozaimasu! Follow Instagram @mukiramen.id"}
                     ></textarea>
-                    <p className="text-[10px] font-semibold text-slate-400 mt-1">Muncul di baris paling bawah struk belanja setelah rincian total bayar.</p>
+                    <p className="text-[10px] font-semibold text-slate-400 mt-1">
+                      {isRental ? 'Muncul di bagian bawah nota sewa sebagai pengingat batas pengembalian dan jaminan.' : 'Muncul di baris paling bawah struk belanja setelah rincian total bayar.'}
+                    </p>
                   </div>
                 </div>
 
                 {/* Preview Struk Premium */}
                 <div className="flex flex-col items-center justify-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-inner">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-amber-500 animate-pulse" /> Live Preview Struk Kasir
+                    <Sparkles size={12} className="text-amber-500 animate-pulse" /> {isRental ? 'Live Preview Nota Sewa Busana' : 'Live Preview Struk Kasir'}
                   </div>
                   
                   {/* Mock Receipt Container */}
                   <div className="bg-white w-64 p-5 font-mono text-[10px] text-slate-700 shadow-lg border border-slate-200 relative">
-                    <div className="font-black text-center text-xs text-slate-800 uppercase tracking-wide mb-1">{formData.storeName || 'MUKI RAMEN'}</div>
-                    <div className="text-center text-[8px] text-slate-400 mb-2 leading-tight whitespace-pre-wrap">{formData.address || 'Jl. Senopati No. 88, Jakarta Selatan'}</div>
+                    <div className="font-black text-center text-xs text-slate-800 uppercase tracking-wide mb-1">
+                      {formData.storeName || (isRental ? 'SANGGAR BUSANA ADAT BUGIS' : 'MUKI RAMEN')}
+                    </div>
+                    <div className="text-center text-[8px] text-slate-400 mb-2 leading-tight whitespace-pre-wrap">
+                      {formData.address || (isRental ? 'Jl. Somba Opu No. 45, Makassar' : 'Jl. Senopati No. 88, Jakarta Selatan')}
+                    </div>
                     
-                    {formData.receiptHeader && (
+                    {formData.receiptHeader ? (
                       <div className="border-b border-dashed border-slate-300 text-center mb-2 pb-2 text-[8px] text-slate-500 italic whitespace-pre-wrap">
                         {formData.receiptHeader}
                       </div>
+                    ) : (
+                      isRental && (
+                        <div className="border-b border-dashed border-slate-300 text-center mb-2 pb-2 text-[8px] text-indigo-700 font-bold tracking-wider">
+                          *** NOTA KONTRAK SEWA BUSANA ***
+                        </div>
+                      )
                     )}
                     
-                    <div className="text-left space-y-1 my-3">
-                      <div className="flex justify-between"><span>2x Tori Paitan Ramen</span><span>116.000</span></div>
-                      <div className="flex justify-between"><span>1x Gyoza Panggang</span><span>28.000</span></div>
-                      <div className="flex justify-between"><span>2x Ocha Dingin</span><span>24.000</span></div>
-                    </div>
+                    {isRental ? (
+                      <div className="text-left space-y-1.5 my-3 text-[9px]">
+                        <div className="flex justify-between font-bold text-slate-800">
+                          <span>1x Baju Bodo Tokko VIP (3 Hari)</span>
+                          <span>250.000</span>
+                        </div>
+                        <div className="text-[7.5px] text-slate-400 pl-2">Kode: BD-001 (Merah Maroon, Sz M)</div>
+
+                        <div className="flex justify-between font-bold text-slate-800">
+                          <span>1x Set Aksesoris Pengantin</span>
+                          <span>100.000</span>
+                        </div>
+                        <div className="text-[7.5px] text-slate-400 pl-2">Saloko, Keris Tataroppa, Kalung</div>
+
+                        <div className="border-t border-dotted border-slate-200 pt-1 flex justify-between text-indigo-700 font-bold">
+                          <span>Uang Jaminan / Deposit</span>
+                          <span>150.000</span>
+                        </div>
+                        <div className="text-[7.5px] text-indigo-500 pl-2">*Refundable saat busana kembali utuh</div>
+                      </div>
+                    ) : (
+                      <div className="text-left space-y-1 my-3">
+                        <div className="flex justify-between"><span>2x Tori Paitan Ramen</span><span>116.000</span></div>
+                        <div className="flex justify-between"><span>1x Gyoza Panggang</span><span>28.000</span></div>
+                        <div className="flex justify-between"><span>2x Ocha Dingin</span><span>24.000</span></div>
+                      </div>
+                    )}
                     
                     <div className="border-t border-dashed border-slate-300 mt-2 pt-2 text-right font-black text-slate-800 text-[11px]">
-                      TOTAL: Rp 184.800
+                      {isRental ? 'TOTAL TAGIHAN: Rp 500.000' : 'TOTAL: Rp 184.800'}
                     </div>
 
-                    {formData.receiptFooter && (
+                    {formData.receiptFooter ? (
                       <div className="border-t border-dashed border-slate-300 mt-3 pt-2 text-center text-[8px] text-slate-500 italic whitespace-pre-wrap">
                         {formData.receiptFooter}
                       </div>
+                    ) : (
+                      isRental && (
+                        <div className="border-t border-dashed border-slate-300 mt-3 pt-2 text-center text-[7.5px] text-slate-500 leading-tight">
+                          Jatuh Tempo: H+1 jam 17:00 WITA<br/>
+                          Pakaian sutra dicuci khusus oleh sanggar.
+                        </div>
+                      )
                     )}
                   </div>
                 </div>
@@ -1234,8 +1305,12 @@ const SettingsView = () => {
                   <Percent size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">Pengaturan Pajak & Service Charge</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Konfigurasi persentase PPN (PB1) dan biaya layanan restoran.</p>
+                  <h3 className="text-base font-bold text-slate-800">
+                    {isRental ? 'Pengaturan Pajak Sewa & Biaya Tambahan' : 'Pengaturan Pajak & Service Charge'}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {isRental ? 'Konfigurasi persentase tarif PPN/pajak sewa busana (opsional).' : 'Konfigurasi persentase PPN (PB1) dan biaya layanan restoran.'}
+                  </p>
                 </div>
               </div>
               
@@ -1243,14 +1318,17 @@ const SettingsView = () => {
                 <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 text-xs font-semibold text-indigo-800 flex items-start gap-3">
                   <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
                   <div>
-                    Konfigurasi persentase pajak dan layanan ini akan otomatis ditambahkan ke kalkulasi akhir pada modul Kasir POS dan struk penjualan. 
-                    Isi angka **0** jika tidak ingin membebankan biaya tambahan ke pelanggan.
+                    {isRental 
+                      ? 'Konfigurasi pajak ini akan otomatis diperhitungkan pada nota kontrak sewa dan kwitansi kasir. Isi angka 0 jika tidak memungut pajak.'
+                      : 'Konfigurasi persentase pajak dan layanan ini akan otomatis ditambahkan ke kalkulasi akhir pada modul Kasir POS dan struk penjualan. Isi angka 0 jika tidak ingin membebankan biaya tambahan ke pelanggan.'}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className={`grid grid-cols-1 ${isRental ? 'max-w-xs' : 'sm:grid-cols-2'} gap-5`}>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Pajak (PPN / PB1) %</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">
+                      {isRental ? 'Pajak Sewa (PPN) %' : 'Pajak (PPN / PB1) %'}
+                    </label>
                     <div className="relative">
                       <input 
                         type="number" 
@@ -1264,21 +1342,23 @@ const SettingsView = () => {
                       <span className="absolute right-4 top-3.5 font-bold text-slate-400">%</span>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Service Charge %</label>
-                    <div className="relative">
-                      <input 
-                        type="number" 
-                        name="serviceCharge" 
-                        className="form-control pl-4 pr-10 font-bold text-lg text-slate-800" 
-                        value={formData.serviceCharge} 
-                        onChange={handleChange} 
-                        placeholder="0"
-                        min="0"
-                      />
-                      <span className="absolute right-4 top-3.5 font-bold text-slate-400">%</span>
+                  {!isRental && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider">Service Charge %</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          name="serviceCharge" 
+                          className="form-control pl-4 pr-10 font-bold text-lg text-slate-800" 
+                          value={formData.serviceCharge} 
+                          onChange={handleChange} 
+                          placeholder="0"
+                          min="0"
+                        />
+                        <span className="absolute right-4 top-3.5 font-bold text-slate-400">%</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="pt-6 border-t border-slate-100">
@@ -1291,10 +1371,13 @@ const SettingsView = () => {
                       onChange={handleChange} 
                     />
                     <div>
-                      <div className="font-bold text-sm text-slate-800">Harga Menu Termasuk Pajak (Include Tax)</div>
+                      <div className="font-bold text-sm text-slate-800">
+                        {isRental ? 'Tarif Sewa Termasuk Pajak (Include Tax)' : 'Harga Menu Termasuk Pajak (Include Tax)'}
+                      </div>
                       <div className="text-xs text-slate-400 mt-1">
-                        Aktifkan opsi ini jika harga produk yang Anda input di menu **Produk** sudah bersih/termasuk PPN di dalamnya. 
-                        Sistem POS akan mengkalkulasikan DPP (Dasar Pengenaan Pajak) secara otomatis ke belakang layar.
+                        {isRental
+                          ? 'Aktifkan opsi ini jika tarif sewa pakaian pada katalog sudah termasuk PPN di dalamnya. Sistem kasir akan menghitung DPP secara otomatis.'
+                          : 'Aktifkan opsi ini jika harga produk yang Anda input di menu Produk sudah bersih/termasuk PPN di dalamnya. Sistem POS akan mengkalkulasikan DPP (Dasar Pengenaan Pajak) secara otomatis ke belakang layar.'}
                       </div>
                     </div>
                   </label>
@@ -1310,8 +1393,14 @@ const SettingsView = () => {
                   <Settings size={18} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">Fitur Tambahan POS</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Personalisasikan fungsionalitas dan fitur penunjang operasional kasir.</p>
+                  <h3 className="text-base font-bold text-slate-800">
+                    {isRental ? 'Aturan & Operasional Sewa Busana' : 'Fitur Tambahan POS'}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {isRental 
+                      ? 'Konfigurasi durasi sewa standar, denda keterlambatan harian, dan jaminan keamanan busana.' 
+                      : 'Personalisasikan fungsionalitas dan fitur penunjang operasional kasir.'}
+                  </p>
                 </div>
               </div>
 
@@ -1319,53 +1408,140 @@ const SettingsView = () => {
                 <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 text-xs font-semibold text-indigo-800 flex items-start gap-3">
                   <Info size={16} className="text-indigo-600 shrink-0 mt-0.5" />
                   <div>
-                    Mengaktifkan fitur-fitur di bawah ini akan menambahkan parameter opsional pada saat kasir membuat pesanan makanan/minuman di terminal POS.
+                    {isRental 
+                      ? 'Aturan operasional ini berlaku sebagai parameter default saat kasir membuat kontrak persewaan baju adat baru dan pencetakan nota perjanjian.' 
+                      : 'Mengaktifkan fitur-fitur di bawah ini akan menambahkan parameter opsional pada saat kasir membuat pesanan makanan/minuman di terminal POS.'}
                   </div>
                 </div>
 
-                {/* Drink Customization Toggle Card */}
-                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableDrinkCustomization ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm`}>
-                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
-                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                          <Coffee size={16} className="text-indigo-600" />
-                          <span>Kustomisasi Minuman (Sugar, Ice, Temperature)</span>
-                        </span>
-                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.enableDrinkCustomization ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {formData.enableDrinkCustomization ? '✓ AKTIF' : 'NONAKTIF'}
-                        </span>
+                {/* RENTAL OPERATIONAL POLICIES CARD */}
+                {isRental && (
+                  <div className="bg-white p-5 rounded-2xl border border-indigo-200/80 shadow-sm space-y-5">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                          <Shirt size={18} />
+                        </div>
+                        <div>
+                          <div className="font-black text-sm text-slate-800">Kebijakan & Operasional Sewa Busana</div>
+                          <div className="text-[11px] text-slate-400">Aturan durasi peminjaman, denda keterlambatan harian, dan jaminan keamanan</div>
+                        </div>
                       </div>
-                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                        Tampilkan opsi pilihan level gula, jumlah es, dan suhu (panas/dingin) saat kasir memasukkan item minuman ke keranjang belanja POS.
-                      </p>
+                      <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        SOP SANGGAR
+                      </span>
                     </div>
 
-                    <div className="relative mt-1 shrink-0">
-                      <input
-                        type="checkbox"
-                        name="enableDrinkCustomization"
-                        className="sr-only"
-                        checked={formData.enableDrinkCustomization}
-                        onChange={handleChange}
-                      />
-                      <div
-                        style={{
-                          width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
-                          background: formData.enableDrinkCustomization ? '#4f46e5' : '#cbd5e1',
-                          transition: 'background 0.2s', position: 'relative',
-                        }}
-                      >
-                        <div style={{
-                          position: 'absolute', top: 3,
-                          left: formData.enableDrinkCustomization ? 23 : 3,
-                          width: 18, height: 18, borderRadius: '50%', background: 'white',
-                          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                        }} />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Durasi Sewa Standar */}
+                      <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-1.5">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Durasi Sewa Default</label>
+                        <div className="flex items-center gap-1.5">
+                          <input 
+                            type="number" 
+                            name="rentalDefaultDays" 
+                            className="form-control text-sm font-bold w-20 text-center" 
+                            value={(formData as any).rentalDefaultDays || 3} 
+                            onChange={handleChange}
+                            min="1"
+                            max="30"
+                          />
+                          <span className="text-xs font-bold text-slate-600">Hari</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400">Default 3 hari: H-1 Ambil, Hari H, H+1 Kembali.</p>
+                      </div>
+
+                      {/* Denda Keterlambatan per Hari */}
+                      <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-1.5">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Denda Telat / Hari</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                          <input 
+                            type="number" 
+                            name="rentalLateFeePerDay" 
+                            className="form-control text-sm font-bold pl-9" 
+                            value={(formData as any).rentalLateFeePerDay || 50000} 
+                            onChange={handleChange}
+                            step="5000"
+                            min="0"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400">Dihitung otomatis saat melewati batas waktu.</p>
+                      </div>
+
+                      {/* Standar Uang Jaminan / Deposit */}
+                      <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 space-y-1.5">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Standar Uang Jaminan</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                          <input 
+                            type="number" 
+                            name="rentalDepositAmount" 
+                            className="form-control text-sm font-bold pl-9" 
+                            value={(formData as any).rentalDepositAmount || 150000} 
+                            onChange={handleChange}
+                            step="10000"
+                            min="0"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400">Uang deposit / jaminan (refundable).</p>
                       </div>
                     </div>
-                  </label>
-                </div>
+
+                    <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/70 text-xs font-medium text-amber-800 flex items-start gap-2.5">
+                      <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Klausul Perawatan Pakaian Sutra:</strong> Pada vertikal RENTAL, penyewa diwajibkan mengembalikan pakaian tanpa dicuci sendiri demi menjaga keaslian serat benang emas dan sutra Bugis. Pencucian &amp; uap dilakukan steril oleh tim sanggar.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Drink Customization Toggle Card (ONLY FOR CAFE / F&B) */}
+                {!isRental && (
+                  <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableDrinkCustomization ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm`}>
+                    <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                      <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                            <Coffee size={16} className="text-indigo-600" />
+                            <span>Kustomisasi Minuman (Sugar, Ice, Temperature)</span>
+                          </span>
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${formData.enableDrinkCustomization ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                            {formData.enableDrinkCustomization ? '✓ AKTIF' : 'NONAKTIF'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                          Tampilkan opsi pilihan level gula, jumlah es, dan suhu (panas/dingin) saat kasir memasukkan item minuman ke keranjang belanja POS.
+                        </p>
+                      </div>
+
+                      <div className="relative mt-1 shrink-0">
+                        <input
+                          type="checkbox"
+                          name="enableDrinkCustomization"
+                          className="sr-only"
+                          checked={formData.enableDrinkCustomization}
+                          onChange={handleChange}
+                        />
+                        <div
+                          style={{
+                            width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                            background: formData.enableDrinkCustomization ? '#4f46e5' : '#cbd5e1',
+                            transition: 'background 0.2s', position: 'relative',
+                          }}
+                        >
+                          <div style={{
+                            position: 'absolute', top: 3,
+                            left: formData.enableDrinkCustomization ? 23 : 3,
+                            width: 18, height: 18, borderRadius: '50%', background: 'white',
+                            transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }} />
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
 
                 {/* Blind Cash Drawer Count Toggle Card */}
                 <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableBlindClose ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm mt-4`}>
@@ -1411,49 +1587,51 @@ const SettingsView = () => {
                   </label>
                 </div>
 
-                {/* High-Precision Mode Toggle Card */}
-                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${highPrecisionMode ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm mt-4`}>
-                  <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
-                    <div className="space-y-1.5 flex-1 min-w-0 pr-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                          <Sliders size={16} className="text-indigo-600" />
-                          <span>Mode Presisi Tinggi (Hardware & Sistem Ketat)</span>
-                        </span>
-                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${highPrecisionMode ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                          {highPrecisionMode ? '✓ AKTIF' : 'NONAKTIF'}
-                        </span>
+                {/* High-Precision Mode Toggle Card (ONLY FOR NON-RENTAL) */}
+                {!isRental && (
+                  <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${highPrecisionMode ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm mt-4`}>
+                    <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+                      <div className="space-y-1.5 flex-1 min-w-0 pr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                            <Sliders size={16} className="text-indigo-600" />
+                            <span>Mode Presisi Tinggi (Hardware & Sistem Ketat)</span>
+                          </span>
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${highPrecisionMode ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                            {highPrecisionMode ? '✓ AKTIF' : 'NONAKTIF'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                          Aktifkan untuk terminal kasir utama yang membutuhkan kontrol fisik ketat, cetak matrix bluetooth, pembukaan laci kas RJ11, dan kiosk mode.
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                        Aktifkan untuk terminal kasir utama yang membutuhkan kontrol fisik ketat, cetak matrix bluetooth, pembukaan laci kas RJ11, dan kiosk mode.
-                      </p>
-                    </div>
 
-                    <div className="relative mt-1 shrink-0">
-                      <input
-                        type="checkbox"
-                        name="highPrecisionMode"
-                        className="sr-only"
-                        checked={highPrecisionMode}
-                        onChange={handleHighPrecisionChange}
-                      />
-                      <div
-                        style={{
-                          width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
-                          background: highPrecisionMode ? '#4f46e5' : '#cbd5e1',
-                          transition: 'background 0.2s', position: 'relative',
-                        }}
-                      >
-                        <div style={{
-                          position: 'absolute', top: 3,
-                          left: highPrecisionMode ? 23 : 3,
-                          width: 18, height: 18, borderRadius: '50%', background: 'white',
-                          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                        }} />
+                      <div className="relative mt-1 shrink-0">
+                        <input
+                          type="checkbox"
+                          name="highPrecisionMode"
+                          className="sr-only"
+                          checked={highPrecisionMode}
+                          onChange={handleHighPrecisionChange}
+                        />
+                        <div
+                          style={{
+                            width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                            background: highPrecisionMode ? '#4f46e5' : '#cbd5e1',
+                            transition: 'background 0.2s', position: 'relative',
+                          }}
+                        >
+                          <div style={{
+                            position: 'absolute', top: 3,
+                            left: highPrecisionMode ? 23 : 3,
+                            width: 18, height: 18, borderRadius: '50%', background: 'white',
+                            transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }} />
+                        </div>
                       </div>
-                    </div>
-                  </label>
-                </div>
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1697,13 +1875,174 @@ const SettingsView = () => {
           {/* â”€â”€â”€ Tab Inventaris â”€â”€â”€ */}
           {activeTab === 'inventaris' && (
             <div className="space-y-8 animate-fade-in">
-              <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600"><PackageSearch size={18} /></div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">Mode Inventaris & Pelacakan Bahan Baku</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Pilih cara sistem mengelola stok dan menghitung HPP (Harga Pokok Produksi).</p>
+              <div className="border-b border-slate-100 pb-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <PackageSearch size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-800">
+                      {isRental ? 'Manajemen Aset Busana & Kebijakan Perawatan' : 'Mode Inventaris & Pelacakan Bahan Baku'}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {isRental 
+                        ? 'Siklus hidup busana adat, standarisasi uap sutra, dan pelacakan kelengkapan aksesoris.' 
+                        : 'Pilih cara sistem mengelola stok dan menghitung HPP (Harga Pokok Produksi).'}
+                    </p>
+                  </div>
                 </div>
+
+                {isRental && (
+                  <button
+                    type="button"
+                    onClick={() => window.location.href = '/rental-inventory'}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Shirt size={15} />
+                    <span>Buka Inventaris Busana</span>
+                  </button>
+                )}
               </div>
+
+              {isRental ? (
+                <div className="space-y-6 max-w-4xl">
+                  {/* SIKLUS ASET BUSANA ADAT */}
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={18} className="text-amber-500" />
+                        <h4 className="font-black text-sm text-slate-800">Alur Standar Siklus Aset Busana Sanggar</h4>
+                      </div>
+                      <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        6 TAHAP STANDAR OPERASIONAL
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/70 space-y-1">
+                        <div className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">Tahap 1</div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          <span>Tersedia di Lemari</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Busana bersih tergantung di hanger berkode siap dipilih dan difitting oleh calon pengantin atau tamu.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/70 space-y-1">
+                        <div className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">Tahap 2</div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                          <span>Dibooking / Fitting</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Klien membayar DP atau lunas, menentukan tanggal acara pernikahan, dan busana dikunci dari peminjam lain.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/70 space-y-1">
+                        <div className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">Tahap 3</div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                          <span>Dibawa Klien (Acara)</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Penyewa mengambil pakaian lengkap bersama aksesoris (saloko, keris) dengan menitipkan jaminan/KTP.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/70 space-y-1">
+                        <div className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">Tahap 4</div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                          <span>Kembali (QC Fisik)</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Pemeriksaan kondisi kain sutra, noda make-up, kelengkapan permata aksesoris, dan perhitungan denda bila telat.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/70 space-y-1">
+                        <div className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">Tahap 5</div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
+                          <span>Cuci &amp; Uap Sutra</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Perawatan dry clean atau steaming uap khusus sutra tanpa mesin cuci putar agar serat benang emas awet.
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/70 space-y-1">
+                        <div className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">Tahap 6</div>
+                        <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                          <span>Restock Siap Sewa</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Aset kembali berstatus Tersedia dan siap direntalkan kembali untuk acara hajatan berikutnya.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SOP PERAWATAN KAIN SUTRA BUGIS & AKSESORIS */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-5 rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50/50 to-white space-y-2">
+                      <div className="flex items-center gap-2 font-black text-xs text-indigo-900">
+                        <ShieldCheck size={16} className="text-indigo-600" />
+                        <span>SOP Kain Sutra Sengkang &amp; Baju Bodo</span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Kain sutra asli dan tenun benang emas Bugis <strong>pantang terkena deterjen berklorin</strong> atau perasan mesin cuci. Sanggar menggunakan teknologi steamer uap panas vertikal untuk mensterilkan kain sekaligus menghilangkan kusut tanpa merusak serat.
+                      </p>
+                    </div>
+
+                    <div className="p-5 rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50/50 to-white space-y-2">
+                      <div className="flex items-center gap-2 font-black text-xs text-amber-900">
+                        <Award size={16} className="text-amber-600" />
+                        <span>Perawatan Aksesoris Kuningan &amp; Permata</span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Saloko (mahkota), keris tataroppa, bando banna, dan kalung berunang dilap kering dengan kain microfiber halus setelah pemakaian. Simpan dalam kotak beludru bersekat dengan silica gel untuk mencegah oksidasi warna emas.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* SHORTCUT ACTIONS */}
+                  <div className="p-5 rounded-3xl border border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                        <Boxes size={20} />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-slate-800">Kelola Koleksi Pakaian &amp; Nomor Hanger</div>
+                        <div className="text-[11px] text-slate-400">Tambahkan busana baru, ukuran, tarif sewa harian, foto, dan stok aksesoris.</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => window.location.href = '/rental-inventory'}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Shirt size={14} />
+                        <span>Katalog Busana</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => window.location.href = '/rental-kanban'}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Layers size={14} />
+                        <span>Papan Sewa</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: false }))} className="cursor-pointer"
                   style={{ border: !formData.ingredientTrackingEnabled ? '2.5px solid #4f46e5' : '2px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', background: !formData.ingredientTrackingEnabled ? '#f5f3ff' : 'white', transition: 'all .2s' }}>
@@ -1747,68 +2086,70 @@ const SettingsView = () => {
                 </p>
               </div>
 
-              {/* Kontrol Dapur & Mode Audit Opsional */}
-              <div className="pt-6 border-t border-slate-100 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
-                    <ShieldAlert size={18} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800">Kontrol Dapur & Mode Audit Inventaris (Opsional)</h4>
-                    <p className="text-xs text-slate-400">Atur tingkat detail pencatatan bahan sisa/waste agar staf dapur tetap nyaman dan tidak terbebani.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Mode Audit Detail Toggle */}
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                        <Flame size={16} className="text-rose-500" />
-                        <span>Mode Audit Detail Dapur</span>
-                      </span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="enableKitchenAuditMode"
-                          checked={formData.enableKitchenAuditMode || false}
-                          onChange={handleChange}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
-                      </label>
+              {/* Kontrol Dapur & Mode Audit Opsional (HANYA KAFE / F&B) */}
+              {isCafe && (
+                <div className="pt-6 border-t border-slate-100 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
+                      <ShieldAlert size={18} />
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      {formData.enableKitchenAuditMode 
-                        ? '🟢 AKTIF: Dapur dapat memilih tombol cepat alasan kerugian (Gosong, Tumpah, Basi, dll) untuk audit performa per koki.' 
-                        : '⚪ NONAKTIF (Mode Cepat): Staf dapur cukup 1-klik kurangi/tambah stok biasa tanpa form berbelit-belit.'}
-                    </p>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-800">Kontrol Dapur & Mode Audit Inventaris (Opsional)</h4>
+                      <p className="text-xs text-slate-400">Atur tingkat detail pencatatan bahan sisa/waste agar staf dapur tetap nyaman dan tidak terbebani.</p>
+                    </div>
                   </div>
 
-                  {/* Staff Meal Tracking Toggle */}
-                  <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                        <Utensils size={16} className="text-emerald-500" />
-                        <span>Pencatatan Makan Karyawan (Staff Meal)</span>
-                      </span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="enableStaffMealTracking"
-                          checked={formData.enableStaffMealTracking !== false}
-                          onChange={handleChange}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                      </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Mode Audit Detail Toggle */}
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                          <Flame size={16} className="text-rose-500" />
+                          <span>Mode Audit Detail Dapur</span>
+                        </span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            name="enableKitchenAuditMode"
+                            checked={formData.enableKitchenAuditMode || false}
+                            onChange={handleChange}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        {formData.enableKitchenAuditMode 
+                          ? '🟢 AKTIF: Dapur dapat memilih tombol cepat alasan kerugian (Gosong, Tumpah, Basi, dll) untuk audit performa per koki.' 
+                          : '⚪ NONAKTIF (Mode Cepat): Staf dapur cukup 1-klik kurangi/tambah stok biasa tanpa form berbelit-belit.'}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      Mengizinkan dapur mencatat konsumsi resmi staf agar HPP makanan terpisah dari kerugian/waste dan stok tetap akurat.
-                    </p>
+
+                    {/* Staff Meal Tracking Toggle */}
+                    <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                          <Utensils size={16} className="text-emerald-500" />
+                          <span>Pencatatan Makan Karyawan (Staff Meal)</span>
+                        </span>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            name="enableStaffMealTracking"
+                            checked={formData.enableStaffMealTracking !== false}
+                            onChange={handleChange}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Mengizinkan dapur mencatat konsumsi resmi staf agar HPP makanan terpisah dari kerugian/waste dan stok tetap akurat.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Warehouse & Transfer Pricing Settings */}
               <div className="pt-6 border-t border-slate-100 space-y-4">
@@ -1817,8 +2158,12 @@ const SettingsView = () => {
                     <Boxes size={18} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-800">Gudang Pusat & Kebijakan Transfer Pricing ke Dapur</h4>
-                    <p className="text-xs text-slate-400">Tentukan harga transfer bahan baku saat dikirim dari Gudang Pusat ke Dapur Cabang.</p>
+                    <h4 className="text-sm font-bold text-slate-800">
+                      Gudang Pusat &amp; Kebijakan Transfer Pricing {isCafe ? 'ke Dapur' : 'ke Unit Cabang'}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Tentukan harga transfer {isCafe ? 'bahan baku saat dikirim dari Gudang Pusat ke Dapur Cabang.' : 'stok barang saat didistribusikan dari Gudang Pusat ke Unit Cabang.'}
+                    </p>
                   </div>
                 </div>
 
@@ -1920,8 +2265,10 @@ const SettingsView = () => {
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+          </>
+        )}
+      </div>
+    )}
 
           {/* ─── Tab Printer Bluetooth ─── */}
           {activeTab === 'printer_bt' && (
@@ -1972,10 +2319,10 @@ const SettingsView = () => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Smartphone className="text-amber-600" size={18} />
-                    <h4 className="text-sm font-black text-slate-900">Aplikasi PWA Staf & Dapur</h4>
+                    <h4 className="text-sm font-black text-slate-900">Aplikasi PWA Staf</h4>
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Staf dapat membuka <strong>{window.location.origin}/staff</strong> di browser smartphone untuk melakukan absensi selfie & input stok dapur.
+                    Staf dapat membuka <strong>{window.location.origin}/staff</strong> di browser smartphone untuk melakukan absensi selfie &amp; operasional harian.
                   </p>
                 </div>
                 <a
@@ -2421,152 +2768,198 @@ const SettingsView = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-800">Sistem Bagi Hasil & Bonus Omzet Karyawan</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Konfigurasi persentase profit sharing divisi Muki Ramen & Muki Drink, serta skema tier reward omzet harian.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {isRental
+                      ? 'Konfigurasi persentase profit sharing divisi Sewa Busana & Aksesoris/Rias, serta skema reward omzet harian.'
+                      : isBengkel
+                      ? 'Konfigurasi persentase profit sharing divisi Jasa Servis & Sparepart, serta skema reward omzet harian.'
+                      : isLaundry
+                      ? 'Konfigurasi persentase profit sharing divisi Laundry Kiloan & Satuan, serta skema reward omzet harian.'
+                      : isRetail
+                      ? 'Konfigurasi persentase profit sharing divisi Retail & Grosir, serta skema reward omzet harian.'
+                      : isCafe
+                      ? 'Konfigurasi persentase profit sharing divisi Makanan & Minuman, serta skema tier reward omzet harian.'
+                      : 'Konfigurasi persentase pembagian hasil usaha (profit sharing) antar divisi serta skema tier reward omzet harian.'}
+                  </p>
                 </div>
               </div>
 
               {/* ── BAGIAN 1: SISTEM BAGI HASIL USAHA (PROFIT SHARING) ── */}
-              <div className="p-5 sm:p-6 rounded-2xl border border-orange-200/80 bg-orange-50/30 space-y-6">
-                <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
-                  <ChefHat size={18} className="text-orange-600" />
-                  <span>I. Pembagian Hasil Usaha (Profit Sharing)</span>
-                </div>
+              {(() => {
+                const div1Title = isRental 
+                  ? 'Divisi Sewa Busana Adat' 
+                  : isBengkel 
+                  ? 'Divisi Jasa Servis & Mekanik' 
+                  : isLaundry 
+                  ? 'Divisi Laundry Kiloan' 
+                  : isRetail 
+                  ? 'Divisi Retail & Ecer' 
+                  : isCafe 
+                  ? 'Divisi Makanan (Food)' 
+                  : 'Divisi Utama (Layanan / Produk 1)';
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Divisi Muki Ramen */}
-                  <div className="p-4 rounded-xl bg-white border border-orange-200/90 shadow-sm space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
-                        <span className="text-base">🍜</span>
-                        <span>Divisi Muki Ramen (Makanan)</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-orange-100 text-orange-800">
-                        Total 100% Laba
-                      </span>
+                const div1Pj = isRental ? 'PJ Busana' : isBengkel ? 'PJ Servis' : isLaundry ? 'PJ Kiloan' : isRetail ? 'PJ Retail' : isCafe ? 'PJ Makanan' : 'PJ Divisi 1';
+                const div1Icon = isRental ? '👘' : isBengkel ? '🔧' : isLaundry ? '🧺' : isRetail ? '📦' : isCafe ? '🍜' : '⭐';
+
+                const div2Title = isRental 
+                  ? 'Divisi Aksesoris & Rias' 
+                  : isBengkel 
+                  ? 'Divisi Sparepart & Oli' 
+                  : isLaundry 
+                  ? 'Divisi Laundry Satuan & Dry Clean' 
+                  : isRetail 
+                  ? 'Divisi Grosir & Partai' 
+                  : isCafe 
+                  ? 'Divisi Minuman (Drink)' 
+                  : 'Divisi Pendukung (Layanan / Produk 2)';
+
+                const div2Pj = isRental ? 'PJ Aksesoris' : isBengkel ? 'PJ Sparepart' : isLaundry ? 'PJ Satuan' : isRetail ? 'PJ Grosir' : isCafe ? 'PJ Minuman' : 'PJ Divisi 2';
+                const div2Icon = isRental ? '✨' : isBengkel ? '⚙️' : isLaundry ? '👔' : isRetail ? '🛒' : isCafe ? '🍹' : '✨';
+
+                return (
+                  <div className="p-5 sm:p-6 rounded-2xl border border-orange-200/80 bg-orange-50/30 space-y-6">
+                    <div className="flex items-center gap-2 text-orange-800 font-bold text-sm">
+                      <Sliders size={18} className="text-orange-600" />
+                      <span>I. Pembagian Hasil Usaha (Profit Sharing)</span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
-                          Bagian PJ Ramen
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            name="profitSharingRamenPercent"
-                            className="form-control font-black text-orange-600 pr-7"
-                            value={formData.profitSharingRamenPercent ?? 20}
-                            onChange={handleChange}
-                            min={0}
-                            max={100}
-                            placeholder="20"
-                          />
-                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Divisi 1 */}
+                      <div className="p-4 rounded-xl bg-white border border-orange-200/90 shadow-sm space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
+                            <span className="text-base">{div1Icon}</span>
+                            <span>{div1Title}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-orange-100 text-orange-800">
+                            Total 100% Laba
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                              Bagian {div1Pj}
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                name="profitSharingRamenPercent"
+                                className="form-control font-black text-orange-600 pr-7"
+                                value={formData.profitSharingRamenPercent ?? 20}
+                                onChange={handleChange}
+                                min={0}
+                                max={100}
+                                placeholder="20"
+                              />
+                              <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                              Bagian Owner
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                className="form-control font-black text-indigo-700 bg-slate-100/80 pr-7 cursor-not-allowed"
+                                value={Math.max(0, 100 - (Number(formData.profitSharingRamenPercent) || 0))}
+                              />
+                              <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 bg-orange-50/60 rounded-lg text-xs font-semibold text-orange-900 border border-orange-100 flex items-center justify-between">
+                          <span>Rasio Bagi Hasil:</span>
+                          <strong className="font-bold text-orange-800">
+                            {Math.max(0, 100 - (Number(formData.profitSharingRamenPercent) || 0))}% Owner : {Number(formData.profitSharingRamenPercent) || 0}% {div1Pj}
+                          </strong>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
-                          Bagian Owner
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            readOnly
-                            disabled
-                            className="form-control font-black text-indigo-700 bg-slate-100/80 pr-7 cursor-not-allowed"
-                            value={Math.max(0, 100 - (Number(formData.profitSharingRamenPercent) || 0))}
-                          />
-                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                      {/* Divisi 2 */}
+                      <div className="p-4 rounded-xl bg-white border border-cyan-200/90 shadow-sm space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
+                            <span className="text-base">{div2Icon}</span>
+                            <span>{div2Title}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800">
+                            Total 100% Laba
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                              Bagian {div2Pj}
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                name="profitSharingDrinkPercent"
+                                className="form-control font-black text-cyan-600 pr-7"
+                                value={formData.profitSharingDrinkPercent ?? 20}
+                                onChange={handleChange}
+                                min={0}
+                                max={100}
+                                placeholder="20"
+                              />
+                              <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
+                              Bagian Owner
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                className="form-control font-black text-indigo-700 bg-slate-100/80 pr-7 cursor-not-allowed"
+                                value={Math.max(0, 100 - (Number(formData.profitSharingDrinkPercent) || 0))}
+                              />
+                              <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 bg-cyan-50/60 rounded-lg text-xs font-semibold text-cyan-900 border border-cyan-100 flex items-center justify-between">
+                          <span>Rasio Bagi Hasil:</span>
+                          <strong className="font-bold text-cyan-800">
+                            {Math.max(0, 100 - (Number(formData.profitSharingDrinkPercent) || 0))}% Owner : {Number(formData.profitSharingDrinkPercent) || 0}% {div2Pj}
+                          </strong>
                         </div>
                       </div>
                     </div>
 
-                    <div className="p-2.5 bg-orange-50/60 rounded-lg text-xs font-semibold text-orange-900 border border-orange-100 flex items-center justify-between">
-                      <span>Rasio Bagi Hasil:</span>
-                      <strong className="font-bold text-orange-800">
-                        {Math.max(0, 100 - (Number(formData.profitSharingRamenPercent) || 0))}% Owner : {Number(formData.profitSharingRamenPercent) || 0}% PJ Ramen
-                      </strong>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                        Mode Pembebanan Biaya Bersama (Shared OPEX: Listrik, Air, Wifi &amp; Operasional Rutin)
+                      </label>
+                      <select
+                        name="profitSharingOpexMode"
+                        className="form-control font-medium text-slate-800 bg-white"
+                        value={formData.profitSharingOpexMode || 'BEFORE_SPLIT'}
+                        onChange={handleChange}
+                      >
+                        <option value="BEFORE_SPLIT">Mode A (Rekomendasi): Dipotong Proporsional dari Omzet Sebelum Bagi Hasil</option>
+                        <option value="OWNER_COVERED">Mode B: Ditanggung Penuh oleh Owner (PJ Terima Bersih dari Omzet - Belanja Langsung)</option>
+                        <option value="SPLIT_50_50">Mode C: Split Beban (50% Owner : 25% {div1Pj} : 25% {div2Pj})</option>
+                      </select>
+                      <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                        Biaya operasional kas kecil seperti token listrik, air galon, internet wifi, serta kebutuhan operasional rutin akan dikurangkan secara otomatis berdasarkan opsi di atas.
+                      </p>
                     </div>
                   </div>
-
-                  {/* Divisi Muki Drink */}
-                  <div className="p-4 rounded-xl bg-white border border-cyan-200/90 shadow-sm space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
-                        <span className="text-base">🍹</span>
-                        <span>Divisi Muki Drink (Minuman)</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800">
-                        Total 100% Laba
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 pt-1">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
-                          Bagian PJ Drink
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            name="profitSharingDrinkPercent"
-                            className="form-control font-black text-cyan-600 pr-7"
-                            value={formData.profitSharingDrinkPercent ?? 20}
-                            onChange={handleChange}
-                            min={0}
-                            max={100}
-                            placeholder="20"
-                          />
-                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">
-                          Bagian Owner
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            readOnly
-                            disabled
-                            className="form-control font-black text-indigo-700 bg-slate-100/80 pr-7 cursor-not-allowed"
-                            value={Math.max(0, 100 - (Number(formData.profitSharingDrinkPercent) || 0))}
-                          />
-                          <span className="absolute right-2.5 top-2.5 text-xs font-bold text-slate-400">%</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 bg-cyan-50/60 rounded-lg text-xs font-semibold text-cyan-900 border border-cyan-100 flex items-center justify-between">
-                      <span>Rasio Bagi Hasil:</span>
-                      <strong className="font-bold text-cyan-800">
-                        {Math.max(0, 100 - (Number(formData.profitSharingDrinkPercent) || 0))}% Owner : {Number(formData.profitSharingDrinkPercent) || 0}% PJ Drink
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                    Mode Pembebanan Biaya Bersama (Shared OPEX: Listrik, Air, Gas, Kemasan, Wifi)
-                  </label>
-                  <select
-                    name="profitSharingOpexMode"
-                    className="form-control font-medium text-slate-800 bg-white"
-                    value={formData.profitSharingOpexMode || 'BEFORE_SPLIT'}
-                    onChange={handleChange}
-                  >
-                    <option value="BEFORE_SPLIT">Mode A (Rekomendasi): Dipotong Proporsional dari Omzet Sebelum Bagi Hasil</option>
-                    <option value="OWNER_COVERED">Mode B: Ditanggung Penuh oleh Owner (PJ Terima Bersih dari Omzet - Belanja Langsung)</option>
-                    <option value="SPLIT_50_50">Mode C: Split Beban (50% Owner : 25% PJ Ramen : 25% PJ Drink)</option>
-                  </select>
-                  <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                    Biaya operasional kas kecil seperti token listrik, air galon, tabung gas, kresek kemasan & tissue akan dikurangkan secara otomatis berdasarkan opsi di atas.
-                  </p>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* ── BAGIAN 2: SKEMA TIER REWARD BONUS OMZET HARIAN ── */}
               <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-6">

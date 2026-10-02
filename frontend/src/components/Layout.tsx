@@ -42,6 +42,7 @@ import {
   Store,
   LayoutGrid,
   Sliders,
+  Shirt,
   LogOut
 } from 'lucide-react';
 
@@ -63,6 +64,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     });
   };
   const location = useLocation();
+  const isPOSPage = location.pathname === '/pos';
 
   useEffect(() => {
     setIsUserMenuOpen(false);
@@ -126,7 +128,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const titleMap: Record<string, string> = {
     '/dashboard': 'Dashboard',
     '/pos': `POS - ${profile.orderTerm || 'Penjualan'}`,
+    '/rental-calendar': 'Kalender & Agenda Sewa Busana',
     '/rental-kanban': 'Papan Status Sewa Busana',
+    '/rental-inventory': 'Inventaris Busana & Ketersediaan Rak',
     '/meja': profile.tableTerm || 'Manajemen Meja',
     '/riwayat': 'Riwayat Transaksi',
     '/produk': profile.itemTerm || 'Katalog Produk',
@@ -267,15 +271,27 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </NavLink>
             )}
             {checkAccess(['Admin', 'Kasir']) && (
-              <NavLink to="/pos" title="POS / Penjualan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink to="/pos" title={isRental ? "POS Sewa Busana" : "POS / Penjualan"} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <ShoppingCart size={20} className="shrink-0" />
-                <span>POS / Penjualan</span>
+                <span>{isRental ? 'POS Sewa Busana' : 'POS / Penjualan'}</span>
+              </NavLink>
+            )}
+            {isRental && checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/rental-calendar" title="Kalender Sewa" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Calendar size={20} className="shrink-0 text-amber-400" />
+                <span>Kalender Sewa</span>
               </NavLink>
             )}
             {isRental && checkAccess(['Admin', 'Kasir']) && (
               <NavLink to="/rental-kanban" title="Papan Status Sewa" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Layers size={20} className="shrink-0 text-amber-400" />
                 <span>Status Sewa (Kanban)</span>
+              </NavLink>
+            )}
+            {isRental && checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/rental-inventory" title="Inventaris Busana" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Shirt size={20} className="shrink-0 text-yellow-400" />
+                <span>Inventaris Busana</span>
               </NavLink>
             )}
             {isKDSEnabled && checkAccess(['Admin', 'Dapur']) && (
@@ -303,7 +319,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 )}
               </NavLink>
             )}
-            {checkAccess(['Admin']) && (
+            {!isRental && checkAccess(['Admin']) && (
               <NavLink to="/produk" title={profile.itemTerm || 'Produk'} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Package size={20} className="shrink-0" />
                 <span>{profile.itemTerm || 'Produk'}</span>
@@ -468,7 +484,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </>
             ) : (
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
                   <LayoutGrid size={20} />
                 </div>
                 <div className="flex flex-col min-w-0">
@@ -595,7 +611,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
         
-        <div className="page-content flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden flex flex-col pb-24 md:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className={`page-content flex-1 min-h-0 w-full flex flex-col ${
+          isPOSPage ? 'overflow-hidden pb-[62px] md:pb-0' : 'overflow-y-auto overflow-x-hidden pb-24 md:pb-0'
+        }`} style={{ WebkitOverflowScrolling: 'touch' }}>
           {children}
         </div>
       </main>
@@ -732,9 +750,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               )}
             </NavLink>
 
-            {/* 2. Meja / Produk */}
+            {/* 2. Meja / Kanban / Produk */}
             <NavLink
-              to={profile.enableTables ? "/meja" : "/produk"}
+              to={profile.enableTables ? "/meja" : (isRental ? "/rental-kanban" : "/produk")}
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 ${
                   isActive
@@ -748,11 +766,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <div className={`flex items-center justify-center rounded-2xl transition-all ${
                     isActive ? 'bg-emerald-100 px-4 py-1' : 'px-4 py-1'
                   }`}>
-                    {profile.enableTables ? <Grid size={22} strokeWidth={isActive ? 2.5 : 2} /> : <Package size={22} strokeWidth={isActive ? 2.5 : 2} />}
+                    {profile.enableTables ? (
+                      <Grid size={22} strokeWidth={isActive ? 2.5 : 2} />
+                    ) : isRental ? (
+                      <Layers size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-amber-700' : ''} />
+                    ) : (
+                      <Package size={22} strokeWidth={isActive ? 2.5 : 2} />
+                    )}
                   </div>
                   <span className={`text-[11px] leading-none transition-all ${
                     isActive ? 'font-bold' : 'font-medium'
-                  }`}>{profile.enableTables ? (isLaundry ? 'Rak' : 'Meja') : 'Produk'}</span>
+                  }`}>{profile.enableTables ? (isLaundry ? 'Rak' : 'Meja') : (isRental ? 'Kanban' : 'Produk')}</span>
                 </>
               )}
             </NavLink>
@@ -863,14 +887,42 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             </div>
 
             <div className="grid grid-cols-3 gap-2.5 max-h-[60vh] overflow-y-auto px-4 py-3">
-              {checkAccess(['Admin']) && (
+              {!isRental && checkAccess(['Admin']) && (
                 <NavLink to="/produk" onClick={() => setIsMoreMenuOpen(false)}
                   className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
                   <div className="w-11 h-11 rounded-2xl bg-violet-100 flex items-center justify-center">
                     <Package size={20} className="text-violet-600" />
                   </div>
-                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Produk</span>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">{isRental ? 'Katalog' : 'Produk'}</span>
                 </NavLink>
+              )}
+
+              {isRental && checkAccess(['Admin', 'Kasir']) && (
+                <>
+                  <NavLink to="/rental-calendar" onClick={() => setIsMoreMenuOpen(false)}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                    <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center">
+                      <Calendar size={20} className="text-amber-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Kalender Sewa</span>
+                  </NavLink>
+
+                  <NavLink to="/rental-kanban" onClick={() => setIsMoreMenuOpen(false)}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                    <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center">
+                      <Layers size={20} className="text-amber-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Status Sewa</span>
+                  </NavLink>
+
+                  <NavLink to="/rental-inventory" onClick={() => setIsMoreMenuOpen(false)}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                    <div className="w-11 h-11 rounded-2xl bg-yellow-100 flex items-center justify-center">
+                      <Shirt size={20} className="text-yellow-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Inventaris</span>
+                  </NavLink>
+                </>
               )}
 
               {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (

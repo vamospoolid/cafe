@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useEffect } from 'react';
 import { usePOS } from './POSContext';
 
 export type BusinessType = 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' | 'RENTAL';
@@ -160,6 +160,14 @@ export const VerticalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     return 'CAFE';
   }, [pos.user?.businessType, pos.settings?.businessType]);
+
+  useEffect(() => {
+    if (businessType) {
+      try {
+        localStorage.setItem('pos_business_type', businessType);
+      } catch (e) {}
+    }
+  }, [businessType]);
 
   const profile = useMemo(() => {
     return VERTICAL_PROFILES[businessType] || VERTICAL_PROFILES.CAFE;

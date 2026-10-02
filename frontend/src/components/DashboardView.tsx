@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   TrendingUp, 
@@ -33,8 +33,12 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import OpenShiftModal from './OpenShiftModal';
 import useSocket from '../hooks/useSocket';
+
+const RentalDashboardStats = lazy(() => import('../verticals/rental/RentalDashboardStats').then(m => ({ default: m.RentalDashboardStats })));
+
 
 const COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6'];
 
@@ -47,9 +51,10 @@ interface LowStockProduct {
 
 const DashboardView = () => {
   const navigate = useNavigate();
+  const { isRental, isBengkel: _isBengkel, isRetail: _isRetail } = useVertical();
   const isBengkel = false;
   const isRetail = false;
-  const isCafe = true;
+  const isCafe = !isRental;
   const [summary, setSummary] = useState<any>({
     revenue: 0,
     profit: 0,
@@ -159,6 +164,44 @@ const DashboardView = () => {
       if (chartMode === 'monthly') fetchSalesChart(30);
     }
   }, [chartMode]);
+
+  // ─── RENTAL VERTICAL: Tampilkan dashboard rental khusus ──────────────────
+  if (isRental) {
+    return (
+      <div className="p-3 sm:p-6 pb-28 sm:pb-16 w-full max-w-[1600px] mx-auto">
+        <Suspense fallback={
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-10 h-10 border-4 border-amber-200 border-t-amber-600 rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-slate-500">Memuat dashboard rental...</p>
+          </div>
+        }>
+          <RentalDashboardStats 
+            activeShift={summary.activeShift}
+            onOpenShift={() => {
+              setShiftModalMode('open');
+              setIsShiftModalOpen(true);
+            }}
+            onCloseShift={() => {
+              setShiftModalMode('close');
+              setIsShiftModalOpen(true);
+            }}
+          />
+        </Suspense>
+
+        {/* Modal Buka/Tutup Shift Kasir Rental */}
+        <OpenShiftModal
+          isOpen={isShiftModalOpen}
+          mode={shiftModalMode}
+          onClose={() => setIsShiftModalOpen(false)}
+          onSuccess={() => {
+            setIsShiftModalOpen(false);
+            posContext?.fetchActiveShift();
+            fetchAnalytics();
+          }}
+        />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

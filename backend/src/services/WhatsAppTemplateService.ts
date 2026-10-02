@@ -24,6 +24,12 @@ export interface TemplateContext {
   weightKg?: string | number;
   perfume?: string;
   customNote?: string;
+  attireSummary?: string;
+  pickupDate?: string;
+  returnDeadline?: string;
+  depositAmount?: string;
+  daysLate?: number | string;
+  estimatedLateFee?: string;
 }
 
 export const DEFAULT_TEMPLATES_BY_VERTICAL: Record<
@@ -159,6 +165,83 @@ export const DEFAULT_TEMPLATES_BY_VERTICAL: Record<
         `Total: *{totalAmount}*\n\n` +
         `Bisa diambil hari ini di outlet kami ya. Terima kasih banyak!`
     }
+  ],
+  RENTAL: [
+    {
+      triggerKey: 'RENTAL_BOOKING',
+      title: 'Konfirmasi Booking & Sewa Busana',
+      variables: ['{storeName}', '{customerName}', '{orderNumber}', '{attireSummary}', '{pickupDate}', '{returnDeadline}', '{totalAmount}', '{depositAmount}', '{invoiceUrl}'],
+      templateBody:
+        `Halo Kak *{customerName}*,\n` +
+        `Terima kasih telah mempercayakan busana adat Anda di *{storeName}*! ✨\n\n` +
+        `📋 *Rincian Booking Busana*:\n` +
+        `• No. Kontrak: *#{orderNumber}*\n` +
+        `• Busana: *{attireSummary}*\n` +
+        `• Jadwal Ambil / Fitting: *{pickupDate}*\n` +
+        `• Batas Pengembalian: *{returnDeadline}*\n` +
+        `• Total Biaya: *{totalAmount}*\n` +
+        `• Jaminan/Deposit: *{depositAmount}*\n\n` +
+        `Nota & Ketentuan Sewa Digital:\n{invoiceUrl}\n\n` +
+        `Silakan bawa identitas jaminan asli (KTP/SIM) saat pengambilan. Sampai jumpa!`
+    },
+    {
+      triggerKey: 'RENTAL_PICKUP_READY',
+      title: 'Busana Siap Diambil / Fitting',
+      variables: ['{storeName}', '{customerName}', '{orderNumber}', '{attireSummary}', '{pickupDate}', '{storeAddress}'],
+      templateBody:
+        `Halo Kak *{customerName}*,\n` +
+        `Kabar baik dari *{storeName}*! 👘✨\n` +
+        `Set busana sewa pesanan Anda (*#{orderNumber}* - {attireSummary}) sudah *SIAP DIAMBIL* atau fitting akhir.\n\n` +
+        `Jadwal Ambil: *{pickupDate}*\n` +
+        `📍 Alamat Butik: {storeAddress}\n\n` +
+        `Mohon bawa identitas jaminan asli (KTP/SIM) dan sisa pelunasan saat pengambilan. Ditunggu kedatangannya Kak! 🙏`
+    },
+    {
+      triggerKey: 'RENTAL_DUE_REMINDER',
+      title: 'Pengingat Batas Pengembalian (H-1 & Hari-H)',
+      variables: ['{storeName}', '{customerName}', '{orderNumber}', '{attireSummary}', '{returnDeadline}', '{storeAddress}'],
+      templateBody:
+        `Halo Kak *{customerName}*,\n` +
+        `Semoga acara bahagianya berjalan lancar dan berkesan! ✨\n\n` +
+        `Kami dari *{storeName}* menginfokan pengingat jadwal pengembalian busana adat:\n` +
+        `• No. Kontrak: *#{orderNumber}*\n` +
+        `• Busana: *{attireSummary}*\n` +
+        `• Batas Waktu: *{returnDeadline}*\n\n` +
+        `⚠️ *Catatan Penting Pengembalian*:\n` +
+        `1. Pastikan seluruh kelengkapan aksesoris (saloko/mahkota, bando, keris, gelang, selempang, dll) telah lengkap di dalam tas busana.\n` +
+        `2. Pakaian *TIDAK PERLU DICUCI* oleh penyewa (sudah termasuk perawatan cuci profesional dari butik kami).\n` +
+        `3. Pengembalian tepat waktu membebaskan Anda dari denda harian dan uang jaminan (*deposit*) dapat langsung direfund penuh.\n\n` +
+        `📍 Lokasi Butik: {storeAddress}\n` +
+        `Terima kasih atas kerja samanya! 🙏`
+    },
+    {
+      triggerKey: 'RENTAL_OVERDUE_ALERT',
+      title: 'Peringatan Keterlambatan Pengembalian (Overdue)',
+      variables: ['{storeName}', '{customerName}', '{orderNumber}', '{attireSummary}', '{returnDeadline}', '{daysLate}', '{estimatedLateFee}'],
+      templateBody:
+        `🚨 *PEMBERITAHUAN KETERLAMBATAN PENGEMBALIAN BUSANA*\n\n` +
+        `Kepada Yth. Kak *{customerName}*,\n` +
+        `Sistem kami mencatat bahwa busana sewa Anda di *{storeName}* telah *MELEWATI BATAS WAKTU PENGEMBALIAN*:\n\n` +
+        `• No. Kontrak: *#{orderNumber}*\n` +
+        `• Busana: *{attireSummary}*\n` +
+        `• Jadwal Kembali: *{returnDeadline}*\n` +
+        `• Keterlambatan: *{daysLate} Hari*\n` +
+        `• Akumulasi Denda: *{estimatedLateFee}*\n\n` +
+        `Mohon kerjasamanya untuk segera mengembalikan busana dan aksesoris hari ini agar tidak terjadi penambahan denda harian serta tidak mengganggu jadwal sewa pelanggan lain berikutnya.\n\n` +
+        `Silakan konfirmasi waktu kedatangan Anda dengan membalas pesan ini. Terima kasih! 🙏`
+    },
+    {
+      triggerKey: 'RENTAL_RETURNED_QC',
+      title: 'Tanda Terima Pengembalian & Refund Jaminan',
+      variables: ['{storeName}', '{customerName}', '{orderNumber}', '{attireSummary}', '{depositAmount}', '{customNote}'],
+      templateBody:
+        `Halo Kak *{customerName}*,\n` +
+        `Terima kasih! Busana sewa (*#{orderNumber}* - {attireSummary}) telah kami terima kembali di *{storeName}* dalam kondisi baik. ✅\n\n` +
+        `Rincian Pengembalian:\n` +
+        `• Uang Jaminan / Deposit Direfund: *{depositAmount}*\n` +
+        `• Catatan: {customNote}\n\n` +
+        `Senang dapat menjadi bagian dari hari istimewa Anda. Sampai jumpa di acara keluarga berikutnya! 🌸`
+    }
   ]
 };
 
@@ -284,7 +367,13 @@ export class WhatsAppTemplateService {
       '{rackNumber}': ctx.rackNumber || '-',
       '{weightKg}': String(ctx.weightKg || '-'),
       '{perfume}': ctx.perfume || 'Reguler',
-      '{customNote}': ctx.customNote || ''
+      '{customNote}': ctx.customNote || '',
+      '{attireSummary}': ctx.attireSummary || 'Set Busana Adat',
+      '{pickupDate}': ctx.pickupDate || '-',
+      '{returnDeadline}': ctx.returnDeadline || '-',
+      '{depositAmount}': ctx.depositAmount || 'Rp 0',
+      '{daysLate}': String(ctx.daysLate || '0'),
+      '{estimatedLateFee}': ctx.estimatedLateFee || 'Rp 0'
     };
 
     for (const [key, value] of Object.entries(map)) {

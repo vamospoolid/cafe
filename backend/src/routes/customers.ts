@@ -80,6 +80,22 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
             createdAt: true
           }
         },
+        rentalOrders: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: {
+            items: true
+          }
+        },
+        workOrders: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: {
+            vehicle: true,
+            services: true,
+            parts: true
+          }
+        },
         pointLogs: {
           orderBy: { createdAt: 'desc' },
           take: 20
@@ -104,7 +120,25 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }
 
-    res.json(customer);
+    // Fallback: jika relasi rentalOrders kosong tetapi nomor WhatsApp cocok
+    // SECURITY: Hanya lakukan jika tenantId valid (strict, tidak boleh null/undefined)
+    const custObj: any = { ...customer };
+    if ((!custObj.rentalOrders || custObj.rentalOrders.length === 0) && customer.phone && customer.tenantId) {
+      const fallbackRentals = await prisma.rentalOrder.findMany({
+        where: {
+          tenantId: customer.tenantId,  // FIX: strict — tidak pakai || undefined
+          customerPhone: customer.phone
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: { items: true }
+      });
+      if (fallbackRentals.length > 0) {
+        custObj.rentalOrders = fallbackRentals;
+      }
+    }
+
+    res.json(custObj);
   } catch (error: any) {
     console.error('Fetch Customer Detail Error:', error);
     res.status(500).json({ error: 'Gagal mengambil detail pelanggan' });

@@ -1,5 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { savePdfDocument } from './pdfDownloadHelper';
+export { savePdfDocument };
 
 interface VenueSettings {
   storeName?: string;
@@ -4833,6 +4835,525 @@ export const generateWorkOrderInvoicePDF = async (invoice: any, settings: VenueS
   }
 
   doc.save(`Invoice_${invoice.invoiceNumber || 'B2B'}_${Date.now()}.pdf`);
+};
+
+// ─── RENTAL BUSANA ADAT REPORTS & AUDIT WORKSHEET GENERATOR ──────────────────
+
+export const generateRentalFinancialPDF = async (
+  analyticsData: any,
+  settings: VenueSettings,
+  userName?: string
+) => {
+  if (!analyticsData) return;
+
+  const logoSrc = settings?.logoUrl || (settings as any)?.logo_url;
+  let logoBase64 = '';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 14;
+  const currentTitle = 'LAPORAN REKAPITULASI KEUANGAN & KASIR RENTAL';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 11, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(55, 48, 163); // Indigo 800
+      pdfDoc.rect(margin, 12, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(13);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SANGGAR BUSANA ADAT', textXOffset, 16);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Pusat Operasional Busana', textXOffset, 21);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 25);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(9.5);
+    pdfDoc.setTextColor(55, 48, 163);
+    pdfDoc.text(currentTitle, pageWidth - margin, 16, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    const startStr = analyticsData.period?.startDate ? formatDateID(analyticsData.period.startDate) : '-';
+    const endStr = analyticsData.period?.endDate ? formatDateID(analyticsData.period.endDate) : '-';
+    pdfDoc.text(`Periode: ${startStr} s/d ${endStr}`, pageWidth - margin, 21, { align: 'right' });
+    pdfDoc.text(`Dicetak Oleh: ${userName || 'Kasir / Owner'}`, pageWidth - margin, 25, { align: 'right' });
+    pdfDoc.text(`Waktu Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 29, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 33, pageWidth - margin, 33);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdfDoc.text(
+      `Sistem Laporan Rental ${settings?.storeName || 'CodePOS'} — Dokumen keuangan resmi tercatat di sistem cloud.`,
+      margin,
+      pageHeight - 8
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  let nextY = 38;
+  const s = analyticsData.summary || {};
+
+  // Executive Summary Card Box (2x3 Grid)
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 32, 2, 2, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 32, 2, 2, 'S');
+
+  const colWidth = (pageWidth - (margin * 2)) / 3;
+
+  // Row 1
+  // Col 1: Total Kontrak Sewa
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL KONTRAK SEWA (BOOKING):', margin + 4, nextY + 6);
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(formatCurrency(s.totalRevenue || 0), margin + 4, nextY + 12);
+
+  // Col 2: Total Kas Masuk (Gross)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('TOTAL KAS MASUK DITERIMA:', margin + colWidth + 4, nextY + 6);
+  doc.setFontSize(10.5);
+  doc.setTextColor(16, 185, 129); // emerald
+  doc.text(formatCurrency(s.totalGrossRevenue || (s.totalPaid + s.totalDeposit + s.totalPenalty) || 0), margin + colWidth + 4, nextY + 12);
+
+  // Col 3: Deposit Dikembalikan (Refund)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('DEPOSIT DIKEMBALIKAN (REFUND):', margin + (colWidth * 2) + 4, nextY + 6);
+  doc.setFontSize(10.5);
+  doc.setTextColor(6, 182, 212); // cyan
+  doc.text(formatCurrency(s.totalDepositRefunded || 0), margin + (colWidth * 2) + 4, nextY + 12);
+
+  // Row 2
+  // Col 1: Pendapatan Bersih (Net Income) — RENAMED: Nilai Kontrak + Denda
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('NILAI KONTRAK + DENDA (GROSS):', margin + 4, nextY + 20);
+  doc.setFontSize(10.5);
+  doc.setTextColor(79, 70, 229); // indigo
+  doc.text(formatCurrency(s.netIncome || 0), margin + 4, nextY + 26);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Kas nyata masuk: ${formatCurrency(s.netIncomeCash || s.totalPaid || 0)}`, margin + 4, nextY + 30);
+
+  // Col 2: Sisa Piutang Belum Lunas
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('SISA PIUTANG SEWA BELUM LUNAS:', margin + colWidth + 4, nextY + 20);
+  doc.setFontSize(10.5);
+  doc.setTextColor(225, 29, 72); // rose
+  doc.text(formatCurrency(s.unpaidBalance || 0), margin + colWidth + 4, nextY + 26);
+
+  // Col 3: Denda & Jaminan Tertahan
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text('DENDA TELAT/RUSAK + DEP TERTAHAN:', margin + (colWidth * 2) + 4, nextY + 20);
+  doc.setFontSize(10.5);
+  doc.setTextColor(217, 119, 6); // amber
+  doc.text(`${formatCurrency(s.totalPenalty || 0)} (Dep: ${formatCurrency(s.depositHeld || 0)})`, margin + (colWidth * 2) + 4, nextY + 26);
+
+  nextY += 38;
+
+  // Breakdown Metode Pembayaran Table (Mini Horizontal / Table)
+  const pMethods = analyticsData.paymentMethods || [];
+  if (pMethods.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    doc.text('Ringkasan Pembayaran per Saluran:', margin, nextY);
+    nextY += 3;
+
+    autoTable(doc, {
+      startY: nextY,
+      margin: { left: margin, right: margin },
+      head: [['Metode Pembayaran', 'Frekuensi Transaksi', 'Total Uang Masuk', 'Porsi (% Total)']],
+      body: pMethods.map((m: any) => {
+        const totalP = pMethods.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0) || 1;
+        const pct = Math.round(((m.amount || 0) / totalP) * 100);
+        return [
+          m.method === 'CASH' ? 'Tunai (Cash Laci)' : m.method === 'TRANSFER' ? 'Transfer Bank' : m.method === 'QRIS' ? 'QRIS Online' : m.method,
+          `${m.count}x Transaksi`,
+          formatCurrency(m.amount || 0),
+          `${pct}%`
+        ];
+      }),
+      theme: 'grid',
+      headStyles: { fillColor: [55, 48, 163], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+      styles: { cellPadding: 2 }
+    });
+
+    nextY = (doc as any).lastAutoTable?.finalY + 8;
+  }
+
+  // Rincian Transaksi Sewa Periode Ini
+  const orders = analyticsData.periodOrders || [];
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`Rincian Transaksi Sewa (${orders.length} Kontrak):`, margin, nextY);
+  nextY += 3;
+
+  autoTable(doc, {
+    startY: nextY,
+    margin: { left: margin, right: margin },
+    head: [['No. Nota', 'Tgl Sewa', 'Klien & No. WA', 'Busana & Hanger', 'Total Kontrak', 'Terbayar', 'Deposit', 'Sisa Tagihan', 'Status']],
+    body: orders.map((o: any) => {
+      const unpaid = Math.max(0, (o.totalAmount || 0) - (o.paidAmount || 0));
+      const attireStr = (o.items || [])
+        .map((it: any) => `${it.attireName} [${it.rackHangerCode || it.attireCode || '-'}]`)
+        .join(', ') || '-';
+
+      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-';
+
+      const STATUS_LABEL_PDF: Record<string, string> = {
+        BOOKED: 'Terjadwal', FITTING: 'Fitting', PICKED_UP: 'Di Klien',
+        RETURNED: 'Dikembalikan', QC_CHECK: 'Cek QC', LAUNDRY: 'Cuci/Laundry',
+        COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan'
+      };
+
+      return [
+        `#${o.orderNumber}`,
+        dateStr,
+        `${o.customerName}\n${o.customerPhone || '-'}`,
+        attireStr,
+        formatCurrency(o.totalAmount || 0),
+        formatCurrency(o.paidAmount || 0),
+        o.depositAmount > 0 ? formatCurrency(o.depositAmount) : '-',
+        unpaid > 0 ? formatCurrency(unpaid) : 'Lunas',
+        STATUS_LABEL_PDF[o.status] || o.status
+      ];
+    }),
+    theme: 'grid',
+    headStyles: { fillColor: [55, 48, 163], textColor: 255, fontSize: 7, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 6.5, textColor: [30, 41, 59], cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 22, fontStyle: 'bold' },
+      1: { cellWidth: 14 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 42 },
+      4: { cellWidth: 18, halign: 'right' },
+      5: { cellWidth: 16, halign: 'right' },
+      6: { cellWidth: 16, halign: 'right' },
+      7: { cellWidth: 16, halign: 'right' },
+      8: { cellWidth: 14, halign: 'center' }
+    }
+  });
+
+  const finalTableY = (doc as any).lastAutoTable?.finalY || nextY + 30;
+
+  // Signature Block
+  let sigY = finalTableY + 12;
+  if (sigY + 35 > pageHeight - 15) {
+    doc.addPage();
+    sigY = 30;
+  }
+
+  const sigColWidth = 55;
+  // Left: Kasir / Pengelola
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Dibuat & Divalidasi Oleh,', margin + 10, sigY);
+  doc.text('Kasir / Bagian Operasional', margin + 10, sigY + 4);
+
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin + 5, sigY + 22, margin + 5 + sigColWidth, sigY + 22);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`( ${userName || 'Kasir Sanggar'} )`, margin + 10, sigY + 26);
+
+  // Right: Owner Sanggar
+  const rightSigX = pageWidth - margin - sigColWidth - 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Mengetahui & Menyetujui,', rightSigX + 5, sigY);
+  doc.text(settings?.storeName || 'Pemilik Sanggar (Owner)', rightSigX + 5, sigY + 4);
+
+  doc.line(rightSigX, sigY + 22, rightSigX + sigColWidth, sigY + 22);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text('( Pemilik Sanggar / Owner )', rightSigX + 5, sigY + 26);
+
+  // Total pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addFooter(doc, i, totalPages);
+  }
+
+  const storeNameSafe = (settings?.storeName || 'Rental').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').trim();
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const periodStr = analyticsData.period?.type || 'Bulan';
+  savePdfDocument(doc, `Laporan_Keuangan_Rental_${storeNameSafe}_${periodStr}_${dateStr}.pdf`);
+};
+
+export const generateRentalCustodyWorksheetPDF = async (
+  analyticsData: any,
+  settings: VenueSettings,
+  userName?: string
+) => {
+  if (!analyticsData) return;
+
+  const logoSrc = settings?.logoUrl || (settings as any)?.logo_url;
+  let logoBase64 = '';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 12;
+  const currentTitle = 'LEMBAR KERJA AUDIT BUSANA & PENGAWASAN JAMINAN';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    let textXOffset = margin;
+    if (logoBase64) {
+      pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 14, 14);
+      textXOffset = margin + 18;
+    } else {
+      pdfDoc.setFillColor(217, 119, 6); // Amber 600
+      pdfDoc.rect(margin, 11, 4, 18, 'F');
+      textXOffset = margin + 7;
+    }
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(13);
+    pdfDoc.setTextColor(30, 41, 59);
+    pdfDoc.text(settings?.storeName || 'SANGGAR BUSANA ADAT', textXOffset, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || 'Jl. Pusat Operasional Busana', textXOffset, 20);
+    pdfDoc.text(`WhatsApp: ${settings?.phone || '-'}`, textXOffset, 24);
+
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(8.8);
+    pdfDoc.setTextColor(217, 119, 6);
+    pdfDoc.text(currentTitle, pageWidth - margin, 15, { align: 'right' });
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text('Lembar Kerja Pemeriksaan Fisik Busana & Jaminan Kasir', pageWidth - margin, 19, { align: 'right' });
+    pdfDoc.text(`Auditor / Kasir: ${userName || 'Petugas Lapangan'}`, pageWidth - margin, 23, { align: 'right' });
+    pdfDoc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageWidth - margin, 27, { align: 'right' });
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 31, pageWidth - margin, 31);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPages: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.setDrawColor(241, 245, 249);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(
+      `Lembar Audit Fisik ${settings?.storeName || 'CodePOS Sanggar'} — Wajib diperiksa dan diparaf kasir saat busana diserahterimakan.`,
+      margin,
+      pageHeight - 6
+    );
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPages}`, pageWidth - margin, pageHeight - 6, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  let nextY = 35;
+  const s = analyticsData.summary || {};
+  const custodyOrders = analyticsData.activeCustodyOrders || [];
+
+  // Summary Metrics Bar
+  doc.setFillColor(254, 243, 199); // amber-100/60
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 14, 2, 2, 'F');
+  doc.setDrawColor(251, 191, 36);
+  doc.roundedRect(margin, nextY, pageWidth - (margin * 2), 14, 2, 2, 'S');
+
+  const bColW = (pageWidth - (margin * 2)) / 4;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(146, 64, 14);
+
+  // 1. Total Busana Sedang Dipinjam
+  doc.text('TOTAL ORDER AKTIF:', margin + 4, nextY + 5);
+  doc.setFontSize(9.5);
+  doc.text(`${custodyOrders.length} Kontrak Sewa`, margin + 4, nextY + 10);
+
+  // 2. Jaminan Fisik (KTP/SIM)
+  doc.setFontSize(7.5);
+  doc.text('JAMINAN KTP/SIM DITAHAN:', margin + bColW + 4, nextY + 5);
+  doc.setFontSize(9.5);
+  doc.text(`${s.activeCollateralCount || 0} Lembar Kartu`, margin + bColW + 4, nextY + 10);
+
+  // 3. Deposit Uang Tertahan
+  doc.setFontSize(7.5);
+  doc.text('UANG DEPOSIT TERTAHAN:', margin + (bColW * 2) + 4, nextY + 5);
+  doc.setFontSize(9.5);
+  doc.text(formatCurrency(s.depositHeld || 0), margin + (bColW * 2) + 4, nextY + 10);
+
+  // 4. Terlambat
+  doc.setFontSize(7.5);
+  doc.text('TELAT PENGEMBALIAN:', margin + (bColW * 3) + 4, nextY + 5);
+  doc.setFontSize(9.5);
+  doc.setTextColor(190, 18, 60);
+  doc.text(`${analyticsData.overdueReturns?.length || 0} Klien Overdue`, margin + (bColW * 3) + 4, nextY + 10);
+
+  nextY += 19;
+
+  // Table Checklist Audit Lapangan
+  autoTable(doc, {
+    startY: nextY,
+    margin: { left: margin, right: margin },
+    head: [['No. Nota', 'Klien & No. WA', 'Busana & No. Hanger', 'Batas Kembali', 'Jaminan Kasir', 'Cek Fisik Baju', 'Cek Aksesori', 'Paraf']],
+    body: custodyOrders.map((o: any) => {
+      const returnDateStr = o.returnDeadline 
+        ? new Date(o.returnDeadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ' ' + new Date(o.returnDeadline).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        : '-';
+
+      const attireStr = (o.items || [])
+        .map((it: any) => `• ${it.attireName} [${it.rackHangerCode || it.attireCode}]`)
+        .join('\n') || '-';
+
+      const jaminanStr = `${o.collateralText || 'KTP'}\n${o.depositAmount > 0 ? 'Dep: ' + formatCurrency(o.depositAmount) : ''}`;
+
+      const urgencyStr = o.daysOverdue > 0 
+        ? `${returnDateStr}\n(TELAT ${o.daysOverdue} HARI)`
+        : returnDateStr;
+
+      const STATUS_LABEL_AUDIT: Record<string, string> = {
+        BOOKED: 'Terjadwal', FITTING: 'Fitting', PICKED_UP: 'Di Klien',
+        RETURNED: 'Dikembalikan', QC_CHECK: 'Cek QC', LAUNDRY: 'Cuci/Laundry',
+        COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan'
+      };
+
+      return [
+        `#${o.orderNumber}\n(${STATUS_LABEL_AUDIT[o.status] || o.status})`,
+        `${o.customerName}\n${o.customerPhone || '-'}`,
+        attireStr,
+        urgencyStr,
+        jaminanStr,
+        '[  ] Baik\n[  ] Rusak',
+        '[  ] Lengkap\n[  ] Kurang',
+        '________'
+      ];
+    }),
+    theme: 'grid',
+    headStyles: { fillColor: [217, 119, 6], textColor: 255, fontSize: 7, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 6.8, textColor: [30, 41, 59], cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 22, fontStyle: 'bold' },
+      1: { cellWidth: 28 },
+      2: { cellWidth: 48 },
+      3: { cellWidth: 24, halign: 'center' },
+      4: { cellWidth: 24 },
+      5: { cellWidth: 18, halign: 'center' },
+      6: { cellWidth: 18, halign: 'center' },
+      7: { cellWidth: 16, halign: 'center' }
+    }
+  });
+
+  const finalTableY = (doc as any).lastAutoTable?.finalY || nextY + 30;
+
+  // Catatan Khusus & Tanda Tangan
+  let sigY = finalTableY + 8;
+  if (sigY + 35 > pageHeight - 15) {
+    doc.addPage();
+    sigY = 25;
+  }
+
+  // Box Catatan Petugas Lapangan
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Catatan Pemeriksaan Lapangan / Permak / Noda / Cucian Khusus:', margin, sigY);
+  doc.setDrawColor(203, 213, 225);
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(margin, sigY + 2, pageWidth - (margin * 2), 12, 1, 1, 'S');
+
+  sigY += 18;
+  const sigColWidth = 55;
+
+  // Left: Petugas Pemeriksa
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Petugas Pemeriksa Fisik Busana,', margin + 10, sigY);
+  doc.text('Staf Gudang & Serah Terima', margin + 10, sigY + 4);
+
+  doc.line(margin + 5, sigY + 18, margin + 5 + sigColWidth, sigY + 18);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('( _______________________ )', margin + 10, sigY + 22);
+
+  // Right: Kasir Penanggung Jawab Jaminan
+  const rightSigX = pageWidth - margin - sigColWidth - 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Penanggung Jawab Laci Jaminan,', rightSigX + 5, sigY);
+  doc.text('Kasir Utama Sanggar', rightSigX + 5, sigY + 4);
+
+  doc.line(rightSigX, sigY + 18, rightSigX + sigColWidth, sigY + 18);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('( _______________________ )', rightSigX + 5, sigY + 22);
+
+  // Total pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    addFooter(doc, i, totalPages);
+  }
+
+  const storeNameSafe = (settings?.storeName || 'Rental').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').trim();
+  const dateStr = new Date().toISOString().slice(0, 10);
+  savePdfDocument(doc, `Lembar_Audit_Jaminan_Rental_${storeNameSafe}_${dateStr}.pdf`);
 };
 
 

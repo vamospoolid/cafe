@@ -42,11 +42,17 @@ import {
   FileSpreadsheet,
   Split,
   ChevronDown,
-  Shirt
+  Shirt,
+  Wrench
 } from 'lucide-react';
 import { TenantRegisterWizard } from './TenantRegisterWizard';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
+import { 
+  VERTICAL_LANDING_ITEMS, 
+  INDUSTRY_SOLUTIONS, 
+  type VerticalId 
+} from '../data/verticalLandingData';
 
 interface LandingPageProps {
   onNavigateLogin?: () => void;
@@ -73,103 +79,38 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
   const [activeSolutionIndex, setActiveSolutionIndex] = useState<number>(0);
   const [demoLoading, setDemoLoading] = useState(false);
 
-  // Hero Carousel State (Gaya Kasir Pintar)
-  const [currentHeroSlide, setCurrentHeroSlide] = useState(0);
-  const [isHeroPaused, setIsHeroPaused] = useState(false);
-
-  const heroSlides = [
-    {
-      id: 'pos-omzet',
-      badge: 'Software POS & Ekosistem Bisnis Kafe #1',
-      badgeIcon: Coffee,
-      title: 'Kondisi Tak Menentu, Bisnis Kafe Tetap Maju',
-      subtitle: 'Dipercaya oleh 500++ pengusaha kuliner di Indonesia. Catat transaksi kasir kilat 1.2 detik, cetak struk thermal otomatis, dan pantau pertumbuhan omzet real-time langsung dari smartphone Anda.',
-      rating: '4.9',
-      usersCount: '500+ Mitra Kafe & Resto',
-      offlineStatus: '100% Offline-First',
-      ctaText: 'Daftar Sekarang (Gratis 14 Hari)',
-      image: '/assets/images/codenusa_hero_banner.jpg',
-      imageAlt: 'Barista Ramah & Kasir Codenusa POS',
-      floatingBadge: 'Penjualan Naik 45%',
-      floatingSub: 'Omzet Real-time di HP'
-    },
-    {
-      id: 'kds-dapur',
-      badge: 'Layar Dapur Digital (Kitchen Display System)',
-      badgeIcon: ChefHat,
-      title: 'Dapur Cepat Tanpa Kertas, Pesanan Tepat Tanpa Cemas',
-      subtitle: 'Layar Dapur Otomatis (KDS) menghubungkan kasir ke dapur dalam hitungan milidetik. Pesanan terpisah otomatis: makanan ke koki dapur, minuman ke barista bar tanpa tiket kertas tercecer.',
-      rating: '4.9',
-      usersCount: 'Waktu Saji 35% Lebih Cepat',
-      offlineStatus: 'Sync Instan Dapur & Bar',
-      ctaText: 'Coba Layar Dapur KDS',
-      image: '/assets/images/chef_kitchen_kds.jpg',
-      imageAlt: 'Koki Dapur Restoran Menggunakan KDS',
-      floatingBadge: 'Dapur Rapi & Cepat',
-      floatingSub: 'Routing Makanan & Bar'
-    },
-    {
-      id: 'resep-hpp',
-      badge: 'Resep Bahan Baku (BOM) & HPP Otomatis',
-      badgeIcon: Package,
-      title: 'Ketahui Untung Bersih, Stop Kebocoran Bahan Baku',
-      subtitle: 'Formula Resep (BOM) presisi hingga gram & mililiter. Setiap menu terjual di kasir, stok biji kopi, susu, dan sirup langsung terpotong otomatis. Pantau HPP riil dan cegah limbah berlebih.',
-      rating: '4.9',
-      usersCount: 'Tekan Waste s/d 40%',
-      offlineStatus: 'Audit Kasir Blind Z-Report',
-      ctaText: 'Kelola Resep Sekarang',
-      image: '/assets/images/fresh_ingredients_inventory.jpg',
-      imageAlt: 'Manajemen Resep Bahan Baku & HPP',
-      floatingBadge: 'HPP Presisi Tiap Porsi',
-      floatingSub: 'Stok Terpotong Otomatis'
-    },
-    {
-      id: 'retail-grosir',
-      badge: 'Software Kasir Toko Grosir & Sembako #1',
-      badgeIcon: Store,
-      title: 'Transaksi Kilat Tanpa Antre, Hitung Grosir & Bon Otomatis',
-      subtitle: 'Didesain khusus untuk toko grosir dan minimarket: scan barcode laser kilat, jual per dus/karton/bal langsung potong stok fisik, serta kelola buku bon warung langganan tanpa selisih.',
-      rating: '4.9',
-      usersCount: '400+ Mitra Grosir & Sembako',
-      offlineStatus: 'Dukung Barcode Laser Scanner',
-      ctaText: 'Coba Toko Grosir (Gratis 14 Hari)',
-      image: '/assets/images/fresh_ingredients_inventory.jpg',
-      imageAlt: 'Kasir Toko Grosir & Minimarket Cepat',
-      floatingBadge: 'Multi-Satuan Dus/Bal',
-      floatingSub: 'Buku Bon Warung Aman'
-    },
-    {
-      id: 'laundry-kiloan',
-      badge: 'Software Kasir Laundry Kiloan & Satuan #1',
-      badgeIcon: Shirt,
-      title: 'Timbang Kiloan Kilat, Pantau Rak & Notif WhatsApp',
-      subtitle: 'Didesain khusus untuk usaha laundry kiloan & satuan: input timbangan desimal (Kg), varian aroma parfum, papan kanban pencucian s/d rak simpan, dan WhatsApp otomatis saat cucian siap diambil.',
-      rating: '4.9',
-      usersCount: '350+ Mitra Laundry Kiloan',
-      offlineStatus: '100% Offline-First & Struk Thermal',
-      ctaText: 'Coba Laundry (Gratis 14 Hari)',
-      image: '/assets/images/codenusa_hero_banner.jpg',
-      imageAlt: 'Kasir Laundry Kiloan & Satuan Codenusa POS',
-      floatingBadge: 'Rak & Notif WA Otomatis',
-      floatingSub: 'Desimal Kg & Varian Parfum'
+  // Multi-Vertical Landing State
+  const getInitialVertical = (): VerticalId => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const vert = params.get('vertical')?.toLowerCase();
+      if (vert === 'bengkel') return 'bengkel';
+      if (vert === 'retail' || vert === 'grosir') return 'retail';
+      if (vert === 'laundry') return 'laundry';
+      if (vert === 'rental') return 'rental';
+      if (vert === 'cafe' || vert === 'coffee') return 'cafe';
     }
-  ];
-
-  // Auto-play interval slider (Kasir Pintar Style)
-  useEffect(() => {
-    if (isHeroPaused) return;
-    const timer = setInterval(() => {
-      setCurrentHeroSlide(prev => (prev + 1) % heroSlides.length);
-    }, 6000);
-    return () => clearInterval(timer);
-  }, [isHeroPaused, heroSlides.length]);
-
-  const handleNextHeroSlide = () => {
-    setCurrentHeroSlide(prev => (prev + 1) % heroSlides.length);
+    return 'cafe';
   };
 
-  const handlePrevHeroSlide = () => {
-    setCurrentHeroSlide(prev => (prev - 1 + heroSlides.length) % heroSlides.length);
+  const [activeVertical, setActiveVertical] = useState<VerticalId>(getInitialVertical);
+  const [selectedVerticalForRegister, setSelectedVerticalForRegister] = useState<string>('coffee');
+
+  const currentVertical = VERTICAL_LANDING_ITEMS.find(v => v.id === activeVertical) || VERTICAL_LANDING_ITEMS[0];
+
+  const handleSelectVertical = (vId: VerticalId) => {
+    setActiveVertical(vId);
+    if (typeof window !== 'undefined' && window.history) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('vertical', vId);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
+
+  const handleOpenRegisterWithVertical = (wizardType: string) => {
+    setSelectedVerticalForRegister(wizardType);
+    setSelectedPlanCode('GROWTH');
+    setIsRegisterOpen(true);
   };
   
   // Interactive Simulator State
@@ -260,70 +201,6 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
     setIsRegisterOpen(true);
   };
 
-  // Daftar Solusi Bisnis Kuliner (Gaya Kasir Pintar Kuliner)
-  const culinarySolutions = [
-    {
-      title: 'Kasir Transaksi Cepat & Serba Lengkap',
-      description: 'Catat pesanan pelanggan di kasir dalam 1 detik. Mendukung pembayaran Tunai, QRIS Dinamis, Debit, Kartu Kredit, dan Split Bill per meja secara otomatis.',
-      badge: 'Point of Sale',
-      image: '/assets/images/cafe_pos_hero.jpg',
-      icon: Store,
-      points: [
-        'Multi tipe harga (Dine-in, Takeaway, dan Ojol Delivery)',
-        'Cetak struk kasir via Thermal Bluetooth, USB, atau kirim struk digital WhatsApp',
-        'Pecah tagihan (Split Bill) per orang atau per pesanan meja'
-      ]
-    },
-    {
-      title: 'Layar Dapur Otomatis (Kitchen Display System)',
-      description: 'Hilangkan tiket kertas yang tercecer dan teriak-teriak antar staf. Pesanan kasir langsung muncul di layar tablet dapur koki dan barista bar secara real-time.',
-      badge: 'Operasional Dapur',
-      image: '/assets/images/chef_kitchen_kds.jpg',
-      icon: ChefHat,
-      points: [
-        'Routing otomatis: Makanan ke Dapur, Minuman ke Barista Bar',
-        'Timer durasi masak: Ketahui pesanan yang tertunda dengan warna peringatan',
-        'Notifikasi ke waiter saat pesanan selesai disiapkan'
-      ]
-    },
-    {
-      title: 'Resep Bahan Baku (BOM) & HPP Otomatis',
-      description: 'Ketahui keuntungan bersih tiap porsi makanan secara presisi. Setiap menu terjual di kasir, stok gramasi bahan mentah di gudang langsung terpotong otomatis.',
-      badge: 'Manajemen Resep',
-      image: '/assets/images/fresh_ingredients_inventory.jpg',
-      icon: Package,
-      points: [
-        'Kalkulasi otomatis HPP (Harga Pokok Penjualan) per gram bahan baku',
-        'Peringatan otomatis saat stok bahan baku menipis',
-        'Catat food waste / limbah sisa produksi agar biaya tidak bocor'
-      ]
-    },
-    {
-      title: 'Laporan Finansial & Blind Z-Report Kasir',
-      description: 'Tutup kasir harian tanpa cemas uang hilang. Fitur Blind Z-Report mewajibkan kasir menghitung fisik uang tunai tanpa melihat angka sistem terlebih dahulu.',
-      badge: 'Keuangan & Laba',
-      image: '/assets/images/cafe_pos_hero.jpg',
-      icon: BarChart3,
-      points: [
-        'Rekonsiliasi otomatis selisih kas kasir setiap pergantian shift',
-        'Laporan laba kotor, omzet harian/bulanan, dan jam ramai penjualan',
-        'Pantau omzet semua cabang dari HP pemilik kapan saja'
-      ]
-    },
-    {
-      title: 'Kasir Laundry Kiloan, Satuan & Kanban Rak',
-      description: 'Solusi lengkap operasional laundry modern: input timbangan desimal (Kg), pilihan aroma parfum, papan kanban cuci-kering-setrika, dan WhatsApp otomatis saat cucian siap diambil di rak.',
-      badge: 'Spesialis Laundry',
-      image: '/assets/images/codenusa_hero_banner.jpg',
-      icon: Shirt,
-      points: [
-        'Input berat timbangan desimal (Kg), hitung otomatis harga kiloan & tier express',
-        'Alokasi nomor rak simpan & WhatsApp notifikasi otomatis ke pelanggan',
-        'Analisis aging rack (cucian mengendap) & kontrol stok deterjen/parfum'
-      ]
-    }
-  ];
-
   // Pricing Data
   const pricingPlans = [
     {
@@ -388,16 +265,16 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
       {/* ─── TOP ANNOUNCEMENT BAR ─────────────────────────────────────────── */}
       <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-purple-700 text-white text-xs py-2 px-4 text-center font-semibold flex items-center justify-center gap-2">
         <Sparkles size={14} className="text-amber-300 animate-spin" style={{ animationDuration: '6s' }} />
-        <span>Solusi POS & Bisnis Kuliner #1: Uji coba gratis 14 hari tanpa kartu kredit!</span>
+        <span>Solusi POS & Operasional Multi-UMKM #1: Uji coba gratis 14 hari tanpa kartu kredit!</span>
         <button 
-          onClick={() => setIsRegisterOpen(true)}
+          onClick={() => handleOpenRegisterWithVertical(currentVertical.wizardType)}
           className="underline font-bold text-amber-300 hover:text-white ml-1 transition-colors"
         >
           Daftar Sekarang &rarr;
         </button>
       </div>
 
-      {/* ─── 1. NAVBAR ALA KASIR PINTAR (SOFT INDIGO TONE) ───────────────── */}
+      {/* ─── 1. NAVBAR MULTI-UMKM (SOFT INDIGO TONE) ───────────────── */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/70 shadow-sm transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           
@@ -411,7 +288,7 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                 CODENUSA <span className="text-indigo-600 font-extrabold">POS</span>
               </span>
               <span className="text-[10px] text-slate-500 font-semibold tracking-wide block -mt-1">
-                Solusi Kasir Bisnis Kuliner
+                Software Kasir & Operasional Multi-UMKM
               </span>
             </div>
           </div>
@@ -419,7 +296,7 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
           {/* Navigation Links */}
           <nav className="hidden lg:flex items-center gap-7 text-sm font-semibold text-slate-600">
             <a href="#solusi" className="hover:text-indigo-600 transition-colors flex items-center gap-1">
-              <span>Solusi Kuliner</span>
+              <span>Solusi Industri</span>
             </a>
             <a href="#cara-kerja" className="hover:text-indigo-600 transition-colors">Cara Memulai</a>
             <a href="#simulator" className="hover:text-indigo-600 transition-colors">Simulasi POS</a>
@@ -460,209 +337,262 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
         </div>
       </header>
 
-      {/* ─── 2. HERO PROMO CAROUSEL (GAYA KASIR PINTAR BANNER) ─────────────── */}
+      {/* ─── 2. HERO SECTION MULTI-VERTICAL (DILENGKAPI MOCKUP REALISTIS) ─────────────── */}
       <section 
-        className="relative overflow-hidden bg-gradient-to-br from-[#0b0f19] via-[#151733] to-[#25225c] text-white py-14 sm:py-20 lg:py-24"
-        onMouseEnter={() => setIsHeroPaused(true)}
-        onMouseLeave={() => setIsHeroPaused(false)}
+        className="relative overflow-hidden bg-gradient-to-br from-[#0b0f19] via-[#111728] to-[#1c1938] text-white pt-10 pb-16 sm:pt-14 sm:pb-24"
       >
         {/* Ambient Glows */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none -translate-y-1/2" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none translate-y-1/2" />
+        <div className={`absolute top-0 left-1/4 w-[28rem] h-[28rem] ${currentVertical.theme.glowColor} rounded-full blur-3xl pointer-events-none -translate-y-1/2 transition-colors duration-700`} />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none translate-y-1/2" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           
-          {/* Arrow Navigation (Kiri & Kanan ala Kasir Pintar) */}
-          <button
-            onClick={handlePrevHeroSlide}
-            aria-label="Slide Sebelumnya"
-            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center backdrop-blur-md shadow-xl transition-all hover:scale-110 active:scale-95"
-          >
-            <ChevronLeft size={22} />
-          </button>
+          {/* Vertical Selector Bar (Pills 5 Vertikal) */}
+          <div className="flex flex-col items-center mb-8 sm:mb-12">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400 mb-3 flex items-center gap-1.5">
+              <Sparkles size={13} className="text-amber-400" />
+              <span>Pilih Jenis Usaha Anda untuk Melihat Solusi Spesifik:</span>
+            </span>
+            <div className="flex flex-wrap items-center justify-center gap-2 p-1.5 bg-slate-900/80 border border-slate-700/60 rounded-2xl sm:rounded-full backdrop-blur-xl shadow-2xl max-w-full">
+              {VERTICAL_LANDING_ITEMS.map((item) => {
+                const IconComp = item.badgeIcon;
+                const isSelected = activeVertical === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectVertical(item.id)}
+                    className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs sm:text-sm font-bold transition-all duration-300 cursor-pointer ${
+                      isSelected
+                        ? `${item.theme.accentBg} ${item.theme.accentText} border ${item.theme.accentBorder} shadow-lg scale-105`
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent'
+                    }`}
+                  >
+                    <IconComp size={16} className={isSelected ? item.theme.accentText : 'text-slate-400'} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          <button
-            onClick={handleNextHeroSlide}
-            aria-label="Slide Selanjutnya"
-            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/10 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center backdrop-blur-md shadow-xl transition-all hover:scale-110 active:scale-95"
-          >
-            <ChevronRight size={22} />
-          </button>
+          {/* Dynamic 2-Column Hero Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+            
+            {/* Left Column (Dynamic Copywriting & CTAs) */}
+            <div className="lg:col-span-6 text-center lg:text-left">
+              
+              {/* Category Pill */}
+              <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-bold shadow-inner backdrop-blur-md mb-5 ${currentVertical.theme.pillBg}`}>
+                {React.createElement(currentVertical.badgeIcon, { size: 14, className: currentVertical.theme.accentText })}
+                <span>{currentVertical.badge}</span>
+              </div>
 
-          {/* Current Slide Content */}
-          {heroSlides.map((slide, index) => {
-            if (index !== currentHeroSlide) return null;
-            const BadgeIcon = slide.badgeIcon;
+              {/* Dynamic Headline */}
+              <h1 className="text-3xl sm:text-5xl lg:text-[3.1rem] font-black tracking-tight text-white leading-[1.14] mb-5">
+                {currentVertical.title}
+              </h1>
 
-            return (
-              <div 
-                key={slide.id} 
-                className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center px-4 sm:px-8 transition-opacity duration-500 animate-fadeIn"
-              >
-                
-                {/* Left Column (Copywriting & CTA) */}
-                <div className="lg:col-span-7 text-center lg:text-left">
-                  
-                  {/* Category Pill */}
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-amber-300 text-xs font-bold shadow-inner backdrop-blur-md mb-5">
-                    <BadgeIcon size={14} className="text-amber-400" />
-                    <span>{slide.badge}</span>
-                  </div>
+              {/* Dynamic Subtitle */}
+              <p className="text-base sm:text-lg text-slate-200 font-normal leading-relaxed mb-8 max-w-xl">
+                {currentVertical.subtitle}
+              </p>
 
-                  {/* Headline Utama */}
-                  <h1 className="text-3xl sm:text-5xl lg:text-[3.25rem] font-black tracking-tight text-white leading-[1.14] mb-5">
-                    {slide.title}
-                  </h1>
-
-                  {/* Subtitle / Penjelasan Solusi */}
-                  <p className="text-base sm:text-lg text-slate-200 font-normal leading-relaxed mb-8 max-w-2xl">
-                    {slide.subtitle}
-                  </p>
-
-                  {/* Proof Badges (Rating, Users, Offline) */}
-                  <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-8 text-xs sm:text-sm font-bold">
-                    <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15 backdrop-blur-sm">
-                      <Star size={15} className="text-amber-400 fill-amber-400" />
-                      <span>Rating {slide.rating}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15 backdrop-blur-sm">
-                      <Users size={15} className="text-indigo-300" />
-                      <span>{slide.usersCount}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15 backdrop-blur-sm">
-                      <Zap size={15} className="text-emerald-400 fill-emerald-400" />
-                      <span>{slide.offlineStatus}</span>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 mb-8">
-                    <button
-                      onClick={() => setIsRegisterOpen(true)}
-                      className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl text-sm sm:text-base font-black text-slate-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 hover:from-amber-300 hover:to-amber-400 shadow-xl shadow-amber-500/25 transition-all hover:scale-[1.02] active:scale-95"
-                    >
-                      <span>{slide.ctaText}</span>
-                      <ArrowRight size={18} className="text-slate-950" />
-                    </button>
-
-                    <button
-                      onClick={handleInstantDemoLogin}
-                      disabled={demoLoading}
-                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-sm sm:text-base font-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md shadow-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70"
-                    >
-                      <Zap size={18} className="text-amber-400 fill-amber-400" />
-                      <span>{demoLoading ? 'Menyiapkan Kasir...' : '⚡ Coba Demo Kasir (1-Klik)'}</span>
-                    </button>
-                  </div>
-
-                  {/* Small Guarantee List */}
-                  <div className="flex flex-wrap items-center justify-center lg:justify-start gap-5 text-xs text-slate-300 font-medium">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-amber-400" />
-                      14 Hari Gratis Penuh
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-amber-400" />
-                      Tanpa Kartu Kredit
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-amber-400" />
-                      Gratis Bantuan Setup Menu
-                    </span>
-                  </div>
-
+              {/* Proof Badges (Rating, Users, Offline) */}
+              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-8 text-xs sm:text-sm font-bold">
+                <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15 backdrop-blur-sm">
+                  <Star size={15} className="text-amber-400 fill-amber-400" />
+                  <span>Rating {currentVertical.rating}</span>
                 </div>
+                <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15 backdrop-blur-sm">
+                  <Users size={15} className="text-indigo-300" />
+                  <span>{currentVertical.usersCount}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/15 backdrop-blur-sm">
+                  <Zap size={15} className="text-emerald-400 fill-emerald-400" />
+                  <span>{currentVertical.offlineStatus}</span>
+                </div>
+              </div>
 
-                {/* Right Column (3D Pop-Out Visual AI) */}
-                <div className="lg:col-span-5">
-                  <div className="relative mx-auto max-w-md lg:max-w-none">
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 mb-8">
+                <button
+                  onClick={() => handleOpenRegisterWithVertical(currentVertical.wizardType)}
+                  className={`w-full sm:w-auto flex items-center justify-center gap-2.5 px-8 py-4 rounded-2xl text-sm sm:text-base font-black shadow-xl transition-all hover:scale-[1.02] active:scale-95 bg-gradient-to-r ${currentVertical.theme.btnGradient}`}
+                >
+                  <span>{currentVertical.ctaText}</span>
+                  <ArrowRight size={18} />
+                </button>
+
+                <button
+                  onClick={handleInstantDemoLogin}
+                  disabled={demoLoading}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-sm sm:text-base font-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md shadow-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70"
+                >
+                  <Zap size={18} className="text-amber-400 fill-amber-400" />
+                  <span>{demoLoading ? 'Menyiapkan...' : '⚡ Coba Demo Kasir (1-Klik)'}</span>
+                </button>
+              </div>
+
+              {/* Guarantee List */}
+              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-5 text-xs text-slate-300 font-medium">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={15} className="text-amber-400" />
+                  14 Hari Gratis Penuh
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={15} className="text-amber-400" />
+                  Tanpa Kartu Kredit
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={15} className="text-amber-400" />
+                  Katalog & Data Contoh Otomatis
+                </span>
+              </div>
+
+            </div>
+
+            {/* Right Column (Live Adaptive POS Tablet Mockup Simulator) */}
+            <div className="lg:col-span-6">
+              <div className="relative mx-auto max-w-lg lg:max-w-none">
+                
+                {/* Tablet Frame */}
+                <div className="relative rounded-3xl p-3 sm:p-4 bg-slate-900/90 border-2 border-slate-700/80 shadow-2xl backdrop-blur-xl group transition-all duration-500">
+                  
+                  {/* Tablet Top Bezel Camera & Status Bar */}
+                  <div className="flex items-center justify-between px-3 py-1.5 bg-slate-950/60 rounded-t-2xl border-b border-slate-800 text-[11px] text-slate-400 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="font-mono text-white text-[10px]">CodePOS v2.10 • {currentVertical.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-400">Offline-Ready ⚡</span>
+                      <div className="w-2 h-2 rounded-full bg-slate-600" />
+                    </div>
+                  </div>
+
+                  {/* Mockup Screen Body */}
+                  <div className="bg-slate-950/90 rounded-2xl p-4 sm:p-5 border border-slate-800/80 text-left">
                     
-                    {/* Frame Container */}
-                    <div className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white/20 bg-slate-900 aspect-[16/10] sm:aspect-[4/3] group">
-                      <img 
-                        src={slide.image} 
-                        alt={slide.imageAlt} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
-                      
-                      {/* Top-Left Floating Badge */}
-                      <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-full text-xs font-bold text-white flex items-center gap-2 shadow-lg">
-                        <Sparkles size={14} className="text-amber-400" />
-                        <span>{slide.floatingBadge}</span>
-                      </div>
-
-                      {/* Bottom Overlay Label */}
-                      <div className="absolute bottom-4 left-4 right-4 text-white text-left">
-                        <div className="text-sm font-black flex items-center gap-2">
-                          <span>{slide.floatingSub}</span>
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    {/* Header Row */}
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+                      <div>
+                        <div className="text-xs font-bold text-slate-400">{currentVertical.mockup.screenTitle}</div>
+                        <div className="text-base font-black text-white flex items-center gap-2">
+                          <span>{currentVertical.mockup.orderNumber}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${currentVertical.mockup.statusBadgeColor}`}>
+                            {currentVertical.mockup.statusBadge}
+                          </span>
                         </div>
-                        <div className="text-[11px] text-slate-300">Ekosistem terintegrasi Codenusa POS</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-500 uppercase font-semibold">{currentVertical.mockup.infoLabel}</div>
+                        <div className="text-xs font-bold text-slate-200">{currentVertical.mockup.infoValue}</div>
                       </div>
                     </div>
 
-                    {/* Floating Micro Badge Kiri Atas */}
-                    <div className="hidden sm:flex absolute -top-4 -left-4 bg-white/90 backdrop-blur-md p-3 rounded-2xl border border-white/50 shadow-2xl items-center gap-2.5 text-xs text-slate-900">
-                      <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-black">
-                        <Zap size={16} />
+                    {/* Tag Pill */}
+                    <div className="mb-3">
+                      <span className="inline-block text-[11px] px-2.5 py-0.5 rounded-md bg-slate-800 text-slate-300 font-medium">
+                        {currentVertical.mockup.tagPill}
+                      </span>
+                    </div>
+
+                    {/* Order / Transaction Items List */}
+                    <div className="space-y-2 mb-4">
+                      {currentVertical.mockup.items.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 rounded-xl bg-slate-900/80 border border-slate-800/60 text-xs">
+                          <div>
+                            <div className="font-bold text-slate-200">{item.name}</div>
+                            {item.tag && <div className="text-[10px] text-slate-400">{item.tag}</div>}
+                          </div>
+                          <div className="text-right pl-3">
+                            <span className="text-slate-400 mr-2">{item.qty}</span>
+                            <span className="font-mono font-bold text-white">{item.price}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Financial Summary */}
+                    <div className="pt-3 border-t border-slate-800 space-y-1.5 text-xs mb-4">
+                      <div className="flex justify-between text-slate-400">
+                        <span>Subtotal Transaksi</span>
+                        <span className="font-mono">{currentVertical.mockup.subtotal}</span>
                       </div>
-                      <div>
-                        <div className="font-extrabold text-[12px]">1.2 Detik</div>
-                        <div className="text-[10px] text-slate-500 font-medium">Transaksi Kilat</div>
+                      {currentVertical.mockup.taxOrDeposit && (
+                        <div className="flex justify-between text-amber-400/90 text-[11px]">
+                          <span>{currentVertical.mockup.taxOrDeposit}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm font-black text-white pt-1 border-t border-slate-800/60">
+                        <span>Total Pembayaran</span>
+                        <span className="font-mono text-emerald-400">{currentVertical.mockup.total}</span>
                       </div>
                     </div>
 
-                    {/* Floating Micro Badge Kanan Bawah */}
-                    <div className="hidden sm:flex absolute -bottom-5 -right-3 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-white/50 shadow-2xl items-center gap-2.5 text-xs text-slate-900">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">
-                        <Printer size={16} />
-                      </div>
-                      <div>
-                        <div className="font-extrabold text-[12px]">Thermal / WA</div>
-                        <div className="text-[10px] text-slate-500 font-medium">Struk Otomatis</div>
-                      </div>
+                    {/* Action Button & Chips */}
+                    <button 
+                      onClick={() => handleOpenRegisterWithVertical(currentVertical.wizardType)}
+                      className={`w-full py-2.5 rounded-xl text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer ${currentVertical.mockup.actionButtonColor}`}
+                    >
+                      {currentVertical.mockup.actionButtonText}
+                    </button>
+
+                    <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-slate-800/60">
+                      {currentVertical.mockup.chips.map((chip, ci) => (
+                        <span key={ci} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800/70 text-slate-400 border border-slate-700/50">
+                          ✓ {chip}
+                        </span>
+                      ))}
                     </div>
 
                   </div>
+
+                  {/* Floating Micro Badge Kiri Atas */}
+                  <div className="hidden sm:flex absolute -top-4 -left-4 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-white/40 shadow-2xl items-center gap-2.5 text-xs text-slate-900">
+                    <div className={`w-8 h-8 rounded-xl ${currentVertical.theme.accentBg} ${currentVertical.theme.accentText} flex items-center justify-center font-black`}>
+                      {React.createElement(currentVertical.floatingMicroTop.icon, { size: 16 })}
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-[12px]">{currentVertical.floatingMicroTop.value}</div>
+                      <div className="text-[10px] text-slate-500 font-medium">{currentVertical.floatingMicroTop.label}</div>
+                    </div>
+                  </div>
+
+                  {/* Floating Micro Badge Kanan Bawah */}
+                  <div className="hidden sm:flex absolute -bottom-5 -right-3 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-white/40 shadow-2xl items-center gap-2.5 text-xs text-slate-900">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">
+                      {React.createElement(currentVertical.floatingMicroBottom.icon, { size: 16 })}
+                    </div>
+                    <div>
+                      <div className="font-extrabold text-[12px]">{currentVertical.floatingMicroBottom.value}</div>
+                      <div className="text-[10px] text-slate-500 font-medium">{currentVertical.floatingMicroBottom.label}</div>
+                    </div>
+                  </div>
+
                 </div>
 
               </div>
-            );
-          })}
+            </div>
 
-          {/* Bottom Dot Pagination (Ala Kasir Pintar) */}
-          <div className="flex items-center justify-center gap-2.5 mt-10">
-            {heroSlides.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentHeroSlide(idx)}
-                aria-label={`Pindah ke slide ${idx + 1}`}
-                className={`h-2.5 rounded-full transition-all duration-300 ${
-                  currentHeroSlide === idx 
-                    ? 'w-8 bg-amber-400 shadow-md shadow-amber-400/50' 
-                    : 'w-2.5 bg-white/30 hover:bg-white/60'
-                }`}
-              />
-            ))}
           </div>
 
         </div>
       </section>
 
-      {/* ─── 3. SOLUSI UNTUK BISNIS KULINER (GAYA KASIR PINTAR) ───────────── */}
+      {/* ─── 3. SOLUSI BERDASARKAN JENIS USAHA UMKM ───────────── */}
       <section id="solusi" className="py-20 bg-white border-y border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-3xl mx-auto mb-14">
             <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold uppercase tracking-wider">
-              Ekosistem Terintegrasi
+              Ekosistem Terintegrasi Multi-UMKM
             </span>
             <h2 className="text-2xl sm:text-4xl font-black text-slate-900 mt-3 mb-3">
-              Solusi Lengkap untuk Segala Bisnis Kuliner
+              Solusi Lengkap untuk 5 Industri Usaha UMKM
             </h2>
             <p className="text-sm sm:text-base text-slate-500">
-              Dirancang khusus menjawab tantangan nyata operasional kafe, warung makan, resto cepat saji, hingga bisnis franchise multi-cabang.
+              Tidak ada sistem satu ukuran untuk semua. CodePOS menghadirkan modul operasional khusus yang menjawab kebutuhan spesifik bisnis Anda tanpa kompromi.
             </p>
           </div>
 
@@ -671,17 +601,17 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
             
             {/* Left Column: Solution Selector Cards */}
             <div className="lg:col-span-5 space-y-3">
-              {culinarySolutions.map((sol, index) => {
+              {INDUSTRY_SOLUTIONS.map((sol, index) => {
                 const IconComponent = sol.icon;
                 const isActive = activeSolutionIndex === index;
 
                 return (
                   <div
-                    key={index}
+                    key={sol.id}
                     onClick={() => setActiveSolutionIndex(index)}
                     className={`p-5 rounded-3xl border transition-all cursor-pointer text-left ${
                       isActive 
-                        ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' 
+                        ? 'border-indigo-600 bg-indigo-50/50 shadow-sm ring-1 ring-indigo-500/20' 
                         : 'border-slate-200/80 hover:border-slate-300 bg-white'
                     }`}
                   >
@@ -692,9 +622,7 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                         <IconComponent size={20} />
                       </div>
                       <div>
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
-                        }`}>
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${sol.badgeTone}`}>
                           {sol.badge}
                         </span>
                         <h3 className="text-base font-bold text-slate-900 mt-1.5 mb-1">{sol.title}</h3>
@@ -706,56 +634,56 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
               })}
             </div>
 
-            {/* Right Column: Detailed Active Showcase with AI Image */}
+            {/* Right Column: Detailed Active Showcase */}
             <div className="lg:col-span-7">
-              <div className="bg-slate-50 rounded-[2.5rem] border border-slate-200/80 overflow-hidden shadow-sm flex flex-col justify-between">
-                
-                {/* Solution Cover Image */}
-                <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-200">
-                  <img 
-                    src={culinarySolutions[activeSolutionIndex].image} 
-                    alt={culinarySolutions[activeSolutionIndex].title}
-                    className="w-full h-full object-cover transition-all duration-500 hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/20 to-transparent" />
-                  <div className="absolute bottom-4 left-6">
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-indigo-600 text-white shadow-sm">
-                      {culinarySolutions[activeSolutionIndex].badge}
-                    </span>
-                    <div className="text-white font-black text-lg sm:text-xl mt-1">
-                      {culinarySolutions[activeSolutionIndex].title}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-6 sm:p-8">
-                  <p className="text-sm text-slate-600 leading-relaxed mb-6">
-                    {culinarySolutions[activeSolutionIndex].description}
-                  </p>
-
-                  <div className="space-y-3 pt-4 border-t border-slate-200">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Keunggulan Modul:</h4>
-                    {culinarySolutions[activeSolutionIndex].points.map((pt, idx) => (
-                      <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-700">
-                        <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                        <span>{pt}</span>
+              {(() => {
+                const activeSol = INDUSTRY_SOLUTIONS[activeSolutionIndex] || INDUSTRY_SOLUTIONS[0];
+                const ActiveIcon = activeSol.icon;
+                return (
+                  <div className="bg-slate-50 rounded-[2.5rem] border border-slate-200/80 overflow-hidden shadow-sm flex flex-col justify-between p-6 sm:p-8">
+                    
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+                        <ActiveIcon size={24} />
                       </div>
-                    ))}
-                  </div>
+                      <div>
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${activeSol.badgeTone}`}>
+                          {activeSol.badge}
+                        </span>
+                        <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
+                          {activeSol.title}
+                        </h3>
+                      </div>
+                    </div>
 
-                  <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <span className="text-xs text-slate-500">Ingin melihat langsung bagaimana fitur ini berjalan di kafe Anda?</span>
-                    <button
-                      onClick={() => setIsRegisterOpen(true)}
-                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 active:scale-95"
-                    >
-                      <span>Coba Fitur Ini Gratis</span>
-                      <ChevronRight size={15} />
-                    </button>
-                  </div>
-                </div>
+                    <p className="text-sm sm:text-base text-slate-600 leading-relaxed mb-6">
+                      {activeSol.description}
+                    </p>
 
-              </div>
+                    <div className="space-y-3 pt-4 border-t border-slate-200">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Fitur Utama & Keunggulan Khusus:</h4>
+                      {activeSol.points.map((pt, idx) => (
+                        <div key={idx} className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700">
+                          <Check size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                          <span>{pt}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <span className="text-xs text-slate-500">Mulai operasional toko Anda hari ini tanpa kendala:</span>
+                      <button
+                        onClick={() => handleOpenRegisterWithVertical(activeSol.wizardType)}
+                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
+                      >
+                        <span>Coba Gratis untuk {activeSol.title.split(',')[0]}</span>
+                        <ArrowRight size={14} />
+                      </button>
+                    </div>
+
+                  </div>
+                );
+              })()}
             </div>
 
           </div>
@@ -786,10 +714,10 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                 1
               </div>
               <h3 className="text-base font-bold text-slate-900 mb-2">
-                Daftar & Beri Nama Toko
+                Daftar & Beri Nama Usaha
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-                Cukup masukkan nama kafe Anda dan tentukan tipe usaha kuliner Anda. Proses registrasi hanya butuh 60 detik!
+                Cukup masukkan nama toko/bengkel/sanggar Anda dan pilih bidang usaha Anda. Proses registrasi hanya butuh 60 detik!
               </p>
             </div>
 
@@ -798,10 +726,10 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                 2
               </div>
               <h3 className="text-base font-bold text-slate-900 mb-2">
-                Menu & Meja Siap Otomatis
+                Katalog & Modul Siap Otomatis
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-                Sistem langsung membuatkan template menu makanan, minuman, dan tata letak meja standar yang siap pakai.
+                Sistem langsung membuatkan data produk contoh, alur operasional, dan pengaturan standar sesuai vertikal usaha yang dipilih.
               </p>
             </div>
 
@@ -813,7 +741,7 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                 Langsung Buka Kasir & Cetak Struk
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-                Buka kasir di tablet atau HP Anda, klik menu pesanan, simulasikan pembayaran QRIS, dan hubungkan printer thermal Anda.
+                Buka kasir di tablet, laptop, atau smartphone Anda, mulai transaksi pertama, dan hubungkan printer thermal Anda.
               </p>
             </div>
 
@@ -826,12 +754,12 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                 <HeartHandshake size={20} />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-800">Butuh Bantuan Memasukkan Daftar Menu Toko Anda?</h4>
-                <p className="text-xs text-slate-500">Tim spesialis kami siap membantu mengimpor daftar menu Anda secara gratis selama masa uji coba.</p>
+                <h4 className="text-sm font-bold text-slate-800">Butuh Bantuan Memasukkan Daftar Katalog & Menu Usaha Anda?</h4>
+                <p className="text-xs text-slate-500">Tim spesialis kami siap membantu mengimpor data produk Anda secara gratis selama masa uji coba.</p>
               </div>
             </div>
             <a
-              href="https://wa.me/6281234567890?text=Halo%20Tim%20Codenusa,%20saya%20ingin%20dibantu%20setup%20uji%20coba%20kafe%20saya"
+              href="https://wa.me/6281234567890?text=Halo%20Tim%20Codenusa,%20saya%20ingin%20dibantu%20setup%20uji%20coba%20usaha%20saya"
               target="_blank"
               rel="noreferrer"
               className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shrink-0 shadow-sm transition-all"
@@ -1458,6 +1386,7 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
         initialPlan={selectedPlanCode}
+        initialBusinessType={selectedVerticalForRegister}
         onSuccess={() => {
           setIsRegisterOpen(false);
         }}

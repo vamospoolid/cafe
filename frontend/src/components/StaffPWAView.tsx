@@ -137,6 +137,42 @@ export const VERTICAL_SOP_PRESETS: Record<string, { opening: SOPCheckItem[]; clo
       { id: 'r_cl5', text: 'Parkir Armada Kirim di Garasi & Kunci Setir', checked: false, category: 'clean' },
       { id: 'r_cl6', text: 'Matikan Lampu Display, AC & Gembok Rolling Door', checked: false, category: 'clean' },
     ]
+  },
+  RENTAL: {
+    opening: [
+      { id: 'rn_op1', text: 'Cek Kebersihan Etalase & Rak Gaun / Baju Adat', checked: false, category: 'clean' },
+      { id: 'rn_op2', text: 'Pastikan Aksesoris Kuningan & Mahkota Tertata Rapi', checked: false, category: 'bar' },
+      { id: 'rn_op3', text: 'Siapkan Lembar Kontrak Sewa & Kwitansi Jaminan', checked: false, category: 'cash' },
+      { id: 'rn_op4', text: 'Hitung Modal Kasir & Kas Laci Awal', checked: false, category: 'cash' },
+      { id: 'rn_op5', text: 'Nyalakan POS & Pastikan WhatsApp Notifikasi Siap', checked: false, category: 'cash' },
+      { id: 'rn_op6', text: 'Cek Jadwal Fitting & Pengambilan Busana Hari Ini', checked: false, category: 'bar' },
+    ],
+    closing: [
+      { id: 'rn_cl1', text: 'Sortir Busana Kembali: Cek Kerusakan / Noda / Robek', checked: false, category: 'clean' },
+      { id: 'rn_cl2', text: 'Gantung Busana Kotor ke Area Laundry / Dry Clean', checked: false, category: 'clean' },
+      { id: 'rn_cl3', text: 'Simpan Perhiasan & Mahkota ke Kotak Bersekat', checked: false, category: 'bar' },
+      { id: 'rn_cl4', text: 'Rekonsiliasi Kas Jaminan & Tutup Shift Kasir', checked: false, category: 'cash' },
+      { id: 'rn_cl5', text: 'Matikan Lampu Sorot Display & AC Fitting Room', checked: false, category: 'clean' },
+      { id: 'rn_cl6', text: 'Kunci Pintu Sanggar & Nyalakan Pengaman Toko', checked: false, category: 'clean' },
+    ]
+  },
+  LAUNDRY: {
+    opening: [
+      { id: 'l_op1', text: 'Cek Ketersediaan Deterjen, Softener & Parfum', checked: false, category: 'bar' },
+      { id: 'l_op2', text: 'Kalibrasi Timbangan Digital & Pastikan Akurat', checked: false, category: 'bar' },
+      { id: 'l_op3', text: 'Bersihkan Filter Lint Mesin Pengering & Drum Cuci', checked: false, category: 'clean' },
+      { id: 'l_op4', text: 'Hitung Kas Awal / Modal Uang Kembalian Kasir', checked: false, category: 'cash' },
+      { id: 'l_op5', text: 'Nyalakan POS & Printer Label Tag Antrean', checked: false, category: 'cash' },
+      { id: 'l_op6', text: 'Cek Target Selesai Cucian SLA Kilat Hari Ini', checked: false, category: 'bar' },
+    ],
+    closing: [
+      { id: 'l_cl1', text: 'Sortir Cucian Selesai ke Nomor Rak Simpan Pelanggan', checked: false, category: 'bar' },
+      { id: 'l_cl2', text: 'Kuras Selang Air & Matikan Kran Mesin Cuci', checked: false, category: 'clean' },
+      { id: 'l_cl3', text: 'Buang Serat Lint Pengering & Bersihkan Area Basah', checked: false, category: 'clean' },
+      { id: 'l_cl4', text: 'Rekonsiliasi Kas Laci & Rekap Nota Ambil Hari Ini', checked: false, category: 'cash' },
+      { id: 'l_cl5', text: 'Matikan Mesin Boiler Setrika & Buang Tekanan Uap', checked: false, category: 'bar' },
+      { id: 'l_cl6', text: 'Gembok Rolling Door & Kunci Pintu Outlet', checked: false, category: 'clean' },
+    ]
   }
 };
 
@@ -185,10 +221,12 @@ export const StaffPWAView: React.FC = () => {
   const [selectedShiftId, setSelectedShiftId] = useState<string>('pagi');
 
   // Business Type & Role Identification
-  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' = (settings?.businessType || user?.tenant?.businessType || 'CAFE').toUpperCase() as any;
+  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' | 'RENTAL' = (settings?.businessType || user?.tenant?.businessType || 'CAFE').toUpperCase() as any;
   const isCafe = businessType === 'CAFE';
   const isBengkel = businessType === 'BENGKEL';
   const isRetail = businessType === 'RETAIL';
+  const isLaundry = businessType === 'LAUNDRY';
+  const isRental = businessType === 'RENTAL';
   const isOwnerOrAdmin = ['owner', 'admin', 'manager', 'supervisor', 'superadmin'].includes(user?.role?.toLowerCase() || '');
 
   // GPS State
@@ -228,7 +266,15 @@ export const StaffPWAView: React.FC = () => {
   const [handoverForm, setHandoverForm] = useState({
     shiftName: 'Shift Pagi ke Shift Sore',
     cashBalance: '',
-    equipmentStatus: isBengkel ? 'Semua toolkit & mesin kompresor normal' : isRetail ? 'Area lorong bersih & display rapi' : 'Semua mesin normal & area bar bersih',
+    equipmentStatus: isBengkel
+      ? 'Semua toolkit & mesin kompresor normal'
+      : isRetail
+      ? 'Area lorong bersih & display rapi'
+      : isRental
+      ? 'Busana tersortir rapi, laci jaminan terkunci, etalase aman'
+      : isLaundry
+      ? 'Mesin cuci & pengering normal, cucian sudah tersortir'
+      : 'Semua mesin normal & area bar bersih',
     notes: ''
   });
   const [submittingHandover, setSubmittingHandover] = useState(false);
@@ -2370,6 +2416,44 @@ export const StaffPWAView: React.FC = () => {
                           Sparepart
                         </button>
                       </>
+                    ) : isRental ? (
+                      <>
+                        <button
+                          onClick={() => setStockCategory('FOOD')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'FOOD' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Busana
+                        </button>
+                        <button
+                          onClick={() => setStockCategory('DRINK')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'DRINK' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Aksesori
+                        </button>
+                      </>
+                    ) : isLaundry ? (
+                      <>
+                        <button
+                          onClick={() => setStockCategory('FOOD')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'FOOD' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Deterjen
+                        </button>
+                        <button
+                          onClick={() => setStockCategory('DRINK')}
+                          className={`py-1.5 rounded-xl font-bold transition-all ${
+                            stockCategory === 'DRINK' ? 'bg-[#7C3AED] text-white shadow-sm' : 'bg-[#F4F6F9] text-slate-600'
+                          }`}
+                        >
+                          Parfum
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button
@@ -2390,6 +2474,7 @@ export const StaffPWAView: React.FC = () => {
                         </button>
                       </>
                     )}
+
 
                     <button
                       onClick={() => setStockCategory('LOW')}
@@ -3186,7 +3271,7 @@ export const StaffPWAView: React.FC = () => {
               }`}
             >
               <Package size={20} className={activeTab === 'stock' ? 'text-[#7C3AED]' : 'text-slate-400'} />
-              <span className="text-[10px] mt-0.5">{isBengkel ? 'Part' : isRetail ? 'Barang' : 'Stok'}</span>
+              <span className="text-[10px] mt-0.5">{isBengkel ? 'Part' : isRetail ? 'Barang' : isRental ? 'Busana' : isLaundry ? 'Deterjen' : 'Stok'}</span>
               {activeTab === 'stock' ? (
                 <span className="w-1.5 h-1.5 rounded-full bg-[#FFD600] mt-0.5" />
               ) : ingredients.filter(i => i.stock <= i.minStock).length > 0 ? (
@@ -3266,7 +3351,7 @@ export const StaffPWAView: React.FC = () => {
                 </div>
 
                 <p className="text-[10px] text-purple-200/70">
-                  Scan QR code ini di POS Kasir atau KDS Dapur untuk otentikasi instan.
+                  Scan QR code ini di POS Kasir{isCafe ? ' atau KDS Dapur' : ''} untuk otentikasi instan.
                 </p>
               </div>
 

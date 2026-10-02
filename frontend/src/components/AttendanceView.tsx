@@ -12,6 +12,7 @@ import { toast } from '../utils/alert';
 import { exportIndividualAppraisalPDF } from '../utils/pdfGenerator';
 
 import { getTodayStr, formatLocalDate } from '../utils/dateUtils';
+import { useVertical } from '../context/VerticalContext';
 
 interface IndividualSummary {
   user: {
@@ -76,6 +77,7 @@ interface IndividualSummary {
 }
 
 export const AttendanceView: React.FC = () => {
+  const { isCafe, isRental, isBengkel, isLaundry, isRetail } = useVertical();
   const [activeTab, setActiveTab] = useState<'daily' | 'individual' | 'leaves' | 'sop_handover'>('daily');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [attendances, setAttendances] = useState<any[]>([]);
@@ -922,7 +924,7 @@ export const AttendanceView: React.FC = () => {
                             )}
                             {s.kitchenStats && s.kitchenStats.totalLossIncidents > 0 && (
                               <div className="text-[10px] text-amber-600 font-bold">
-                                🍳 Loss Dapur: Rp {s.kitchenStats.totalLossCost.toLocaleString()}
+                                {isCafe ? '🍳 Loss Dapur' : '📦 Loss Barang / Aset'}: Rp {s.kitchenStats.totalLossCost.toLocaleString()}
                               </div>
                             )}
                           </div>
@@ -956,7 +958,7 @@ export const AttendanceView: React.FC = () => {
                       <th className="py-3.5 px-4 text-center">Skor KPI</th>
                       <th className="py-3.5 px-4 text-center">Presensi</th>
                       <th className="py-3.5 px-4 text-center">Akurasi Kasir</th>
-                      <th className="py-3.5 px-4 text-center">Loss Dapur</th>
+                      <th className="py-3.5 px-4 text-center">{isCafe ? 'Loss Dapur' : 'Loss / Waste'}</th>
                       <th className="py-3.5 px-4 text-center">Bonus / Denda HR</th>
                       <th className="py-3.5 px-4 text-center">Aksi</th>
                     </tr>
@@ -1207,11 +1209,11 @@ export const AttendanceView: React.FC = () => {
                     )}
                   </div>
 
-                  {/* PILAR 3: EFISIENSI & STOCK LOSS DAPUR */}
+                  {/* PILAR 3: EFISIENSI & STOCK LOSS */}
                   <div className="p-4.5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-3">
                     <h4 className="text-xs font-black text-rose-900 uppercase tracking-wider flex items-center gap-2">
                       <TrendingUp size={16} className="text-rose-600" />
-                      3. Pilar Pengendalian Stock Loss & Dapur
+                      3. Pilar Pengendalian Stock Loss &amp; {isCafe ? 'Dapur' : 'Operasional'}
                     </h4>
                     {selectedUserSummary.kitchenStats && selectedUserSummary.kitchenStats.totalLossIncidents > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
@@ -1232,12 +1234,14 @@ export const AttendanceView: React.FC = () => {
                           <span className="text-sm font-black text-amber-700">
                             Rp {selectedUserSummary.kitchenStats.humanErrorLossCost.toLocaleString()}
                           </span>
-                          <span className="text-[10px] text-slate-400 block">(Gosong / Salah Resep / Tumpah)</span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {isCafe ? '(Gosong / Salah Resep / Tumpah)' : '(Barang Rusak / Cacat / Hilang)'}
+                          </span>
                         </div>
                       </div>
                     ) : (
                       <div className="p-3 bg-white rounded-xl border border-slate-100 text-center text-xs text-slate-400">
-                        Tidak ada catatan insiden stock loss / waste dapur untuk karyawan ini. 🎉
+                        Tidak ada catatan insiden stock loss / waste {isCafe ? 'dapur ' : ''}untuk karyawan ini. 🎉
                       </div>
                     )}
                   </div>
@@ -1419,7 +1423,7 @@ export const AttendanceView: React.FC = () => {
               <div className="flex items-center justify-between border-b pb-3">
                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                   <Sparkles size={16} className="text-indigo-600" />
-                  <span>Kepatuhan SOP Buka / Tutup Dapur Hari Ini</span>
+                  <span>Kepatuhan SOP Buka / Tutup {isCafe ? 'Dapur' : isRental ? 'Sanggar' : isBengkel ? 'Bengkel' : isLaundry ? 'Outlet' : 'Toko'} Hari Ini</span>
                 </h3>
                 <span className="text-xs font-bold text-slate-400">{todaySopList.length} Sesi</span>
               </div>

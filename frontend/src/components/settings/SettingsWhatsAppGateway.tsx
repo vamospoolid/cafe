@@ -381,7 +381,13 @@ export const SettingsWhatsAppGateway: React.FC = () => {
       .split('{mechanicName}').join('Mas Agus')
       .split('{rackNumber}').join('A-02')
       .split('{weightKg}').join('4.5 Kg')
-      .split('{perfume}').join('Lavender Premium');
+      .split('{perfume}').join('Lavender Premium')
+      .split('{attireSummary}').join('Set Baju Bodo Tokko Merah Marun (Lengkap Saloko & Keris)')
+      .split('{pickupDate}').join('Jumat, 25 Sep 2026')
+      .split('{returnDeadline}').join('Senin, 28 Sep 2026, 17:00 WITA')
+      .split('{depositAmount}').join('Rp 150.000')
+      .split('{daysLate}').join('2')
+      .split('{estimatedLateFee}').join('Rp 100.000');
 
     return sample;
   };
@@ -397,7 +403,13 @@ export const SettingsWhatsAppGateway: React.FC = () => {
     { tag: '{tableName}', label: 'Nomor Meja' },
     { tag: '{vehiclePlate}', label: 'Plat Nomor' },
     { tag: '{vehicleModel}', label: 'Model Motor/Mobil' },
-    { tag: '{rackNumber}', label: 'Rak Cucian' }
+    { tag: '{rackNumber}', label: 'Rak Cucian' },
+    { tag: '{attireSummary}', label: 'Koleksi Busana Adat' },
+    { tag: '{pickupDate}', label: 'Jadwal Ambil/Fitting' },
+    { tag: '{returnDeadline}', label: 'Batas Pengembalian' },
+    { tag: '{depositAmount}', label: 'Uang Jaminan/Deposit' },
+    { tag: '{daysLate}', label: 'Hari Terlambat' },
+    { tag: '{estimatedLateFee}', label: 'Estimasi Denda' }
   ];
 
   return (

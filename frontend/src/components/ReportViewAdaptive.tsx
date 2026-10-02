@@ -7,6 +7,7 @@ const ReportViewCafe = React.lazy(() => import('./ReportView').then(m => ({ defa
 const BengkelReports = React.lazy(() => import('../verticals/bengkel/BengkelReports').then(m => ({ default: m.BengkelReports })));
 const RetailReports = React.lazy(() => import('../verticals/retail/RetailReports').then(m => ({ default: m.RetailReports })));
 const LaundryReports = React.lazy(() => import('../verticals/laundry/LaundryReports').then(m => ({ default: m.LaundryReports })));
+const RentalReports = React.lazy(() => import('../verticals/rental/RentalReports').then(m => ({ default: m.RentalReports })));
 const ConsolidatedOutletDashboard = React.lazy(() => import('./ConsolidatedOutletDashboard').then(m => ({ default: m.ConsolidatedOutletDashboard })));
 
 const FallbackLoader = () => (
@@ -19,7 +20,7 @@ const FallbackLoader = () => (
 );
 
 export const ReportViewAdaptive: React.FC = () => {
-  const { isBengkel, isRetail, isLaundry } = useVertical();
+  const { isBengkel, isRetail, isLaundry, isRental } = useVertical();
   const posContext = useContext(POSContext);
   const [activeTab, setActiveTab] = useState<'vertical' | 'consolidated'>('vertical');
 
@@ -29,6 +30,8 @@ export const ReportViewAdaptive: React.FC = () => {
     ? 'Laporan Retail' 
     : isLaundry 
     ? 'Laporan Laundry' 
+    : isRental
+    ? 'Laporan Rental'
     : 'Laporan Kafe';
 
   const isOwnerOrAdmin = ['OWNER', 'ADMIN'].includes(String(posContext?.user?.role).toUpperCase()) || (posContext?.user as any)?.isPlatformAdmin;
@@ -73,6 +76,8 @@ export const ReportViewAdaptive: React.FC = () => {
           <RetailReports />
         ) : isLaundry ? (
           <LaundryReports />
+        ) : isRental ? (
+          <RentalReports />
         ) : (
           <ReportViewCafe />
         )}

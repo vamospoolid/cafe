@@ -165,16 +165,22 @@ export const connectGattWithRetry = async (device: any, maxRetries = 2): Promise
   let lastError: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Disconnect socket lama jika dalam keadaan hanging / half-open
-      if (device.gatt) {
+      // Disconnect socket lama hanya jika masih dalam keadaan terhubung sebagian
+      if (device.gatt?.connected) {
         try {
           device.gatt.disconnect();
         } catch { /* ignore */ }
+        await new Promise(r => setTimeout(r, 200));
       }
 
-      await new Promise(r => setTimeout(r, 350));
+      // Timeout proteksi 4.5 detik agar Chrome tidak menggantung tanpa batas di Windows BLE
+      const server = await Promise.race([
+        device.gatt.connect(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Koneksi Bluetooth timeout (4.5s). Printer tidak merespons.')), 4500)
+        )
+      ]);
 
-      const server = await device.gatt.connect();
       if (server && server.connected) {
         return server;
       }
@@ -182,7 +188,7 @@ export const connectGattWithRetry = async (device: any, maxRetries = 2): Promise
       lastError = err;
       console.warn(`[GATT Connect] Percobaan ${attempt}/${maxRetries} gagal:`, err.message);
       if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 500));
       }
     }
   }

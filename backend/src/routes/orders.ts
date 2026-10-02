@@ -159,6 +159,74 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     const whereCondition: any = {};
     if (tenantId) {
       whereCondition.tenantId = tenantId;
+
+      // ─── RENTAL VERTICAL HARMONIZATION ──────────────────────────────────────────
+      // Jika tenant adalah RENTAL (Penyewaan Baju Bodo & Busana Adat), otomatis
+      // sinkronisasikan dan ambil dari RentalOrder agar riwayat transaksi tidak kosong.
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { businessType: true }
+      });
+
+      if (tenant?.businessType === 'RENTAL') {
+        const rentalWhere: any = { tenantId };
+        if (date) {
+          const { startUtc, endUtc } = getLocalDateRange(date as string, tzOffset as string);
+          rentalWhere.createdAt = { gte: startUtc, lte: endUtc };
+        } else if (startDate && endDate) {
+          const { startUtc, endUtc } = getCustomDateRange(startDate as string, endDate as string, tzOffset as string);
+          rentalWhere.createdAt = { gte: startUtc, lte: endUtc };
+        }
+        if (status) {
+          if (status === 'Void') rentalWhere.status = 'CANCELLED';
+          else if (status === 'Paid') rentalWhere.paymentStatus = 'FULL_PAID';
+          else if (status === 'Pending') rentalWhere.paymentStatus = { in: ['UNPAID', 'DP_PAID'] };
+          else rentalWhere.status = status;
+        }
+
+        const rentalOrders = await prisma.rentalOrder.findMany({
+          where: rentalWhere,
+          include: {
+            items: true,
+            customer: true
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        const normalizedOrders = rentalOrders.map(ro => ({
+          id: ro.id,
+          orderNumber: ro.orderNumber,
+          customerName: ro.customerName,
+          customerPhone: ro.customerPhone,
+          total: ro.totalAmount,
+          subtotal: ro.rentalSubtotal,
+          discount: ro.discount,
+          paidAmount: ro.paidAmount,
+          depositAmount: ro.depositAmount,
+          status: ro.status === 'CANCELLED' ? 'Void' : (ro.paymentStatus === 'FULL_PAID' ? 'Paid' : 'Pending'),
+          rentalStatus: ro.status,
+          paymentStatus: ro.paymentStatus,
+          paymentMethod: ro.paymentMethod || 'CASH',
+          createdAt: ro.createdAt,
+          eventDate: ro.eventDate,
+          pickupDate: ro.pickupDate,
+          returnDeadline: ro.returnDeadline,
+          user: { name: 'Kasir Rental', username: 'rental' },
+          items: ro.items.map(it => ({
+            id: it.id,
+            productId: it.attireCode,
+            quantity: 1,
+            price: it.price || 0,
+            subtotal: it.price || 0,
+            product: {
+              name: `${it.attireName}${it.size ? ` (${it.size})` : ''}${it.rackHangerCode ? ` [${it.rackHangerCode}]` : ''}`,
+              imageUrl: null
+            }
+          }))
+        }));
+
+        return res.json(normalizedOrders);
+      }
     }
     
     if (active === 'true') {
@@ -217,11 +285,55 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
     const tenantId = (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
 
     // IDOR Guard: selalu sertakan tenantId agar tidak bisa intip order kafe lain
-    const orderWhere: any = { id: Number(id) };
-    if (tenantId) orderWhere.tenantId = tenantId;
-    else if (!(req as any).user?.isPlatformAdmin) {
+    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
+
+    // Jika id bukan angka murni (misal UUID RentalOrder)
+    if (isNaN(Number(id))) {
+      const rentalOrder = await prisma.rentalOrder.findFirst({
+        where: { id: String(id), ...(tenantId ? { tenantId } : {}) },
+        include: { items: true, customer: true, outlet: true }
+      });
+      if (rentalOrder) {
+        return res.json({
+          id: rentalOrder.id,
+          orderNumber: rentalOrder.orderNumber,
+          customerName: rentalOrder.customerName,
+          customerPhone: rentalOrder.customerPhone,
+          total: rentalOrder.totalAmount,
+          subtotal: rentalOrder.rentalSubtotal,
+          discount: rentalOrder.discount,
+          paidAmount: rentalOrder.paidAmount,
+          depositAmount: rentalOrder.depositAmount,
+          status: rentalOrder.status === 'CANCELLED' ? 'Void' : (rentalOrder.paymentStatus === 'FULL_PAID' ? 'Paid' : 'Pending'),
+          rentalStatus: rentalOrder.status,
+          paymentStatus: rentalOrder.paymentStatus,
+          paymentMethod: rentalOrder.paymentMethod || 'CASH',
+          createdAt: rentalOrder.createdAt,
+          eventDate: rentalOrder.eventDate,
+          pickupDate: rentalOrder.pickupDate,
+          returnDeadline: rentalOrder.returnDeadline,
+          customer: rentalOrder.customer,
+          user: { name: 'Kasir Rental', username: 'rental' },
+          items: rentalOrder.items.map(it => ({
+            id: it.id,
+            productId: it.attireCode,
+            quantity: 1,
+            price: it.price || 0,
+            subtotal: it.price || 0,
+            product: {
+              name: `${it.attireName}${it.size ? ` (${it.size})` : ''}${it.rackHangerCode ? ` [${it.rackHangerCode}]` : ''}`,
+              imageUrl: null
+            }
+          }))
+        });
+      }
+      return res.status(404).json({ error: 'Kontrak sewa busana tidak ditemukan' });
+    }
+
+    const orderWhere: any = { id: Number(id) };
+    if (tenantId) orderWhere.tenantId = tenantId;
 
     const order = await prisma.order.findFirst({
       where: orderWhere,

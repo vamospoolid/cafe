@@ -413,6 +413,7 @@ import { runBengkelInvoiceOverdueCheck } from './routes/bengkel/invoices';
 // ─── SaaS Subscription & Backup Background Automation ───────────────────────
 import { subscriptionCronService } from './services/SubscriptionCronService';
 import { backupCronService } from './services/BackupCronService';
+import { rentalReminderCronService } from './services/RentalReminderCronService';
 
 if (require.main === module) {
   httpServer.listen(PORT, () => {
@@ -427,7 +428,7 @@ if (require.main === module) {
     if (isPrimaryWorker) {
       console.log('[Cron] Worker primer terdeteksi — background jobs diaktifkan.');
 
-      // Run initial EOD, Subscription, Bengkel Overdue, and Backup check on startup
+      // Run initial EOD, Subscription, Bengkel Overdue, Rental Reminder, and Backup check on startup
       setTimeout(async () => {
         try {
           await runShiftAutoCutoff();
@@ -435,6 +436,13 @@ if (require.main === module) {
           await runBengkelInvoiceOverdueCheck();
         } catch (e) {
           console.error('[Auto-EOD Background Task Error]', e);
+        }
+
+        try {
+          const rentalReminderResult = await rentalReminderCronService.runRentalReminderCycle();
+          console.log('[RentalReminderCron Startup Result]', rentalReminderResult);
+        } catch (e) {
+          console.error('[RentalReminderCron Startup Error]', e);
         }
 
         try {
@@ -460,7 +468,7 @@ if (require.main === module) {
         }
       }, 5000);
 
-      // Periodic interval (runs every 30 minutes to check auto-cutoff, subscriptions, and 03:00 WIB backup)
+      // Periodic interval (runs every 30 minutes to check auto-cutoff, subscriptions, rental reminders, and 03:00 WIB backup)
       setInterval(async () => {
         try {
           await runShiftAutoCutoff();
@@ -468,6 +476,12 @@ if (require.main === module) {
           await runBengkelInvoiceOverdueCheck();
         } catch (e) {
           console.error('[Auto-EOD Periodic Error]', e);
+        }
+
+        try {
+          await rentalReminderCronService.runRentalReminderCycle();
+        } catch (e) {
+          console.error('[RentalReminderCron Periodic Error]', e);
         }
 
         try {

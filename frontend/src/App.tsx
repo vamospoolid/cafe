@@ -21,6 +21,7 @@ import { PrinterProvider } from './context/PrinterContext';
 import VerticalGuard from './components/VerticalGuard';
 import ChunkErrorBoundary from './components/ChunkErrorBoundary';
 import { updatePwaManifestForRoute } from './utils/pwaManager';
+import './utils/pdfDownloadHelper';
 
 // ─── Code Splitting & Dynamic Imports for Large Modules (Bundle Optimization) ─────
 const BengkelRoutes = React.lazy(() => import('./verticals/bengkel/BengkelRoutes'));
@@ -31,6 +32,8 @@ const POSLaundry = React.lazy(() => import('./verticals/laundry/POSLaundry'));
 const LaundryKanbanView = React.lazy(() => import('./verticals/laundry/LaundryKanbanView'));
 const POSRental = React.lazy(() => import('./verticals/rental/POSRental'));
 const RentalKanbanView = React.lazy(() => import('./verticals/rental/RentalKanbanView'));
+const RentalInventoryView = React.lazy(() => import('./verticals/rental/RentalInventoryView'));
+const RentalCalendarView = React.lazy(() => import('./verticals/rental/RentalCalendarView'));
 const ReportViewAdaptive = React.lazy(() => import('./components/ReportViewAdaptive'));
 const ProductView = React.lazy(() => import('./components/ProductView'));
 const TransactionHistoryView = React.lazy(() => import('./components/TransactionHistoryView'));
@@ -289,11 +292,31 @@ const AppRoutes = () => {
                     }
                   />
                   <Route
+                    path="/rental-calendar"
+                    element={
+                      <VerticalGuard allow="RENTAL">
+                        <Suspense fallback={<div className="p-8 text-center text-amber-600 font-bold text-xs">Memuat Kalender Sewa...</div>}>
+                          <RentalCalendarView />
+                        </Suspense>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
                     path="/rental-kanban"
                     element={
                       <VerticalGuard allow="RENTAL">
                         <Suspense fallback={<div className="p-8 text-center text-amber-600 font-bold text-xs">Memuat Papan Status Sewa...</div>}>
                           <RentalKanbanView />
+                        </Suspense>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
+                    path="/rental-inventory"
+                    element={
+                      <VerticalGuard allow="RENTAL">
+                        <Suspense fallback={<div className="p-8 text-center text-amber-600 font-bold text-xs">Memuat Inventaris Busana...</div>}>
+                          <RentalInventoryView />
                         </Suspense>
                       </VerticalGuard>
                     }

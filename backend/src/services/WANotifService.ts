@@ -1,5 +1,6 @@
 import prisma from '../db';
 import { whatsAppManager } from './WhatsAppManager';
+import { whatsAppTemplateService } from './WhatsAppTemplateService';
 
 interface SPKNotificationPayload {
   tenantId: string;
@@ -278,7 +279,163 @@ export class WANotifService {
       payload.referenceId
     );
   }
+
+  /**
+   * Kirim WhatsApp Pengingat Jatuh Tempo Pengembalian Busana (H-1 / Hari-H)
+   */
+  public static async sendRentalDueReminder(payload: {
+    tenantId: string;
+    customerName: string;
+    customerPhone: string;
+    orderNumber: string;
+    attireSummary: string;
+    returnDeadline: Date | string;
+    storeName?: string;
+    storeAddress?: string;
+    isToday?: boolean;
+  }): Promise<boolean> {
+    if (!payload.customerPhone) return false;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: payload.tenantId },
+      select: { name: true }
+    });
+    const storeName = payload.storeName || tenant?.name || 'Butik Sewa Busana';
+
+    const deadlineStr = new Date(payload.returnDeadline).toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const timingLabel = payload.isToday ? 'HARI INI' : 'BESOK';
+
+    // 1. Cek apakah ada custom template dari tenant
+    let message = '';
+    const template = await prisma.whatsAppTemplate.findUnique({
+      where: {
+        tenantId_triggerKey: {
+          tenantId: payload.tenantId,
+          triggerKey: 'RENTAL_DUE_REMINDER'
+        }
+      }
+    });
+
+    if (template && template.isActive) {
+      message = whatsAppTemplateService.interpolate(template.templateBody, {
+        storeName,
+        storeAddress: payload.storeAddress,
+        customerName: payload.customerName,
+        customerPhone: payload.customerPhone,
+        orderNumber: payload.orderNumber,
+        attireSummary: payload.attireSummary,
+        returnDeadline: `${deadlineStr} (${timingLabel})`
+      });
+    } else {
+      message = `Halo Kak *${payload.customerName}*,\n` +
+        `Semoga acara bahagianya berjalan lancar dan berkesan! ✨\n\n` +
+        `Kami dari *${storeName}* ingin menginfokan bahwa masa sewa busana adat Anda dijadwalkan berakhir *${timingLabel}*:\n\n` +
+        `📋 *Rincian Sewa Busana*:\n` +
+        `• No. Kontrak: *#${payload.orderNumber}*\n` +
+        `• Busana: *${payload.attireSummary}*\n` +
+        `• Batas Pengembalian: *${deadlineStr}*\n\n` +
+        `⚠️ *Catatan Penting Pengembalian*:\n` +
+        `1. Pastikan seluruh kelengkapan aksesoris (saloko/mahkota, bando, keris, gelang, selempang, dll) telah lengkap di dalam tas busana.\n` +
+        `2. Pakaian *TIDAK PERLU DICUCI* oleh penyewa (sudah termasuk perawatan cuci profesional dari butik kami).\n` +
+        `3. Pengembalian tepat waktu akan membebaskan Anda dari denda keterlambatan harian dan uang jaminan (*deposit*) dapat langsung direfund penuh.\n\n` +
+        (payload.storeAddress ? `📍 *Alamat Butik*: ${payload.storeAddress}\n\n` : '') +
+        `Jika ada kendala terkait pengembalian, silakan balas pesan WhatsApp ini.\n` +
+        `Terima kasih! 🙏\n*${storeName}*`;
+    }
+
+    return this.sendTenantOrFonnte(
+      payload.tenantId,
+      payload.customerPhone,
+      message,
+      'RENTAL_DUE_REMINDER',
+      payload.orderNumber
+    );
+  }
+
+  /**
+   * Kirim WhatsApp Peringatan Keterlambatan Busana (Overdue Alert & Denda Berjalan)
+   */
+  public static async sendRentalOverdueAlert(payload: {
+    tenantId: string;
+    customerName: string;
+    customerPhone: string;
+    orderNumber: string;
+    attireSummary: string;
+    returnDeadline: Date | string;
+    daysLate: number;
+    estimatedLateFee?: number;
+    storeName?: string;
+  }): Promise<boolean> {
+    if (!payload.customerPhone) return false;
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: payload.tenantId },
+      select: { name: true }
+    });
+    const storeName = payload.storeName || tenant?.name || 'Butik Sewa Busana';
+
+    const deadlineStr = new Date(payload.returnDeadline).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const lateDays = Math.max(1, payload.daysLate || 1);
+    const dendaStr = payload.estimatedLateFee && payload.estimatedLateFee > 0
+      ? `Rp ${payload.estimatedLateFee.toLocaleString('id-ID')}`
+      : `Rp ${(lateDays * 50000).toLocaleString('id-ID')} (estimasi)`;
+
+    let message = '';
+    const template = await prisma.whatsAppTemplate.findUnique({
+      where: {
+        tenantId_triggerKey: {
+          tenantId: payload.tenantId,
+          triggerKey: 'RENTAL_OVERDUE_ALERT'
+        }
+      }
+    });
+
+    if (template && template.isActive) {
+      message = whatsAppTemplateService.interpolate(template.templateBody, {
+        storeName,
+        customerName: payload.customerName,
+        customerPhone: payload.customerPhone,
+        orderNumber: payload.orderNumber,
+        attireSummary: payload.attireSummary,
+        returnDeadline: deadlineStr,
+        daysLate: lateDays,
+        estimatedLateFee: dendaStr
+      });
+    } else {
+      message = `🚨 *PEMBERITAHUAN KETERLAMBATAN PENGEMBALIAN BUSANA*\n\n` +
+        `Kepada Yth. Kak *${payload.customerName}*,\n` +
+        `Sistem kami mencatat bahwa busana sewa Anda di *${storeName}* telah *MELEWATI BATAS WAKTU PENGEMBALIAN*:\n\n` +
+        `• No. Kontrak: *#${payload.orderNumber}*\n` +
+        `• Busana: *${payload.attireSummary}*\n` +
+        `• Jadwal Kembali: *${deadlineStr}*\n` +
+        `• Keterlambatan: *${lateDays} Hari*\n` +
+        `• Akumulasi Denda: *${dendaStr}*\n\n` +
+        `Mohon kerjasamanya untuk segera mengembalikan busana dan aksesoris hari ini agar tidak terjadi penambahan denda harian serta tidak mengganggu jadwal sewa pelanggan lain berikutnya.\n\n` +
+        `Silakan konfirmasi waktu kedatangan Anda dengan membalas pesan ini.\n\n` +
+        `Hormat kami,\n*${storeName}*`;
+    }
+
+    return this.sendTenantOrFonnte(
+      payload.tenantId,
+      payload.customerPhone,
+      message,
+      'RENTAL_OVERDUE_ALERT',
+      payload.orderNumber
+    );
+  }
 }
 
 export default WANotifService;
+
 

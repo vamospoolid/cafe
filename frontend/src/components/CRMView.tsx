@@ -35,7 +35,7 @@ import SettingsWhatsAppGateway from './settings/SettingsWhatsAppGateway';
 
 const CRMView = () => {
   const posContext = useContext(POSContext);
-  const { isBengkel } = useVertical();
+  const { isBengkel, isRental } = useVertical();
   const isAdminOrOwner = posContext?.user?.role?.toUpperCase() === 'ADMIN' || posContext?.user?.role?.toUpperCase() === 'OWNER';
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -448,6 +448,8 @@ const CRMView = () => {
             {customers.length}
           </span>
         </button>
+        {/* Voucher Tab: hanya relevan untuk Kafe & Retail */}
+        {!isRental && !isBengkel && (
         <button
           type="button"
           onClick={() => setActiveTab('vouchers')}
@@ -464,6 +466,7 @@ const CRMView = () => {
             </span>
           )}
         </button>
+        )}
         <button
           type="button"
           onClick={() => setActiveTab('whatsapp')}
@@ -1021,7 +1024,9 @@ const CRMView = () => {
 
               <div className="border-t border-indigo-100/70 pt-3 flex justify-between text-xs">
                 <div>
-                  <span className="text-muted block">Akumulasi Belanja</span>
+                  <span className="text-muted block">
+                    {isRental ? 'Total Nilai Sewa' : isBengkel ? 'Total Nilai Servis' : 'Akumulasi Belanja'}
+                  </span>
                   <span className="font-bold text-gray-800">{formatCurrency(selectedCustomer.totalSpent)}</span>
                 </div>
                 <div className="text-right">
@@ -1113,14 +1118,96 @@ const CRMView = () => {
               )}
             </div>
 
-            {/* Shopping History — Riwayat Transaksi (Kafe) atau Servis Kendaraan (Bengkel) */}
+            {/* Shopping History — Riwayat Transaksi (Kafe) / Servis Kendaraan (Bengkel) / Sewa Busana (Rental) */}
             <div>
               <h4 className="font-bold text-sm text-gray-800 flex items-center gap-2 mb-3">
                 <TrendingUp size={16} className="text-primary" />
-                {isBengkel ? '10 Servis Kendaraan Terakhir' : '10 Transaksi Terakhir'}
+                {isBengkel ? '10 Servis Kendaraan Terakhir' : isRental ? '10 Riwayat Sewa Busana Adat' : '10 Transaksi Terakhir'}
               </h4>
               {drawerLoading ? (
                 <div className="text-xs text-muted py-2 text-center">Memuat riwayat...</div>
+              ) : isRental ? (
+                // ── RENTAL: Riwayat Sewa Busana Adat ──────────────────────
+                !customerDetail?.rentalOrders || customerDetail.rentalOrders.length === 0 ? (
+                  <div className="text-xs text-muted py-4 text-center border border-dashed rounded-lg">
+                    Belum ada riwayat sewa busana untuk pelanggan ini
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {customerDetail.rentalOrders.slice(0, 10).map((ro: any) => {
+                      const isCompleted = ro.status === 'COMPLETED';
+                      const isCancelled = ro.status === 'CANCELLED';
+                      const isOverdue = ro.status === 'PICKED_UP' && new Date(ro.returnDeadline) < new Date();
+                      return (
+                        <div key={ro.id} className="p-3 border border-amber-100 bg-amber-50/20 rounded-xl hover:bg-amber-50/50 transition-colors space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="font-mono text-xs font-black text-amber-900 block">{ro.orderNumber}</span>
+                              <span className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                <Calendar size={10} /> Acara: <strong>{formatDate(ro.eventDate)}</strong>
+                              </span>
+                            </div>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                              isCompleted ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                              isCancelled ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                              isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse' :
+                              ro.status === 'PICKED_UP' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              ro.status === 'RETURNED' || ro.status === 'QC_CHECK' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                              'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            }`}>
+                            {/* FIX: Map status rental ke label Indonesia */}
+                            {(() => {
+                              const RENTAL_STATUS_LABEL: Record<string, string> = {
+                                BOOKED: 'Terjadwal', FITTING: 'Fitting', PICKED_UP: 'Di Klien',
+                                RETURNED: 'Dikembalikan', QC_CHECK: 'Cek QC', LAUNDRY: 'Laundry/Cuci',
+                                COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan'
+                              };
+                              return RENTAL_STATUS_LABEL[ro.status] || ro.status;
+                            })()}
+                            </span>
+                          </div>
+
+                          {/* Items / Busana Adat */}
+                          {ro.items && ro.items.length > 0 && (
+                            <div className="space-y-1 bg-white p-2 rounded-lg border border-slate-100 text-[10px]">
+                              {ro.items.map((it: any, idx: number) => (
+                                <div key={idx} className="flex justify-between items-center text-slate-700">
+                                  <span className="font-medium truncate max-w-[200px]">
+                                    👘 {it.attireName || it.name}
+                                    {it.size ? ` (${it.size})` : ''} {it.color ? `• ${it.color}` : ''}
+                                  </span>
+                                  {it.rackHangerCode && (
+                                    <span className="font-mono text-[9px] bg-slate-100 text-slate-600 px-1 py-0.5 rounded">
+                                      {it.rackHangerCode}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {ro.fittingNotes && (
+                            <div className="text-[10px] text-slate-600 italic bg-amber-50/60 p-1.5 rounded">
+                              Ukuran/Fitting: "{ro.fittingNotes}"
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-center pt-1.5 border-t border-amber-100/60 text-[11px]">
+                            <span className="text-slate-500 text-[10px]">
+                              Deposit: <strong className="text-slate-700">Rp {(ro.depositAmount || 0).toLocaleString('id-ID')}</strong>
+                            </span>
+                            <div className="text-right">
+                              <span className="font-black text-slate-900 block">Rp {(ro.totalAmount || 0).toLocaleString('id-ID')}</span>
+                              <span className={`text-[9px] font-bold ${ro.paymentStatus === 'FULL_PAID' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                {ro.paymentStatus === 'FULL_PAID' ? 'Lunas' : 'Belum Lunas / DP'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
               ) : isBengkel ? (
                 // ── BENGKEL: Riwayat SPK/Servis ──────────────────────────
                 !customerDetail?.workOrders || customerDetail.workOrders.length === 0 ? (

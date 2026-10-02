@@ -165,18 +165,16 @@ async function runGitPush() {
 
   try {
     const status = execSync('git status --porcelain', { cwd: ROOT_DIR, encoding: 'utf8' }).trim();
-    if (!status) {
-      logWarn('Tidak ada perubahan lokal baru yang perlu di-commit.');
-      logSuccess('Repositori lokal bersih dan siap di-deploy ke VPS.');
-      return;
+    if (status) {
+      console.log('   -> Menambahkan perubahan ke Git staging (git add .)...');
+      execSync('git add .', { cwd: ROOT_DIR, stdio: 'inherit' });
+
+      console.log(`   -> Commit perubahan dengan pesan: "${commitMsg}"...`);
+      execSync(`git commit -m "${commitMsg}"`, { cwd: ROOT_DIR, stdio: 'inherit' });
+      logSuccess('Git Commit berhasil dibuat.');
+    } else {
+      logWarn('Tidak ada perubahan lokal baru yang belum di-commit.');
     }
-
-    console.log('   -> Menambahkan perubahan ke Git staging (git add .)...');
-    execSync('git add .', { cwd: ROOT_DIR, stdio: 'inherit' });
-
-    console.log(`   -> Commit perubahan dengan pesan: "${commitMsg}"...`);
-    execSync(`git commit -m "${commitMsg}"`, { cwd: ROOT_DIR, stdio: 'inherit' });
-    logSuccess('Git Commit berhasil dibuat.');
 
     console.log(`   -> Mengunggah (git push origin ${activeBranch}) ke GitHub...`);
     try {

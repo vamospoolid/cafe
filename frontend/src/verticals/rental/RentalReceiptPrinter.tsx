@@ -22,17 +22,21 @@ interface RentalReceiptPrinterProps {
   order: any;
   onClose?: () => void;
   autoPrint?: boolean;
+  defaultDocType?: 'THERMAL' | 'CONTRACT_A4' | 'DEPOSIT_REFUND';
 }
 
 export const RentalReceiptPrinter: React.FC<RentalReceiptPrinterProps> = ({
   order,
   onClose,
-  autoPrint = false
+  autoPrint = false,
+  defaultDocType
 }) => {
   const { settings, user } = usePOS();
   const printRef = useRef<HTMLDivElement>(null);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [printDocType, setPrintDocType] = useState<'THERMAL' | 'CONTRACT_A4'>('THERMAL');
+  const [printDocType, setPrintDocType] = useState<'THERMAL' | 'CONTRACT_A4' | 'DEPOSIT_REFUND'>(() => {
+    return defaultDocType || order?.defaultDocType || 'THERMAL';
+  });
 
   const actualOrder = order?.order ? { ...order.order, ...order } : (order || {});
 
@@ -92,10 +96,41 @@ export const RentalReceiptPrinter: React.FC<RentalReceiptPrinterProps> = ({
     const phone = actualOrder.customerPhone ? actualOrder.customerPhone.replace(/[^0-9]/g, '') : '';
     const formattedPhone = phone.startsWith('0') ? '62' + phone.substring(1) : phone;
     const invoiceUrl = `${window.location.origin}/invoice/order/${actualOrder.orderNumber}`;
+
+    if (printDocType === 'DEPOSIT_REFUND') {
+      const depositVal = actualOrder.depositAmount || 0;
+      const lateFeeVal = actualOrder.lateFee || 0;
+      const damageFeeVal = actualOrder.damageFee || 0;
+      const refundVal = actualOrder.depositRefunded != null 
+        ? actualOrder.depositRefunded 
+        : Math.max(0, depositVal - lateFeeVal - damageFeeVal);
+
+      const messageRefund = `Halo Kak ${actualOrder.customerName || ''}, terima kasih telah menyewa busana adat di *${settings?.storeName || 'Sanggar Kami'}* ✨\n\n`
+        + `Berikut *BUKTI PENGEMBALIAN DEPOSIT JAMINAN* Anda:\n`
+        + `📋 *No. Kontrak:* #${actualOrder.orderNumber}\n`
+        + `📅 *Tgl Selesai:* ${formatDate(actualOrder.actualReturnDate || new Date().toISOString())}\n`
+        + `🛡️ *Deposit Jaminan Awal:* ${formatCurrency(depositVal)}\n`
+        + (lateFeeVal > 0 ? `⚠️ *Denda Terlambat:* ${formatCurrency(lateFeeVal)}\n` : '')
+        + (damageFeeVal > 0 ? `⚠️ *Denda Rusak/Noda:* ${formatCurrency(damageFeeVal)}\n` : '')
+        + `💵 *Total Deposit Dikembalikan:* *${formatCurrency(refundVal)}*\n`
+        + `📄 *Dokumen Jaminan (KTP/SIM):* Telah diserahkan kembali [✓]\n\n`
+        + `Terima kasih banyak telah merawat busana kami dengan baik. Sampai jumpa di acara bahagia berikutnya! 🙏`;
+
+      const waLink = formattedPhone 
+        ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(messageRefund)}`
+        : `https://wa.me/?text=${encodeURIComponent(messageRefund)}`;
+      window.open(waLink, '_blank');
+      return;
+    }
     
+    const itemSummary = (actualOrder.items || []).map((it: any, i: number) => 
+      `   ${i + 1}. ${it.attireName || it.name} (${formatCurrency(it.price)})`
+    ).join('\n');
+
     const message = `Halo Kak ${actualOrder.customerName || ''}, terima kasih telah menyewa busana adat di *${settings?.storeName || 'Sanggar Kami'}* ✨\n\n`
       + `Berikut resi digital & kontrak bukti sewa Anda:\n`
       + `📋 *No. Kontrak:* ${actualOrder.orderNumber}\n`
+      + (itemSummary ? `👗 *Busana Disewa:*\n${itemSummary}\n` : '')
       + `📅 *Tgl Acara:* ${formatDate(actualOrder.eventDate)}\n`
       + `⏰ *Batas Kembali:* ${formatDate(actualOrder.returnDeadline)}\n`
       + `💰 *Total Biaya:* ${formatCurrency(actualOrder.totalAmount)}\n`
@@ -141,47 +176,59 @@ export const RentalReceiptPrinter: React.FC<RentalReceiptPrinterProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+        <div className="bg-indigo-700 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center border border-white/20">
               <Sparkles size={18} />
             </div>
             <div>
               <h3 className="font-black text-sm text-white flex items-center gap-2">
-                Manajemen Resi & Kontrak Sewa
+                Manajemen Resi &amp; Kontrak Sewa
               </h3>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-indigo-100">
                 {actualOrder.orderNumber} • {actualOrder.customerName || 'Pelanggan'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Toggle Thermal vs Surat Kontrak A4 */}
-            <div className="bg-slate-800 p-1 rounded-xl flex items-center gap-1 text-xs">
+            {/* Toggle Thermal vs Surat Kontrak A4 vs Kwitansi Deposit */}
+            <div className="bg-black/20 p-1 rounded-xl flex items-center gap-1 text-xs">
               <button
                 type="button"
                 onClick={() => setPrintDocType('THERMAL')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   printDocType === 'THERMAL' 
-                    ? 'bg-amber-500 text-slate-950 shadow-sm' 
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-slate-900 shadow-xs' 
+                    : 'text-indigo-100 hover:text-white'
                 }`}
               >
                 <Printer size={13} />
-                <span>Thermal 58/80</span>
+                <span>Thermal</span>
               </button>
               <button
                 type="button"
                 onClick={() => setPrintDocType('CONTRACT_A4')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   printDocType === 'CONTRACT_A4' 
-                    ? 'bg-amber-500 text-slate-950 shadow-sm' 
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-white text-slate-900 shadow-xs' 
+                    : 'text-indigo-100 hover:text-white'
                 }`}
               >
                 <FileText size={13} />
-                <span>Surat Perjanjian A4</span>
+                <span className="hidden sm:inline">Kontrak A4</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintDocType('DEPOSIT_REFUND')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  printDocType === 'DEPOSIT_REFUND' 
+                    ? 'bg-emerald-500 text-white shadow-xs' 
+                    : 'text-indigo-100 hover:text-white'
+                }`}
+              >
+                <ShieldCheck size={13} />
+                <span>Kwitansi Deposit</span>
               </button>
             </div>
 
@@ -295,12 +342,16 @@ export const RentalReceiptPrinter: React.FC<RentalReceiptPrinterProps> = ({
                 <div className="my-2 text-[9px]">
                   <div className="font-bold text-slate-700 uppercase mb-0.5">Kelengkapan Aksesoris:</div>
                   <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                    {actualOrder.accessoryChecklist.map((acc: any, i: number) => (
-                      <div key={i} className="flex items-center gap-1">
-                        <span>[✓]</span>
-                        <span>{acc.name || acc}</span>
-                      </div>
-                    ))}
+                    {actualOrder.accessoryChecklist.map((acc: any, i: number) => {
+                      const name = typeof acc === 'string' ? acc : (acc.name || '-');
+                      const extra = acc?.extraPrice ? ` (+${(acc.extraPrice).toLocaleString('id-ID')})` : '';
+                      return (
+                        <div key={i} className="flex items-center gap-1">
+                          <span>[✓]</span>
+                          <span className={acc?.extraPrice ? 'font-bold text-violet-900' : ''}>{name}{extra}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -357,6 +408,150 @@ export const RentalReceiptPrinter: React.FC<RentalReceiptPrinterProps> = ({
 
               <div className="text-center text-[10px] font-bold text-slate-800 italic">
                 "{settings?.receiptFooter || 'Terima kasih atas kepercayaan Anda!'}"
+              </div>
+            </div>
+          ) : printDocType === 'DEPOSIT_REFUND' ? (
+            /* BUKTI PENGEMBALIAN DEPOSIT JAMINAN PREVIEW (THERMAL / A5 COMPATIBLE) */
+            <div
+              ref={printRef}
+              id="rental-deposit-refund-receipt"
+              className="bg-white p-6 shadow-sm border border-slate-300 w-full max-w-[360px] text-slate-900 font-mono text-[11px] leading-tight select-none rounded-xl"
+            >
+              {/* Header Toko */}
+              <div className="text-center space-y-1 mb-2">
+                <div className="font-black text-sm uppercase tracking-wide">
+                  {settings?.storeName || 'SANGGAR SEWA BUSANA ADAT'}
+                </div>
+                <div className="text-[10px] text-slate-600 leading-tight">
+                  {settings?.address || 'Spesialis Baju Bodo, Jas Tutup & Pakaian Pengantin Adat'}
+                </div>
+                {settings?.phone && (
+                  <div className="text-[10px] text-slate-600">WA: {settings?.phone}</div>
+                )}
+              </div>
+
+              <div className="text-center font-bold tracking-widest text-[10px] text-slate-400 mb-2">
+                ================================
+              </div>
+
+              {/* Title Bukti */}
+              <div className="text-center my-2 p-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+                <div className="font-black text-xs text-emerald-950 uppercase">
+                  BUKTI PENGEMBALIAN DEPOSIT
+                </div>
+                <div className="text-[9px] font-bold text-emerald-700">
+                  (Berita Acara QC &amp; Serah Terima Jaminan)
+                </div>
+              </div>
+
+              {/* Data Order & Penyewa */}
+              <div className="space-y-1 text-[10px] mb-2">
+                <div className="flex justify-between">
+                  <span>No. Kontrak:</span>
+                  <span className="font-bold">#{actualOrder.orderNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Penyewa:</span>
+                  <span className="font-bold">{actualOrder.customerName || 'Pelanggan'}</span>
+                </div>
+                {actualOrder.customerPhone && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>No. WhatsApp:</span>
+                    <span>{actualOrder.customerPhone}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-dashed border-slate-300 pt-1 mt-1">
+                  <span>Tgl Pengembalian:</span>
+                  <span className="font-bold">{formatDate(actualOrder.actualReturnDate || new Date().toISOString())}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Petugas QC:</span>
+                  <span>{user?.name || 'Staf Sanggar'}</span>
+                </div>
+              </div>
+
+              <div className="text-center font-bold tracking-widest text-[10px] text-slate-400 my-1">
+                --------------------------------
+              </div>
+
+              {/* Hasil Inspeksi Kelayakan */}
+              <div className="mb-2 space-y-1">
+                <div className="font-bold text-[10px] uppercase text-emerald-900">
+                  [ STATUS SERAH TERIMA FISIK ]
+                </div>
+                <div className="text-[10px] space-y-0.5 text-slate-700">
+                  <div className="flex justify-between">
+                    <span>• Koleksi Busana:</span>
+                    <span className="font-bold text-emerald-700">Lengkap Diterima ✓</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>• Identitas KTP/SIM:</span>
+                    <span className="font-bold text-emerald-700">Diserahkan Kembali ✓</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center font-bold tracking-widest text-[10px] text-slate-400 my-1">
+                --------------------------------
+              </div>
+
+              {/* Rekonsiliasi Deposit & Denda */}
+              <div className="space-y-1.5 text-[10px]">
+                <div className="font-bold text-[10px] uppercase text-slate-800">
+                  [ PERHITUNGAN DANA JAMINAN ]
+                </div>
+                <div className="flex justify-between text-slate-700">
+                  <span>Deposit Awal Diterima:</span>
+                  <span className="font-bold">{formatCurrency(deposit)}</span>
+                </div>
+                {(actualOrder.lateFee || 0) > 0 && (
+                  <div className="flex justify-between text-rose-600 font-bold">
+                    <span>Potongan Terlambat:</span>
+                    <span>-{formatCurrency(actualOrder.lateFee)}</span>
+                  </div>
+                )}
+                {(actualOrder.damageFee || 0) > 0 && (
+                  <div className="flex justify-between text-rose-600 font-bold">
+                    <span>Potongan Noda/Kerusakan:</span>
+                    <span>-{formatCurrency(actualOrder.damageFee)}</span>
+                  </div>
+                )}
+                <div className="p-2 bg-emerald-50 rounded-lg border border-emerald-300 text-emerald-950 flex justify-between items-center text-xs font-black mt-1">
+                  <span>SISA DEPOSIT DIKEMBALIKAN:</span>
+                  <span className="text-sm">
+                    {formatCurrency(actualOrder.depositRefunded != null ? actualOrder.depositRefunded : Math.max(0, deposit - (actualOrder.lateFee || 0) - (actualOrder.damageFee || 0)))}
+                  </span>
+                </div>
+                {(actualOrder.settledAmount || 0) > 0 && (
+                  <div className="flex justify-between text-slate-600 text-[9px] pt-1">
+                    <span>Pelunasan Sisa Biaya Sewa:</span>
+                    <span className="font-bold text-emerald-700">{formatCurrency(actualOrder.settledAmount)} (LUNAS ✓)</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-center font-bold tracking-widest text-[10px] text-slate-400 my-2">
+                ================================
+              </div>
+
+              {/* Tanda Tangan */}
+              <div className="grid grid-cols-2 gap-4 text-center text-[9px] pt-2 mb-2">
+                <div>
+                  <div className="text-slate-500 mb-8">Penerima (Penyewa)</div>
+                  <div className="font-bold border-t border-slate-300 pt-1">
+                    {actualOrder.customerName || 'Penyewa'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-500 mb-8">Petugas Sanggar</div>
+                  <div className="font-bold border-t border-slate-300 pt-1">
+                    {user?.name || 'Kasir'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center text-[9px] text-slate-400 italic">
+                Dokumen ini sah sebagai tanda terima serah-terima pengembalian uang jaminan &amp; bukti busana telah kembali ke sanggar.
               </div>
             </div>
           ) : (
@@ -434,6 +629,27 @@ export const RentalReceiptPrinter: React.FC<RentalReceiptPrinterProps> = ({
                     ))}
                   </tbody>
                 </table>
+
+                {/* Checklist Aksesoris di A4 */}
+                {actualOrder.accessoryChecklist && actualOrder.accessoryChecklist.length > 0 && (
+                  <div className="mt-2.5 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px]">
+                    <span className="font-bold text-slate-700 block mb-1 uppercase tracking-wide">
+                      Kelengkapan Aksesoris Disertakan:
+                    </span>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      {actualOrder.accessoryChecklist.map((acc: any, i: number) => {
+                        const name = typeof acc === 'string' ? acc : (acc.name || '-');
+                        const extra = acc?.extraPrice ? ` (+${(acc.extraPrice).toLocaleString('id-ID')})` : '';
+                        return (
+                          <div key={i} className="flex items-center gap-1.5 text-slate-700">
+                            <span className="text-amber-600 font-bold">☑</span>
+                            <span className={acc?.extraPrice ? 'font-semibold text-slate-900' : ''}>{name}{extra}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Jadwal Pengambilan & Pengembalian */}
@@ -526,10 +742,10 @@ export const RentalReceiptPrinter: React.FC<RentalReceiptPrinterProps> = ({
               type="button"
               onClick={handlePrint}
               disabled={isPrinting}
-              className="px-5 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-slate-900/20 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+              className="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-indigo-200 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              <Printer size={15} className="text-amber-400" />
-              <span>{isPrinting ? 'Mencetak...' : (printDocType === 'THERMAL' ? 'Cetak Struk Thermal' : 'Cetak Dokumen A4')}</span>
+              <Printer size={15} />
+              <span>{isPrinting ? 'Mencetak...' : (printDocType === 'THERMAL' ? 'Cetak Struk Thermal' : printDocType === 'DEPOSIT_REFUND' ? 'Cetak Kwitansi Deposit' : 'Cetak Dokumen A4')}</span>
             </button>
           </div>
         </div>

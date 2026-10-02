@@ -7,6 +7,7 @@ interface ReceiptPrinterProps {
   order: any;
   storeSettings?: any;
   printMode?: PrintModeType;
+  forceBrowser?: boolean;
   onClose: () => void;
 }
 
@@ -14,6 +15,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
   order, 
   storeSettings, 
   printMode = 'receipt',
+  forceBrowser = false,
   onClose 
 }) => {
   const fmt = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
@@ -62,9 +64,9 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
       return;
     }
 
-    // Check if Bluetooth Printer is configured
+    // Check if Bluetooth Printer is configured (hanya jika forceBrowser false)
     const savedBt = getSavedBluetoothPrinter();
-    if (savedBt || localStorage.getItem('bluetooth_printer_mac')) {
+    if (!forceBrowser && (savedBt || localStorage.getItem('bluetooth_printer_mac'))) {
       console.log('ReceiptPrinter: executing silent print via Bluetooth Thermal Printer');
       printBluetoothReceipt(order, {
         name: storeSettings?.storeName || storeSettings?.name || 'MUKI RAMEN',

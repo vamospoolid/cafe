@@ -71,6 +71,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [createdOrderId, setCreatedOrderId] = useState<number | null>(null);
   const [printLoading, setPrintLoading] = useState(false);
   const [printOrderData, setPrintOrderData] = useState<any | null>(null);
+  const [forceBrowserPrint, setForceBrowserPrint] = useState(false);
 
   const [currentCustomer, setCurrentCustomer] = useState<any>(customer || null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -251,6 +252,30 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const quickAmounts = getSmartPresets(finalTotal);
 
+  const handleBrowserPrint = async (id: number) => {
+    setPrintLoading(true);
+    try {
+      const orderRes = await fetch(`/api/orders/${id}`, {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (!orderRes.ok) throw new Error('Gagal mengambil detail order untuk cetak browser');
+      const orderData = await orderRes.json();
+      
+      if (!orderData.table && customer) {
+        orderData.tableName = customer.tableName || orderData.tableName;
+        orderData.tableId = customer.tableId || orderData.tableId;
+        orderData.orderType = customer.orderType || orderData.orderType;
+      }
+
+      setForceBrowserPrint(true);
+      setPrintOrderData(orderData);
+    } catch (err: any) {
+      toast(err.message || 'Gagal menyiapkan cetak browser', 'error');
+    } finally {
+      setPrintLoading(false);
+    }
+  };
+
   const handleDirectPrint = async (id: number) => {
     const savedBt = getSavedBluetoothPrinter('cashier');
     if (savedBt) {
@@ -291,7 +316,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         });
         toast('Struk berhasil dicetak via Bluetooth!', 'success');
       } catch (err: any) {
-        toast(err.message || 'Gagal cetak via Bluetooth', 'error');
+        console.warn('[CheckoutModal] Bluetooth print error:', err);
+        toast(`⚠️ ${err.message || 'Gagal cetak via Bluetooth'}. Menyiapkan dialog cetak Windows / PDF...`, 'warning');
+        // Auto-fallback langsung ke cetak dialog browser Windows agar kasir tidak terhenti!
+        await handleBrowserPrint(id);
       } finally {
         setPrintLoading(false);
       }
@@ -620,7 +648,18 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   className="w-full py-3 px-4 font-bold rounded-xl flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm shadow-md transition-all active:scale-[0.98]"
                 >
                   <Printer size={18} />
-                  <span>{printLoading ? 'Mencetak...' : 'Cetak Struk Kasir'}</span>
+                  <span>{printLoading ? 'Mencetak...' : 'Cetak Struk Kasir (Bluetooth)'}</span>
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => handleBrowserPrint(createdOrderId)}
+                  disabled={printLoading}
+                  className="w-full py-2.5 px-3 font-semibold rounded-xl flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition-all active:scale-[0.98] border border-slate-200"
+                  title="Cetak via dialog printer Windows / browser (cocok untuk USB, default Windows, PDF, atau jika Bluetooth bermasalah)"
+                >
+                  <FileText size={15} />
+                  <span>Cetak via Dialog Windows / PDF</span>
                 </button>
 
                 {(getSavedBluetoothPrinter('cashier') || getSavedBluetoothPrinter('kitchen')) && (
@@ -696,7 +735,11 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <ReceiptPrinter 
             order={printOrderData} 
             storeSettings={posContext?.settings} 
-            onClose={() => setPrintOrderData(null)} 
+            forceBrowser={forceBrowserPrint}
+            onClose={() => {
+              setPrintOrderData(null);
+              setForceBrowserPrint(false);
+            }} 
           />
         )}
 
