@@ -458,10 +458,9 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res: Response
             if (!existingCustomer && customerName) {
               existingCustomer = await tx.customer.create({
                 data: {
-                  tenantId,
+                  tenant: { connect: { id: tenantId } },
                   name: String(customerName).trim(),
-                  phone: cleanPhone,
-                  address: eventLocation ? String(eventLocation).trim() : null
+                  phone: cleanPhone
                 }
               });
             }
