@@ -5,7 +5,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, Sparkles, Filter, DollarSign, ArrowRight, 
   ShieldAlert, FileText, Coffee, ShoppingBag, Truck, BarChart3, PieChart, 
   ArrowUpRight, ArrowDownRight, Layers, HelpCircle, Send, ShoppingCart,
-  Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target, X
+  Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target, X, Wrench
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -554,12 +554,79 @@ export const IngredientView: React.FC = () => {
     stock: '', 
     minStock: '', 
     buyPrice: '', 
+    packPrice: '',
     supplierId: '',
-    purchaseUnit: '',
+    purchaseUnit: 'Pack',
     conversionRatio: '1',
     warehouseMinStock: '0'
   });
-  const [adjustForm, setAdjustForm] = useState<{ change: string; type: string; description: string; newBuyPrice?: string }>({ change: '', type: 'Restock', description: '', newBuyPrice: '' });
+
+  const [adjustForm, setAdjustForm] = useState<{
+    change: string;
+    type: string;
+    description: string;
+    newBuyPrice?: string;
+    purchaseUnit: string;
+    conversionRatio: string;
+    packQty: string;
+    packPrice: string;
+    useWac: boolean;
+    costingMethod?: 'WAC' | 'LATEST' | 'KEEP';
+  }>({
+    change: '',
+    type: 'Restock',
+    description: '',
+    newBuyPrice: '',
+    purchaseUnit: 'Pack',
+    conversionRatio: '1',
+    packQty: '1',
+    packPrice: '',
+    useWac: true,
+    costingMethod: 'WAC'
+  });
+
+  // Dual-Core Auto-Calculation Handlers (Tambah/Edit Bahan Baku)
+  const handlePackPriceChange = (val: string) => {
+    const ratio = parseFloat(form.conversionRatio) || 1;
+    const pPrice = parseFloat(val);
+    const calculatedBuyPrice = (!isNaN(pPrice) && ratio > 0) ? Number((pPrice / ratio).toFixed(2)).toString() : '';
+    setForm(prev => ({ ...prev, packPrice: val, buyPrice: calculatedBuyPrice }));
+  };
+
+  const handleConversionRatioChange = (val: string) => {
+    const ratio = parseFloat(val) || 1;
+    const pPrice = parseFloat(form.packPrice);
+    const calculatedBuyPrice = (!isNaN(pPrice) && ratio > 0) ? Number((pPrice / ratio).toFixed(2)).toString() : form.buyPrice;
+    setForm(prev => ({ ...prev, conversionRatio: val, buyPrice: calculatedBuyPrice }));
+  };
+
+  const handleBuyPriceChange = (val: string) => {
+    const ratio = parseFloat(form.conversionRatio) || 1;
+    const bPrice = parseFloat(val);
+    const calculatedPackPrice = (!isNaN(bPrice) && ratio > 0) ? Number((bPrice * ratio).toFixed(2)).toString() : '';
+    setForm(prev => ({ ...prev, buyPrice: val, packPrice: calculatedPackPrice }));
+  };
+
+  // Helper untuk membuka Modal Restock / Penyesuaian dengan pre-fill data kemasan faktur
+  const handleOpenAdjustModal = (ing: Ingredient, type: 'Restock' | 'Penyesuaian' = 'Restock') => {
+    const conv = (ing.conversionRatio && Number(ing.conversionRatio) > 0) ? Number(ing.conversionRatio) : 1;
+    const pUnit = ing.purchaseUnit || (conv > 1 ? 'Pack' : (ing.unit || 'Pack'));
+    const defaultPackPrice = ing.buyPrice > 0 ? (Number((ing.buyPrice * conv).toFixed(2))).toString() : '';
+
+    setAdjustForm({
+      type,
+      purchaseUnit: pUnit,
+      conversionRatio: conv.toString(),
+      packQty: '1',
+      packPrice: defaultPackPrice,
+      change: conv.toString(),
+      newBuyPrice: ing.buyPrice > 0 ? ing.buyPrice.toString() : '',
+      useWac: true,
+      costingMethod: 'WAC',
+      description: ''
+    });
+    setAdjustModal({ open: true, ingredient: ing });
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -869,12 +936,27 @@ export const IngredientView: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditData(null);
-    setForm({ name: '', category: 'FOOD', subCategory: '', unit: 'gram', stock: '', minStock: '', buyPrice: '', supplierId: '', purchaseUnit: 'Karton', conversionRatio: '1', warehouseMinStock: '0' });
+    setForm({ 
+      name: '', 
+      category: 'FOOD', 
+      subCategory: '', 
+      unit: 'gram', 
+      stock: '', 
+      minStock: '', 
+      buyPrice: '', 
+      packPrice: '',
+      supplierId: '', 
+      purchaseUnit: 'Pack', 
+      conversionRatio: '1', 
+      warehouseMinStock: '0' 
+    });
     setShowModal(true);
   };
 
   const handleOpenEdit = (ing: Ingredient) => {
     setEditData(ing);
+    const conv = (ing.conversionRatio && Number(ing.conversionRatio) > 0) ? Number(ing.conversionRatio) : 1;
+    const pPrice = ing.buyPrice > 0 ? (Number((ing.buyPrice * conv).toFixed(2))).toString() : '';
     setForm({
       name: ing.name,
       category: ing.category || 'FOOD',
@@ -883,9 +965,10 @@ export const IngredientView: React.FC = () => {
       stock: ing.stock.toString(),
       minStock: ing.minStock.toString(),
       buyPrice: ing.buyPrice.toString(),
+      packPrice: pPrice,
       supplierId: ing.supplierId ? ing.supplierId.toString() : '',
-      purchaseUnit: ing.purchaseUnit || '',
-      conversionRatio: (ing.conversionRatio || 1).toString(),
+      purchaseUnit: ing.purchaseUnit || (conv > 1 ? 'Pack' : ''),
+      conversionRatio: conv.toString(),
       warehouseMinStock: (ing.warehouseMinStock || 0).toString()
     });
     setShowModal(true);
@@ -1037,19 +1120,57 @@ export const IngredientView: React.FC = () => {
   const handleAdjustSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adjustModal.ingredient) return;
-    const change = parseFloat(adjustForm.change);
-    if (isNaN(change) || change === 0) return toast('Jumlah perubahan tidak boleh 0', 'warning');
+
+    let change = 0;
+    let newBuyPrice: number | undefined = undefined;
+    let description = adjustForm.description.trim();
+
+    if (adjustForm.type === 'Restock') {
+      const pQty = parseFloat(adjustForm.packQty) || 0;
+      const conv = parseFloat(adjustForm.conversionRatio) || 1;
+      const pPrice = parseFloat(adjustForm.packPrice) || 0;
+
+      if (pQty <= 0) return toast('Jumlah beli kemasan (pack) harus lebih dari 0', 'warning');
+      if (conv <= 0) return toast('Isi per kemasan harus lebih dari 0', 'warning');
+
+      change = pQty * conv;
+      const incomingUnitPrice = pPrice > 0 ? Number((pPrice / conv).toFixed(2)) : undefined;
+
+      if (adjustForm.useWac && incomingUnitPrice !== undefined) {
+        newBuyPrice = incomingUnitPrice;
+      }
+
+      const pUnit = adjustForm.purchaseUnit || 'Pack';
+      const invoiceDetail = `Kulakan ${pQty} ${pUnit} (isi ${conv} ${adjustModal.ingredient.unit})` +
+        (pPrice > 0 ? ` @ Rp ${pPrice.toLocaleString('id-ID')}` : '');
+      description = description ? `${description} [${invoiceDetail}]` : invoiceDetail;
+    } else {
+      change = parseFloat(adjustForm.change);
+      if (isNaN(change) || change === 0) return toast('Jumlah perubahan tidak boleh 0', 'warning');
+      if (adjustForm.newBuyPrice) {
+        const parsed = parseFloat(adjustForm.newBuyPrice);
+        if (!isNaN(parsed) && parsed > 0) newBuyPrice = parsed;
+      }
+    }
 
     try {
+      const payload: any = {
+        change,
+        type: adjustForm.type,
+        description: description || (adjustForm.type === 'Restock' ? 'Restock bahan baku' : 'Penyesuaian stok')
+      };
+      if (newBuyPrice !== undefined) {
+        payload.newBuyPrice = newBuyPrice;
+      }
+
       const res = await fetch(`${API}/ingredients/${adjustModal.ingredient.id}/adjust`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(adjustForm)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
-        toast('Stok berhasil disesuaikan!', 'success');
+        toast('Stok bahan baku berhasil diperbarui!', 'success');
         setAdjustModal({ open: false, ingredient: null });
-        setAdjustForm({ change: '', type: 'Restock', description: '' });
         fetchData();
       } else {
         const err = await res.json();
@@ -1925,10 +2046,7 @@ export const IngredientView: React.FC = () => {
                           {/* Sesuaikan Stok — Admin only */}
                           {isAdminRole && (
                           <button
-                            onClick={() => {
-                              setAdjustModal({ open: true, ingredient: ing });
-                              setAdjustForm({ change: '', type: 'Restock', description: '' });
-                            }}
+                            onClick={() => handleOpenAdjustModal(ing, 'Restock')}
                             className="px-2 py-1 bg-white hover:bg-slate-100 text-purple-700 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs flex items-center gap-1 active:scale-95"
                             title="Sesuaikan Stok"
                           >
@@ -2101,10 +2219,7 @@ export const IngredientView: React.FC = () => {
                             <div className="flex items-center justify-center gap-1.5">
                               {isAdminRole && (
                                 <button
-                                  onClick={() => {
-                                    setAdjustModal({ open: true, ingredient: ing });
-                                    setAdjustForm({ change: '', type: 'Restock', description: '' });
-                                  }}
+                                  onClick={() => handleOpenAdjustModal(ing, 'Restock')}
                                   title="Sesuaikan Stok / Restock"
                                   className="px-2 py-1 bg-white hover:bg-slate-100 text-purple-700 hover:border-purple-300 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs"
                                 >
@@ -3969,7 +4084,7 @@ export const IngredientView: React.FC = () => {
                             <td className="py-3.5 px-3 text-center whitespace-nowrap">
                               <button
                                 onClick={() => {
-                                  if (ingObj) setAdjustModal({ open: true, ingredient: ingObj });
+                                  if (ingObj) handleOpenAdjustModal(ingObj, 'Restock');
                                 }}
                                 title="Sesuaikan Stok Bahan Ini"
                                 className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 hover:text-emerald-700 border border-slate-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs"
@@ -5239,40 +5354,133 @@ export const IngredientView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Satuan / Unit <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="gram, ml, pcs, kg, porsi"
-                      value={form.unit}
-                      onChange={e => setForm({ ...form, unit: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
-                    />
+                {/* ─── Satuan & Kemasan Pembelian Faktur ─── */}
+                <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-100/90 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                      <Boxes size={15} className="text-indigo-600" />
+                      Satuan Resep &amp; Kemasan Pembelian Faktur
+                    </div>
+                    <span className="text-[10px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded-full border border-indigo-200">
+                      ⚡ Auto-Calculate
+                    </span>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">
-                      Harga Beli / Unit (Rp) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      placeholder="0"
-                      value={form.buyPrice}
-                      onChange={e => setForm({ ...form, buyPrice: e.target.value })}
-                      className="w-full px-3.5 py-2.5 bg-white border border-indigo-300 rounded-xl text-xs font-black text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Satuan Resep Dapur */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Satuan Resep <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="gram, ml, pcs, butir"
+                        value={form.unit}
+                        onChange={e => setForm({ ...form, unit: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 shadow-2xs"
+                      />
+                      <span className="text-[9.5px] text-slate-400 mt-0.5 block">Satuan porsi dapur</span>
+                    </div>
+
+                    {/* Satuan Beli Faktur */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Kemasan Faktur (Beli)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Botol, Dus, Pack, Sak"
+                        value={form.purchaseUnit}
+                        onChange={e => setForm({ ...form, purchaseUnit: e.target.value })}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 shadow-2xs"
+                      />
+                      <span className="text-[9.5px] text-slate-400 mt-0.5 block">Contoh: Botol, Jerigen</span>
+                    </div>
+
+                    {/* Isi Kemasan */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Isi per Kemasan
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Contoh: 750 (ml)"
+                        value={form.conversionRatio}
+                        onChange={e => handleConversionRatioChange(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 shadow-2xs"
+                      />
+                      <span className="text-[9.5px] text-slate-400 mt-0.5 block">
+                        Ke {form.unit || 'unit'} (Rasio {form.conversionRatio || '1'}:1)
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Input Harga Beli Kemasan Faktur vs Harga per Unit */}
+                  <div className="pt-2 border-t border-indigo-100/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-black text-indigo-950 uppercase tracking-wider mb-1 flex items-center justify-between">
+                        <span>Harga Beli per {form.purchaseUnit || 'Pack'} (Faktur)</span>
+                        <span className="text-[9px] text-indigo-600 bg-indigo-100/60 px-1.5 py-0.5 rounded font-bold">Input Nota</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-400">Rp</span>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Contoh: 70000"
+                          value={form.packPrice}
+                          onChange={e => handlePackPriceChange(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-white border-2 border-indigo-300 rounded-xl text-xs font-black text-indigo-900 outline-none focus:border-indigo-600 shadow-xs"
+                        />
+                      </div>
+                      <span className="text-[9.5px] text-indigo-700 mt-0.5 block font-medium">
+                        Ketik harga yang tertera di nota pembelian
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                        <span>Harga Satuan Resep (per {form.unit || 'unit'}) <span className="text-rose-500">*</span></span>
+                        <span className="text-[9px] text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded font-bold">Auto</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          placeholder="0"
+                          value={form.buyPrice}
+                          onChange={e => handleBuyPriceChange(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-emerald-50/50 border border-emerald-300 rounded-xl text-xs font-black text-emerald-900 outline-none focus:border-emerald-600 shadow-xs"
+                        />
+                      </div>
+                      <span className="text-[9.5px] text-slate-500 mt-0.5 block">
+                        Dihitung otomatis (atau bisa diedit manual)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Live Formula Badge */}
+                  {Number(form.conversionRatio) > 1 && (
+                    <div className="p-2.5 bg-white/80 rounded-xl border border-indigo-200/80 text-[11px] text-indigo-900 flex items-center justify-between flex-wrap gap-1">
+                      <span className="font-semibold text-slate-600">
+                        1 {form.purchaseUnit || 'Pack'} = <strong className="text-indigo-800">{form.conversionRatio} {form.unit}</strong>
+                      </span>
+                      {form.packPrice && form.buyPrice && (
+                        <span className="font-mono text-emerald-700 font-bold text-[10px]">
+                          Rp {Number(form.packPrice).toLocaleString('id-ID')} ÷ {form.conversionRatio} = Rp {Number(form.buyPrice).toLocaleString('id-ID')}/{form.unit}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Stok Awal</label>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Stok Awal ({form.unit || 'unit'})</label>
                     <input
                       type="number"
                       step="any"
@@ -5293,50 +5501,6 @@ export const IngredientView: React.FC = () => {
                       onChange={e => setForm({ ...form, minStock: e.target.value })}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                     />
-                  </div>
-                </div>
-
-                {/* Konversi Satuan Grosir (Gudang Pusat) */}
-                <div className="p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-100/90 space-y-3">
-                  <div className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
-                    <Boxes size={15} className="text-indigo-600" />
-                    Konversi Satuan Grosir (Gudang Pusat)
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Satuan Grosir / Kemasan Beli
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: Karton, Dus, Karung"
-                        value={form.purchaseUnit}
-                        onChange={e => setForm({ ...form, purchaseUnit: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Isi per Satuan Grosir (ke {form.unit || 'unit'})
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Contoh: 12 (1 Karton = 12 Botol)"
-                        value={form.conversionRatio}
-                        onChange={e => setForm({ ...form, conversionRatio: e.target.value })}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
-                      />
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    {form.purchaseUnit && Number(form.conversionRatio) > 1 ? (
-                      <span className="text-indigo-700 font-bold">
-                        Rumus Konversi: 1 {form.purchaseUnit} = {form.conversionRatio} {form.unit}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">Rasio standar 1:1 (satuan grosir sama dengan satuan dapur)</span>
-                    )}
                   </div>
                 </div>
 
@@ -5667,103 +5831,368 @@ export const IngredientView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          MODAL 3: ADJUST / RESTOCK CEPAT
+          MODAL 3: KULAKAN / RESTOCK CEPAT & PENYESUAIAN STOK
       ───────────────────────────────────────────────────────────── */}
-      {adjustModal.open && adjustModal.ingredient && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-scale-up">
-            <h3 className="text-base font-black text-slate-900">
-              Penyesuaian Stok: {adjustModal.ingredient.name}
-            </h3>
-            <p className="text-xs text-slate-500">Stok saat ini: {adjustModal.ingredient.stock} {adjustModal.ingredient.unit}</p>
+      {adjustModal.open && adjustModal.ingredient && (() => {
+        const curIng = adjustModal.ingredient;
+        const convRatio = parseFloat(adjustForm.conversionRatio) || 1;
+        const pQty = parseFloat(adjustForm.packQty) || 0;
+        const pPrice = parseFloat(adjustForm.packPrice) || 0;
+        const incomingUnitPrice = (convRatio > 0 && pPrice > 0) ? (pPrice / convRatio) : 0;
+        const stokMasuk = pQty * convRatio;
+        const currentStock = curIng.stock || 0;
+        const currentBuyPrice = curIng.buyPrice || 0;
+        const finalStock = currentStock + stokMasuk;
+        const wacUnitPrice = finalStock > 0 
+          ? (((Math.max(0, currentStock) * currentBuyPrice) + (stokMasuk * incomingUnitPrice)) / finalStock)
+          : incomingUnitPrice;
 
-            <form onSubmit={handleAdjustSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Jenis Perubahan</label>
-                <select
-                  value={adjustForm.type}
-                  onChange={e => setAdjustForm({ ...adjustForm, type: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                >
-                  <option value="Restock">📥 Restock / Pembelian Tambahan (+)</option>
-                  <option value="Penyesuaian">🔧 Koreksi / Penyesuaian (+/-)</option>
-                </select>
-              </div>
+        const priceDiffPerUnit = incomingUnitPrice > 0 && currentBuyPrice > 0 ? (incomingUnitPrice - currentBuyPrice) : 0;
+        const isPriceIncrease = priceDiffPerUnit > 0.01;
+        const isPriceDecrease = priceDiffPerUnit < -0.01;
+        const priceDiffPercent = currentBuyPrice > 0 ? ((incomingUnitPrice - currentBuyPrice) / currentBuyPrice) * 100 : 0;
+        const priceDiffPerPack = priceDiffPerUnit * convRatio;
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Jumlah Perubahan (+ untuk tambah, - untuk kurang)
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  placeholder="Contoh: 1000 atau -200"
-                  value={adjustForm.change}
-                  onChange={e => setAdjustForm({ ...adjustForm, change: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-                />
-              </div>
+        const effectiveModalBaru = adjustForm.costingMethod === 'LATEST'
+          ? incomingUnitPrice
+          : adjustForm.costingMethod === 'KEEP'
+          ? currentBuyPrice
+          : wacUnitPrice;
 
-              {adjustForm.type === 'Restock' && (
-                <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 space-y-1 animate-fade-in">
-                  <label className="block text-xs font-bold text-indigo-900">
-                    Harga Beli Masuk per {adjustModal.ingredient.unit} (Opsional untuk WAC)
-                  </label>
-                  <p className="text-[10px] text-indigo-600">
-                    Harga sistem saat ini: Rp {adjustModal.ingredient.buyPrice.toLocaleString('id-ID')}/{adjustModal.ingredient.unit}. Masukkan jika harga nota baru berbeda untuk menghitung HPP rata-rata bergerak otomatis.
-                  </p>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder={`Default: ${adjustModal.ingredient.buyPrice}`}
-                    value={adjustForm.newBuyPrice || ''}
-                    onChange={e => setAdjustForm({ ...adjustForm, newBuyPrice: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-400"
-                  />
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up my-auto max-h-[92vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-slate-100 pb-3 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    adjustForm.type === 'Restock' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white'
+                  }`}>
+                    {adjustForm.type === 'Restock' ? <Boxes size={18} /> : <Wrench size={18} />}
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-slate-900 leading-tight">
+                      {adjustForm.type === 'Restock' ? 'Kulakan / Restock Bahan' : 'Penyesuaian Stok Fisik'}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                      {curIng.name} &bull; Stok: <strong className="text-slate-800">{Number(curIng.stock).toLocaleString('id-ID')} {curIng.unit}</strong> | Modal: <strong className="text-indigo-700">Rp {Number(curIng.buyPrice).toLocaleString('id-ID')}/{curIng.unit}</strong>
+                    </p>
+                  </div>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Keterangan / Nomor Nota</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Pembelian pasar dadakan"
-                  value={adjustForm.description}
-                  onChange={e => setAdjustForm({ ...adjustForm, description: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setAdjustModal({ open: false, ingredient: null })}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-xs transition-colors shrink-0"
                 >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '.65rem 1.25rem',
-                    background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '.75rem',
-                    fontWeight: 800,
-                    fontSize: '.85rem',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(124,58,237,0.3)'
-                  }}
-                >
-                  Simpan Penyesuaian
+                  <X size={15} />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleAdjustSubmit} className="space-y-3.5 overflow-y-auto flex-1 pr-1">
+                {/* Mode Selector */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustForm(prev => ({ ...prev, type: 'Restock' }))}
+                    className={`py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                      adjustForm.type === 'Restock'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Boxes size={14} />
+                    <span>Kulakan Faktur (+)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdjustForm(prev => ({ ...prev, type: 'Penyesuaian' }))}
+                    className={`py-2 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                      adjustForm.type === 'Penyesuaian'
+                        ? 'bg-white text-amber-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <RefreshCw size={14} />
+                    <span>Koreksi Stok (+/-)</span>
+                  </button>
+                </div>
+
+                {/* ─── TIPE 1: RESTOCK / KULAKAN FAKTUR (VAMOS STYLE) ─── */}
+                {adjustForm.type === 'Restock' ? (
+                  <div className="space-y-3">
+                    {/* Satuan Pembelian Faktur */}
+                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                        <span>1. Satuan Pembelian Faktur</span>
+                        <span className="text-slate-400">Contoh: Dus, Jerigen, Karung</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Satuan Kemasan (Faktur)</label>
+                          <input
+                            type="text"
+                            placeholder="Botol / Pack"
+                            value={adjustForm.purchaseUnit}
+                            onChange={e => setAdjustForm({ ...adjustForm, purchaseUnit: e.target.value })}
+                            className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Isi per Kemasan ({curIng.unit})</label>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="1"
+                            value={adjustForm.conversionRatio}
+                            onChange={e => setAdjustForm({ ...adjustForm, conversionRatio: e.target.value })}
+                            className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Transaksi Kulakan Sesuai Nota */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Jumlah Beli ({adjustForm.purchaseUnit || 'Pack'}) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          placeholder="Contoh: 2"
+                          value={adjustForm.packQty}
+                          onChange={e => setAdjustForm({ ...adjustForm, packQty: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-indigo-500 shadow-2xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-indigo-900 mb-1">
+                          Harga Beli per {adjustForm.purchaseUnit || 'Pack'} (Rp) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          placeholder="Contoh: 70000"
+                          value={adjustForm.packPrice}
+                          onChange={e => setAdjustForm({ ...adjustForm, packPrice: e.target.value })}
+                          className="w-full px-3 py-2 bg-indigo-50/50 border border-indigo-300 rounded-xl text-xs font-black text-indigo-950 outline-none focus:border-indigo-600 shadow-2xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* ─── DETEKSI KENAIKAN / PENURUNAN HARGA BELI ─── */}
+                    {isPriceIncrease && (
+                      <div className="p-3 bg-amber-50/90 rounded-2xl border-2 border-amber-300 text-amber-950 space-y-2 animate-fade-in shadow-xs">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-black text-xs text-amber-900">
+                            <AlertTriangle size={15} className="text-amber-600" />
+                            <span>Perhatian: Terjadi Kenaikan Harga (+{priceDiffPercent.toFixed(1)}%)</span>
+                          </div>
+                          <span className="text-[10px] font-bold bg-amber-200 text-amber-950 px-2 py-0.5 rounded-full">
+                            +Rp {Math.round(priceDiffPerPack).toLocaleString('id-ID')} / {adjustForm.purchaseUnit || 'Pack'}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] text-amber-800 leading-relaxed font-medium">
+                          Harga faktur naik dari <strong>Rp {Math.round(currentBuyPrice * convRatio).toLocaleString('id-ID')}</strong> menjadi <strong>Rp {pPrice.toLocaleString('id-ID')}</strong> per {adjustForm.purchaseUnit || 'Pack'} (+Rp {priceDiffPerUnit.toFixed(2)}/{curIng.unit}).
+                        </p>
+
+                        {/* Strategi Penanganan Kenaikan HPP */}
+                        <div className="pt-1.5 border-t border-amber-200/80 space-y-1">
+                          <div className="text-[9.5px] font-bold text-amber-900 uppercase tracking-wider">
+                            Pilih Strategi HPP Resep:
+                          </div>
+                          <div className="grid grid-cols-3 gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setAdjustForm(prev => ({ ...prev, costingMethod: 'WAC' }))}
+                              className={`p-1.5 rounded-xl text-left border transition-all ${
+                                adjustForm.costingMethod === 'WAC'
+                                  ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                                  : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100/50'
+                              }`}
+                            >
+                              <div className="text-[9.5px] font-black truncate">1. Rata-rata (WAC)</div>
+                              <div className="text-[8.5px] opacity-90">Rp {Number(wacUnitPrice.toFixed(2)).toLocaleString('id-ID')}</div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setAdjustForm(prev => ({ ...prev, costingMethod: 'LATEST' }))}
+                              className={`p-1.5 rounded-xl text-left border transition-all ${
+                                adjustForm.costingMethod === 'LATEST'
+                                  ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                                  : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100/50'
+                              }`}
+                            >
+                              <div className="text-[9.5px] font-black truncate">2. Harga Terkini</div>
+                              <div className="text-[8.5px] opacity-90">Rp {Number(incomingUnitPrice.toFixed(2)).toLocaleString('id-ID')}</div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setAdjustForm(prev => ({ ...prev, costingMethod: 'KEEP' }))}
+                              className={`p-1.5 rounded-xl text-left border transition-all ${
+                                adjustForm.costingMethod === 'KEEP'
+                                  ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                                  : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100/50'
+                              }`}
+                            >
+                              <div className="text-[9.5px] font-black truncate">3. Tetap Lama</div>
+                              <div className="text-[8.5px] opacity-90">Rp {Number(currentBuyPrice.toFixed(2)).toLocaleString('id-ID')}</div>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {isPriceDecrease && (
+                      <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-950 flex items-center justify-between animate-fade-in shadow-2xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-[10px]">
+                            ↓
+                          </span>
+                          <span className="text-xs font-bold text-emerald-900">
+                            Harga Beli Lebih Hemat (-{Math.abs(priceDiffPercent).toFixed(1)}%)
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-black text-emerald-700 font-mono">
+                          Hemat Rp {Math.abs(Math.round(priceDiffPerPack)).toLocaleString('id-ID')} / {adjustForm.purchaseUnit || 'Pack'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Catatan Faktur / Nama Toko */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Catatan Kulakan / No. Faktur / Nama Toko
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Toko Barista Abadi #INV-290"
+                        value={adjustForm.description}
+                        onChange={e => setAdjustForm({ ...adjustForm, description: e.target.value })}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                      />
+                    </div>
+
+                    {/* ─── RINGKASAN OTOMATIS SISTEM (LIVE PREVIEW) ─── */}
+                    <div className="p-3.5 bg-gradient-to-br from-indigo-900 to-slate-900 rounded-2xl text-white space-y-2.5 shadow-md">
+                      <div className="flex items-center justify-between border-b border-indigo-800/60 pb-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 flex items-center gap-1">
+                          <Boxes size={12} />
+                          Ringkasan Otomatis Sistem
+                        </span>
+                        <span className="text-[9px] font-mono bg-indigo-800/80 text-indigo-200 px-1.5 py-0.5 rounded">
+                          auto-calculate
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <div className="text-[10px] text-slate-400 font-medium">Stok Masuk:</div>
+                          <div className="font-mono font-black text-emerald-400 text-sm">
+                            +{stokMasuk.toLocaleString('id-ID')} {curIng.unit}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[10px] text-slate-400 font-medium">Harga Masuk per {curIng.unit}:</div>
+                          <div className="font-mono font-black text-amber-300 text-sm">
+                            Rp {Number(incomingUnitPrice.toFixed(2)).toLocaleString('id-ID')}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[10px] text-slate-400 font-medium">Estimasi Stok Akhir:</div>
+                          <div className="font-mono font-bold text-white text-xs">
+                            {Number(finalStock.toFixed(2)).toLocaleString('id-ID')} {curIng.unit}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-[10px] text-slate-400 font-medium">Estimasi Modal Baru (HPP):</div>
+                          <div className="font-mono font-bold text-white text-xs flex items-center gap-1">
+                            <span>Rp {Number(effectiveModalBaru.toFixed(2)).toLocaleString('id-ID')} / {curIng.unit}</span>
+                            {isPriceIncrease && <span className="text-[9px] text-amber-400">🔺</span>}
+                            {isPriceDecrease && <span className="text-[9px] text-emerald-400">🔻</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* ─── TIPE 2: KOREKSI / PENYESUAIAN MANUAL (+/-) ─── */
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">
+                        Jumlah Perubahan ({curIng.unit}) (+ untuk tambah, - untuk kurang)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        required
+                        placeholder="Contoh: 1000 atau -200"
+                        value={adjustForm.change}
+                        onChange={e => setAdjustForm({ ...adjustForm, change: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">
+                        Harga Beli per {curIng.unit} (Opsional jika ada perubahan HPP)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={`Default: ${curIng.buyPrice}`}
+                        value={adjustForm.newBuyPrice || ''}
+                        onChange={e => setAdjustForm({ ...adjustForm, newBuyPrice: e.target.value })}
+                        className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">Keterangan / Alasan Koreksi</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Koreksi selisih timbangan fisik"
+                        value={adjustForm.description}
+                        onChange={e => setAdjustForm({ ...adjustForm, description: e.target.value })}
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustModal({ open: false, ingredient: null })}
+                    className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className={`px-5 py-2.5 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-1.5 ${
+                      adjustForm.type === 'Restock'
+                        ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 shadow-indigo-500/25'
+                        : 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 shadow-amber-500/25'
+                    }`}
+                  >
+                    <span>{adjustForm.type === 'Restock' ? 'Terapkan Kulakan ➔' : 'Simpan Koreksi'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
