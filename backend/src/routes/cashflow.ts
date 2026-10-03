@@ -77,14 +77,15 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
         .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
         .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
-      // Mutasi kas laci kasir manual
+      // Mutasi kas laci kasir manual (abaikan kategori sistem untuk mencegah double counting)
       const drInAgg = await prisma.cashFlow.aggregate({
         where: { 
           ...baseWhere, 
           cashPocket: 'LACI_KASIR', 
           type: 'Pemasukan', 
           status: 'APPROVED', 
-          date: { gte: activeShift.waktuBuka } 
+          date: { gte: activeShift.waktuBuka },
+          category: { notIn: ['Omset POS - Tunai', 'Omset POS - Non Tunai (QRIS/Transfer)', 'Saldo Awal Shift', 'Penjualan Kasir', 'Pelunasan Piutang - Tunai', 'Pembayaran Piutang'] }
         },
         _sum: { amount: true }
       });
@@ -297,21 +298,27 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     if (finalStatus === 'APPROVED' && autoStock && ingredientId) {
       try {
         const qtyNum = Number(ingredientQty) || 1;
-        await prisma.ingredient.update({
-          where: { id: Number(ingredientId) },
-          data: { stock: { increment: qtyNum } }
+        // IDOR Guard: verifikasi kepemilikan bahan baku oleh tenant
+        const targetIng = await prisma.ingredient.findFirst({
+          where: { id: Number(ingredientId), ...(tenantId ? { tenantId } : {}) }
         });
-        await prisma.ingredientLog.create({
-          data: {
-            tenantId,
-            ingredientId: Number(ingredientId),
-            change: qtyNum,
-            cost: Number(amount),
-            type: 'Restock',
-            reason: `Petty Cash Restock: ${description}`,
-            userId: user.id
-          }
-        });
+        if (targetIng) {
+          await prisma.ingredient.update({
+            where: { id: targetIng.id },
+            data: { stock: { increment: qtyNum } }
+          });
+          await prisma.ingredientLog.create({
+            data: {
+              tenantId,
+              ingredientId: targetIng.id,
+              change: qtyNum,
+              cost: Number(amount),
+              type: 'Restock',
+              reason: `Petty Cash Restock: ${description}`,
+              userId: user.id
+            }
+          });
+        }
       } catch (stkErr) {
         console.warn('[CashFlow] Failed to auto-increment stock:', stkErr);
       }
@@ -381,6 +388,34 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
         user: { select: { id: true, name: true, role: true } }
       }
     });
+
+    // Auto-restock jika pengeluaran terhubung dengan bahan baku dan memiliki restockQty
+    if (existing.linkedIngredientId && existing.restockQty) {
+      try {
+        const targetIng = await prisma.ingredient.findFirst({
+          where: { id: existing.linkedIngredientId, ...(tenantId ? { tenantId } : {}) }
+        });
+        if (targetIng) {
+          await prisma.ingredient.update({
+            where: { id: targetIng.id },
+            data: { stock: { increment: existing.restockQty } }
+          });
+          await prisma.ingredientLog.create({
+            data: {
+              tenantId,
+              ingredientId: targetIng.id,
+              change: existing.restockQty,
+              cost: existing.amount,
+              type: 'Restock',
+              reason: `Petty Cash Approved Restock: ${existing.description}`,
+              userId: user.id
+            }
+          });
+        }
+      } catch (stkErr) {
+        console.warn('[CashFlow] Failed to increment stock on approval:', stkErr);
+      }
+    }
 
     if (tenantId) {
       emitToTenant(tenantId, 'cashflow:approved', updated);

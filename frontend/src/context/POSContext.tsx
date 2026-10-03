@@ -3,7 +3,7 @@ import { offlineDB } from '../utils/offlineDb';
 import { offlineDb } from '../db/offlineDb';
 import { syncEngine } from '../services/syncEngine';
 import { toast } from '../utils/alert';
-import useSocket from '../hooks/useSocket';
+import useSocket, { reconnectSocket } from '../hooks/useSocket';
 
 // Interfaces
 export interface User {
@@ -387,13 +387,22 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     if (userData.businessType) {
       localStorage.setItem('pos_business_type', userData.businessType);
     }
+    // Sinkronisasikan koneksi WebSocket agar masuk ke tenant room yang valid secara real-time
+    try {
+      reconnectSocket(newToken);
+    } catch (e) {
+      console.warn('[Socket.IO] Reconnect on login failed:', e);
+    }
   };
 
   const logout = async () => {
-    // 1. Putus koneksi Socket.IO seketika agar tidak menerima event toko lama
-    if (socket) {
-      try { socket.disconnect(); } catch (e) {}
-    }
+    // 1. Putus koneksi Socket.IO seketika dan reset auth token agar tidak menerima event toko lama
+    try {
+      reconnectSocket(undefined);
+      if (socket) {
+        socket.disconnect();
+      }
+    } catch (e) {}
 
     // 2. Bersihkan IndexedDB Dexie secara atomik
     try {

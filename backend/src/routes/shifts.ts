@@ -276,10 +276,11 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
     const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getCashPortion(o.paymentMethod, o.total), 0);
     const nonCashSalesIncome = activeOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
-    // Hitung transaksi Void selama shift
+    // Hitung transaksi Void selama shift (hanya tenant ini)
     const voidOrders = await prisma.order.findMany({
       where: {
         status: 'Void',
+        ...(tenantId ? { tenantId } : {}),
         OR: [
           { paidAt: { gte: activeShift.waktuBuka } },
           { createdAt: { gte: activeShift.waktuBuka } }
@@ -290,11 +291,17 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
     const voidNonCashTotal = voidOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
     const cashFlows = await prisma.cashFlow.findMany({
-      where: { date: { gte: activeShift.waktuBuka } }
+      where: {
+        ...(tenantId ? { tenantId } : {}),
+        date: { gte: activeShift.waktuBuka }
+      }
     });
 
     const debtPayments = await prisma.debtPayment.findMany({
-      where: { createdAt: { gte: activeShift.waktuBuka } }
+      where: {
+        ...(tenantId ? { tenantId } : {}),
+        createdAt: { gte: activeShift.waktuBuka }
+      }
     });
 
     const cashDebtIncome = debtPayments
@@ -305,8 +312,17 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
+    const systemExcludedCategories = [
+      'Pembayaran Piutang', 
+      'Penjualan Kasir', 
+      'Omset POS - Tunai', 
+      'Omset POS - Non Tunai (QRIS/Transfer)', 
+      'Saldo Awal Shift', 
+      'Pelunasan Piutang - Tunai'
+    ];
+
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
+      .filter(cf => cf.type === 'Pemasukan' && !systemExcludedCategories.includes(cf.category) && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
       .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
@@ -459,8 +475,17 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
+    const systemExcludedCategories = [
+      'Pembayaran Piutang', 
+      'Penjualan Kasir', 
+      'Omset POS - Tunai', 
+      'Omset POS - Non Tunai (QRIS/Transfer)', 
+      'Saldo Awal Shift', 
+      'Pelunasan Piutang - Tunai'
+    ];
+
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
+      .filter(cf => cf.type === 'Pemasukan' && !systemExcludedCategories.includes(cf.category) && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
       .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
@@ -515,6 +540,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Saldo Awal Shift',
+        cashPocket: 'LACI_KASIR',
+        status: 'APPROVED',
         amount: activeShift.saldoAwal,
         description: `Modal awal kasir saat buka shift — tutup shift #${closedShift.id}`,
         userId,
@@ -529,6 +556,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Omset POS - Tunai',
+        cashPocket: 'LACI_KASIR',
+        status: 'APPROVED',
         amount: cashSalesIncome,
         description: `Omset penjualan tunai (${activeOrders.filter(o => getCashPortion(o.paymentMethod, o.total) > 0).length} transaksi) — shift #${closedShift.id}`,
         userId,
@@ -543,6 +572,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Omset POS - Non Tunai (QRIS/Transfer)',
+        cashPocket: 'KAS_OPERASIONAL',
+        status: 'APPROVED',
         amount: nonCashSalesIncome,
         description: `Omset penjualan non-tunai/QRIS/transfer — shift #${closedShift.id} (tidak mempengaruhi kas laci)`,
         userId,
@@ -557,6 +588,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         outletId: shiftOutletId,
         type: 'Pemasukan',
         category: 'Pelunasan Piutang - Tunai',
+        cashPocket: 'LACI_KASIR',
+        status: 'APPROVED',
         amount: cashDebtIncome,
         description: `Pembayaran piutang tunai yang diterima — shift #${closedShift.id}`,
         userId,

@@ -127,6 +127,7 @@ export const POSView = () => {
   }, []);
   
   const drinkCustomizationEnabled = posContext?.settings?.enableDrinkCustomization ?? false;
+  const isAdvancedMode = posContext?.settings?.ingredientTrackingEnabled ?? false;
 
   useEffect(() => {
     if (posContext?.token) {
@@ -243,7 +244,47 @@ export const POSView = () => {
       price: priceVal,
       sellPrice: priceVal,
       stock: Number(p?.stock || 0),
-      minStock: Number(p?.minStock || 0)
+      minStock: Number(p?.minStock || 0),
+      recipes: Array.isArray(p?.recipes) ? p.recipes : []
+    };
+  };
+
+  const getProductPortionCapacity = (product: any) => {
+    // Jika bukan Advanced Mode (Bahan Baku) atau tidak memiliki resep, gunakan product.stock
+    if (!isAdvancedMode || !product.recipes || product.recipes.length === 0) {
+      const s = product.stock !== undefined ? Number(product.stock) : 9999;
+      return {
+        capacity: s,
+        isSoldOut: s <= 0,
+        bottleneck: null,
+        hasRecipe: false
+      };
+    }
+
+    let minCapacity = Infinity;
+    let bottleneckIng: any = null;
+
+    for (const r of product.recipes) {
+      const ingStock = Number(r.ingredient?.stock ?? 0);
+      const qtyPerServing = Number(r.qtyPerServing ?? 1);
+      if (qtyPerServing > 0) {
+        const cap = Math.floor(ingStock / qtyPerServing);
+        if (cap < minCapacity) {
+          minCapacity = cap;
+          bottleneckIng = r.ingredient;
+        }
+      }
+    }
+
+    const recipeCap = minCapacity === Infinity ? 0 : minCapacity;
+    // 100% Otomatis mengikuti ketersediaan bahan baku dapur:
+    const effectiveStock = recipeCap;
+
+    return {
+      capacity: effectiveStock,
+      isSoldOut: effectiveStock <= 0,
+      bottleneck: effectiveStock <= 0 ? bottleneckIng : null,
+      hasRecipe: true
     };
   };
 
@@ -325,6 +366,22 @@ export const POSView = () => {
     const notesStr = customization
       ? [customization.temperature, customization.sugar, customization.ice, customization.notes].filter(Boolean).join(' • ')
       : '';
+
+    const capInfo = getProductPortionCapacity(product);
+    const existingTotal = cart
+      .filter(item => item.product.id === product.id)
+      .reduce((sum, item) => sum + item.qty, 0);
+
+    if (capInfo.capacity !== Infinity && existingTotal + 1 > capInfo.capacity) {
+      if (capInfo.bottleneck) {
+        const u = capInfo.bottleneck.unit ? ` ${capInfo.bottleneck.unit}` : '';
+        toast(`Maksimal ${capInfo.capacity} porsi: Bahan baku "${capInfo.bottleneck.name}" tersisa ${capInfo.bottleneck.stock || 0}${u} (hanya cukup untuk ${capInfo.capacity} porsi)! Cek bahan baku dapur.`, 'warning');
+      } else {
+        toast(`Maksimal ${capInfo.capacity} porsi sesuai stok produk!`, 'warning');
+      }
+      return;
+    }
+
     setCart(prev => {
       // If same product and same notes -> stack qty
       const existing = prev.find(item => item.product.id === product.id && item.notes === notesStr);
@@ -342,8 +399,14 @@ export const POSView = () => {
       return;
     }
 
-    if (product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe)) {
-      toast(`Menu "${product.name}" sudah habis di dapur!`, 'warning');
+    const capInfo = getProductPortionCapacity(product);
+    if (product.isSoldOut || capInfo.isSoldOut) {
+      if (capInfo.bottleneck) {
+        const u = capInfo.bottleneck.unit ? ` ${capInfo.bottleneck.unit}` : '';
+        toast(`Menu "${product.name}" tidak dapat dipesan: Bahan baku "${capInfo.bottleneck.name}" tersisa 0${u} (habis). Cek bahan baku dapur!`, 'warning');
+      } else {
+        toast(`Menu "${product.name}" sudah habis di dapur!`, 'warning');
+      }
       return;
     }
 
@@ -865,7 +928,8 @@ export const POSView = () => {
         {/* Grid Produk Responsive 2-Kolom di HP / Multi-Kolom di Layar Lebar */}
         <div className="product-grid flex-1">
           {filteredProducts.map(product => {
-            const isSoldOut = Boolean(product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe));
+            const capInfo = getProductPortionCapacity(product);
+            const isSoldOut = Boolean(product.isSoldOut || capInfo.isSoldOut);
             const cartQty = cart.find(item => item.product.id === product.id)?.qty || 0;
             return (
               <div 
@@ -903,7 +967,7 @@ export const POSView = () => {
                   {isSoldOut ? (
                     <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10">
                       <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider rounded-md shadow-md border border-white/20">
-                        HABIS
+                        {capInfo.bottleneck ? `HABIS (${capInfo.bottleneck.name})` : 'HABIS'}
                       </span>
                     </div>
                   ) : (
@@ -924,10 +988,12 @@ export const POSView = () => {
                     </div>
                     <div className="product-stock flex justify-between items-center text-[10px] sm:text-xs text-slate-400 mt-0.5">
                       {isSoldOut ? (
-                        <span className="font-extrabold text-rose-500 uppercase text-[9px]">Stok Habis</span>
+                        <span className="font-extrabold text-rose-500 uppercase text-[9px]">
+                          {capInfo.bottleneck ? `Habis (${capInfo.bottleneck.name})` : 'Stok Habis'}
+                        </span>
                       ) : (
-                        <span className={`font-semibold ${product.stock <= product.minStock ? 'text-red-500' : 'text-slate-400'}`}>
-                          Stok: {product.stock}
+                        <span className={`font-semibold ${capInfo.capacity <= product.minStock ? 'text-red-500' : 'text-slate-400'}`}>
+                          {capInfo.hasRecipe ? `Saji: ${capInfo.capacity} porsi` : `Stok: ${capInfo.capacity}`}
                         </span>
                       )}
                     </div>

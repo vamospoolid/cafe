@@ -524,6 +524,8 @@ router.post('/:id/payments', async (req: AuthRequest, res: Response) => {
             tenantId,
             type: 'Pengeluaran',
             category: 'Pembayaran Hutang Supplier',
+            cashPocket: paymentMethod === 'CASH' ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
+            status: 'APPROVED',
             amount: payAmount,
             description: `Pelunasan/Cicilan Hutang Nota #${invoice.invoiceNumber} (${invoice.supplier.name}) via ${methodLabel}${referenceNo ? ` [Ref: ${referenceNo}]` : ''}`,
             userId: effectiveUserId

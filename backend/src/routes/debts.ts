@@ -2,6 +2,7 @@ import prisma from '../db';
 import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { TenantContext } from '../utils/tenantContext';
+import { emitToTenant } from '../index';
 
 const router = Router();
 
@@ -193,6 +194,8 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
           outletId,
           type: 'Pemasukan',
           category: isCash ? 'Pembayaran Piutang - Tunai' : 'Pembayaran Piutang - Non-Tunai',
+          cashPocket: isCash ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
+          status: 'APPROVED',
           amount: payAmt,
           description: `Pelunasan piutang via ${paymentMethod} dari member ${debt.customer.name}${orderInfo}`,
           userId
@@ -201,6 +204,11 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
 
       return updatedDebt;
     });
+
+    if (tenantId) {
+      emitToTenant(tenantId, 'debt:updated', result);
+      emitToTenant(tenantId, 'cashflow:created', { type: 'Pemasukan', amount: payAmt });
+    }
 
     res.json(result);
   } catch (error: any) {

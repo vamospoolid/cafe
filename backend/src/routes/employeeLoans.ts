@@ -247,6 +247,8 @@ router.post('/:id/approve', authenticateToken, async (req: Request, res: Respons
             outletId,
             type: 'Pengeluaran',
             category: 'Kasbon Karyawan',
+            cashPocket: 'LACI_KASIR',
+            status: 'APPROVED',
             amount: loan.amount,
             description: `Kasbon Tunai Kasir untuk ${loan.user.name}: ${loan.reason || 'Kasbon Karyawan'}`,
             userId: authUser?.id || 1
@@ -509,6 +511,8 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
             userId: authUser?.id || 1,
             type: 'Pemasukan',
             category: isCashPayment ? 'Pengembalian Kasbon - Tunai' : 'Pengembalian Kasbon - Non-Tunai',
+            cashPocket: isCashPayment ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
+            status: 'APPROVED',
             amount: payAmt,
             description: `Pengembalian kasbon via ${pm} dari staf ${loan.user.name} (${isSettled ? 'Lunas' : 'Cicilan'})`,
             date: new Date()

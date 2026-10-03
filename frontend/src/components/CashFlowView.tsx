@@ -68,7 +68,7 @@ const CashFlowView = () => {
   const posContext = useContext(POSContext);
   const user = posContext?.user;
   const isOwnerOrAdmin = user?.role === 'Admin' || user?.role === 'Owner' || (user as any)?.isPlatformAdmin;
-  const storeName = posContext?.settings?.storeName || 'VAMOS POOL & CAFE';
+  const storeName = posContext?.settings?.storeName || 'MUKI RAMEN';
   const socket = useSocket();
 
   const formatCurrency = (val: any) => {

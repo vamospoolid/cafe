@@ -35,7 +35,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
-const useVertical = () => ({ isBengkel: false, isRetail: false, businessType: 'fnb' });
+import { useVertical } from '../context/VerticalContext';
 import { toast, confirmAlert } from '../utils/alert';
 import {
   exportWarehouseStockPDF,

@@ -559,11 +559,27 @@ export const SettingsBluetoothPrinter: React.FC = () => {
             onClick={handlePairUsb}
             disabled={connectingUsb}
             className="flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all disabled:opacity-50"
+            title="Hubungkan langsung menggunakan kabel USB printer ke Laptop/PC atau OTG di HP"
           >
-            <Usb size={15} />
-            {connectingUsb ? 'Menghubungkan USB...' : 'Printer USB (OTG)'}
+            <Usb size={15} className="text-indigo-600" />
+            {connectingUsb ? 'Menghubungkan USB...' : 'Printer USB (Kabel PC / OTG)'}
           </button>
         )}
+      </div>
+
+      {/* ─── Tips Khusus Printer Desktop (Blueprint BP-ECO58D, Panda, dll di Windows) ─── */}
+      <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs space-y-1.5 text-amber-900 shadow-xs">
+        <div className="font-bold flex items-center gap-1.5 text-amber-950">
+          <Info size={14} className="text-amber-600" />
+          <span>Tips Khusus Printer Blueprint BP-ECO58D / Printer Desktop di Windows:</span>
+        </div>
+        <p className="text-[11px] leading-relaxed text-amber-800">
+          Printer seperti <strong>Blueprint BP-ECO58D</strong> adalah jenis printer desktop yang dirancang menggunakan <strong>Kabel USB untuk Windows PC/Laptop</strong> dan Bluetooth untuk perangkat Android.
+        </p>
+        <div className="text-[11px] text-amber-800 space-y-1 pl-1">
+          <div>• <strong>Di Laptop/PC (Direkomendasikan):</strong> Colok kabel USB bawaan printer ke port USB laptop/PC, lalu klik tombol <strong>"Printer USB (Kabel PC / OTG)"</strong> di atas. Sangat stabil dan langsung mencetak seketika tanpa kendala Bluetooth.</div>
+          <div>• <strong>Di HP/Tablet Android:</strong> Hubungkan printer via Bluetooth di pengaturan Android (PIN <code>0000</code> atau <code>1234</code>), lalu gunakan aplikasi POS / PWA.</div>
+        </div>
       </div>
 
       {/* ─── Native Device List ─── */}

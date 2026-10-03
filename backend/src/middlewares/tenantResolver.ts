@@ -63,7 +63,7 @@ export async function resolveTenantFromRequest(req: Request): Promise<{ id: stri
     if (subdomain === 'cafe') {
       const data = await cacheService.remember(`cache:tenant:slug:cafe_default`, 600, async () => {
         const tenant = await prisma.tenant.findFirst({
-          where: { OR: [{ id: 'tenant-vamos-pool' }, { slug: 'vamospool' }, { slug: 'cafe' }] }
+          where: { OR: [{ slug: 'mukiramen' }, { id: 'tenant-vamos-pool' }, { slug: 'vamospool' }, { slug: 'cafe' }] }
         });
         return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;
       });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 const getSocketUrl = (): string => {
@@ -11,17 +11,54 @@ const getSocketUrl = (): string => {
 
 // Singleton socket instance — satu koneksi untuk seluruh aplikasi
 let socket: Socket | null = null;
+let lastUsedToken: string | undefined | null = null;
 
-const getSocket = (): Socket => {
-  if (!socket || socket.disconnected) {
-    const url = getSocketUrl();
-    const token = localStorage.getItem('pos_token') || undefined;
+export const getSocket = (): Socket => {
+  const currentToken = localStorage.getItem('pos_token') || undefined;
+  const url = getSocketUrl();
+
+  if (!socket) {
+    lastUsedToken = currentToken;
     socket = io(url, {
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
       transports: ['websocket', 'polling'],
       auth: {
-        token
+        token: currentToken
+      }
+    });
+  } else if (currentToken !== lastUsedToken) {
+    // Token berubah (misal: user login/logout atau ganti tenant) -> re-authenticate
+    lastUsedToken = currentToken;
+    socket.auth = { token: currentToken };
+    if (socket.connected) {
+      socket.disconnect();
+    }
+    socket.connect();
+  } else if (socket.disconnected) {
+    socket.connect();
+  }
+  return socket;
+};
+
+export const reconnectSocket = (explicitToken?: string): Socket => {
+  const currentToken = explicitToken !== undefined ? explicitToken : (localStorage.getItem('pos_token') || undefined);
+  lastUsedToken = currentToken;
+  const url = getSocketUrl();
+
+  if (socket) {
+    socket.auth = { token: currentToken };
+    if (socket.connected) {
+      socket.disconnect();
+    }
+    socket.connect();
+  } else {
+    socket = io(url, {
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      transports: ['websocket', 'polling'],
+      auth: {
+        token: currentToken
       }
     });
   }
@@ -29,25 +66,32 @@ const getSocket = (): Socket => {
 };
 
 export const useSocket = () => {
-  const sock = useMemo(() => getSocket(), []);
+  const [sock, setSock] = useState<Socket>(() => getSocket());
 
   useEffect(() => {
-    sock.on('connect', () => {
-      console.log('[Socket.IO] Connected:', sock.id);
-    });
-    sock.on('connect_error', (err) => {
+    const s = getSocket();
+    setSock(s);
+
+    const handleConnect = () => {
+      console.log('[Socket.IO] Connected:', s.id);
+    };
+    const handleConnectError = (err: Error) => {
       console.warn('[Socket.IO] Connection error:', err.message);
-    });
-    sock.on('disconnect', (reason) => {
+    };
+    const handleDisconnect = (reason: string) => {
       console.log('[Socket.IO] Disconnected:', reason);
-    });
+    };
+
+    s.on('connect', handleConnect);
+    s.on('connect_error', handleConnectError);
+    s.on('disconnect', handleDisconnect);
 
     return () => {
-      sock.off('connect');
-      sock.off('connect_error');
-      sock.off('disconnect');
+      s.off('connect', handleConnect);
+      s.off('connect_error', handleConnectError);
+      s.off('disconnect', handleDisconnect);
     };
-  }, [sock]);
+  }, []);
 
   return sock;
 };

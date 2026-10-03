@@ -555,8 +555,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           }),
         });
       }
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Gagal checkout'); }
-      const data = await res.json();
+      if (!res.ok) { 
+        const e = await res.json().catch(() => ({})); 
+        const errMsg = (e.detail && e.detail !== e.error) ? e.detail : (e.error || e.message || 'Gagal memproses pesanan.');
+        throw new Error(errMsg); 
+      }
+      const data = await res.json().catch(() => ({}));
       
       const createdOrder = data.order || (data.orders && data.orders[0]) || data.orderItem?.order;
       if (createdOrder) {

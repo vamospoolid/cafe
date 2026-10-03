@@ -827,6 +827,8 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
             amount: parsedPaid,
             description: `Pembayaran SPK ${wo.spkNumber} (${wo.vehiclePlate || 'Umum'}) - ${paymentMethod || 'TUNAI'}`,
             userId: Number((req as any).user?.id || 1),
+            cashPocket: isCash ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
+            status: 'APPROVED',
             date: new Date()
           }
         });

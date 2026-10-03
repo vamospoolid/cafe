@@ -223,18 +223,20 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res: Response
         include: { items: true }
       });
 
-      // 2. If paid at intake, record to CashFlow (Laci Kasir)
+      // 2. If paid at intake, record to CashFlow
       if (Number(paidAmount) > 0 && userId) {
+        const pm = (paymentMethod || 'TUNAI').toUpperCase();
+        const isCash = pm === 'TUNAI' || pm === 'CASH';
         await tx.cashFlow.create({
           data: {
             tenantId,
             outletId: outlet?.id || null,
             userId: Number(userId),
             type: 'Pemasukan',
-            category: 'Pendapatan Laundry',
+            category: isCash ? 'Pendapatan Laundry - Tunai' : 'Pendapatan Laundry - Non-Tunai',
             amount: Number(paidAmount),
-            description: `Pembayaran Drop-off Nota Cuci #${orderNumber} (${customerName})`,
-            cashPocket: 'LACI_KASIR',
+            description: `Pembayaran Drop-off Nota Cuci #${orderNumber} (${customerName}) - ${paymentMethod || 'TUNAI'}`,
+            cashPocket: isCash ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
             status: 'APPROVED'
           }
         });
@@ -673,16 +675,18 @@ router.post('/orders/:id/pickup', authenticateToken, async (req: AuthRequest, re
 
       // 2. If additional payment received at pickup, record to CashFlow
       if (additionalPaid > 0 && userId) {
+        const pm = (paymentMethod || 'TUNAI').toUpperCase();
+        const isCash = pm === 'TUNAI' || pm === 'CASH';
         await tx.cashFlow.create({
           data: {
             tenantId,
             outletId: outlet?.id || null,
             userId: Number(userId),
             type: 'Pemasukan',
-            category: 'Pendapatan Laundry',
+            category: isCash ? 'Pendapatan Laundry - Tunai' : 'Pendapatan Laundry - Non-Tunai',
             amount: additionalPaid,
-            description: `Pelunasan Pengambilan Nota Cuci #${order.orderNumber} (${order.customerName})`,
-            cashPocket: 'LACI_KASIR',
+            description: `Pelunasan Pengambilan Nota Cuci #${order.orderNumber} (${order.customerName}) - ${paymentMethod || 'TUNAI'}`,
+            cashPocket: isCash ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
             status: 'APPROVED'
           }
         });

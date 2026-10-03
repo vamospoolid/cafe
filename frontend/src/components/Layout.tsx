@@ -41,7 +41,10 @@ import {
   Store,
   LayoutGrid,
   Sliders,
-  LogOut
+  LogOut,
+  Wrench,
+  Car,
+  Layers
 } from 'lucide-react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -265,11 +268,52 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </NavLink>
             )}
             {checkAccess(['Admin', 'Kasir']) && (
-              <NavLink to="/pos" title="POS / Penjualan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink to="/pos" title={profile.orderTerm || "POS / Penjualan"} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <ShoppingCart size={20} className="shrink-0" />
-                <span>POS / Penjualan</span>
+                <span>{profile.orderTerm || 'POS / Penjualan'}</span>
               </NavLink>
             )}
+
+            {/* Vertikal Khusus: Bengkel Motor & Mobil */}
+            {isBengkel && (
+              <>
+                <NavLink to="/bengkel/board" title="Status Board SPK" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Wrench size={20} className="shrink-0" />
+                  <span>Status Board SPK</span>
+                </NavLink>
+                <NavLink to="/bengkel/kendaraan" title="Data Kendaraan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Car size={20} className="shrink-0" />
+                  <span>Data Kendaraan</span>
+                </NavLink>
+                {checkAccess(['Admin']) && (
+                  <NavLink to="/bengkel/mekanik" title="Mekanik & Komisi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Users size={20} className="shrink-0" />
+                    <span>Mekanik & Komisi</span>
+                  </NavLink>
+                )}
+                <NavLink to="/bengkel/invoices" title="Faktur B2B" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <FileText size={20} className="shrink-0" />
+                  <span>Faktur B2B</span>
+                </NavLink>
+              </>
+            )}
+
+            {/* Vertikal Khusus: Toko Retail & Grosir */}
+            {isRetail && (
+              <NavLink to="/retail/surat-jalan" title="Surat Jalan & Pengiriman" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Truck size={20} className="shrink-0" />
+                <span>Surat Jalan</span>
+              </NavLink>
+            )}
+
+            {/* Vertikal Khusus: Jasa Laundry */}
+            {isLaundry && (
+              <NavLink to="/laundry-kanban" title="Papan Status Cucian" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Layers size={20} className="shrink-0" />
+                <span>Status Cucian</span>
+              </NavLink>
+            )}
+
             {isKDSEnabled && checkAccess(['Admin', 'Dapur']) && (
               <NavLink to="/kds" title="Dapur (KDS)" className={({isActive}) => `nav-item relative ${isActive ? 'active' : ''}`}>
                 <ChefHat size={20} className="shrink-0" />
@@ -307,7 +351,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <span>Reservasi</span>
               </NavLink>
             )}
-            {profile.enableTables && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
               <NavLink to="/meja" title={profile.tableTerm || 'Nomor Meja'} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Grid size={20} className="shrink-0" />
                 <span>{profile.tableTerm || 'Nomor Meja'}</span>
@@ -460,7 +504,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <div className="flex flex-col min-w-0">
                   <h1 className="text-base font-extrabold text-slate-900 leading-tight truncate">{pageTitle}</h1>
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate mt-0.5">
-                    {posContext?.settings?.storeName || 'VAMOS POOL & CAFE'}
+                    {posContext?.settings?.storeName || 'MUKI RAMEN'}
                   </span>
                 </div>
               </div>
@@ -827,7 +871,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </div>
                 <div>
                   <p className="font-extrabold text-sm text-slate-800 leading-tight">Menu Lengkap</p>
-                  <p className="text-[10px] text-slate-400 font-medium">{posContext?.settings?.storeName || 'VAMOS POOL & CAFE'}</p>
+                  <p className="text-[10px] text-slate-400 font-medium">{posContext?.settings?.storeName || 'MUKI RAMEN'}</p>
                 </div>
               </div>
               <button
@@ -847,6 +891,48 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     <Package size={20} className="text-violet-600" />
                   </div>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">Produk</span>
+                </NavLink>
+              )}
+
+              {/* Vertikal Khusus Mobile: Bengkel */}
+              {isBengkel && (
+                <>
+                  <NavLink to="/bengkel/board" onClick={() => setIsMoreMenuOpen(false)}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                    <div className="w-11 h-11 rounded-2xl bg-purple-100 flex items-center justify-center">
+                      <Wrench size={20} className="text-purple-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Board SPK</span>
+                  </NavLink>
+                  <NavLink to="/bengkel/kendaraan" onClick={() => setIsMoreMenuOpen(false)}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                    <div className="w-11 h-11 rounded-2xl bg-blue-100 flex items-center justify-center">
+                      <Car size={20} className="text-blue-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Kendaraan</span>
+                  </NavLink>
+                </>
+              )}
+
+              {/* Vertikal Khusus Mobile: Retail */}
+              {isRetail && (
+                <NavLink to="/retail/surat-jalan" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center">
+                    <Truck size={20} className="text-amber-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Surat Jalan</span>
+                </NavLink>
+              )}
+
+              {/* Vertikal Khusus Mobile: Laundry */}
+              {isLaundry && (
+                <NavLink to="/laundry-kanban" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-cyan-100 flex items-center justify-center">
+                    <Layers size={20} className="text-cyan-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Status Cucian</span>
                 </NavLink>
               )}
 

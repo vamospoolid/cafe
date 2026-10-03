@@ -335,6 +335,8 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
 
       // f. Catat Arus Kas Masuk jika transaksi tunai/non-bon
       if (!isBonPayment) {
+        const pm = (paymentMethod || 'TUNAI').toUpperCase();
+        const isCash = pm === 'TUNAI' || pm === 'CASH';
         await tx.cashFlow.create({
           data: {
             tenantId,
@@ -344,6 +346,8 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
             amount: Number(total),
             description: `Penjualan Faktur ${orderNumber} (${paymentMethod})`,
             userId: user.id,
+            cashPocket: isCash ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
+            status: 'APPROVED',
             date: new Date()
           }
         });

@@ -33,6 +33,8 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
+import BengkelDashboardStats from '../verticals/bengkel/BengkelDashboardStats';
 import OpenShiftModal from './OpenShiftModal';
 import useSocket from '../hooks/useSocket';
 
@@ -47,9 +49,11 @@ interface LowStockProduct {
 
 const DashboardView = () => {
   const navigate = useNavigate();
-  const isBengkel = false;
-  const isRetail = false;
-  const isCafe = true;
+  const { isBengkel, isRetail, isCafe, isLaundry } = useVertical();
+
+  if (isBengkel) {
+    return <BengkelDashboardStats />;
+  }
   const [summary, setSummary] = useState<any>({
     revenue: 0,
     profit: 0,
@@ -296,7 +300,7 @@ const DashboardView = () => {
             </span>
           </button>
 
-          {/* 3. Vertikal Spesifik: Surat Jalan (Retail) atau Meja (Cafe) */}
+          {/* 3. Vertikal Spesifik: Surat Jalan (Retail), Kanban (Laundry), atau Meja (Cafe) */}
           {isRetail ? (
             <button
               type="button"
@@ -310,6 +314,20 @@ const DashboardView = () => {
                 Surat Jalan
               </span>
               <span className="text-[8.5px] font-semibold text-purple-600/80 leading-none">Armada Toko</span>
+            </button>
+          ) : isLaundry ? (
+            <button
+              type="button"
+              onClick={() => { posContext?.triggerHaptic(15); navigate('/laundry-kanban'); }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-cyan-50/60 hover:bg-cyan-100/60 border border-cyan-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+                <Layers size={17} />
+              </div>
+              <span className="text-[10.5px] font-extrabold text-cyan-950 tracking-tight leading-tight line-clamp-1">
+                Status Cucian
+              </span>
+              <span className="text-[8.5px] font-semibold text-cyan-600/80 leading-none">Kanban</span>
             </button>
           ) : (
             <button

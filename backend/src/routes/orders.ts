@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { authenticateToken } from '../middlewares/authMiddleware';
+import { authenticateToken, requirePermission } from '../middlewares/authMiddleware';
 import { io, emitToTenant } from '../index';
 import { PrinterService } from '../services/PrinterService';
 import { AuditLogger } from '../services/AuditLogger';
@@ -419,6 +419,10 @@ router.post('/dinein', async (req: Request, res: Response) => {
       });
 
       for (const item of items) {
+        const prod = await tx.product.findUnique({ where: { id: Number(item.productId) } });
+        if (prod && prod.stock < Number(item.qty)) {
+          throw new Error(`Stok menu "${prod.name}" tidak mencukupi untuk Dine-In (tersisa: ${prod.stock}, diminta: ${item.qty})`);
+        }
         await tx.product.update({
           where: { id: Number(item.productId) },
           data: {
@@ -432,6 +436,15 @@ router.post('/dinein', async (req: Request, res: Response) => {
         });
         for (const recipe of recipes) {
           const used = recipe.qtyPerServing * Number(item.qty);
+          const currentIng = await tx.ingredient.findUnique({ where: { id: recipe.ingredientId }, select: { stock: true, name: true, unit: true } });
+          if (currentIng && currentIng.stock < used) {
+            const u = currentIng.unit ? ` ${currentIng.unit}` : '';
+            if (currentIng.stock <= 0) {
+              throw new Error(`Bahan baku "${currentIng.name}" tersisa 0${u} (habis). Cek bahan baku dapur!`);
+            } else {
+              throw new Error(`Bahan baku "${currentIng.name}" tersisa ${currentIng.stock}${u} (kurang, dibutuhkan ${used}${u}). Cek bahan baku dapur!`);
+            }
+          }
           await tx.ingredient.update({
             where: { id: recipe.ingredientId },
             data: { stock: { decrement: used } }
@@ -479,9 +492,10 @@ router.post('/dinein', async (req: Request, res: Response) => {
     }
 
     res.status(201).json({ message: 'Pesanan Dine-In berhasil dibuat', order: result });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Dine-In Order Error:', error);
-    res.status(500).json({ error: 'Terjadi kesalahan saat memproses pesanan mandiri' });
+    const msg = error?.message || 'Terjadi kesalahan saat memproses pesanan mandiri';
+    res.status(400).json({ error: msg, detail: msg });
   }
 });
 
@@ -532,7 +546,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
       const existing = await prisma.order.findFirst({
         where: { 
           offlineId,
-          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+          ...(tenantId ? { tenantId } : {})
         },
         include: { items: true }
       });
@@ -644,27 +658,35 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
             }
           });
 
-          // Kurangi stok bahan baku berdasarkan resep produk jika tersedia
-          const recipes = await tx.recipeItem.findMany({
-            where: { productId: Number(item.productId) }
-          });
-          for (const recipe of recipes) {
-            const used = recipe.qtyPerServing * Number(item.qty);
-            await tx.ingredient.update({
-              where: { id: recipe.ingredientId },
-              data: { stock: { decrement: used } }
+          // Kurangi stok bahan baku berdasarkan resep produk jika toko mengaktifkan Advanced Mode
+          if (isAdvancedMode) {
+            const recipes = await tx.recipeItem.findMany({
+              where: { productId: Number(item.productId) }
             });
-            await tx.ingredientLog.create({
-              data: {
-                tenantId: tenantId || null,
-                outletId: outletId || null,
-                ingredientId: recipe.ingredientId,
-                change: -used,
-                type: 'Produksi',
-                description: `Order ${orderNumber} (Sync Offline)`,
-                referenceId: orderNumber
+            for (const recipe of recipes) {
+              const used = recipe.qtyPerServing * Number(item.qty);
+              const currentIng = await tx.ingredient.findFirst({
+                where: { id: recipe.ingredientId, ...(tenantId ? { tenantId } : {}), deletedAt: null },
+                select: { id: true, stock: true }
+              });
+              if (currentIng) {
+                await tx.ingredient.update({
+                  where: { id: recipe.ingredientId },
+                  data: { stock: { decrement: used } }
+                });
+                await tx.ingredientLog.create({
+                  data: {
+                    tenantId: tenantId || null,
+                    outletId: outletId || null,
+                    ingredientId: recipe.ingredientId,
+                    change: -used,
+                    type: 'Produksi',
+                    description: `Order ${orderNumber} (Sync Offline)`,
+                    referenceId: orderNumber
+                  }
+                });
               }
-            });
+            }
           }
         }
 
@@ -867,9 +889,14 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     // Ambil userId & tenantId dari token middleware
     const user = (req as any).user;
     const userId = user.id;
-    const tenant = await prisma.tenant.findFirst();
-    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || (tenant ? tenant.id : null);
+    // FIX: Jangan gunakan prisma.tenant.findFirst() sebagai fallback — berbahaya di multi-tenant!
+    // TenantId harus selalu dari JWT token atau header x-tenant-id
+    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
     let outletId = user?.outletId || null;
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
     if (!items || items.length === 0) {
       return res.status(400).json({ error: 'Keranjang belanja kosong' });
@@ -1043,40 +1070,69 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
 
       for (const item of items) {
-        const product = await tx.product.findUnique({ where: { id: Number(item.productId) } });
-        if (product && product.stock < Number(item.qty)) {
-          throw new Error(`Stok produk "${product.name}" tidak mencukupi (tersisa: ${product.stock}, dibutuhkan: ${item.qty})`);
-        }
-        await tx.product.update({
-          where: { id: Number(item.productId) },
-          data: { stock: { decrement: Number(item.qty) } }
+        const product = await tx.product.findFirst({
+          where: { id: Number(item.productId), ...(tenantId ? { tenantId } : {}) }
         });
 
-        // Kurangi stok bahan baku berdasarkan resep produk jika tersedia
-        const recipes = await tx.recipeItem.findMany({
-          where: { productId: Number(item.productId) }
-        });
-        for (const recipe of recipes) {
-          const used = recipe.qtyPerServing * Number(item.qty);
-          // Atomic check: pastikan stok mencukupi sebelum decrement (cegah stok negatif)
-          const currentIng = await tx.ingredient.findUnique({ where: { id: recipe.ingredientId }, select: { stock: true, name: true } });
-          if (currentIng && currentIng.stock < used) {
-            throw new Error(`Stok bahan baku "${currentIng.name}" tidak mencukupi (sisa: ${currentIng.stock}, dibutuhkan: ${used})`);
-          }
-          await tx.ingredient.update({
-            where: { id: recipe.ingredientId },
-            data: { stock: { decrement: used } }
-          });
-          await tx.ingredientLog.create({
-            data: {
-              tenantId: tenantId || null,
-              outletId: outletId || null,
-              ingredientId: recipe.ingredientId,
-              change: -used,
-              type: 'Produksi',
-              description: `Order ${orderNumber}`,
-              referenceId: orderNumber
+        // Cek resep bahan baku jika toko mengaktifkan Advanced Mode
+        const recipes = isAdvancedMode
+          ? await tx.recipeItem.findMany({ where: { productId: Number(item.productId) } })
+          : [];
+
+        const hasRecipe = recipes.length > 0;
+
+        if (hasRecipe) {
+          // 100% OTOMATIS MENGIKUTI BAHAN BAKU:
+          // Validasi dan pemotongan stok bahan baku di dapur secara atomik
+          for (const recipe of recipes) {
+            const used = recipe.qtyPerServing * Number(item.qty);
+            const currentIng = await tx.ingredient.findFirst({
+              where: { id: recipe.ingredientId, ...(tenantId ? { tenantId } : {}), deletedAt: null },
+              select: { id: true, stock: true, name: true, unit: true }
+            });
+            if (currentIng && currentIng.stock < used) {
+              const u = currentIng.unit ? ` ${currentIng.unit}` : '';
+              if (currentIng.stock <= 0) {
+                throw new Error(`Bahan baku "${currentIng.name}" tersisa 0${u} (habis). Cek bahan baku dapur!`);
+              } else {
+                throw new Error(`Bahan baku "${currentIng.name}" tersisa ${currentIng.stock}${u} (kurang, dibutuhkan ${used}${u}). Cek bahan baku dapur!`);
+              }
             }
+            if (currentIng) {
+              await tx.ingredient.update({
+                where: { id: recipe.ingredientId },
+                data: { stock: { decrement: used } }
+              });
+              await tx.ingredientLog.create({
+                data: {
+                  tenantId: tenantId || null,
+                  outletId: outletId || null,
+                  ingredientId: recipe.ingredientId,
+                  change: -used,
+                  type: 'Produksi',
+                  description: `Order ${orderNumber}`,
+                  referenceId: orderNumber
+                }
+              });
+            }
+          }
+
+          // Sinkronkan product.stock jika bernilai positif
+          if (product && product.stock > 0) {
+            await tx.product.update({
+              where: { id: Number(item.productId) },
+              data: { stock: { decrement: Math.min(product.stock, Number(item.qty)) } }
+            });
+          }
+        } else {
+          // PRODUK TANPA RESEP (Barang Jadi / Retail):
+          // Validasi dan pemotongan langsung ke stok fisik produk
+          if (product && product.stock < Number(item.qty)) {
+            throw new Error(`Stok produk "${product.name}" tidak mencukupi (tersisa: ${product.stock}, dibutuhkan: ${item.qty})`);
+          }
+          await tx.product.update({
+            where: { id: Number(item.productId) },
+            data: { stock: { decrement: Number(item.qty) } }
           });
         }
       }
@@ -1159,9 +1215,27 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     }
 
     res.status(201).json({ message: 'Order berhasil dibuat', order: result });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create Order Error:', error);
-    res.status(500).json({ error: 'Terjadi kesalahan saat memproses pesanan' });
+    const msg = error?.message || 'Terjadi kesalahan saat memproses pesanan';
+    const isValidationErr = 
+      msg.includes('Stok') || 
+      msg.includes('stok') || 
+      msg.includes('Bahan baku') || 
+      msg.includes('bahan baku') || 
+      msg.includes('tersisa') || 
+      msg.includes('mencukupi') || 
+      msg.includes('habis') || 
+      msg.includes('tidak ditemukan') || 
+      msg.includes('Shift kasir') ||
+      msg.includes('bukan milik tenant') ||
+      msg.includes('Pelanggan') ||
+      msg.includes('Keranjang');
+
+    if (isValidationErr) {
+      return res.status(400).json({ error: msg, detail: msg, code: 'VALIDATION_ERROR' });
+    }
+    res.status(500).json({ error: msg, detail: msg });
   }
 });
 
@@ -1186,7 +1260,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
     const activeShift = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+        ...(tenantId ? { tenantId } : {})
       }
     });
     if (!activeShift) {
@@ -1210,11 +1284,11 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
         outletId = firstOutlet?.id || null;
       }
 
-      // Ambil data semua order untuk kalkulasi total awal
+      // Ambil data semua order untuk kalkulasi total awal (strictly scoped to tenant)
       const orders = await tx.order.findMany({
         where: {
           id: { in: ids },
-          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+          ...(tenantId ? { tenantId } : {})
         }
       });
 
@@ -1477,12 +1551,21 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 });
 
 // PATCH Void Order (Membatalkan pesanan dan mengembalikan stok)
-router.patch('/:id/void', authenticateToken, async (req: Request, res: Response) => {
+router.patch('/:id/void', authenticateToken, requirePermission('pos.void'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const user = (req as any).user;
+    const tenantId = (req as any).tenantId || user?.tenantId;
+
+    if (!tenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     
-    const orderData = await prisma.order.findUnique({
-      where: { id: Number(id) },
+    const orderData = await prisma.order.findFirst({
+      where: {
+        id: Number(id),
+        ...(tenantId ? { tenantId } : {})
+      },
       include: { items: true }
     });
 
@@ -1496,6 +1579,26 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
         where: { id: Number(id) },
         data: { status: 'Void', kdsStatus: 'Cancelled' }
       });
+
+      // 1b. Jika pesanan sebelumnya berstatus Paid, catat pengeluaran refund kasir di CashFlow
+      if (orderData.status === 'Paid' && orderData.total > 0) {
+        const pm = (orderData.paymentMethod || '').toLowerCase();
+        const isCash = pm === 'cash' || pm === 'tunai';
+        await tx.cashFlow.create({
+          data: {
+            tenantId: orderData.tenantId,
+            outletId: orderData.outletId,
+            type: 'Pengeluaran',
+            category: 'Refund Penjualan',
+            amount: orderData.total,
+            description: `Void Order #${orderData.orderNumber} (Pengembalian Dana Kasir)`,
+            userId: user.id,
+            cashPocket: isCash ? 'LACI_KASIR' : 'KAS_OPERASIONAL',
+            status: 'APPROVED',
+            date: new Date()
+          }
+        });
+      }
 
       // 2. Kembalikan stok produk
       const voidSettings = await tx.settings.findFirst({ where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined });

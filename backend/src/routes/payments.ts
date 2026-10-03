@@ -120,12 +120,17 @@ router.post('/public/charge-dinein', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'orderId wajib diisi' });
     }
 
+    const reqTenantId = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || null;
     const order = await prisma.order.findUnique({
       where: { id: Number(orderId) }
     });
 
     if (!order) {
       return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+    }
+
+    if (reqTenantId && order.tenantId && reqTenantId !== order.tenantId) {
+      return res.status(403).json({ error: 'Pesanan ini tidak sesuai dengan tenant yang diminta' });
     }
 
     const tenantId = order.tenantId || TenantContext.getTenantId();
