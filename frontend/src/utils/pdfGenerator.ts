@@ -3404,11 +3404,14 @@ export const exportProfitSharingPDF = async (
 
   const ramenOwnerPct = food.ownerPct || (100 - (config.ramenPct || 20));
   const drinkOwnerPct = drink.ownerPct || (100 - (config.drinkPct || 20));
+  const ramenPjPct = food.profitSharingPct || config.ramenPct || 20;
+  const drinkPjPct = drink.profitSharingPct || config.drinkPct || 20;
 
   const splitRows = [
-    ['Owner (Pemilik Usaha)', 'Divisi Makanan + Minuman', `${config.ownerPct || 80}%`, formatCurrency(summary.ownerShare || 0), 'Laba Bersih gabungan setelah potongan beban'],
-    ['Pengelola Makanan', 'Divisi Makanan (Kitchen)', `${config.ramenPct || 20}%`, formatCurrency(summary.pjRamenShare || 0), `Hak ${config.ramenPct || 20}% dari laba bersih Dapur (${formatCurrency(food.netProfit || 0)})`],
-    ['Pengelola Minuman', 'Divisi Minuman (Bar)', `${config.drinkPct || 20}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak ${config.drinkPct || 20}% dari laba bersih Bar (${formatCurrency(drink.netProfit || 0)})`]
+    ['Owner (Divisi Makanan)', 'Divisi Makanan (Kitchen)', `${ramenOwnerPct}%`, formatCurrency(food.ownerShare || 0), `Hak ${ramenOwnerPct}% dari laba bersih Dapur (${formatCurrency(food.netProfit || 0)})`],
+    ['Pengelola Makanan', 'Divisi Makanan (Kitchen)', `${ramenPjPct}%`, formatCurrency(summary.pjRamenShare || 0), `Hak ${ramenPjPct}% dari laba bersih Dapur (${formatCurrency(food.netProfit || 0)})`],
+    ['Owner (Divisi Minuman)', 'Divisi Minuman (Bar)', `${drinkOwnerPct}%`, formatCurrency(drink.ownerShare || 0), `Hak ${drinkOwnerPct}% dari laba bersih Bar (${formatCurrency(drink.netProfit || 0)})`],
+    ['Pengelola Minuman', 'Divisi Minuman (Bar)', `${drinkPjPct}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak ${drinkPjPct}% dari laba bersih Bar (${formatCurrency(drink.netProfit || 0)})`]
   ];
 
   if (summary.other && (summary.other.revenue > 0 || summary.other.finalNet > 0)) {
@@ -3454,8 +3457,8 @@ export const exportProfitSharingPDF = async (
     ['Laba Kotor Divisi', formatCurrency(food.grossProfit || 0), formatCurrency(drink.grossProfit || 0), formatCurrency((food.grossProfit || 0) + (drink.grossProfit || 0))],
     ['Alokasi Beban Bersama (Shared OPEX)', `(${formatCurrency(food.sharedOpexPortion || 0)})`, `(${formatCurrency(drink.sharedOpexPortion || 0)})`, `(${formatCurrency(shared.total || 0)})`],
     ['Laba Bersih Divisi', formatCurrency(food.netProfit || 0), formatCurrency(drink.netProfit || 0), formatCurrency(summary.totalNetProfit || 0)],
-    [`Bagian Owner (${config.ownerPct || 80}%)`, formatCurrency(food.ownerShare || 0), formatCurrency(drink.ownerShare || 0), formatCurrency(summary.ownerShare || 0)],
-    [`Bagian Pengelola (${config.ramenPct || 20}%)`, formatCurrency(food.pjShare || 0), formatCurrency(drink.pjShare || 0), formatCurrency((summary.pjRamenShare || 0) + (summary.pjDrinkShare || 0))]
+    ['Bagian Hak Owner', `${formatCurrency(food.ownerShare || 0)} (${ramenOwnerPct}%)`, `${formatCurrency(drink.ownerShare || 0)} (${drinkOwnerPct}%)`, formatCurrency(summary.ownerShare || 0)],
+    ['Bagian Hak Pengelola (PJ)', `${formatCurrency(food.pjShare || 0)} (${ramenPjPct}%)`, `${formatCurrency(drink.pjShare || 0)} (${drinkPjPct}%)`, formatCurrency((summary.pjRamenShare || 0) + (summary.pjDrinkShare || 0))]
   ];
 
   autoTable(doc, {
@@ -3504,7 +3507,7 @@ export const exportProfitSharingPDF = async (
     autoTable(doc, {
       startY: currentY + 1,
       margin: { left: margin, right: margin },
-      head: [['No', 'Tgl', 'Hari', 'Omzet Makanan', `PJ Mkn (${config.ramenPct || 20}%)`, 'Omzet Minuman', `PJ Mnm (${config.drinkPct || 20}%)`, 'Shared OPEX', 'Total Omzet', 'Hak Owner']],
+      head: [['No', 'Tgl', 'Hari', 'Omzet Makanan', `PJ Mkn (${ramenPjPct}%)`, 'Omzet Minuman', `PJ Mnm (${drinkPjPct}%)`, 'Shared OPEX', 'Total Omzet', 'Hak Owner']],
       body: dailyTableRows,
       foot: [[
         'TOT',
