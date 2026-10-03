@@ -1065,6 +1065,20 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
       }
 
+      // BUG-003 FIX: Increment voucher usedCount saat checkout POST langsung (isPaid=true)
+      // Sebelumnya usedCount hanya di-increment di PATCH /payment, bukan di sini
+      if (voucherId && isActuallyPaid && order) {
+        const v = await tx.voucher.findFirst({
+          where: { id: Number(voucherId), ...(tenantId ? { tenantId } : {}) }
+        });
+        if (v) {
+          await tx.voucher.update({
+            where: { id: v.id },
+            data: { usedCount: { increment: 1 } }
+          });
+        }
+      }
+
       // 2. Kurangi Stok Produk (Fix #6: validasi stok sebelum decrement)
       // Cek mode inventaris untuk menentukan apakah perlu decrement bahan baku juga
       const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
@@ -1467,6 +1481,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
             }
             await tx.debt.create({
               data: {
+                tenantId: effectiveTenantId || null, // BUG-001 FIX: tenantId wajib ada untuk isolasi multi-tenant
                 customerId: finalCustomerId,
                 orderId: updated.id,
                 amount: Number(updated.total),
@@ -1703,7 +1718,8 @@ router.patch('/:id/void', authenticateToken, requirePermission('pos.void'), asyn
             }
 
             // 3. Update Customer.points dan Customer.totalSpent secara atomic
-            const newPoints = cust.points + pointsRedeemed - pointsEarned;
+            // BUG-004 FIX: guard Math.max(0,...) agar poin tidak pernah negatif
+            const newPoints = Math.max(0, cust.points + pointsRedeemed - pointsEarned);
             const newTotalSpent = Math.max(0, cust.totalSpent - orderData.total);
 
             // 4. Re-kalkulasi tier setelah void

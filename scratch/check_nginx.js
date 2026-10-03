@@ -1,11 +1,10 @@
 const { Client } = require('ssh2');
-const config = { host: '173.212.243.240', port: 22, username: 'root', password: 'Ahmad_dcc07' };
+
 const conn = new Client();
 conn.on('ready', () => {
-  conn.exec('ls -la /etc/nginx/sites-enabled/ && for f in /etc/nginx/sites-enabled/*; do echo "=== $f ==="; cat "$f"; done', (err, stream) => {
+  conn.exec('cat /etc/nginx/sites-enabled/poscafe.conf', (err, stream) => {
     if (err) throw err;
     stream.on('data', d => process.stdout.write(d));
-    stream.stderr.on('data', d => process.stderr.write(d));
     stream.on('close', () => conn.end());
   });
-}).connect(config);
+}).connect({ host: '173.212.243.240', port: 22, username: 'root', password: 'Ahmad_dcc07' });

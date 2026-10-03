@@ -91,9 +91,11 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
     }, shifts[0].waktuTutup || now);
 
     // Fetch semua order, cashflow, debtpayment dalam rentang global sekaligus
+    // BUG-008 FIX: Tambahkan tenantId agar tidak mengambil data tenant lain yang berada di rentang waktu yang sama
     const [allOrders, allCashFlows, allDebtPayments] = await Promise.all([
       prisma.order.findMany({
         where: {
+          ...(tenantId ? { tenantId } : {}),
           OR: [
             { paidAt: { gte: earliestOpen, lte: latestClose } },
             { paidAt: null, createdAt: { gte: earliestOpen, lte: latestClose } }
@@ -102,11 +104,11 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         select: { status: true, paymentMethod: true, total: true, paidAt: true, createdAt: true }
       }),
       prisma.cashFlow.findMany({
-        where: { date: { gte: earliestOpen, lte: latestClose } },
+        where: { ...(tenantId ? { tenantId } : {}), date: { gte: earliestOpen, lte: latestClose } },
         select: { type: true, amount: true, category: true, date: true, cashPocket: true, status: true }
       }),
       prisma.debtPayment.findMany({
-        where: { createdAt: { gte: earliestOpen, lte: latestClose } },
+        where: { ...(tenantId ? { tenantId } : {}), createdAt: { gte: earliestOpen, lte: latestClose } },
         select: { paymentMethod: true, amountPaid: true, createdAt: true }
       })
     ]);

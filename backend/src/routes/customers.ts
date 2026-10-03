@@ -22,9 +22,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     if (search) {
       andConditions.push({
         OR: [
-          { name: { contains: String(search) } },
+          { name: { contains: String(search), mode: 'insensitive' as const } },
           { phone: { contains: String(search) } },
-          { email: { contains: String(search) } }
+          { email: { contains: String(search), mode: 'insensitive' as const } }
         ]
       });
     }

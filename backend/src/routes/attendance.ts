@@ -537,8 +537,9 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
         });
 
         // Rekap Order & Omzet Kasir
-        const completedOrders = userOrders.filter((o: any) => o.status === 'COMPLETED');
-        const voidOrders = userOrders.filter((o: any) => o.status === 'CANCELLED' || o.status === 'VOID');
+        // BUG-002 FIX: Status order di schema Prisma adalah 'Paid' dan 'Void', bukan 'COMPLETED'/'CANCELLED'/'VOID'
+        const completedOrders = userOrders.filter((o: any) => o.status === 'Paid');
+        const voidOrders = userOrders.filter((o: any) => o.status === 'Void');
         const totalSalesHandled = completedOrders.reduce((sum: number, o: any) => sum + (o.total || 0), 0);
         const totalOrdersHandled = completedOrders.length;
         const voidCount = voidOrders.length;
