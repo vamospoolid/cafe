@@ -428,7 +428,7 @@ export const StaffPWAView: React.FC = () => {
 
         const storeLat = settings?.storeLatitude ?? -6.200000;
         const storeLon = settings?.storeLongitude ?? 106.816666;
-        const maxRadius = settings?.gpsRadiusMeters ?? 150;
+        const maxRadius = settings?.gpsRadiusMeters ?? 100;
 
         const dist = calculateDistance(lat, lng, storeLat, storeLon);
         setGpsDistance(dist);
@@ -441,6 +441,18 @@ export const StaffPWAView: React.FC = () => {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
+
+  // Recalculate distance dynamically whenever gpsLocation OR settings (latitude, longitude, radius) update
+  useEffect(() => {
+    if (!gpsLocation) return;
+    const storeLat = settings?.storeLatitude ?? -6.200000;
+    const storeLon = settings?.storeLongitude ?? 106.816666;
+    const maxRadius = settings?.gpsRadiusMeters ?? 100;
+
+    const dist = calculateDistance(gpsLocation.lat, gpsLocation.lng, storeLat, storeLon);
+    setGpsDistance(dist);
+    setIsWithinRadius(dist <= maxRadius);
+  }, [gpsLocation, settings?.storeLatitude, settings?.storeLongitude, settings?.gpsRadiusMeters]);
 
   // Camera WebRTC + fallback
   const startCamera = async (facing = cameraFacing) => {
@@ -1981,25 +1993,35 @@ export const StaffPWAView: React.FC = () => {
                   {/* GPS Status Strip */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className={`p-1.5 rounded-full shrink-0 ${isWithinRadius ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-[#F43F5E]'}`}>
+                      <div className={`p-1.5 rounded-full shrink-0 ${
+                        !(settings?.enableGpsValidation ?? true) 
+                          ? 'bg-blue-50 text-blue-600'
+                          : isWithinRadius 
+                            ? 'bg-emerald-50 text-emerald-600' 
+                            : 'bg-rose-50 text-[#F43F5E]'
+                      }`}>
                         <MapPin size={14} />
                       </div>
                       <div className="min-w-0">
                         <div className="font-bold text-[#1A1033] text-[11px] truncate">
-                          {settings?.storeName || 'DEMO CAFE'}
+                          {settings?.storeName || 'MUKI RAMEN'}
                         </div>
                         <div className="text-[10px]">
-                          {gpsLoading ? (
+                          {!(settings?.enableGpsValidation ?? true) ? (
+                            <span className="text-blue-600 font-medium">
+                              ✓ Bebas Radius (Validasi GPS dinonaktifkan owner)
+                            </span>
+                          ) : gpsLoading ? (
                             <span className="text-slate-400 flex items-center gap-1">
                               <RefreshCw size={10} className="animate-spin text-[#7C3AED]" /> Mengunci GPS...
                             </span>
                           ) : isWithinRadius ? (
                             <span className="text-emerald-600 font-medium">
-                              ✓ Tepat di Lokasi ({gpsDistance !== null ? `${gpsDistance}m` : '0m'} / {settings?.gpsRadiusMeters || 150}m)
+                              ✓ Tepat di Lokasi ({gpsDistance !== null ? `${gpsDistance}m` : '0m'} / maks {settings?.gpsRadiusMeters || 100}m)
                             </span>
                           ) : (
                             <span className="text-[#F43F5E] font-medium">
-                              Di Luar Radius ({gpsDistance !== null ? `${gpsDistance}m` : '-'})
+                              Di Luar Radius ({gpsDistance !== null ? `${gpsDistance}m` : '-'} / batas {settings?.gpsRadiusMeters || 100}m)
                             </span>
                           )}
                         </div>
@@ -2023,7 +2045,7 @@ export const StaffPWAView: React.FC = () => {
                   {!mySummary?.todayStatus?.clockedIn ? (
                     <button
                       type="button"
-                      disabled={clockLoading || !isWithinRadius}
+                      disabled={clockLoading || ((settings?.enableGpsValidation ?? true) && !isWithinRadius)}
                       onClick={() => handleClockAction('IN')}
                       className="w-full py-4 bg-[#7C3AED] hover:bg-[#6D28D9] active:bg-[#5B21B6] disabled:bg-slate-300 text-white rounded-full text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#7C3AED]/25 active:scale-98"
                     >
