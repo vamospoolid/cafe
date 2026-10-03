@@ -250,8 +250,10 @@ export const POSView = () => {
   };
 
   const getProductPortionCapacity = (product: any) => {
-    // Jika bukan Advanced Mode (Bahan Baku) atau tidak memiliki resep, gunakan product.stock
-    if (!isAdvancedMode || !product.recipes || product.recipes.length === 0) {
+    const hasRecipes = Array.isArray(product.recipes) && product.recipes.length > 0;
+
+    // Jika tidak memiliki resep, gunakan stok fisik barang jadi (product.stock)
+    if (!hasRecipes) {
       const s = product.stock !== undefined ? Number(product.stock) : 9999;
       return {
         capacity: s,
@@ -261,6 +263,7 @@ export const POSView = () => {
       };
     }
 
+    // Jika memiliki resep bahan baku: 100% otomatis mengikuti ketersediaan bahan baku dapur (Pure BOM)
     let minCapacity = Infinity;
     let bottleneckIng: any = null;
 
@@ -277,13 +280,11 @@ export const POSView = () => {
     }
 
     const recipeCap = minCapacity === Infinity ? 0 : minCapacity;
-    // 100% Otomatis mengikuti ketersediaan bahan baku dapur:
-    const effectiveStock = recipeCap;
 
     return {
-      capacity: effectiveStock,
-      isSoldOut: effectiveStock <= 0,
-      bottleneck: effectiveStock <= 0 ? bottleneckIng : null,
+      capacity: recipeCap,
+      isSoldOut: recipeCap <= 0,
+      bottleneck: bottleneckIng,
       hasRecipe: true
     };
   };
@@ -942,10 +943,8 @@ export const POSView = () => {
                       : 'border-slate-200/80 cursor-pointer hover:border-indigo-500'
                 }`} 
                 onClick={() => {
-                  if (!isSoldOut) {
-                    posContext?.triggerHaptic(15);
-                    handleProductClick(product);
-                  }
+                  posContext?.triggerHaptic(15);
+                  handleProductClick(product);
                 }}
               >
                 <div className="product-img-wrapper bg-slate-50 flex items-center justify-center relative overflow-hidden h-28 sm:h-36 w-full">
@@ -965,10 +964,16 @@ export const POSView = () => {
                   
                   {/* Sold Out Badge Overlay */}
                   {isSoldOut ? (
-                    <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10">
-                      <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider rounded-md shadow-md border border-white/20">
-                        {capInfo.bottleneck ? `HABIS (${capInfo.bottleneck.name})` : 'HABIS'}
-                      </span>
+                    <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10 animate-fade-in">
+                      <div className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg border border-white/20 flex items-center gap-1 mb-1">
+                        <AlertTriangle size={12} />
+                        <span>HABIS</span>
+                      </div>
+                      {capInfo.bottleneck && (
+                        <div className="text-[10px] font-bold text-rose-200 px-1 leading-tight line-clamp-2">
+                          {capInfo.bottleneck.name} (0 {capInfo.bottleneck.unit || 'gram'})
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -986,15 +991,33 @@ export const POSView = () => {
                     <div className="product-price font-black text-xs sm:text-sm text-indigo-600">
                       {formatCurrency(product.sellPrice ?? product.price)}
                     </div>
-                    <div className="product-stock flex justify-between items-center text-[10px] sm:text-xs text-slate-400 mt-0.5">
+                    <div className="product-stock mt-1.5">
                       {isSoldOut ? (
-                        <span className="font-extrabold text-rose-500 uppercase text-[9px]">
-                          {capInfo.bottleneck ? `Habis (${capInfo.bottleneck.name})` : 'Stok Habis'}
-                        </span>
+                        <div className="px-2 py-1 bg-rose-50 border border-rose-200/80 rounded-lg flex items-center gap-1.5 text-[10px] font-bold text-rose-700">
+                          <AlertTriangle size={12} className="shrink-0 text-rose-500" />
+                          <span className="truncate">
+                            {capInfo.bottleneck ? `Habis: ${capInfo.bottleneck.name}` : 'Stok Habis'}
+                          </span>
+                        </div>
+                      ) : capInfo.hasRecipe ? (
+                        <div className={`px-2 py-0.5 rounded-lg flex items-center justify-between text-[10px] ${
+                          capInfo.capacity <= 5 
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200/80 font-bold' 
+                            : 'bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-semibold'
+                        }`}>
+                          <span className="flex items-center gap-1">
+                            {capInfo.capacity <= 5 && <AlertTriangle size={10} className="text-amber-600" />}
+                            {capInfo.capacity <= 5 ? 'Menipis:' : 'Kapasitas:'}
+                          </span>
+                          <span className="font-black">{capInfo.capacity} porsi</span>
+                        </div>
                       ) : (
-                        <span className={`font-semibold ${capInfo.capacity <= product.minStock ? 'text-red-500' : 'text-slate-400'}`}>
-                          {capInfo.hasRecipe ? `Saji: ${capInfo.capacity} porsi` : `Stok: ${capInfo.capacity}`}
-                        </span>
+                        <div className="flex justify-between items-center text-[10px] sm:text-xs text-slate-400">
+                          <span>Stok:</span>
+                          <span className={`font-semibold ${capInfo.capacity <= product.minStock ? 'text-red-500' : 'text-slate-600'}`}>
+                            {capInfo.capacity}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
