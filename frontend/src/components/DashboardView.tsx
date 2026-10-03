@@ -22,13 +22,7 @@ import {
   Package,
   FileText,
   Grid,
-  ChefHat,
   Sparkles,
-  Building2,
-  Sliders,
-  ShieldCheck,
-  Database,
-  ArrowUpRight,
   Layers
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -843,107 +837,6 @@ const DashboardView = () => {
 
       </div>
 
-      {/* ─── 6. SAAS PLATFORM CONTROL PANEL (KHUSUS DEVELOPER & SUPERADMIN) ─── */}
-      {Boolean((posContext?.user as any)?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user?.role === 'OWNER' && (posContext?.user?.username === 'admin' || posContext?.user?.username === 'ahmad'))) && (
-        <div className="bg-gradient-to-br from-[#0b0f19] via-[#0f172a] to-[#1e1b4b] rounded-3xl border-2 border-indigo-500/30 p-6 sm:p-7 text-white shadow-2xl relative overflow-hidden mt-2">
-          {/* Subtle Background Glow */}
-          <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-600/10 rounded-full blur-2xl pointer-events-none" />
-
-          {/* Header Bar Panel */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800/80 relative z-10">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shadow-inner">
-                <Sliders size={24} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-black text-white tracking-tight">SaaS Developer Control Panel</h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-wider flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Cloud
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Konsol Pusat Manajemen Multi-Tenant, Paket Langganan, Billing Invoice, dan Database Server.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => navigate('/platform-admin')}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
-              >
-                <Sparkles size={15} className="text-amber-300" />
-                <span>Buka Master Control Plane</span>
-                <ArrowUpRight size={15} />
-              </button>
-            </div>
-          </div>
-
-          {/* Feature Grid Shortcut */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-5 relative z-10">
-            
-            <div 
-              onClick={() => navigate('/platform-admin?tab=tenants')}
-              className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800/60 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Building2 size={18} />
-                </div>
-                <ArrowUpRight size={15} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
-              </div>
-              <h4 className="text-xs font-black text-white group-hover:text-indigo-300 transition-colors">Direktori Tenant</h4>
-              <p className="text-[11px] text-slate-400 mt-1 leading-snug">Kelola tenant kafe, bengkel, grosir, dan aktivasi merchant.</p>
-            </div>
-
-            <div 
-              onClick={() => navigate('/platform-admin?tab=plans')}
-              className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-violet-500/50 hover:bg-slate-800/60 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-xl bg-violet-500/20 text-violet-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Layers size={18} />
-                </div>
-                <ArrowUpRight size={15} className="text-slate-500 group-hover:text-violet-400 transition-colors" />
-              </div>
-              <h4 className="text-xs font-black text-white group-hover:text-violet-300 transition-colors">Paket &amp; Langganan</h4>
-              <p className="text-[11px] text-slate-400 mt-1 leading-snug">Atur kuota outlet, user, produk, dan fitur tiap tier paket SaaS.</p>
-            </div>
-
-            <div 
-              onClick={() => navigate('/platform-admin?tab=database')}
-              className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-800/60 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Database size={18} />
-                </div>
-                <ArrowUpRight size={15} className="text-slate-500 group-hover:text-emerald-400 transition-colors" />
-              </div>
-              <h4 className="text-xs font-black text-white group-hover:text-emerald-300 transition-colors">Database &amp; Backup</h4>
-              <p className="text-[11px] text-slate-400 mt-1 leading-snug">Metrik kapasitas PostgreSQL, pool health, dan trigger safe backup .sql.</p>
-            </div>
-
-            <div 
-              onClick={() => navigate('/cabang')}
-              className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-amber-500/50 hover:bg-slate-800/60 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <ShieldCheck size={18} />
-                </div>
-                <ArrowUpRight size={15} className="text-slate-500 group-hover:text-amber-400 transition-colors" />
-              </div>
-              <h4 className="text-xs font-black text-white group-hover:text-amber-300 transition-colors">Multi-Outlet Hub</h4>
-              <p className="text-[11px] text-slate-400 mt-1 leading-snug">Pantau cabang merchant, aktivasi lisensi outlet, dan audit trail.</p>
-            </div>
-
-          </div>
-        </div>
-      )}
 
       {/* Modal Buka/Tutup Shift Kasir */}
       <OpenShiftModal
