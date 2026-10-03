@@ -353,9 +353,13 @@ const SettingsView = () => {
           const json = await res.json();
           if (res.ok && json.success && json.data.address) {
             setFormData(prev => ({ ...prev, address: json.data.address }));
-            toast('Alamat toko otomatis diperbarui sesuai titik GPS perangkat!', 'success');
+            toast('Titik GPS & alamat terdeteksi! Tekan tombol "Simpan" di bawah untuk menerapkan permanen.', 'success');
+          } else {
+            toast('Titik GPS terdeteksi! Tekan tombol "Simpan" di bawah untuk menerapkan permanen.', 'info');
           }
-        } catch {}
+        } catch {
+          toast('Titik GPS terdeteksi! Tekan tombol "Simpan" di bawah untuk menerapkan permanen.', 'info');
+        }
       },
       err => {
         toast('Gagal mengambil koordinat GPS: ' + err.message, 'error');
@@ -396,13 +400,31 @@ const SettingsView = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      const payload: any = { ...formData };
+      if (payload.storeLatitude !== undefined && payload.storeLatitude !== null) {
+        const parsed = typeof payload.storeLatitude === 'string'
+          ? parseFloat(String(payload.storeLatitude).replace(',', '.'))
+          : Number(payload.storeLatitude);
+        if (!isNaN(parsed)) payload.storeLatitude = parsed;
+      }
+      if (payload.storeLongitude !== undefined && payload.storeLongitude !== null) {
+        const parsed = typeof payload.storeLongitude === 'string'
+          ? parseFloat(String(payload.storeLongitude).replace(',', '.'))
+          : Number(payload.storeLongitude);
+        if (!isNaN(parsed)) payload.storeLongitude = parsed;
+      }
+      if (payload.gpsRadiusMeters !== undefined && payload.gpsRadiusMeters !== null) {
+        const parsed = Number(payload.gpsRadiusMeters);
+        if (!isNaN(parsed)) payload.gpsRadiusMeters = parsed;
+      }
+
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${posContext?.token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {

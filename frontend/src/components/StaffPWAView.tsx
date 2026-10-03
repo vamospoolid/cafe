@@ -142,10 +142,18 @@ export const VERTICAL_SOP_PRESETS: Record<string, { opening: SOPCheckItem[]; clo
 
 export const StaffPWAView: React.FC = () => {
   // Authentication state
-  const [token, setToken] = useState<string>(() => localStorage.getItem('staff_token') || '');
+  const [token, setToken] = useState<string>(() => 
+    localStorage.getItem('staff_token') || 
+    localStorage.getItem('pos_token') || 
+    localStorage.getItem('token') || ''
+  );
   const [user, setUser] = useState<any>(() => {
     try {
-      return JSON.parse(localStorage.getItem('staff_user') || 'null');
+      return JSON.parse(
+        localStorage.getItem('staff_user') || 
+        localStorage.getItem('pos_user') || 
+        localStorage.getItem('user') || 'null'
+      );
     } catch {
       return null;
     }
@@ -359,33 +367,38 @@ export const StaffPWAView: React.FC = () => {
   // Fetch Settings & Shifts
   const fetchSettingsAndShifts = async () => {
     try {
-      if (!token) {
-        // Jika staf belum login, jangan tembak endpoint protected (/api/settings)
-        // Ambil branding publik untuk logo dan nama toko di form login
-        const brandRes = await fetch('/api/public-branding');
+      const activeTenantId = user?.tenantId || (user?.tenant?.id) || localStorage.getItem('tenantId') || localStorage.getItem('staff_tenant_id') || localStorage.getItem('activeTenantId');
+
+      // 1. Ambil data branding & koordinat toko publik terlebih dahulu sebagai base geofence
+      try {
+        const brandRes = await fetch(`/api/public-branding${activeTenantId ? `?tenantId=${activeTenantId}` : ''}`);
         if (brandRes.ok) {
           const brandData = await brandRes.json();
           setSettings((prev: any) => ({
-            ...prev,
-            storeName: brandData.storeName,
-            logoUrl: brandData.logoUrl,
-            primaryColor: brandData.primaryColor,
-            businessType: brandData.businessType || 'CAFE',
+            ...brandData,
+            ...prev
           }));
         }
-        return;
+      } catch (err) {
+        console.warn('Gagal memuat public branding:', err);
       }
 
-      const activeTenantId = user?.tenantId || (user?.tenant?.id) || localStorage.getItem('tenantId') || localStorage.getItem('staff_tenant_id');
+      // 2. Jika token tersedia, ambil pengaturan lengkap terotentikasi & daftar shift
+      const effectiveToken = token || localStorage.getItem('staff_token') || localStorage.getItem('pos_token') || localStorage.getItem('token');
+      if (!effectiveToken) return;
+
       const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${effectiveToken}`,
         ...(activeTenantId ? { 'x-tenant-id': activeTenantId } : {})
       };
       const [setRes, shiftRes] = await Promise.all([
         fetch('/api/settings', { headers }),
         fetch(`/api/attendance/shifts${activeTenantId ? `?tenantId=${activeTenantId}` : ''}`, { headers })
       ]);
-      if (setRes.ok) setSettings(await setRes.json());
+      if (setRes.ok) {
+        const fullSettings = await setRes.json();
+        setSettings(fullSettings);
+      }
       if (shiftRes.ok) {
         const shiftData = await shiftRes.json();
         if (Array.isArray(shiftData) && shiftData.length > 0) {
@@ -426,9 +439,9 @@ export const StaffPWAView: React.FC = () => {
         setGpsLocation({ lat, lng });
         setGpsLoading(false);
 
-        const storeLat = settings?.storeLatitude ?? -6.200000;
-        const storeLon = settings?.storeLongitude ?? 106.816666;
-        const maxRadius = settings?.gpsRadiusMeters ?? 100;
+        const storeLat = settings?.storeLatitude ?? -3.4028794;
+        const storeLon = settings?.storeLongitude ?? 119.213115;
+        const maxRadius = settings?.gpsRadiusMeters ?? 300;
 
         const dist = calculateDistance(lat, lng, storeLat, storeLon);
         setGpsDistance(dist);
@@ -445,9 +458,9 @@ export const StaffPWAView: React.FC = () => {
   // Recalculate distance dynamically whenever gpsLocation OR settings (latitude, longitude, radius) update
   useEffect(() => {
     if (!gpsLocation) return;
-    const storeLat = settings?.storeLatitude ?? -6.200000;
-    const storeLon = settings?.storeLongitude ?? 106.816666;
-    const maxRadius = settings?.gpsRadiusMeters ?? 100;
+    const storeLat = settings?.storeLatitude ?? -3.4028794;
+    const storeLon = settings?.storeLongitude ?? 119.213115;
+    const maxRadius = settings?.gpsRadiusMeters ?? 300;
 
     const dist = calculateDistance(gpsLocation.lat, gpsLocation.lng, storeLat, storeLon);
     setGpsDistance(dist);
@@ -2030,10 +2043,13 @@ export const StaffPWAView: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={requestGpsLocation}
+                      onClick={() => {
+                        fetchSettingsAndShifts();
+                        requestGpsLocation();
+                      }}
                       disabled={gpsLoading}
                       className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all active:scale-95 shrink-0"
-                      title="Perbarui GPS"
+                      title="Perbarui GPS & Pengaturan Toko"
                     >
                       <RefreshCw size={12} className={gpsLoading ? 'animate-spin text-[#7C3AED]' : ''} />
                     </button>

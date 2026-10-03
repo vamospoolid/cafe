@@ -80,6 +80,11 @@ router.get('/public', async (req: Request, res: Response) => {
       tenantSlug: tenant?.slug || 'platform',
       tenantName: tenant?.name || storeName,
       address: settings?.address || '',
+      phone: settings?.phone || '',
+      storeLatitude: settings?.storeLatitude ?? -3.4028794,
+      storeLongitude: settings?.storeLongitude ?? 119.213115,
+      gpsRadiusMeters: settings?.gpsRadiusMeters ?? 300,
+      enableGpsValidation: settings?.enableGpsValidation ?? true,
       primaryColor: settings?.primaryColor || '#4f46e5',
       accentColor: settings?.accentColor || '#f59e0b',
       loginLayout: settings?.loginLayout || 'split_modern',
@@ -204,9 +209,34 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.receiptShowCashier !== undefined) updateData.receiptShowCashier = Boolean(updateData.receiptShowCashier);
     if (updateData.receiptShowTable !== undefined) updateData.receiptShowTable = Boolean(updateData.receiptShowTable);
 
-    if (updateData.storeLatitude !== undefined) updateData.storeLatitude = Number(updateData.storeLatitude);
-    if (updateData.storeLongitude !== undefined) updateData.storeLongitude = Number(updateData.storeLongitude);
-    if (updateData.gpsRadiusMeters !== undefined) updateData.gpsRadiusMeters = Number(updateData.gpsRadiusMeters);
+    if (updateData.storeLatitude !== undefined) {
+      const parsedLat = typeof updateData.storeLatitude === 'string'
+        ? parseFloat(updateData.storeLatitude.replace(',', '.'))
+        : Number(updateData.storeLatitude);
+      if (!isNaN(parsedLat)) {
+        updateData.storeLatitude = parsedLat;
+      } else {
+        delete updateData.storeLatitude;
+      }
+    }
+    if (updateData.storeLongitude !== undefined) {
+      const parsedLon = typeof updateData.storeLongitude === 'string'
+        ? parseFloat(updateData.storeLongitude.replace(',', '.'))
+        : Number(updateData.storeLongitude);
+      if (!isNaN(parsedLon)) {
+        updateData.storeLongitude = parsedLon;
+      } else {
+        delete updateData.storeLongitude;
+      }
+    }
+    if (updateData.gpsRadiusMeters !== undefined) {
+      const parsedRadius = Number(updateData.gpsRadiusMeters);
+      if (!isNaN(parsedRadius)) {
+        updateData.gpsRadiusMeters = parsedRadius;
+      } else {
+        delete updateData.gpsRadiusMeters;
+      }
+    }
     if (updateData.enableGpsValidation !== undefined) updateData.enableGpsValidation = Boolean(updateData.enableGpsValidation);
     if (updateData.enableCameraPhoto !== undefined) updateData.enableCameraPhoto = Boolean(updateData.enableCameraPhoto);
     if (updateData.workShifts !== undefined && typeof updateData.workShifts !== 'string') {
