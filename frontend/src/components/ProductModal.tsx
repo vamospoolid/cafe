@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { 
   X, Image as ImageIcon, RefreshCw, ScanBarcode, Package, Tag, Layers, 
-  Beaker, Plus, Trash2, Info, AlertTriangle, Check, UploadCloud 
+  Beaker, Plus, Trash2, Info, AlertTriangle, Check, UploadCloud,
+  Search, ChevronDown, CheckCircle2, Sparkles, Filter 
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -41,6 +42,32 @@ const ProductModal: React.FC<ProductModalProps> = ({
   const [recipeItems, setRecipeItems] = useState<any[]>([]);
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [newRecipe, setNewRecipe] = useState({ ingredientId: '', qty: '' });
+
+  // Searchable Bahan Baku Combobox States
+  const [ingSearchQuery, setIngSearchQuery] = useState('');
+  const [isIngDropdownOpen, setIsIngDropdownOpen] = useState(false);
+  const [selectedIngCategory, setSelectedIngCategory] = useState<string>('ALL');
+  const ingDropdownRef = useRef<HTMLDivElement>(null);
+  const ingSearchInputRef = useRef<HTMLInputElement>(null);
+  const qtyInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ingDropdownRef.current && !ingDropdownRef.current.contains(event.target as Node)) {
+        setIsIngDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isIngDropdownOpen) {
+      setTimeout(() => {
+        ingSearchInputRef.current?.focus();
+      }, 50);
+    }
+  }, [isIngDropdownOpen]);
 
   const posContext = useContext(POSContext);
   const isAdvancedMode = posContext?.settings?.ingredientTrackingEnabled;
@@ -243,6 +270,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
       buyPrice: ing.buyPrice
     }]);
     setNewRecipe({ ingredientId: '', qty: '' });
+    setIngSearchQuery('');
+    toast(`Bahan "${ing.name}" ditambahkan ke resep!`, 'success');
   };
 
   const handleRemoveRecipeItem = (id: number) => {
@@ -602,57 +631,273 @@ const ProductModal: React.FC<ProductModalProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end pt-1">
-                    {/* Select Bahan Baku */}
-                    <div className="sm:col-span-6">
-                      <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                        Pilih Bahan Baku <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <select 
-                          className="w-full pl-3 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer shadow-sm truncate" 
-                          value={newRecipe.ingredientId} 
-                          onChange={e => setNewRecipe(p => ({ ...p, ingredientId: e.target.value }))}
-                        >
-                          <option value="">-- Pilih Bahan Baku --</option>
-                          {ingredients.map(ing => (
-                            <option key={ing.id} value={ing.id}>
-                              {ing.name} (Stok: {ing.stock} {ing.unit} | Rp {Number(ing.buyPrice || 0).toLocaleString('id-ID')}/{ing.unit})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Input Qty */}
+                    {/* Searchable Combobox Bahan Baku */}
                     {(() => {
                       const selectedIng = ingredients.find(i => String(i.id) === String(newRecipe.ingredientId));
+                      const availableIngCategories = Array.from(new Set(ingredients.map(i => i.category || 'FOOD')));
+                      
+                      const filteredIngredients = ingredients.filter(ing => {
+                        if (selectedIngCategory !== 'ALL' && ing.category !== selectedIngCategory) {
+                          return false;
+                        }
+                        if (!ingSearchQuery.trim()) return true;
+                        const q = ingSearchQuery.toLowerCase();
+                        const nameMatch = (ing.name || '').toLowerCase().includes(q);
+                        const catMatch = (ing.category || '').toLowerCase().includes(q);
+                        const subCatMatch = (ing.subCategory || '').toLowerCase().includes(q);
+                        const unitMatch = (ing.unit || '').toLowerCase().includes(q);
+                        return nameMatch || catMatch || subCatMatch || unitMatch;
+                      });
+
+                      const handleSelectIngredient = (ing: any) => {
+                        setNewRecipe(p => ({ ...p, ingredientId: String(ing.id) }));
+                        setIsIngDropdownOpen(false);
+                        setIngSearchQuery('');
+                        setTimeout(() => {
+                          qtyInputRef.current?.focus();
+                          qtyInputRef.current?.select();
+                        }, 50);
+                      };
+
+                      const handleClearSelected = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        setNewRecipe(p => ({ ...p, ingredientId: '' }));
+                        setIngSearchQuery('');
+                      };
+
                       return (
-                        <div className="sm:col-span-3">
-                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5 truncate">
-                            Takaran {selectedIng?.unit ? `(${selectedIng.unit})` : '/ Porsi'} <span className="text-rose-500">*</span>
-                          </label>
-                          <div className="relative">
-                            <input 
-                              type="number" 
-                              step="any"
-                              placeholder="0.00" 
-                              className="w-full pl-3 pr-12 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm"
-                              value={newRecipe.qty}
-                              onChange={e => setNewRecipe(p => ({ ...p, qty: e.target.value }))}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddRecipeItem();
-                                }
-                              }}
-                            />
-                            {selectedIng?.unit && (
-                              <span className="absolute right-2.5 top-2 text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 pointer-events-none">
-                                {selectedIng.unit}
-                              </span>
+                        <>
+                          <div className="sm:col-span-6 relative" ref={ingDropdownRef}>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                                Pilih Bahan Baku <span className="text-rose-500">*</span>
+                              </label>
+                              {selectedIng && (
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  Stok: <strong className={selectedIng.stock <= 0 ? 'text-rose-500' : 'text-slate-700'}>{selectedIng.stock} {selectedIng.unit}</strong> | HPP: <strong>Rp {Number(selectedIng.buyPrice || 0).toLocaleString('id-ID')}/{selectedIng.unit}</strong>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Trigger Button */}
+                            <div 
+                              onClick={() => setIsIngDropdownOpen(prev => !prev)}
+                              className={`w-full min-h-[42px] px-3.5 py-2 bg-white border rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center justify-between gap-2 ${
+                                isIngDropdownOpen 
+                                  ? 'border-indigo-600 ring-2 ring-indigo-100 shadow-md' 
+                                  : selectedIng
+                                    ? 'border-indigo-300 bg-indigo-50/20 hover:border-indigo-400'
+                                    : 'border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              {selectedIng ? (
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="text-base shrink-0">
+                                    {selectedIng.category === 'DRINK' ? '☕' : selectedIng.category === 'PACKAGING' ? '📦' : '🍲'}
+                                  </span>
+                                  <div className="flex flex-col truncate">
+                                    <span className="text-slate-900 font-black truncate">{selectedIng.name}</span>
+                                    <span className="text-[10px] text-slate-500 font-semibold truncate">
+                                      {selectedIng.subCategory ? `${selectedIng.subCategory} • ` : ''}Rp {Number(selectedIng.buyPrice || 0).toLocaleString('id-ID')}/{selectedIng.unit}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 text-slate-400 font-medium">
+                                  <Search size={15} className="text-slate-400 shrink-0" />
+                                  <span>Cari & pilih bahan baku (ketik nama, jenis)...</span>
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                {selectedIng && (
+                                  <button
+                                    type="button"
+                                    onClick={handleClearSelected}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Hapus pilihan"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                )}
+                                <ChevronDown size={15} className={`text-slate-400 transition-transform duration-200 ${isIngDropdownOpen ? 'rotate-180 text-indigo-600' : ''}`} />
+                              </div>
+                            </div>
+
+                            {/* Dropdown Popover */}
+                            {isIngDropdownOpen && (
+                              <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                                {/* Search Bar */}
+                                <div className="p-2.5 border-b border-slate-100 bg-slate-50/70">
+                                  <div className="relative">
+                                    <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+                                    <input
+                                      ref={ingSearchInputRef}
+                                      type="text"
+                                      className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-xs"
+                                      placeholder="Ketik nama bahan (cth: beras, ayam, salmon)..."
+                                      value={ingSearchQuery}
+                                      onChange={e => setIngSearchQuery(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Escape') {
+                                          setIsIngDropdownOpen(false);
+                                        } else if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          if (filteredIngredients.length > 0) {
+                                            handleSelectIngredient(filteredIngredients[0]);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                    {ingSearchQuery && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setIngSearchQuery('')}
+                                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Category Filter Chips */}
+                                  <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5 scrollbar-none">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedIngCategory('ALL')}
+                                      className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all shrink-0 ${
+                                        selectedIngCategory === 'ALL'
+                                          ? 'bg-indigo-600 text-white shadow-xs'
+                                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                      }`}
+                                    >
+                                      Semua ({ingredients.length})
+                                    </button>
+                                    {availableIngCategories.map(cat => {
+                                      const count = ingredients.filter(i => i.category === cat).length;
+                                      const label = cat === 'FOOD' ? '🍲 Makanan' : cat === 'DRINK' ? '☕ Minuman' : cat === 'PACKAGING' ? '📦 Kemasan' : cat;
+                                      return (
+                                        <button
+                                          key={cat}
+                                          type="button"
+                                          onClick={() => setSelectedIngCategory(cat)}
+                                          className={`text-[10px] px-2.5 py-1 rounded-lg font-bold transition-all shrink-0 ${
+                                            selectedIngCategory === cat
+                                              ? 'bg-indigo-600 text-white shadow-xs'
+                                              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                          }`}
+                                        >
+                                          {label} ({count})
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                {/* Ingredient Items List */}
+                                <div className="max-h-60 overflow-y-auto divide-y divide-slate-100">
+                                  {filteredIngredients.length === 0 ? (
+                                    <div className="p-6 text-center text-slate-400">
+                                      <Search size={24} className="mx-auto mb-1.5 opacity-40 text-slate-400" />
+                                      <p className="text-xs font-bold text-slate-600">Tidak ada bahan baku yang cocok</p>
+                                      <p className="text-[11px] text-slate-400 mt-0.5">Coba gunakan kata kunci lain</p>
+                                    </div>
+                                  ) : (
+                                    filteredIngredients.map(ing => {
+                                      const isAlreadyInRecipe = recipeItems.some(r => r.ingredientId === ing.id);
+                                      const isSelected = String(newRecipe.ingredientId) === String(ing.id);
+                                      const icon = ing.category === 'DRINK' ? '☕' : ing.category === 'PACKAGING' ? '📦' : '🍲';
+                                      
+                                      return (
+                                        <div
+                                          key={ing.id}
+                                          onClick={() => handleSelectIngredient(ing)}
+                                          className={`p-2.5 px-3.5 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                                            isSelected
+                                              ? 'bg-indigo-50/80 font-bold'
+                                              : isAlreadyInRecipe
+                                                ? 'bg-slate-50/60 hover:bg-indigo-50/40 opacity-80'
+                                                : 'hover:bg-indigo-50/50'
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                            <span className="text-lg shrink-0">{icon}</span>
+                                            <div className="flex flex-col truncate">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-xs font-black text-slate-800 truncate">{ing.name}</span>
+                                                {isAlreadyInRecipe && (
+                                                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                                                    ✓ Di resep
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                                                {ing.subCategory && (
+                                                  <span className="font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded text-[9px]">
+                                                    {ing.subCategory}
+                                                  </span>
+                                                )}
+                                                <span>Satuan: <strong className="text-slate-600">{ing.unit}</strong></span>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex flex-col items-end shrink-0 gap-0.5">
+                                            <span className="text-xs font-black text-indigo-700">
+                                              Rp {Number(ing.buyPrice || 0).toLocaleString('id-ID')}<span className="text-[10px] font-normal text-slate-400">/{ing.unit}</span>
+                                            </span>
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                              Number(ing.stock) <= 0 
+                                                ? 'bg-rose-50 text-rose-600 border border-rose-200' 
+                                                : 'text-slate-500 bg-slate-100'
+                                            }`}>
+                                              {Number(ing.stock) <= 0 ? 'Habis (0)' : `Stok: ${ing.stock} ${ing.unit}`}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+
+                                {/* Footer info */}
+                                <div className="p-2 px-3.5 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-medium">
+                                  <span>Menampilkan {filteredIngredients.length} dari {ingredients.length} bahan</span>
+                                  <span className="text-indigo-600 font-bold">Klik untuk memilih</span>
+                                </div>
+                              </div>
                             )}
                           </div>
-                        </div>
+
+                          {/* Input Qty */}
+                          <div className="sm:col-span-3">
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5 truncate">
+                              Takaran {selectedIng?.unit ? `(${selectedIng.unit})` : '/ Porsi'} <span className="text-rose-500">*</span>
+                            </label>
+                            <div className="relative">
+                              <input 
+                                ref={qtyInputRef}
+                                type="number" 
+                                step="any"
+                                placeholder="0.00" 
+                                className="w-full pl-3 pr-12 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all shadow-sm"
+                                value={newRecipe.qty}
+                                onChange={e => setNewRecipe(p => ({ ...p, qty: e.target.value }))}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddRecipeItem();
+                                  }
+                                }}
+                              />
+                              {selectedIng?.unit && (
+                                <span className="absolute right-2.5 top-2 text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 pointer-events-none">
+                                  {selectedIng.unit}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </>
                       );
                     })()}
 
