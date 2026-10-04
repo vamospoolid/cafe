@@ -87,14 +87,26 @@ const AppRoutes = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Deteksi Domain:
+  // - staff.mukiramen.id (atau subdomain staff.*): Khusus aplikasi staf & dapur PWA.
+  // - app.mukiramen.id: Sistem POS Kasir & Backoffice utama.
+  // - Root domain codenusa.id & www.codenusa.id menampilkan Landing Page Marketing SaaS.
+  // - Subdomain tenant (misal: jakartamotor.codenusa.id, sabarjaya.codenusa.id) langsung menampilkan Login POS Kasir.
+  const hostname = window.location.hostname.toLowerCase();
+  const isStaffDomain = hostname === 'staff.mukiramen.id' || hostname.startsWith('staff.');
+  const isMukiAppDomain = hostname === 'app.mukiramen.id' || hostname.includes('mukiramen');
+  const isTenantSubdomain = (hostname.endsWith('.codenusa.id') && hostname !== 'codenusa.id' && hostname !== 'www.codenusa.id') || isMukiAppDomain || isStaffDomain;
+  const isPlatformLandingDomain = !isTenantSubdomain;
+
   // Sinkronisasi manifest PWA (Kasir vs Staf) & dynamic metadata toko
   useEffect(() => {
-    updatePwaManifestForRoute(location.pathname, {
+    const effectiveRoute = isStaffDomain ? '/staff' : location.pathname;
+    updatePwaManifestForRoute(effectiveRoute, {
       storeName: context?.settings?.storeName,
       logoUrl: context?.settings?.logoUrl,
       themeColor: context?.settings?.primaryColor
     });
-  }, [location.pathname, context?.settings]);
+  }, [location.pathname, context?.settings, isStaffDomain]);
 
   // Seed IndexedDB catalog cache setiap kali token berubah (login/refresh)
   useEffect(() => {
@@ -103,16 +115,9 @@ const AppRoutes = () => {
     }
   }, [context?.token]);
 
-  // Deteksi Domain:
-  // Root domain codenusa.id & www.codenusa.id menampilkan Landing Page Marketing SaaS.
-  // Subdomain tenant (misal: jakartamotor.codenusa.id, sabarjaya.codenusa.id) langsung menampilkan Login POS Kasir.
-  const hostname = window.location.hostname.toLowerCase();
-  const isTenantSubdomain = hostname.endsWith('.codenusa.id') && hostname !== 'codenusa.id' && hostname !== 'www.codenusa.id';
-  const isPlatformLandingDomain = !isTenantSubdomain;
-
   // Rute publik landing page SaaS (bisa diakses langsung kapan saja via /landing atau /landing-page)
   const isLandingRoute = location.pathname === '/landing' || location.pathname === '/landing-page';
-  if (isLandingRoute) {
+  if (isLandingRoute && !isStaffDomain) {
     return (
       <Suspense fallback={<RouteSuspenseFallback />}>
         <LandingPageView onNavigateLogin={() => navigate('/login')} />
@@ -120,8 +125,9 @@ const AppRoutes = () => {
       </Suspense>
     );
   }
-  // Jika ini rute staff PWA mandiri (bisa dibuka di HP staf/dapur), biarkan terbuka
-  const isStaffRoute = location.pathname.startsWith('/staff') || location.pathname.startsWith('/dapur-app');
+
+  // Jika ini domain staff atau rute staff PWA mandiri (bisa dibuka di HP staf/dapur), sajikan StaffPWAView
+  const isStaffRoute = isStaffDomain || location.pathname.startsWith('/staff') || location.pathname.startsWith('/dapur-app');
   if (isStaffRoute) {
     return (
       <Routes>
