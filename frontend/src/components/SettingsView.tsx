@@ -882,8 +882,9 @@ const SettingsView = () => {
           {activeTab === 'pwa_mobile' && (
             <div className="space-y-6 animate-fade-in">
               <TenantPWASection
-                tenantSlug={posContext?.user?.memberships?.[0]?.tenantSlug || ''}
-                storeName={formData.storeName}
+                tenantSlug={posContext?.user?.memberships?.find(m => m.tenantId === posContext?.user?.tenantId)?.tenantSlug || posContext?.user?.memberships?.[0]?.tenantSlug || 'mukiramen'}
+                storeName={formData.storeName || 'MUKI RAMEN'}
+                customDomain={typeof window !== 'undefined' && window.location.hostname.includes('mukiramen.id') ? 'app.mukiramen.id' : undefined}
                 businessType={businessType}
               />
             </div>

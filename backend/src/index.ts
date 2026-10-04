@@ -98,7 +98,7 @@ const corsOptions: cors.CorsOptions = {
         hostname === 'localhost' ||
         hostname === '127.0.0.1' ||
         hostname.endsWith('codenusa.id') ||
-        hostname.endsWith('vamospool.id') ||
+        hostname.endsWith('mukiramen.id') ||
         extraAllowedOrigins.some(allowed => hostname === allowed) ||
         process.env.NODE_ENV !== 'production'
       ) {
@@ -313,8 +313,8 @@ export const io = new SocketIOServer(httpServer, {
       ? [
           'https://codenusa.id',
           /\.codenusa\.id$/,
-          'https://vamospool.id',
-          /\.vamospool\.id$/,
+          'https://mukiramen.id',
+          /\.mukiramen\.id$/,
           ...(process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean)
         ]
       : '*',

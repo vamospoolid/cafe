@@ -75,21 +75,40 @@ export async function promptInstallPwa(): Promise<'accepted' | 'dismissed' | 'un
  * Auto-generate link mandiri per tenant berdasarkan slug / domain aktif
  */
 export function getTenantPwaUrls(tenantSlug?: string, customDomain?: string) {
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://codenusa.id';
-  const isLocal = currentOrigin.includes('localhost') || currentOrigin.includes('127.0.0.1');
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://app.mukiramen.id';
+  const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : 'app.mukiramen.id';
+  const isLocal = hostname.includes('localhost') || hostname.includes('127.0.0.1');
+
+  // Khusus ekosistem domain resmi Muki Ramen (app.mukiramen.id & staff.mukiramen.id)
+  if (hostname.includes('mukiramen.id') || tenantSlug === 'mukiramen') {
+    return {
+      cashierUrl: 'https://app.mukiramen.id/pos',
+      staffUrl: 'https://staff.mukiramen.id',
+      menuUrl: 'https://app.mukiramen.id/menu',
+      dashboardUrl: 'https://app.mukiramen.id/',
+      baseUrl: 'https://app.mukiramen.id',
+    };
+  }
 
   let baseUrl = currentOrigin;
-  if (!isLocal && tenantSlug) {
-    if (customDomain) {
-      baseUrl = `https://${customDomain}`;
-    } else if (!currentOrigin.includes(tenantSlug)) {
+  let staffUrl = `${currentOrigin}/staff`;
+
+  if (customDomain) {
+    const cleanDomain = customDomain.replace(/^https?:\/\//, '');
+    baseUrl = `https://${cleanDomain}`;
+    staffUrl = `${baseUrl}/staff`;
+  } else if (!isLocal && tenantSlug) {
+    if (currentOrigin.includes(tenantSlug)) {
+      baseUrl = currentOrigin;
+    } else {
       baseUrl = `https://${tenantSlug}.codenusa.id`;
     }
+    staffUrl = `${baseUrl}/staff`;
   }
 
   return {
     cashierUrl: `${baseUrl}/pos`,
-    staffUrl: `${baseUrl}/staff`,
+    staffUrl,
     menuUrl: `${baseUrl}/menu`,
     dashboardUrl: `${baseUrl}/`,
     baseUrl,

@@ -39,9 +39,9 @@ router.get('/', async (req: Request, res: Response) => {
         });
       } else {
         const host = (req.headers['x-forwarded-host'] || req.headers.host || '').toString().toLowerCase();
-        if (host.includes('cafe')) {
+        if (host.includes('cafe') || host.includes('mukiramen')) {
           tenant = await prisma.tenant.findFirst({
-            where: { OR: [{ id: 'tenant-vamos-pool' }, { slug: 'vamospool' }, { id: 'tenant-default-muki' }, { slug: 'mukiramen' }, { businessType: 'CAFE' }] },
+            where: { OR: [{ slug: 'mukiramen' }, { customDomain: host }, { businessType: 'CAFE' }] },
             include: { settings: true }
           });
         }
