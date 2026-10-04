@@ -363,6 +363,31 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
       });
     }
 
+    // Sync profile address, phone, and GPS with the primary/default outlet
+    try {
+      const primaryOutlet = await prisma.outlet.findFirst({
+        where: { tenantId },
+        orderBy: { createdAt: 'asc' }
+      });
+      if (primaryOutlet) {
+        const outletUpdateData: Record<string, any> = {};
+        if (sanitizedData.address !== undefined) outletUpdateData.address = sanitizedData.address ? String(sanitizedData.address).trim() : null;
+        if (sanitizedData.phone !== undefined) outletUpdateData.phone = sanitizedData.phone ? String(sanitizedData.phone).trim() : null;
+        if (sanitizedData.storeLatitude !== undefined) outletUpdateData.latitude = sanitizedData.storeLatitude ? Number(sanitizedData.storeLatitude) : null;
+        if (sanitizedData.storeLongitude !== undefined) outletUpdateData.longitude = sanitizedData.storeLongitude ? Number(sanitizedData.storeLongitude) : null;
+        if (sanitizedData.gpsRadiusMeters !== undefined) outletUpdateData.gpsRadiusMeters = sanitizedData.gpsRadiusMeters ? Number(sanitizedData.gpsRadiusMeters) : 100;
+        
+        if (Object.keys(outletUpdateData).length > 0) {
+          await prisma.outlet.update({
+            where: { id: primaryOutlet.id },
+            data: outletUpdateData
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[Settings API] Failed to sync profile with primary outlet:', (e as any)?.message);
+    }
+
     // Audit Log: Settings Update
     await AuditLogger.log({
       action: 'SETTINGS_UPDATE',

@@ -227,6 +227,11 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
       outlets = [defaultOutlet];
     }
 
+    const settings = await prisma.settings.findFirst({
+      where: { tenantId },
+      select: { address: true, phone: true }
+    });
+
     // 2. Ambil data order F&B / Retail yang sudah dibayar (dukung status 'Paid', 'PAID', 'Completed')
     const orders = await prisma.order.findMany({
       where: {
@@ -341,7 +346,7 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
         name: out.name,
         code: out.code,
         status: out.status,
-        address: out.address,
+        address: out.address || (outlets.length === 1 ? settings?.address : null) || out.address,
         totalRevenue,
         totalOrders,
         totalExpense,
