@@ -70,7 +70,7 @@ async function resolveTenantInfo(slug) {
     ? args.url.replace(/\/$/, '')
     : args.domain 
     ? `https://${args.domain.replace(/^https?:\/\//, '').replace(/\/$/, '')}`
-    : (envMode === 'dev' ? 'http://192.168.100.197:5173' : 'https://cafe.codenusa.id');
+    : (slug === 'mukiramen' ? 'https://app.mukiramen.id' : (envMode === 'dev' ? 'http://192.168.100.197:5173' : 'https://cafe.codenusa.id'));
 
   try {
     const { PrismaClient } = require(path.join(rootDir, 'backend', 'node_modules', '@prisma/client'));
@@ -156,22 +156,35 @@ async function main() {
   await generateAndroidIcons(info.logoFile, androidResDir);
 
   // B. Definisikan 2 Target Aplikasi
+  const isMukiRamen = info.cleanSlug === 'mukiramen' || info.baseUrl.includes('mukiramen');
+  
+  const cashierUrl = isMukiRamen ? 'https://app.mukiramen.id' : `${info.baseUrl}/pos`;
+  const staffUrl = isMukiRamen ? 'https://staff.mukiramen.id' : `${info.baseUrl}/staff`;
+  
+  const cashierAppId = isMukiRamen ? 'id.mukiramen.pos' : `id.codenusa.${info.cleanSlug}.pos`;
+  const staffAppId = isMukiRamen ? 'id.mukiramen.staff' : `id.codenusa.${info.cleanSlug}.staff`;
+
+  const cashierApkName = isMukiRamen ? 'mukiramen-pos-tablet.apk' : `${info.cleanSlug}-pos-tablet.apk`;
+  const staffApkName = isMukiRamen ? 'mukiramen-staff.apk' : `${info.cleanSlug}-staff.apk`;
+
   const buildTargets = [
     {
       type: 'cashier',
       name: `${info.storeName} - Kasir & Tablet POS`,
-      appId: `id.codenusa.${info.cleanSlug}.pos`,
+      appId: cashierAppId,
       appName: `${info.storeName} POS`,
-      url: `${info.baseUrl}/pos`,
-      outputFileName: `${info.cleanSlug}-pos-cashier.apk`
+      url: cashierUrl,
+      orientation: 'sensorLandscape',
+      outputFileName: cashierApkName
     },
     {
       type: 'staff',
       name: `${info.storeName} - Portal Staf & Absensi`,
-      appId: `id.codenusa.${info.cleanSlug}.staff`,
+      appId: staffAppId,
       appName: `${info.storeName} Staf`,
-      url: `${info.baseUrl}/staff`,
-      outputFileName: `${info.cleanSlug}-staff.apk`
+      url: staffUrl,
+      orientation: 'portrait',
+      outputFileName: staffApkName
     }
   ];
 
@@ -192,6 +205,7 @@ async function main() {
     console.log(`📦 [MEMPROSES APK] ${target.name}`);
     console.log(`🌐 Target URL   : ${target.url}`);
     console.log(`🆔 Application ID: ${target.appId}`);
+    console.log(`📐 Orientasi Layar: ${target.orientation}`);
     console.log(`----------------------------------------------------------------`);
 
     // 1. Update strings.xml dengan nama brand toko
@@ -203,6 +217,18 @@ async function main() {
     <string name="custom_url_scheme">${target.appId}</string>
 </resources>`;
     fs.writeFileSync(stringsXmlPath, stringsContent, 'utf-8');
+
+    // 1b. Update orientasi layar di AndroidManifest.xml
+    const manifestPath = path.join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml');
+    if (fs.existsSync(manifestPath)) {
+      let manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+      if (manifestContent.includes('android:screenOrientation="')) {
+        manifestContent = manifestContent.replace(/android:screenOrientation="[^"]*"/g, `android:screenOrientation="${target.orientation}"`);
+      } else {
+        manifestContent = manifestContent.replace('<activity', `<activity\n            android:screenOrientation="${target.orientation}"`);
+      }
+      fs.writeFileSync(manifestPath, manifestContent, 'utf-8');
+    }
 
     // 2. Update capacitor.config.json
     const configData = {

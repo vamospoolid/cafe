@@ -1503,8 +1503,20 @@ export const StaffPWAView: React.FC = () => {
             </div>
           </form>
 
+          {/* Staff APK Download Button */}
+          <div className="pt-3">
+            <a
+              href="/downloads/staff.apk"
+              download="mukiramen-staff.apk"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-purple-50 hover:bg-purple-100 text-[#7C3AED] border border-purple-200/80 rounded-2xl text-xs font-bold transition-all shadow-xs"
+            >
+              <Smartphone size={16} className="text-[#7C3AED]" />
+              <span>Unduh Aplikasi Android Staf (APK)</span>
+            </a>
+          </div>
+
           {/* Footer Return Link */}
-          <div className="text-center pt-4 border-t border-slate-200">
+          <div className="text-center pt-3 border-t border-slate-200/70">
             <a
               href="/"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-[#7C3AED] transition-colors"

@@ -1,9 +1,9 @@
 {
-  "appId": "id.codenusa.mukiramen.pos",
-  "appName": "MUKI RAMEN - Master POS",
+  "appId": "id.mukiramen.pos",
+  "appName": "Muki Ramen POS",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://cafe.codenusa.id/pos",
+    "url": "https://app.mukiramen.id",
     "cleartext": true
   }
 }

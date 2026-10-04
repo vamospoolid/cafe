@@ -41,6 +41,8 @@ public class MainActivity extends BridgeActivity {
             webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
             webView.getSettings().setDomStorageEnabled(true);
             webView.getSettings().setDatabaseEnabled(true);
+            webView.getSettings().setJavaScriptEnabled(true);
+            webView.getSettings().setAllowFileAccess(true);
 
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override

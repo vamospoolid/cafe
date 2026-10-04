@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">MUKI RAMEN - Master POS</string>
-    <string name="title_activity_main">MUKI RAMEN - Master POS</string>
-    <string name="package_name">id.codenusa.mukiramen.pos</string>
-    <string name="custom_url_scheme">id.codenusa.mukiramen.pos</string>
+    <string name="app_name">Muki Ramen POS</string>
+    <string name="title_activity_main">Muki Ramen POS</string>
+    <string name="package_name">id.mukiramen.pos</string>
+    <string name="custom_url_scheme">id.mukiramen.pos</string>
 </resources>

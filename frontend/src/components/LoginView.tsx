@@ -13,7 +13,8 @@ import {
   Zap, 
   Store, 
   X,
-  Sparkles
+  Sparkles,
+  Smartphone
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
@@ -351,8 +352,24 @@ const LoginView: React.FC = () => {
         </button>
       </form>
 
+      {/* Tablet APK Download Link */}
+      <div className="mt-4 text-center">
+        <a
+          href="/downloads/pos.apk"
+          download="mukiramen-pos-tablet.apk"
+          className={`inline-flex items-center justify-center gap-2 py-2 px-3.5 rounded-xl text-xs font-bold transition-all shadow-xs ${
+            isGlassDark 
+              ? 'bg-white/10 hover:bg-white/20 text-indigo-200 border border-white/10' 
+              : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-100'
+          }`}
+        >
+          <Smartphone size={14} />
+          <span>Unduh Aplikasi Kasir Tablet (APK)</span>
+        </a>
+      </div>
+
       {/* Clean Standalone Branding Footer */}
-      <div className="mt-8 pt-5 border-t border-slate-100 text-center">
+      <div className="mt-6 pt-4 border-t border-slate-100/60 text-center">
         <div className={`text-xs font-semibold ${isGlassDark ? 'text-slate-400' : 'text-slate-400'}`}>
           Powered by <strong className={isGlassDark ? 'text-slate-200' : 'text-slate-700'}>CodePOS</strong> &bull; Sistem Kasir Pintar
         </div>
