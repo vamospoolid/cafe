@@ -7,6 +7,8 @@ import { TenantContext } from '../utils/tenantContext';
 import { invalidateTenantCache } from '../middlewares/tenantResolver';
 import { cacheService } from '../services/CacheService';
 import { whatsAppTemplateService } from '../services/WhatsAppTemplateService';
+import { BackupService } from '../services/BackupService';
+import { emitToTenant } from '../index';
 
 const router = Router();
 
@@ -597,6 +599,226 @@ router.post('/migrate-vertical', authenticateToken, requirePermission('settings.
   } catch (error: any) {
     console.error('Migrate vertical error:', error);
     res.status(500).json({ error: error?.message || 'Gagal memproses migrasi jenis bisnis' });
+  }
+});
+
+/**
+ * POST /api/settings/reset-standalone
+ * Reset Database Penuh khusus POS Standalone / Muki Ramen.
+ * Menghapus seluruh data operasional (transaksi, shift, kas kecil), master menu, bahan baku & resep, pelanggan, piutang, dan catatan gudang.
+ * MEMPERTAHANKAN: Akun login staf/owner, konfigurasi pengaturan sistem & pajak, serta konfigurasi denah meja (status di-reset ke 'Aktif').
+ * Otorisasi: Khusus role OWNER atau ADMIN dengan konfirmasi teks "RESET MUKI RAMEN" dan validasi PIN / kata sandi Owner.
+ */
+router.post('/reset-standalone', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const tenantId = resolveSettingsTenantId(req);
+    const user = (req as any).user;
+    const userId = user?.id;
+
+    if (!tenantId || !userId) {
+      return res.status(400).json({ error: 'Sesi login tidak valid atau tenant ID tidak ditemukan.' });
+    }
+
+    // 1. Role verification (OWNER or ADMIN or Platform Admin)
+    const userRole = (user?.role || '').toUpperCase();
+    if (!['OWNER', 'ADMIN'].includes(userRole) && !user?.isPlatformAdmin) {
+      return res.status(403).json({ error: 'Akses Ditolak: Hanya akun OWNER atau ADMIN yang berwenang mereset database.' });
+    }
+
+    const { confirmText, pin, createBackup = true } = req.body;
+
+    // 2. Fetch tenant & user info
+    const [tenant, currentUser] = await Promise.all([
+      prisma.tenant.findUnique({ where: { id: tenantId } }),
+      prisma.user.findUnique({ where: { id: userId } })
+    ]);
+
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant tidak ditemukan.' });
+    }
+    if (!currentUser) {
+      return res.status(404).json({ error: 'Data user tidak ditemukan.' });
+    }
+
+    // 3. Exact Confirmation Text Verification
+    const cleanConfirm = (confirmText || '').trim().toUpperCase();
+    const validConfirms = [
+      'RESET MUKI RAMEN',
+      `RESET ${tenant.name.trim().toUpperCase()}`,
+      'RESET-TOTAL'
+    ];
+
+    if (!validConfirms.includes(cleanConfirm)) {
+      return res.status(400).json({
+        error: `Teks konfirmasi tidak sesuai. Harap ketik "RESET MUKI RAMEN" dengan benar.`
+      });
+    }
+
+    // 4. PIN or Password Verification
+    if (!pin || typeof pin !== 'string') {
+      return res.status(400).json({ error: 'PIN atau kata sandi Owner wajib diisi sebagai konfirmasi otorisasi.' });
+    }
+
+    const isPasswordMatch = currentUser.passwordHash ? await bcrypt.compare(pin, currentUser.passwordHash) : false;
+    const isPinMatch = currentUser.pin === pin;
+
+    if (!isPasswordMatch && !isPinMatch) {
+      return res.status(401).json({ error: 'PIN atau kata sandi Owner salah. Tindakan reset dibatalkan demi keamanan data.' });
+    }
+
+    // 5. Automated Emergency Pre-Reset Backup (Safety Net)
+    let backupMeta: any = null;
+    if (createBackup !== false) {
+      try {
+        backupMeta = await BackupService.createBackup({
+          tenantId,
+          scope: 'TENANT',
+          isEncrypted: false,
+          compress: true
+        });
+      } catch (backupErr: any) {
+        console.warn('[RESET] Warning: Pre-reset emergency backup warning:', backupErr?.message);
+      }
+    }
+
+    // 6. Execute atomic reset within Prisma Transaction
+    const stats = await prisma.$transaction(async (tx) => {
+      // 1. Logs & Communications
+      await tx.auditLog.deleteMany({ where: { tenantId } });
+      await tx.whatsAppLog.deleteMany({ where: { tenantId } });
+      await tx.pointLog.deleteMany({ where: { tenantId } });
+      await tx.wasteLog.deleteMany({ where: { tenantId } });
+      await tx.ingredientLog.deleteMany({ where: { tenantId } });
+
+      // 2. Financials & Debts
+      await tx.debtPayment.deleteMany({ where: { tenantId } });
+      await tx.debt.deleteMany({ where: { tenantId } });
+      await tx.paymentTransaction.deleteMany({ where: { tenantId } });
+      await tx.ownerFundTransaction.deleteMany({ where: { tenantId } });
+      await tx.employeeLoan.deleteMany({ where: { tenantId } });
+      const cashFlowCount = await tx.cashFlow.deleteMany({ where: { tenantId } });
+
+      // 3. Warehouse / Gudang Pusat
+      await tx.warehouseSaleItem.deleteMany({ where: { OR: [{ tenantId }, { sale: { tenantId } }] } });
+      await tx.warehouseSale.deleteMany({ where: { tenantId } });
+      await tx.warehouseRequisitionItem.deleteMany({ where: { OR: [{ tenantId }, { requisition: { tenantId } }] } });
+      await tx.warehouseRequisition.deleteMany({ where: { tenantId } });
+      await tx.warehouseInboundItem.deleteMany({ where: { OR: [{ tenantId }, { inbound: { tenantId } }] } });
+      await tx.warehouseInbound.deleteMany({ where: { tenantId } });
+
+      // 4. Purchases & Suppliers
+      await tx.purchaseOrderItem.deleteMany({ where: { OR: [{ tenantId }, { po: { tenantId } }] } });
+      const poCount = await tx.purchaseOrder.deleteMany({ where: { tenantId } });
+      await tx.supplierInvoicePayment.deleteMany({ where: { tenantId } });
+      await tx.supplierInvoiceItem.deleteMany({ where: { invoice: { tenantId } } });
+      await tx.supplierInvoice.deleteMany({ where: { tenantId } });
+      const supplierCount = await tx.supplier.deleteMany({ where: { tenantId } });
+
+      // 5. Retail Delivery Orders & Laundry (if any)
+      await tx.deliveryOrderItem.deleteMany({ where: { deliveryOrder: { tenantId } } });
+      await tx.deliveryOrder.deleteMany({ where: { tenantId } });
+      await tx.laundryOrderItem.deleteMany({ where: { order: { tenantId } } });
+      await tx.laundryOrder.deleteMany({ where: { tenantId } });
+
+      // 6. Bengkel modules (if any)
+      await tx.workOrderReturnItem.deleteMany({ where: { return: { tenantId } } });
+      await tx.workOrderReturn.deleteMany({ where: { tenantId } });
+      await tx.workOrderPart.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
+      await tx.workOrderService.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
+      await tx.workOrderInvoice.deleteMany({ where: { tenantId } });
+      await tx.commissionPayout.deleteMany({ where: { tenantId } });
+      await tx.partRequest.deleteMany({ where: { tenantId } });
+      await tx.workOrder.deleteMany({ where: { tenantId } });
+      await tx.serviceType.deleteMany({ where: { tenantId } });
+      await tx.vehicle.deleteMany({ where: { tenantId } });
+      await tx.mechanicProfile.deleteMany({ where: { tenantId } });
+
+      // 7. Orders & Items
+      await tx.orderItem.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }] } });
+      const orderCount = await tx.order.deleteMany({ where: { tenantId } });
+
+      // 8. Recipes, Products & Categories
+      const recipeCount = await tx.recipeItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.productPriceTier.deleteMany({ where: { tenantId } });
+      await tx.productUOM.deleteMany({ where: { tenantId } });
+      const productCount = await tx.product.deleteMany({ where: { tenantId } });
+      await tx.category.deleteMany({ where: { tenantId, parentId: { not: null } } });
+      const categoryCount = await tx.category.deleteMany({ where: { tenantId } });
+
+      // 9. Ingredients
+      const ingCount = await tx.ingredient.deleteMany({ where: { tenantId } });
+
+      // 10. Customers & Vouchers & Reservations
+      await tx.voucher.deleteMany({ where: { tenantId } });
+      await tx.reservation.deleteMany({ where: { tenantId } });
+      const customerCount = await tx.customer.deleteMany({ where: { tenantId } });
+
+      // 11. Shifts, Checklists, & Attendances
+      await tx.shiftHandover.deleteMany({ where: { tenantId } });
+      await tx.kitchenChecklist.deleteMany({ where: { tenantId } });
+      await tx.leaveRequest.deleteMany({ where: { tenantId } });
+      await tx.attendance.deleteMany({ where: { tenantId } });
+      const shiftCount = await tx.shift.deleteMany({ where: { tenantId } });
+
+      // 12. Tables - PRESERVED, ONLY STATUS RESET TO 'Aktif'
+      const tableCount = await tx.table.updateMany({
+        where: { tenantId },
+        data: { status: 'Aktif' }
+      });
+
+      return {
+        orders: orderCount.count,
+        products: productCount.count,
+        categories: categoryCount.count,
+        ingredients: ingCount.count,
+        recipes: recipeCount.count,
+        customers: customerCount.count,
+        shifts: shiftCount.count,
+        cashFlows: cashFlowCount.count,
+        purchaseOrders: poCount.count,
+        suppliers: supplierCount.count,
+        tablesReset: tableCount.count
+      };
+    }, { timeout: 60000 });
+
+    // 7. Clear Caches
+    invalidateTenantCache(tenantId);
+    await cacheService.invalidateTenant(tenantId, tenant.slug, tenant.customDomain || undefined);
+    await cacheService.bumpTenantCatalogVersion(tenantId);
+
+    // 8. Real-time terminal broadcast
+    emitToTenant(tenantId, 'system:database_reset', {
+      tenantId,
+      timestamp: new Date().toISOString(),
+      message: 'Database berhasil direset penuh oleh Owner. Terminal siap untuk transaksi baru.'
+    });
+
+    // 9. Audit Logging (new entry after wipe)
+    await AuditLogger.log({
+      tenantId,
+      action: 'STANDALONE_DATABASE_RESET',
+      resource: 'SETTINGS',
+      description: `Reset Database Penuh berhasil dieksekusi oleh Owner/Admin (${currentUser.name}). ${stats.orders} transaksi, ${stats.products} menu, ${stats.ingredients} bahan baku, ${stats.customers} pelanggan dibersihkan. ${stats.tablesReset} meja diset siap pakai.`,
+      severity: 'CRITICAL'
+    }, req);
+
+    console.log(`[RESET STANDALONE] Tenant ${tenantId} (${tenant.name}) reset success by ${currentUser.name} at ${new Date().toISOString()}`);
+
+    return res.json({
+      success: true,
+      message: 'Reset database berhasil! Sistem siap digunakan untuk data menu, bahan baku, dan transaksi baru.',
+      stats,
+      backup: backupMeta ? {
+        fileName: backupMeta.fileName || backupMeta.filename,
+        sizeFormatted: backupMeta.sizeFormatted
+      } : null
+    });
+
+  } catch (error: any) {
+    console.error('[Reset Standalone Error]', error);
+    return res.status(500).json({
+      error: error?.message || 'Gagal mereset database standalone.'
+    });
   }
 });
 

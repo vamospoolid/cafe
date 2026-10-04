@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Trash2, AlertTriangle } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -9,6 +9,7 @@ import TenantResetModal from './TenantResetModal';
 import RecycleBinModal from './RecycleBinModal';
 import TenantPWASection from './TenantPWASection';
 import SettingsWhatsAppGateway from './settings/SettingsWhatsAppGateway';
+import ResetStandaloneModal from './settings/ResetStandaloneModal';
 
 const SettingsView = () => {
   const [searchParams] = useSearchParams();
@@ -2818,12 +2819,18 @@ const SettingsView = () => {
 };
 
 const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) => {
+  const posContext = useContext(POSContext);
   const [backingUp, setBackingUp] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [healthData, setHealthData] = useState<any>(null);
   const [backups, setBackups] = useState<any[]>([]);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(true);
+  const [isResetStandaloneOpen, setIsResetStandaloneOpen] = useState(false);
+
+  const isOwner = (posContext?.user?.role || '').toUpperCase() === 'OWNER' ||
+    Boolean(posContext?.user?.isPlatformAdmin) ||
+    (posContext?.user?.role || '').toUpperCase() === 'ADMIN';
 
   const fetchHealthAndBackups = async () => {
     setLoadingHealth(true);
@@ -3112,6 +3119,55 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
             </button>
           </div>
         </div>
+
+        {/* Card 3: Zona Berbahaya - Reset Database Penuh (Muki Ramen Independent Mode) */}
+        <div className="p-6 rounded-3xl border-2 border-red-200 dark:border-red-900/60 bg-gradient-to-br from-red-50/70 via-white to-rose-50/40 dark:from-slate-900 dark:to-red-950/30 hover:border-red-400 shadow-sm transition-all space-y-4 md:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-600 via-rose-600 to-red-800 text-white flex items-center justify-center shadow-lg shadow-red-600/20 shrink-0">
+                <Trash2 size={24} className="text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider bg-red-100 text-red-700 border border-red-200">
+                    ⚠️ ZONA BERBAHAYA
+                  </span>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Reset Database Penuh (Independent Mode)</h4>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                  Hapus seluruh data operasional, riwayat transaksi, bahan baku, dan menu lama untuk memulai operasional dari awal. Pengaturan sistem, akun staf/owner, dan denah meja tetap aman.
+                </p>
+              </div>
+            </div>
+
+            <div className="shrink-0 self-start sm:self-auto flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => setIsResetStandaloneOpen(true)}
+                disabled={!isOwner}
+                className="btn btn-danger bg-red-600 hover:bg-red-700 border-red-600 text-xs font-bold py-3 px-5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 disabled:opacity-50 disabled:cursor-not-allowed text-white"
+              >
+                <Trash2 size={16} />
+                <span>Reset Database Penuh</span>
+              </button>
+              {!isOwner && (
+                <span className="text-[10px] text-slate-400 font-medium">Hanya untuk Akun Role OWNER</span>
+              )}
+            </div>
+          </div>
+
+          {/* Quick checklist of what is wiped vs kept */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs border-t border-red-100">
+            <div className="flex items-center gap-2 text-rose-700 font-medium">
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+              <span>Dihapus: Order, Bahan Baku, Menu, Resep, Pelanggan, Kas</span>
+            </div>
+            <div className="flex items-center gap-2 text-emerald-700 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              <span>Aman: Akun Staf/Owner, Pengaturan Pajak/Struk, Denah Meja</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Table of Stored Backups ── */}
@@ -3166,6 +3222,13 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
           </div>
         )}
       </div>
+
+      {/* Reset Standalone Modal */}
+      <ResetStandaloneModal
+        isOpen={isResetStandaloneOpen}
+        onClose={() => setIsResetStandaloneOpen(false)}
+        onSuccess={() => fetchHealthAndBackups()}
+      />
     </div>
   );
 };

@@ -196,6 +196,21 @@ class OfflineDB {
     return this.getOfflineQueue();
   }
 
+  public async clearOperationalCache(): Promise<void> {
+    const db = await this.openDB();
+    const storesToClear = ['products', 'categories', 'customers', 'offlineQueue'];
+    return new Promise((resolve, reject) => {
+      const activeStores = storesToClear.filter(s => db.objectStoreNames.contains(s));
+      if (activeStores.length === 0) return resolve();
+      const transaction = db.transaction(activeStores, 'readwrite');
+      activeStores.forEach(storeName => {
+        transaction.objectStore(storeName).clear();
+      });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
   public async getCachedTables(): Promise<any[]> {
     return this.getTables();
   }
