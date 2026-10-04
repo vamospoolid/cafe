@@ -1,16 +1,7 @@
 import React, { useContext, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
-import POSView from './components/POSView';
-import KDSView from './components/KDSView';
-import TableView from './components/TableView';
-import QRCodeView from './components/QRCodeView';
-import ReservationView from './components/ReservationView';
-import DashboardView from './components/DashboardView';
-import LoginView from './components/LoginView';
 import CustomerSupportWidget from './components/CustomerSupportWidget';
-import DineInView from './components/DineInView';
-import StaffPWAView from './components/StaffPWAView';
 import InAppUpdateBanner from './components/InAppUpdateBanner';
 import { POSProvider, POSContext } from './context/POSContext';
 import { seedLocalCatalogCache } from './utils/catalogCacheSeeder';
@@ -20,6 +11,17 @@ import { PrinterProvider } from './context/PrinterContext';
 import VerticalGuard from './components/VerticalGuard';
 import ChunkErrorBoundary from './components/ChunkErrorBoundary';
 import { updatePwaManifestForRoute } from './utils/pwaManager';
+
+// ─── Eager/Lazy Component Splitting for Instant Initial Page Load ───────────
+const LoginView = React.lazy(() => import('./components/LoginView'));
+const StaffPWAView = React.lazy(() => import('./components/StaffPWAView'));
+const POSView = React.lazy(() => import('./components/POSView'));
+const DashboardView = React.lazy(() => import('./components/DashboardView'));
+const KDSView = React.lazy(() => import('./components/KDSView'));
+const TableView = React.lazy(() => import('./components/TableView'));
+const QRCodeView = React.lazy(() => import('./components/QRCodeView'));
+const ReservationView = React.lazy(() => import('./components/ReservationView'));
+const DineInView = React.lazy(() => import('./components/DineInView'));
 
 // ─── Code Splitting & Dynamic Imports for Large Modules (Bundle Optimization) ─────
 const BengkelRoutes = React.lazy(() => import('./verticals/bengkel/BengkelRoutes'));
@@ -79,7 +81,11 @@ const POSViewAdaptive = () => {
       </Suspense>
     );
   }
-  return <POSView />;
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-indigo-600 font-bold text-xs">Memuat POS Kasir...</div>}>
+      <POSView />
+    </Suspense>
+  );
 };
 
 const AppRoutes = () => {
@@ -130,11 +136,13 @@ const AppRoutes = () => {
   const isStaffRoute = isStaffDomain || location.pathname.startsWith('/staff') || location.pathname.startsWith('/dapur-app');
   if (isStaffRoute) {
     return (
-      <Routes>
-        <Route path="/staff" element={<StaffPWAView />} />
-        <Route path="/dapur-app" element={<StaffPWAView />} />
-        <Route path="*" element={<StaffPWAView />} />
-      </Routes>
+      <Suspense fallback={<RouteSuspenseFallback />}>
+        <Routes>
+          <Route path="/staff" element={<StaffPWAView />} />
+          <Route path="/dapur-app" element={<StaffPWAView />} />
+          <Route path="*" element={<StaffPWAView />} />
+        </Routes>
+      </Suspense>
     );
   }
 
@@ -142,10 +150,12 @@ const AppRoutes = () => {
   const isDineInRoute = location.pathname.startsWith('/dinein/table/') || location.pathname.startsWith('/order');
   if (isDineInRoute) {
     return (
-      <Routes>
-        <Route path="/dinein/table/:tableId" element={<DineInView />} />
-        <Route path="/order" element={<DineInView />} />
-      </Routes>
+      <Suspense fallback={<RouteSuspenseFallback />}>
+        <Routes>
+          <Route path="/dinein/table/:tableId" element={<DineInView />} />
+          <Route path="/order" element={<DineInView />} />
+        </Routes>
+      </Suspense>
     );
   }
 
