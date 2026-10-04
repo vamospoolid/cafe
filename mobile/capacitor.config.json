@@ -1,9 +1,9 @@
 {
-  "appId": "id.mukiramen.pos",
-  "appName": "Muki Ramen POS",
+  "appId": "id.mukiramen.admin",
+  "appName": "Muki Ramen Admin",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://app.mukiramen.id",
+    "url": "https://app.mukiramen.id/dashboard",
     "cleartext": true
   }
 }

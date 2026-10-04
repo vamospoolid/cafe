@@ -4,7 +4,7 @@ android {
     namespace "id.codenusa.poscafe"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "id.mukiramen.pos"
+        applicationId "id.mukiramen.admin"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

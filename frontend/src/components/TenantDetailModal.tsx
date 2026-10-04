@@ -653,8 +653,8 @@ export const TenantDetailModal: React.FC<TenantDetailModalProps> = ({
                     </div>
                   </div>
 
-                  {/* 2 Target APK Cards Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* 3 Target APK Cards Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     
                     {/* Card 1: APK Kasir & Tablet */}
                     <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -692,7 +692,7 @@ export const TenantDetailModal: React.FC<TenantDetailModalProps> = ({
                           className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
                         >
                           <Hammer size={14} />
-                          <span>{apkBuilding ? 'Memproses...' : 'Build APK Kasir'}</span>
+                          <span>{apkBuilding ? 'Memproses...' : 'Build Kasir'}</span>
                         </button>
 
                         {apkStatus?.cashier?.exists && (
@@ -744,12 +744,64 @@ export const TenantDetailModal: React.FC<TenantDetailModalProps> = ({
                           className="flex-1 py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
                         >
                           <Hammer size={14} />
-                          <span>{apkBuilding ? 'Memproses...' : 'Build APK Staf'}</span>
+                          <span>{apkBuilding ? 'Memproses...' : 'Build Staf'}</span>
                         </button>
 
                         {apkStatus?.staff?.exists && (
                           <a
                             href={`/api/platform-admin/tenants/${tenant?.id}/download-apk/staff`}
+                            download
+                            className="py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                          >
+                            <Download size={14} />
+                            <span>Unduh</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card 3: APK Mobile Admin & Owner */}
+                    <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                            HP Admin &amp; Owner (Portrait)
+                          </span>
+                          <h5 className="font-black text-slate-900 text-base mt-1.5">{tenant?.name} Admin</h5>
+                          <p className="text-xs text-slate-400 font-mono">id.codenusa.{tenant?.slug?.replace(/[^a-z0-9]/g, '')}.admin</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 font-bold text-xs">
+                          ADMIN
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1 font-mono">
+                        <div className="flex justify-between text-slate-500">
+                          <span>Status:</span>
+                          <span className={apkStatus?.admin?.exists ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                            {apkStatus?.admin?.exists ? `✓ Siap Unduh (${apkStatus.admin.sizeMb} MB)` : 'Belum Dibuat'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-slate-500">
+                          <span>Target:</span>
+                          <span className="text-slate-700 font-semibold">{tenant?.customDomain ? `https://${tenant.customDomain}/dashboard` : `https://${tenant?.slug}.codenusa.id/dashboard`}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={apkBuilding}
+                          onClick={() => handleBuildApk('admin')}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                        >
+                          <Hammer size={14} />
+                          <span>{apkBuilding ? 'Memproses...' : 'Build Admin'}</span>
+                        </button>
+
+                        {apkStatus?.admin?.exists && (
+                          <a
+                            href={`/api/platform-admin/tenants/${tenant?.id}/download-apk/admin`}
                             download
                             className="py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
                           >

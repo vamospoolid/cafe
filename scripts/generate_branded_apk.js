@@ -157,17 +157,20 @@ async function main() {
   // A. Generate Seluruh Resolusi Icon Android Mipmap
   await generateAndroidIcons(info.logoFile, androidResDir);
 
-  // B. Definisikan 2 Target Aplikasi
+  // B. Definisikan 3 Target Aplikasi
   const isMukiRamen = info.cleanSlug === 'mukiramen' || info.baseUrl.includes('mukiramen');
   
   const cashierUrl = isMukiRamen ? 'https://app.mukiramen.id' : `${info.baseUrl}/pos`;
   const staffUrl = isMukiRamen ? 'https://staff.mukiramen.id' : `${info.baseUrl}/staff`;
+  const adminUrl = isMukiRamen ? 'https://app.mukiramen.id/dashboard' : `${info.baseUrl}/dashboard`;
   
   const cashierAppId = isMukiRamen ? 'id.mukiramen.pos' : `id.codenusa.${info.cleanSlug}.pos`;
   const staffAppId = isMukiRamen ? 'id.mukiramen.staff' : `id.codenusa.${info.cleanSlug}.staff`;
+  const adminAppId = isMukiRamen ? 'id.mukiramen.admin' : `id.codenusa.${info.cleanSlug}.admin`;
 
   const cashierApkName = isMukiRamen ? 'mukiramen-pos-tablet.apk' : `${info.cleanSlug}-pos-tablet.apk`;
   const staffApkName = isMukiRamen ? 'mukiramen-staff.apk' : `${info.cleanSlug}-staff.apk`;
+  const adminApkName = isMukiRamen ? 'mukiramen-admin.apk' : `${info.cleanSlug}-admin.apk`;
 
   const buildTargets = [
     {
@@ -187,16 +190,28 @@ async function main() {
       url: staffUrl,
       orientation: 'portrait',
       outputFileName: staffApkName
+    },
+    {
+      type: 'admin',
+      name: `${info.storeName} - Mobile Admin & Owner Back-Office`,
+      appId: adminAppId,
+      appName: `${info.storeName} Admin`,
+      url: adminUrl,
+      orientation: 'portrait',
+      outputFileName: adminApkName
     }
   ];
 
   const isCashierTarget = ['cashier', 'pos', 'kasir', 'tablet'].includes(rawTarget);
   const isStaffTarget = ['staff', 'staf', 'absensi'].includes(rawTarget);
+  const isAdminTarget = ['admin', 'owner', 'manager', 'backoffice'].includes(rawTarget);
 
   const targetsToBuild = isCashierTarget
     ? [buildTargets[0]]
     : isStaffTarget
     ? [buildTargets[1]]
+    : isAdminTarget
+    ? [buildTargets[2]]
     : buildTargets;
 
   if (!fs.existsSync(releaseDir)) {
@@ -277,6 +292,15 @@ async function main() {
       // Duplikasi alias pos-cashier untuk kompatibilitas endpoint platformAdmin
       if (target.type === 'cashier') {
         const aliasName = `${info.cleanSlug}-pos-cashier.apk`;
+        if (target.outputFileName !== aliasName) {
+          fs.copyFileSync(sourceApk, path.join(releaseDir, aliasName));
+          console.log(`✨ Alias dibuat: ${aliasName}`);
+        }
+      }
+
+      // Duplikasi alias admin untuk kompatibilitas endpoint platformAdmin
+      if (target.type === 'admin') {
+        const aliasName = `${info.cleanSlug}-admin.apk`;
         if (target.outputFileName !== aliasName) {
           fs.copyFileSync(sourceApk, path.join(releaseDir, aliasName));
           console.log(`✨ Alias dibuat: ${aliasName}`);

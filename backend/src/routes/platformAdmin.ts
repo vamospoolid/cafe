@@ -1506,12 +1506,15 @@ router.get('/tenants/:tenantId/apk-status', authenticateToken, requirePlatformAd
 
     const cashierApk = path.join(releaseDir, `${cleanSlug}-pos-cashier.apk`);
     const staffApk = path.join(releaseDir, `${cleanSlug}-staff.apk`);
+    const adminApk = path.join(releaseDir, `${cleanSlug}-admin.apk`);
 
     const hasCashier = fs.existsSync(cashierApk);
     const hasStaff = fs.existsSync(staffApk);
+    const hasAdmin = fs.existsSync(adminApk);
 
     const cashierStats = hasCashier ? fs.statSync(cashierApk) : null;
     const staffStats = hasStaff ? fs.statSync(staffApk) : null;
+    const adminStats = hasAdmin ? fs.statSync(adminApk) : null;
 
     return res.json({
       tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
@@ -1526,6 +1529,12 @@ router.get('/tenants/:tenantId/apk-status', authenticateToken, requirePlatformAd
         fileName: `${cleanSlug}-staff.apk`,
         sizeMb: staffStats ? (staffStats.size / (1024 * 1024)).toFixed(2) : null,
         updatedAt: staffStats ? staffStats.mtime : null
+      },
+      admin: {
+        exists: hasAdmin,
+        fileName: `${cleanSlug}-admin.apk`,
+        sizeMb: adminStats ? (adminStats.size / (1024 * 1024)).toFixed(2) : null,
+        updatedAt: adminStats ? adminStats.mtime : null
       }
     });
   } catch (err: any) {
@@ -1551,7 +1560,7 @@ router.post('/tenants/:tenantId/build-apk', authenticateToken, requirePlatformAd
     if (!tenant) return res.status(404).json({ error: 'Tenant tidak ditemukan' });
 
     // Sanitasi dan whitelist parameter agar kebal terhadap shell/command injection
-    const ALLOWED_TARGETS = ['all', 'kasir', 'staf', 'staff', 'pos'];
+    const ALLOWED_TARGETS = ['all', 'kasir', 'staf', 'staff', 'pos', 'admin', 'owner'];
     const ALLOWED_ENVS = ['prod', 'production', 'staging', 'dev', 'development'];
 
     const safeSlug = tenant.slug.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -1616,7 +1625,11 @@ router.get('/tenants/:tenantId/download-apk/:type', authenticateToken, requirePl
 
     const cleanSlug = tenant.slug.replace(/[^a-z0-9]/g, '');
     const releaseDir = path.resolve(process.cwd(), '..', 'release');
-    const fileName = type === 'staff' ? `${cleanSlug}-staff.apk` : `${cleanSlug}-pos-cashier.apk`;
+    const fileName = type === 'staff' 
+      ? `${cleanSlug}-staff.apk` 
+      : type === 'admin' || type === 'owner'
+      ? `${cleanSlug}-admin.apk`
+      : `${cleanSlug}-pos-cashier.apk`;
     const filePath = path.join(releaseDir, fileName);
 
     if (!fs.existsSync(filePath)) {

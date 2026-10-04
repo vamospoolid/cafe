@@ -126,10 +126,74 @@ export const TenantPWASection: React.FC<TenantPWASectionProps> = ({
         </div>
       </div>
 
-      {/* 3 Auto-Created Independent Links Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* 4 Auto-Created Independent Links & APKs Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         
-        {/* CARD 1: Kasir & Tablet POS */}
+        {/* CARD 1: Mobile Admin & Owner Back-Office */}
+        <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4 hover:border-amber-300 transition-colors">
+          <div>
+            <div className="flex items-start justify-between">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                HP Admin &amp; Owner
+              </span>
+              <div className="w-9 h-9 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+                <ShieldCheck size={18} />
+              </div>
+            </div>
+            <h3 className="font-black text-slate-900 text-base mt-3">Mobile Admin &amp; Owner</h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Monitoring omzet real-time, grafik laba, approval tugas, dan manajemen toko langsung dari HP Android.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-mono text-slate-600 truncate">{urls.dashboardUrl}</span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(urls.dashboardUrl, 'admin')}
+                className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 cursor-pointer shrink-0 transition-colors"
+                title="Salin Link"
+              >
+                {copiedKey === 'admin' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <a
+                href={urls.dashboardUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all text-center"
+              >
+                <ArrowUpRight size={14} />
+                <span>Buka Admin</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setActiveQrModal({ title: `${storeName} — Admin Back-Office`, url: urls.dashboardUrl })}
+                className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                title="Tampilkan QR Code"
+              >
+                <QrCode size={14} />
+                <span>QR</span>
+              </button>
+            </div>
+
+            <div className="pt-1">
+              <a
+                href="/downloads/admin.apk"
+                download={`${tenantSlug || 'admin'}-owner.apk`}
+                className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 text-amber-700 font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Download size={13} />
+                <span>Unduh APK Admin (.apk)</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 2: Kasir & Tablet POS */}
         <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-4 hover:border-indigo-300 transition-colors">
           <div>
             <div className="flex items-start justify-between">
