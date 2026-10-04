@@ -26,15 +26,17 @@ function parseArgs() {
 }
 
 const args = parseArgs();
-const targetArg = (args.target || 'all').toLowerCase();
+const rawTarget = (args.target || 'all').toLowerCase();
 const tenantSlug = args.tenant || 'mukiramen';
 const envMode = args.env || 'prod';
+
+const buildGradlePath = path.join(androidDir, 'app', 'build.gradle');
 
 console.log('================================================================');
 console.log('🚀 GENERATOR APK ANDROID MULTI-TENANT DENGAN LOGO KUSTOM 🚀');
 console.log('================================================================');
 console.log(`[KONFIGURASI] Tenant Slug : ${tenantSlug}`);
-console.log(`[KONFIGURASI] Target Build: ${targetArg.toUpperCase()}`);
+console.log(`[KONFIGURASI] Target Build: ${rawTarget.toUpperCase()}`);
 console.log(`[KONFIGURASI] Environment : ${envMode.toUpperCase()}`);
 console.log('================================================================\n');
 
@@ -188,9 +190,12 @@ async function main() {
     }
   ];
 
-  const targetsToBuild = targetArg === 'cashier'
+  const isCashierTarget = ['cashier', 'pos', 'kasir', 'tablet'].includes(rawTarget);
+  const isStaffTarget = ['staff', 'staf', 'absensi'].includes(rawTarget);
+
+  const targetsToBuild = isCashierTarget
     ? [buildTargets[0]]
-    : targetArg === 'staff'
+    : isStaffTarget
     ? [buildTargets[1]]
     : buildTargets;
 
@@ -230,6 +235,14 @@ async function main() {
       fs.writeFileSync(manifestPath, manifestContent, 'utf-8');
     }
 
+    // 1c. Update applicationId di build.gradle agar Application ID Android benar-benar independen
+    if (fs.existsSync(buildGradlePath)) {
+      let gradleContent = fs.readFileSync(buildGradlePath, 'utf-8');
+      gradleContent = gradleContent.replace(/applicationId\s+"[^"]*"/, `applicationId "${target.appId}"`);
+      fs.writeFileSync(buildGradlePath, gradleContent, 'utf-8');
+      console.log(`[GRADLE] Injeksi Application ID: ${target.appId}`);
+    }
+
     // 2. Update capacitor.config.json
     const configData = {
       appId: target.appId,
@@ -260,6 +273,15 @@ async function main() {
       const stats = fs.statSync(targetApk);
       const sizeMb = (stats.size / (1024 * 1024)).toFixed(2);
       console.log(`✨ Sukses Kompilasi: ${target.outputFileName} (${sizeMb} MB)`);
+
+      // Duplikasi alias pos-cashier untuk kompatibilitas endpoint platformAdmin
+      if (target.type === 'cashier') {
+        const aliasName = `${info.cleanSlug}-pos-cashier.apk`;
+        if (target.outputFileName !== aliasName) {
+          fs.copyFileSync(sourceApk, path.join(releaseDir, aliasName));
+          console.log(`✨ Alias dibuat: ${aliasName}`);
+        }
+      }
     } else {
       throw new Error(`File APK ${target.outputFileName} tidak ditemukan di output gradle.`);
     }

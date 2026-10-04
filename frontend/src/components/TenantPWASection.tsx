@@ -179,6 +179,17 @@ export const TenantPWASection: React.FC<TenantPWASectionProps> = ({
                 <span>QR</span>
               </button>
             </div>
+
+            <div className="pt-1">
+              <a
+                href="/downloads/pos.apk"
+                download={`${tenantSlug || 'pos'}-tablet.apk`}
+                className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-indigo-700 font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Download size={13} />
+                <span>Unduh APK Tablet Kasir (.apk)</span>
+              </a>
+            </div>
           </div>
         </div>
 
@@ -231,6 +242,17 @@ export const TenantPWASection: React.FC<TenantPWASectionProps> = ({
                 <QrCode size={14} />
                 <span>QR</span>
               </button>
+            </div>
+
+            <div className="pt-1">
+              <a
+                href="/downloads/staff.apk"
+                download={`${tenantSlug || 'staff'}-portal.apk`}
+                className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-emerald-700 font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Download size={13} />
+                <span>Unduh APK Portal Staf (.apk)</span>
+              </a>
             </div>
           </div>
         </div>
