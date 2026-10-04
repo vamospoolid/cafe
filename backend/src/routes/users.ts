@@ -229,7 +229,10 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
 
     // Cari user yang tergabung dalam membership tenant aktif
     const memberships = await prisma.tenantMembership.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        user: { tenantId }
+      },
       include: {
         user: {
           select: {
