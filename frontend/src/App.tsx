@@ -11,7 +11,6 @@ import LoginView from './components/LoginView';
 import CustomerSupportWidget from './components/CustomerSupportWidget';
 import DineInView from './components/DineInView';
 import StaffPWAView from './components/StaffPWAView';
-import DeviceActivationView from './components/DeviceActivationView';
 import InAppUpdateBanner from './components/InAppUpdateBanner';
 import { POSProvider, POSContext } from './context/POSContext';
 import { seedLocalCatalogCache } from './utils/catalogCacheSeeder';
@@ -171,7 +170,7 @@ const AppRoutes = () => {
           <Route path="/landing-page" element={<LandingPageView onNavigateLogin={() => navigate('/login')} />} />
           <Route path="/register" element={<LandingPageView onNavigateLogin={() => navigate('/login')} />} />
           <Route path="/platform-admin" element={<PlatformAdminLayout><SaaSPlatformAdminView /></PlatformAdminLayout>} />
-          <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/login')} />} />
+          <Route path="/activate-tablet" element={<Navigate to="/login" replace />} />
           <Route path="/order" element={<DineInView />} />
           <Route path="/staff" element={<StaffPWAView />} />
           <Route path="/invoice/order/:orderNumber" element={<PublicInvoiceView />} />
@@ -299,7 +298,7 @@ const AppRoutes = () => {
                   <Route path="/gudang" element={<FeatureGuard featureKey="warehouse.management"><WarehouseView /></FeatureGuard>} />
                   <Route path="/audit-log" element={<AuditLogView />} />
                   <Route path="/cabang" element={<TenantOutletHubView />} />
-                  <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/dashboard')} />} />
+                  <Route path="/activate-tablet" element={<Navigate to="/dashboard" replace />} />
 
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
