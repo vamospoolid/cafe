@@ -58,29 +58,37 @@ export const ConsolidatedOutletDashboard: React.FC = () => {
 
   const formatRupiah = (num: number) => `Rp ${(num || 0).toLocaleString('id-ID')}`;
 
+  const formatLocalDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   const fetchConsolidatedSummary = async () => {
     try {
       setLoading(true);
       const now = new Date();
       let startDateStr = '';
-      let endDateStr = now.toISOString().split('T')[0];
+      let endDateStr = formatLocalDate(now);
 
       if (period === 'today') {
         startDateStr = endDateStr;
       } else if (period === '7days') {
         const d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        startDateStr = d.toISOString().split('T')[0];
+        startDateStr = formatLocalDate(d);
       } else if (period === '30days') {
         const d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        startDateStr = d.toISOString().split('T')[0];
+        startDateStr = formatLocalDate(d);
       } else if (period === 'thisMonth') {
         const d = new Date(now.getFullYear(), now.getMonth(), 1);
-        startDateStr = d.toISOString().split('T')[0];
+        startDateStr = formatLocalDate(d);
       }
 
       const queryParams = new URLSearchParams();
       if (startDateStr) queryParams.set('startDate', startDateStr);
       if (endDateStr) queryParams.set('endDate', endDateStr);
+      queryParams.set('tzOffset', String(new Date().getTimezoneOffset()));
 
       const res = await fetch(`/api/outlets/consolidated-summary?${queryParams.toString()}`, {
         headers: {

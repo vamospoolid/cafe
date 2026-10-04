@@ -182,14 +182,22 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Tenant context tidak tersedia.' });
     }
 
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, tzOffset } = req.query;
 
     // Filter tanggal
     const dateFilter: any = {};
-    if (startDate) {
-      dateFilter.gte = new Date(String(startDate));
-    }
-    if (endDate) {
+    if (startDate && endDate) {
+      const sDate = new Date(String(startDate));
+      sDate.setHours(0, 0, 0, 0);
+      const eDate = new Date(String(endDate));
+      eDate.setHours(23, 59, 59, 999);
+      dateFilter.gte = sDate;
+      dateFilter.lte = eDate;
+    } else if (startDate) {
+      const sDate = new Date(String(startDate));
+      sDate.setHours(0, 0, 0, 0);
+      dateFilter.gte = sDate;
+    } else if (endDate) {
       const eDate = new Date(String(endDate));
       eDate.setHours(23, 59, 59, 999);
       dateFilter.lte = eDate;
@@ -219,11 +227,11 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
       outlets = [defaultOutlet];
     }
 
-    // 2. Ambil data order F&B / Retail yang sudah dibayar
+    // 2. Ambil data order F&B / Retail yang sudah dibayar (dukung status 'Paid', 'PAID', 'Completed')
     const orders = await prisma.order.findMany({
       where: {
         tenantId,
-        status: 'PAID',
+        status: { in: ['Paid', 'PAID', 'Completed'] },
         ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
       },
       select: {
@@ -241,7 +249,7 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
         laundryOrders = await (prisma as any).laundryOrder.findMany({
           where: {
             tenantId,
-            paymentStatus: { in: ['PAID', 'PARTIAL'] },
+            paymentStatus: { in: ['PAID', 'Paid', 'PARTIAL', 'Partial'] },
             ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
           },
           select: {
@@ -265,7 +273,7 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
         workOrders = await (prisma as any).workOrder.findMany({
           where: {
             tenantId,
-            paymentStatus: 'PAID',
+            paymentStatus: { in: ['PAID', 'Paid'] },
             ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
           },
           select: {
@@ -287,8 +295,8 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
         where: {
           tenantId,
           type: 'Pengeluaran',
-          status: 'APPROVED',
-          ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+          status: { in: ['APPROVED', 'Approved'] },
+          ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {})
         },
         select: {
           id: true,
@@ -303,17 +311,17 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
     // 6. Hitung statistik agregasi per outlet
     const outletStats = outlets.map((out) => {
       // Order umum (F&B / Retail)
-      const matchingOrders = orders.filter(o => o.outletId === out.id || (!o.outletId && out.code.endsWith('-01')));
+      const matchingOrders = orders.filter(o => o.outletId === out.id || (!o.outletId && (outlets.length === 1 || (out as any).isDefault || out.code.includes('01'))));
       const revenueGeneral = matchingOrders.reduce((sum, o) => sum + ((o as any).total || 0), 0);
       const countGeneral = matchingOrders.length;
 
       // Laundry
-      const matchingLaundry = laundryOrders.filter(l => l.outletId === out.id || (!l.outletId && out.code.endsWith('-01')));
+      const matchingLaundry = laundryOrders.filter(l => l.outletId === out.id || (!l.outletId && (outlets.length === 1 || (out as any).isDefault || out.code.includes('01'))));
       const revenueLaundry = matchingLaundry.reduce((sum, l) => sum + (l.paidAmount || 0), 0);
       const countLaundry = matchingLaundry.length;
 
       // Bengkel
-      const matchingBengkel = workOrders.filter(w => w.outletId === out.id || (!w.outletId && out.code.endsWith('-01')));
+      const matchingBengkel = workOrders.filter(w => w.outletId === out.id || (!w.outletId && (outlets.length === 1 || (out as any).isDefault || out.code.includes('01'))));
       const revenueBengkel = matchingBengkel.reduce((sum, w) => sum + (w.totalAmount || 0), 0);
       const countBengkel = matchingBengkel.length;
 
@@ -322,7 +330,7 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
       const totalOrders = countGeneral + countLaundry + countBengkel;
 
       // Total pengeluaran
-      const matchingExpenses = cashFlows.filter(cf => cf.outletId === out.id || (!cf.outletId && out.code.endsWith('-01')));
+      const matchingExpenses = cashFlows.filter(cf => cf.outletId === out.id || (!cf.outletId && (outlets.length === 1 || (out as any).isDefault || out.code.includes('01'))));
       const totalExpense = matchingExpenses.reduce((sum, cf) => sum + (cf.amount || 0), 0);
 
       const netProfit = totalRevenue - totalExpense;
