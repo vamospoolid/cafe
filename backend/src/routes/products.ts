@@ -130,33 +130,95 @@ router.get('/public', async (req: Request, res: Response) => {
       tenantId
     };
 
-    // Fast Cache Check via Tenant Catalog Versioning
-    const catalogVer = await cacheService.getTenantCatalogVersion(tenantId);
-    const cacheKey = `cache:catalog:${tenantId}:v${catalogVer}:public`;
-    const cachedProducts = await cacheService.get<any[]>(cacheKey);
-    if (cachedProducts) {
-      return res.json(cachedProducts);
+    // Cek apakah tenant menggunakan ingredient tracking (Advanced Mode)
+    const settings = await prisma.settings.findFirst({ where: { tenantId } });
+    const ingredientTrackingEnabled = settings?.ingredientTrackingEnabled ?? false;
+
+    // Fast Cache Check — BYPASS cache jika ingredient tracking aktif agar stok real-time
+    if (!ingredientTrackingEnabled) {
+      const catalogVer = await cacheService.getTenantCatalogVersion(tenantId);
+      const cacheKey = `cache:catalog:${tenantId}:v${catalogVer}:public`;
+      const cachedProducts = await cacheService.get<any[]>(cacheKey);
+      if (cachedProducts) {
+        return res.json(cachedProducts);
+      }
     }
 
     const products = await prisma.product.findMany({
       where: whereCondition,
-      include: { 
-        category: true, 
+      include: {
+        category: true,
         subCategory: true,
         productUoms: { orderBy: { conversionRatio: 'asc' } },
-        priceTiers: { orderBy: { minQty: 'asc' } }
+        priceTiers: { orderBy: { minQty: 'asc' } },
+        // Include resep + stok bahan baku untuk BOM check (hanya jika Advanced Mode aktif)
+        ...(ingredientTrackingEnabled ? {
+          recipes: {
+            include: {
+              ingredient: {
+                select: { id: true, name: true, unit: true, stock: true, minStock: true }
+              }
+            }
+          }
+        } : {})
       },
       orderBy: { id: 'desc' }
     });
 
-    // Cache result with 30-minute TTL
-    await cacheService.set(cacheKey, products, 1800);
+    // BOM (Bill of Materials) Availability Calculation
+    // Hitung berapa porsi yang bisa disajikan berdasarkan stok bahan baku saat ini
+    const enrichedProducts = (products as any[]).map((product: any) => {
+      if (!ingredientTrackingEnabled || !product.recipes || product.recipes.length === 0) {
+        // Simple Mode: gunakan product.stock langsung
+        return {
+          ...product,
+          availablePortions: product.stock,
+          ingredientShortage: null,
+          isAvailable: product.stock > 0
+        };
+      }
 
-    res.json(products);
+      // Advanced Mode: hitung kapasitas dari bahan baku (BOM formula)
+      // MaxPortions = min( floor(stock_bahan / qty_per_serving) ) untuk semua bahan di resep
+      let minPortions = Infinity;
+      let bottleneckIngredient: string | null = null;
+
+      for (const recipeItem of product.recipes) {
+        const ing = recipeItem.ingredient;
+        if (!ing || recipeItem.qtyPerServing <= 0) continue;
+        const possiblePortions = Math.floor(ing.stock / recipeItem.qtyPerServing);
+        if (possiblePortions < minPortions) {
+          minPortions = possiblePortions;
+          bottleneckIngredient = possiblePortions === 0
+            ? `${ing.name} habis (stok: ${ing.stock} ${ing.unit})`
+            : `${ing.name} (sisa: ${Math.floor(ing.stock)} ${ing.unit}, cukup ${possiblePortions} porsi)`;
+        }
+      }
+
+      const availablePortions = minPortions === Infinity ? product.stock : Math.max(0, minPortions);
+
+      return {
+        ...product,
+        availablePortions,
+        ingredientShortage: availablePortions === 0 ? bottleneckIngredient : null,
+        isAvailable: availablePortions > 0
+      };
+    });
+
+    // Hanya cache hasil jika Simple Mode
+    // Stok bahan baku real-time — tidak boleh di-cache
+    if (!ingredientTrackingEnabled) {
+      const catalogVer = await cacheService.getTenantCatalogVersion(tenantId);
+      const cacheKey = `cache:catalog:${tenantId}:v${catalogVer}:public`;
+      await cacheService.set(cacheKey, enrichedProducts, 1800);
+    }
+
+    res.json(enrichedProducts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
+
 
 // Get all products (Scoped to active tenant)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {

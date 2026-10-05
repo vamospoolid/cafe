@@ -864,9 +864,15 @@ export const POSView = () => {
 
         {/* Grid Produk Responsive 2-Kolom di HP / Multi-Kolom di Layar Lebar */}
         <div className="product-grid flex-1">
-          {filteredProducts.map(product => {
-            const isSoldOut = Boolean(product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe));
+        {filteredProducts.map(product => {
+            // Sold-out check: gunakan isAvailable dari BOM backend jika tersedia,
+            // fallback ke product.stock untuk Simple Mode
+            const isSoldOut = product.isAvailable === false
+              || Boolean(product.isSoldOut)
+              || (product.isAvailable === undefined && product.availablePortions === undefined && product.stock !== undefined && product.stock <= 0);
             const cartQty = cart.find(item => item.product.id === product.id)?.qty || 0;
+            const isIngredientShortage = product.isAvailable === false && Boolean(product.ingredientShortage);
+            const hasAdvancedStock = product.availablePortions !== undefined;
             return (
               <div 
                 key={product.id} 
@@ -899,12 +905,19 @@ export const POSView = () => {
                     </div>
                   )}
                   
-                  {/* Sold Out Badge Overlay */}
+                  {/* Sold Out / Ingredient Shortage Overlay */}
                   {isSoldOut ? (
                     <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10">
-                      <span className="px-2 py-0.5 bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider rounded-md shadow-md border border-white/20">
-                        HABIS
+                      <span className={`px-2 py-0.5 text-white text-[9px] font-black uppercase tracking-wider rounded-md shadow-md border border-white/20 ${
+                        isIngredientShortage ? 'bg-orange-600' : 'bg-rose-600'
+                      }`}>
+                        {isIngredientShortage ? 'BAHAN HABIS' : 'HABIS'}
                       </span>
+                      {isIngredientShortage && product.ingredientShortage && (
+                        <span className="mt-1.5 text-[9px] text-white/80 leading-tight max-w-[90px] text-center">
+                          {product.ingredientShortage.split('(')[0].trim()}
+                        </span>
+                      )}
                     </div>
                   ) : (
                     <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -924,7 +937,18 @@ export const POSView = () => {
                     </div>
                     <div className="product-stock flex justify-between items-center text-[10px] sm:text-xs text-slate-400 mt-0.5">
                       {isSoldOut ? (
-                        <span className="font-extrabold text-rose-500 uppercase text-[9px]">Stok Habis</span>
+                        <span className={`font-extrabold uppercase text-[9px] ${
+                          isIngredientShortage ? 'text-orange-500' : 'text-rose-500'
+                        }`}>
+                          {isIngredientShortage ? 'Bahan Habis' : 'Stok Habis'}
+                        </span>
+                      ) : hasAdvancedStock ? (
+                        // Advanced Mode: tampilkan kapasitas porsi dari bahan baku
+                        <span className={`font-semibold ${
+                          (product.availablePortions ?? 0) <= 5 ? 'text-amber-500' : 'text-emerald-600'
+                        }`}>
+                          Sisa: {product.availablePortions} porsi
+                        </span>
                       ) : (
                         <span className={`font-semibold ${product.stock <= product.minStock ? 'text-red-500' : 'text-slate-400'}`}>
                           Stok: {product.stock}
