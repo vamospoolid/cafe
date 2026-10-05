@@ -254,7 +254,52 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       },
       orderBy: { id: 'desc' }
     });
-    res.json(products);
+
+    // BOM (Bill of Materials) Availability Calculation untuk POS / Kasir
+    const enrichedProducts = (products as any[]).map((product: any) => {
+      const hasRecipes = Array.isArray(product.recipes) && product.recipes.length > 0;
+      if (!hasRecipes) {
+        return {
+          ...product,
+          hasRecipe: false,
+          availablePortions: Number(product.stock || 0),
+          ingredientShortage: null,
+          isAvailable: Number(product.stock || 0) > 0
+        };
+      }
+
+      // Hitung kapasitas porsi dari stok bahan baku
+      let minPortions = Infinity;
+      let bottleneckIngredient: string | null = null;
+
+      for (const recipeItem of product.recipes) {
+        const ing = recipeItem.ingredient;
+        const requiredQty = Number(recipeItem.qtyPerServing || 0);
+        if (!ing || requiredQty <= 0) continue;
+
+        const ingStock = Number(ing.stock || 0);
+        const possiblePortions = Math.floor(ingStock / requiredQty);
+
+        if (possiblePortions < minPortions) {
+          minPortions = possiblePortions;
+          bottleneckIngredient = possiblePortions <= 0
+            ? `${ing.name} (stok: ${ingStock} ${ing.unit || 'gram'})`
+            : `${ing.name} (sisa ${ingStock} ${ing.unit || 'gram'}, cukup ${possiblePortions} porsi)`;
+        }
+      }
+
+      const availablePortions = minPortions === Infinity ? Number(product.stock || 0) : Math.max(0, minPortions);
+
+      return {
+        ...product,
+        hasRecipe: true,
+        availablePortions,
+        ingredientShortage: availablePortions <= 0 ? bottleneckIngredient : null,
+        isAvailable: availablePortions > 0
+      };
+    });
+
+    res.json(enrichedProducts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }

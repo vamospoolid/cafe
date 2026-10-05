@@ -238,12 +238,41 @@ export const POSView = () => {
 
   const normalizeProduct = (p: any) => {
     const priceVal = Number(p?.sellPrice ?? p?.price ?? 0);
+    const hasRecipes = Array.isArray(p?.recipes) && p.recipes.length > 0;
+    
+    let availablePortions = p?.availablePortions;
+    let ingredientShortage = p?.ingredientShortage;
+    let isAvailable = p?.isAvailable;
+
+    if (hasRecipes && (availablePortions === undefined || isAvailable === undefined)) {
+      let minPortions = Infinity;
+      let bottleneck: string | null = null;
+      for (const r of p.recipes) {
+        const ing = r.ingredient;
+        const reqQty = Number(r.qtyPerServing || 0);
+        if (!ing || reqQty <= 0) continue;
+        const ingStock = Number(ing.stock || 0);
+        const possible = Math.floor(ingStock / reqQty);
+        if (possible < minPortions) {
+          minPortions = possible;
+          bottleneck = possible <= 0 ? `${ing.name} (stok: ${ingStock} ${ing.unit || 'gram'})` : null;
+        }
+      }
+      availablePortions = minPortions === Infinity ? Number(p.stock || 0) : Math.max(0, minPortions);
+      isAvailable = availablePortions > 0;
+      ingredientShortage = availablePortions <= 0 ? bottleneck : null;
+    }
+
     return {
       ...p,
       price: priceVal,
       sellPrice: priceVal,
       stock: Number(p?.stock || 0),
-      minStock: Number(p?.minStock || 0)
+      minStock: Number(p?.minStock || 0),
+      hasRecipe: hasRecipes,
+      availablePortions: availablePortions !== undefined ? availablePortions : Number(p?.stock || 0),
+      ingredientShortage: ingredientShortage !== undefined ? ingredientShortage : null,
+      isAvailable: isAvailable !== undefined ? isAvailable : (Number(p?.stock || 0) > 0)
     };
   };
 
@@ -342,8 +371,16 @@ export const POSView = () => {
       return;
     }
 
-    if (product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe)) {
-      toast(`Menu "${product.name}" sudah habis di dapur!`, 'warning');
+    const isSoldOut = product.isAvailable === false
+      || Boolean(product.isSoldOut)
+      || (product.isAvailable === undefined && product.availablePortions === undefined && product.stock !== undefined && product.stock <= 0);
+
+    if (isSoldOut) {
+      if (product.ingredientShortage) {
+        toast(`Menu "${product.name}" tidak dapat dipesan: Bahan baku ${product.ingredientShortage} habis! Cek stok bahan baku.`, 'warning');
+      } else {
+        toast(`Menu "${product.name}" sudah habis di dapur!`, 'warning');
+      }
       return;
     }
 
@@ -884,10 +921,16 @@ export const POSView = () => {
                       : 'border-slate-200/80 cursor-pointer hover:border-indigo-500'
                 }`} 
                 onClick={() => {
-                  if (!isSoldOut) {
-                    posContext?.triggerHaptic(15);
-                    handleProductClick(product);
+                  posContext?.triggerHaptic(15);
+                  if (isSoldOut) {
+                    if (product.ingredientShortage) {
+                      toast(`Menu "${product.name}" tidak dapat dipesan: Bahan baku ${product.ingredientShortage}!`, 'warning');
+                    } else {
+                      toast(`Menu "${product.name}" saat ini habis di dapur!`, 'warning');
+                    }
+                    return;
                   }
+                  handleProductClick(product);
                 }}
               >
                 <div className="product-img-wrapper bg-slate-50 flex items-center justify-center relative overflow-hidden h-28 sm:h-36 w-full">
