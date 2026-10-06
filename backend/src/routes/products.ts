@@ -138,21 +138,77 @@ router.get('/public', async (req: Request, res: Response) => {
       return res.json(cachedProducts);
     }
 
+    // Cek setting ingredient tracking untuk tenant
+    const settings = await prisma.settings.findFirst({ where: { tenantId } });
+    const ingredientTrackingEnabled = settings?.ingredientTrackingEnabled ?? false;
+
+    // Fast Cache Check — BYPASS jika ingredient tracking aktif agar stok real-time
+    if (!ingredientTrackingEnabled) {
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return res.json(cached);
+    }
+
     const products = await prisma.product.findMany({
       where: whereCondition,
       include: { 
         category: true, 
         subCategory: true,
         productUoms: { orderBy: { conversionRatio: 'asc' } },
-        priceTiers: { orderBy: { minQty: 'asc' } }
+        priceTiers: { orderBy: { minQty: 'asc' } },
+        ...(ingredientTrackingEnabled ? {
+          recipes: {
+            include: {
+              ingredient: {
+                select: { id: true, name: true, unit: true, stock: true, minStock: true }
+              }
+            }
+          }
+        } : {})
       },
       orderBy: { id: 'desc' }
     });
 
-    // Cache result with 30-minute TTL
-    await cacheService.set(cacheKey, products, 1800);
+    // BOM Availability Calculation
+    const enrichedProducts = (products as any[]).map((product: any) => {
+      if (!ingredientTrackingEnabled || !product.recipes || product.recipes.length === 0) {
+        return {
+          ...product,
+          hasRecipe: false,
+          availablePortions: product.stock,
+          ingredientShortage: null,
+          isAvailable: product.stock > 0
+        };
+      }
 
-    res.json(products);
+      let minPortions = Infinity;
+      let bottleneckIngredient: string | null = null;
+      for (const recipeItem of product.recipes) {
+        const ing = recipeItem.ingredient;
+        if (!ing || recipeItem.qtyPerServing <= 0) continue;
+        const possiblePortions = Math.floor(ing.stock / recipeItem.qtyPerServing);
+        if (possiblePortions < minPortions) {
+          minPortions = possiblePortions;
+          bottleneckIngredient = possiblePortions === 0
+            ? `${ing.name} habis (stok: ${ing.stock} ${ing.unit})`
+            : `${ing.name} (sisa: ${Math.floor(ing.stock)} ${ing.unit}, cukup ${possiblePortions} porsi)`;
+        }
+      }
+
+      const availablePortions = minPortions === Infinity ? product.stock : Math.max(0, minPortions);
+      return {
+        ...product,
+        hasRecipe: true,
+        availablePortions,
+        ingredientShortage: availablePortions === 0 ? bottleneckIngredient : null,
+        isAvailable: availablePortions > 0
+      };
+    });
+
+    if (!ingredientTrackingEnabled) {
+      await cacheService.set(cacheKey, enrichedProducts, 1800);
+    }
+
+    res.json(enrichedProducts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
@@ -192,7 +248,47 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       },
       orderBy: { id: 'desc' }
     });
-    res.json(products);
+
+    // BOM Availability Calculation untuk kasir POS
+    const enrichedProducts = (products as any[]).map((product: any) => {
+      const hasRecipes = Array.isArray(product.recipes) && product.recipes.length > 0;
+      if (!hasRecipes) {
+        return {
+          ...product,
+          hasRecipe: false,
+          availablePortions: Number(product.stock || 0),
+          ingredientShortage: null,
+          isAvailable: Number(product.stock || 0) > 0
+        };
+      }
+
+      let minPortions = Infinity;
+      let bottleneckIngredient: string | null = null;
+      for (const recipeItem of product.recipes) {
+        const ing = recipeItem.ingredient;
+        const requiredQty = Number(recipeItem.qtyPerServing || 0);
+        if (!ing || requiredQty <= 0) continue;
+        const ingStock = Number(ing.stock || 0);
+        const possiblePortions = Math.floor(ingStock / requiredQty);
+        if (possiblePortions < minPortions) {
+          minPortions = possiblePortions;
+          bottleneckIngredient = possiblePortions <= 0
+            ? `${ing.name} (stok: ${ingStock} ${ing.unit || 'gram'})`
+            : `${ing.name} (sisa ${ingStock} ${ing.unit || 'gram'}, cukup ${possiblePortions} porsi)`;
+        }
+      }
+
+      const availablePortions = minPortions === Infinity ? Number(product.stock || 0) : Math.max(0, minPortions);
+      return {
+        ...product,
+        hasRecipe: true,
+        availablePortions,
+        ingredientShortage: availablePortions <= 0 ? bottleneckIngredient : null,
+        isAvailable: availablePortions > 0
+      };
+    });
+
+    res.json(enrichedProducts);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }

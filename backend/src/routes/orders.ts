@@ -419,21 +419,26 @@ router.post('/dinein', async (req: Request, res: Response) => {
       });
 
       for (const item of items) {
-        const prod = await tx.product.findUnique({ where: { id: Number(item.productId) } });
-        if (prod && prod.stock < Number(item.qty)) {
-          throw new Error(`Stok menu "${prod.name}" tidak mencukupi untuk Dine-In (tersisa: ${prod.stock}, diminta: ${item.qty})`);
-        }
-        await tx.product.update({
-          where: { id: Number(item.productId) },
-          data: {
-            stock: { decrement: Number(item.qty) }
-          }
-        });
-
         // Kurangi stok bahan baku berdasarkan resep produk jika tersedia
         const recipes = await tx.recipeItem.findMany({
           where: { productId: Number(item.productId) }
         });
+        const hasRecipe = recipes.length > 0;
+
+        // Hanya kurangi product.stock jika TIDAK ada resep bahan baku
+        // Jika ada resep, stok dikendalikan melalui ketersediaan bahan baku dapur (Advanced Mode)
+        if (!hasRecipe) {
+          const prod = await tx.product.findUnique({ where: { id: Number(item.productId) } });
+          if (prod && prod.stock < Number(item.qty)) {
+            throw new Error(`Stok menu "${prod.name}" tidak mencukupi untuk Dine-In (tersisa: ${prod.stock}, diminta: ${item.qty})`);
+          }
+          await tx.product.update({
+            where: { id: Number(item.productId) },
+            data: {
+              stock: { decrement: Number(item.qty) }
+            }
+          });
+        }
         for (const recipe of recipes) {
           const used = recipe.qtyPerServing * Number(item.qty);
           const currentIng = await tx.ingredient.findUnique({ where: { id: recipe.ingredientId }, select: { stock: true, name: true, unit: true } });
@@ -651,18 +656,23 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         });
 
         for (const item of items) {
-          await tx.product.update({
-            where: { id: Number(item.productId) },
-            data: {
-              stock: { decrement: Number(item.qty) }
-            }
+          // Kurangi stok bahan baku berdasarkan resep produk jika tersedia
+          const recipes = await tx.recipeItem.findMany({
+            where: { productId: Number(item.productId) }
           });
+          const hasRecipe = recipes.length > 0;
 
-          // Kurangi stok bahan baku berdasarkan resep produk jika toko mengaktifkan Advanced Mode
-          if (isAdvancedMode) {
-            const recipes = await tx.recipeItem.findMany({
-              where: { productId: Number(item.productId) }
+          // Hanya kurangi product.stock jika TIDAK ada resep bahan baku
+          if (!hasRecipe) {
+            await tx.product.update({
+              where: { id: Number(item.productId) },
+              data: {
+                stock: { decrement: Number(item.qty) }
+              }
             });
+          }
+
+          if (hasRecipe || isAdvancedMode) {
             for (const recipe of recipes) {
               const used = recipe.qtyPerServing * Number(item.qty);
               const currentIng = await tx.ingredient.findFirst({
@@ -1131,13 +1141,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             }
           }
 
-          // Sinkronkan product.stock jika bernilai positif
-          if (product && product.stock > 0) {
-            await tx.product.update({
-              where: { id: Number(item.productId) },
-              data: { stock: { decrement: Math.min(product.stock, Number(item.qty)) } }
-            });
-          }
+          // Advanced Mode: stok dikendalikan 100% oleh bahan baku dapur, jangan kurangi product.stock
         } else {
           // PRODUK TANPA RESEP (Barang Jadi / Retail):
           // Validasi dan pemotongan langsung ke stok fisik produk
