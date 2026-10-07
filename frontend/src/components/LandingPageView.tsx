@@ -78,6 +78,8 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
   const [activeTab, setActiveTab] = useState<'pos' | 'kds' | 'warehouse' | 'analytics'>('pos');
   const [activeSolutionIndex, setActiveSolutionIndex] = useState<number>(0);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [demoTarget, setDemoTarget] = useState<string | null>(null);
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
 
   // Multi-Vertical Landing State
   const getInitialVertical = (): VerticalId => {
@@ -158,42 +160,138 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
     setKdsTickets(prev => prev.map(t => t.id === id ? { ...t, status: nextStatus } : t));
   };
 
-  // 1-Klik Coba Demo Kasir Instan
-  const handleInstantDemoLogin = async () => {
+  // ─── 5 AKUN DEMO RESMI PER INDUSTRI ──────────────────────────────
+  const DEMO_ACCOUNTS = [
+    {
+      id: 'cafe' as VerticalId,
+      name: 'Kopinusa Coffee & Eatery',
+      verticalLabel: 'F&B • Kafe & Resto',
+      badge: 'Artisan Cafe',
+      icon: '☕',
+      username: 'kopinusa',
+      password: '123456',
+      fallbackUser: 'admin',
+      desc: 'Denah tata letak meja interaktif, antrean Kitchen Display (KDS), dan auto-deduct resep bahan baku (BOM).',
+      features: ['Kitchen Display (KDS)', 'Layout Denah Meja', 'Resep Bahan Baku (BOM)', 'QRIS Dinamis'],
+      btnGradient: 'from-amber-600 to-orange-600',
+      badgeBg: 'bg-amber-50 border-amber-200 text-amber-800'
+    },
+    {
+      id: 'bengkel' as VerticalId,
+      name: 'Jakarta Motor Service & Parts',
+      verticalLabel: 'Otomotif • Bengkel Motor & Mobil',
+      badge: 'Bengkel Servis',
+      icon: '🔧',
+      username: 'jakartamotor',
+      password: '123456',
+      fallbackUser: undefined,
+      desc: 'Surat Perintah Kerja (SPK), antrean stall montir, komisi mekanik otomatis, dan riwayat nopol kendaraan.',
+      features: ['SPK / Work Order Digital', 'Komisi Mekanik Otomatis', 'Riwayat Servis Nopol', '3-Tier Harga (Umum/Mitra)'],
+      btnGradient: 'from-purple-600 to-indigo-600',
+      badgeBg: 'bg-purple-50 border-purple-200 text-purple-800'
+    },
+    {
+      id: 'retail' as VerticalId,
+      name: 'Sabar Jaya Grosir & Sembako',
+      verticalLabel: 'Retail • Grosir & Kelontong',
+      badge: 'Grosir & Mart',
+      icon: '🛒',
+      username: 'sabarjaya',
+      password: '123456',
+      fallbackUser: undefined,
+      desc: 'Kasir barcode keyboard-first cepat, konversi multi-satuan bertingkat (Dus/Pak/Pcs), dan buku piutang bon tempo.',
+      features: ['Barcode Scanner Cepat', 'Multi-Satuan UOM Bertingkat', 'Harga Grosir vs Eceran', 'Buku Piutang Bon Tempo'],
+      btnGradient: 'from-blue-600 to-cyan-600',
+      badgeBg: 'bg-blue-50 border-blue-200 text-blue-800'
+    },
+    {
+      id: 'laundry' as VerticalId,
+      name: 'FreshClean Laundry & Care',
+      verticalLabel: 'Jasa • Laundry Kiloan & Satuan',
+      badge: 'Laundry Kiloan',
+      icon: '🧺',
+      username: 'laundry1',
+      password: '123456',
+      fallbackUser: undefined,
+      desc: 'Input timbangan desimal kg, papan kanban cucian 5 tahap, manajemen nomor rak simpan, dan WhatsApp notifikasi.',
+      features: ['Timbangan Desimal (Kg)', 'Kanban Status Cucian 5 Tahap', 'Nomor Rak Simpan', 'WhatsApp Notif Selesai'],
+      btnGradient: 'from-cyan-600 to-teal-600',
+      badgeBg: 'bg-cyan-50 border-cyan-200 text-cyan-800'
+    },
+    {
+      id: 'rental' as VerticalId,
+      name: 'Sanggar Busana Adat Bugis',
+      verticalLabel: 'Sewa • Rental Baju Bodo & Jas Tutup',
+      badge: 'Sewa Busana',
+      icon: '👘',
+      username: 'sewabajubodo',
+      password: '123456',
+      fallbackUser: 'owner_rental',
+      desc: 'Kalender booking sewa, hitung denda telat otomatis, uang jaminan deposit, dan paket rias adat komplit.',
+      features: ['Jadwal Pinjam & Kembali', 'Denda Keterlambatan Otomatis', 'Uang Jaminan Deposit', 'Fitting & Paket Rias Adat'],
+      btnGradient: 'from-rose-600 to-pink-600',
+      badgeBg: 'bg-rose-50 border-rose-200 text-rose-800'
+    },
+    {
+      id: 'admin' as any,
+      name: 'Platform SuperAdmin Console',
+      verticalLabel: 'Developer & Platform Control Plane',
+      badge: 'SuperAdmin SaaS',
+      icon: '👑',
+      username: 'admin',
+      password: 'admin123',
+      fallbackUser: undefined,
+      desc: 'Master console pengelola SaaS untuk monitoring seluruh tenant, kontrol lisensi paket, dan audit log platform.',
+      features: ['Monitoring Seluruh Tenant', 'Kelola Lisensi & Paket', 'Audit Security & IDOR Guard', 'Tenant Provisioning'],
+      btnGradient: 'from-slate-800 to-slate-950',
+      badgeBg: 'bg-slate-100 border-slate-300 text-slate-800'
+    }
+  ];
+
+  const executeDemoLogin = async (username: string, password: string, displayName?: string, fallbackUser?: string) => {
     setDemoLoading(true);
+    setDemoTarget(username);
     try {
-      const res = await fetch('/api/auth/login', {
+      let res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'admin', password: 'password' })
+        body: JSON.stringify({ username, password })
       });
-      const data = await res.json();
+      let data = await res.json();
+
+      if (!res.ok && fallbackUser) {
+        res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: fallbackUser, password })
+        });
+        data = await res.json();
+      }
+
       if (res.ok && data.token && posContext?.login) {
         posContext.login(data.user, data.token);
-        toast('🎉 Masuk ke mode demo kasir kafe berhasil!', 'success');
-        window.location.href = '/pos';
+        toast(`🎉 Berhasil masuk ke akun Demo ${displayName || username}! Menyiapkan kasir...`, 'success');
+        setIsDemoModalOpen(false);
+        if (data.user?.role === 'SUPERADMIN') {
+          window.location.href = '/platform-admin';
+        } else {
+          window.location.href = '/pos';
+        }
         return;
       }
 
-      const resFallback = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'admin', password: '123456' })
-      });
-      const dataFallback = await resFallback.json();
-      if (resFallback.ok && dataFallback.token && posContext?.login) {
-        posContext.login(dataFallback.user, dataFallback.token);
-        toast('🎉 Masuk ke mode demo kasir kafe berhasil!', 'success');
-        window.location.href = '/pos';
-        return;
-      }
-
-      onNavigateLogin();
+      toast(data.error || 'Gagal masuk ke akun demo, silakan coba lagi.', 'error');
     } catch (err) {
-      onNavigateLogin();
+      toast('Terjadi gangguan koneksi saat memuat akun demo.', 'error');
     } finally {
       setDemoLoading(false);
+      setDemoTarget(null);
     }
+  };
+
+  const handleLaunchCurrentVerticalDemo = () => {
+    const acc = DEMO_ACCOUNTS.find(a => a.id === activeVertical) || DEMO_ACCOUNTS[0];
+    executeDemoLogin(acc.username, acc.password, acc.name, acc.fallbackUser);
   };
 
   const handleOpenRegisterWithPlan = (planCode: string) => {
@@ -307,32 +405,62 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={onNavigateLogin}
-              className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100 transition-all"
-            >
-              Masuk
-            </button>
-            
-            {/* 1-Click Demo Button */}
-            <button
-              onClick={handleInstantDemoLogin}
-              disabled={demoLoading}
-              className="hidden sm:flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-all active:scale-95 disabled:opacity-70"
-              title="Coba demo kasir langsung tanpa registrasi"
-            >
-              <Zap size={14} className="text-amber-500 fill-amber-500" />
-              <span>{demoLoading ? 'Membuka...' : 'Coba Demo Kasir'}</span>
-            </button>
+            {posContext?.token && posContext?.user ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  {posContext.user.name} ({posContext.user.role})
+                </span>
+                <button
+                  onClick={() => { window.location.href = '/pos'; }}
+                  className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all"
+                >
+                  Buka Kasir POS &rarr;
+                </button>
+                <button
+                  onClick={() => { window.location.href = '/dashboard'; }}
+                  className="hidden sm:inline-flex px-3 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 transition-all"
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => posContext.logout()}
+                  className="px-2.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-all"
+                  title="Keluar dari sesi saat ini"
+                >
+                  Keluar
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={onNavigateLogin}
+                  className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 hover:text-indigo-600 hover:bg-slate-100 transition-all"
+                >
+                  Masuk
+                </button>
+                
+                {/* 1-Click Demo Button */}
+                <button
+                  onClick={() => setIsDemoModalOpen(true)}
+                  disabled={demoLoading}
+                  className="hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-all active:scale-95 disabled:opacity-70"
+                  title="Coba demo akun 5 vertikal industri"
+                >
+                  <Zap size={14} className="text-amber-500 fill-amber-500" />
+                  <span>Akun Demo (5 Industri)</span>
+                </button>
 
-            {/* Main CTA */}
-            <button
-              onClick={() => setIsRegisterOpen(true)}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all active:scale-95"
-            >
-              <span>Daftar Gratis</span>
-              <ArrowRight size={14} />
-            </button>
+                {/* Main CTA */}
+                <button
+                  onClick={() => handleOpenRegisterWithVertical(currentVertical.wizardType)}
+                  className="flex items-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                >
+                  <span>Daftar Gratis</span>
+                  <ArrowRight size={14} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -424,12 +552,24 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                 </button>
 
                 <button
-                  onClick={handleInstantDemoLogin}
+                  onClick={handleLaunchCurrentVerticalDemo}
                   disabled={demoLoading}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-sm sm:text-base font-bold text-white bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md shadow-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70"
                 >
                   <Zap size={18} className="text-amber-400 fill-amber-400" />
-                  <span>{demoLoading ? 'Menyiapkan...' : '⚡ Coba Demo Kasir (1-Klik)'}</span>
+                  <span>{demoLoading ? `Menyiapkan ${currentVertical.label}...` : `⚡ Coba Demo ${currentVertical.label} (1-Klik)`}</span>
+                </button>
+              </div>
+
+              {/* Quick Link to open all 5 demo accounts modal */}
+              <div className="mb-8 text-center lg:text-left">
+                <button
+                  type="button"
+                  onClick={() => setIsDemoModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-xs text-indigo-200 hover:text-white underline font-semibold transition-colors"
+                >
+                  <Sparkles size={13} className="text-amber-300" />
+                  <span>Lihat & coba 5 akun demo industri lainnya (Bengkel, Retail, Laundry, Rental, Admin) &rarr;</span>
                 </button>
               </div>
 
@@ -1325,12 +1465,12 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
               Mulai Uji Coba Gratis 14 Hari
             </button>
             <button
-              onClick={handleInstantDemoLogin}
+              onClick={() => setIsDemoModalOpen(true)}
               disabled={demoLoading}
               className="w-full sm:w-auto px-6 py-4 bg-indigo-800/80 hover:bg-indigo-800 text-white font-bold text-sm sm:text-base rounded-2xl border border-indigo-400/40 transition-all flex items-center justify-center gap-2"
             >
               <Zap size={18} className="text-amber-300 fill-amber-300" />
-              <span>{demoLoading ? 'Menyiapkan...' : 'Coba Demo Kasir (1-Klik)'}</span>
+              <span>⚡ Coba Akun Demo (5 Industri)</span>
             </button>
           </div>
         </div>
@@ -1344,7 +1484,7 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
               C
             </div>
             <span className="font-bold text-slate-900">Codenusa POS</span>
-            <span>&bull; Ekosistem SaaS & POS Bisnis Kuliner Indonesia</span>
+            <span>&bull; Platform POS & Operasional Multi-UMKM Indonesia (Kafe, Bengkel, Retail, Laundry, Rental)</span>
           </div>
           <div>
             &copy; 2026 Codenusa POS. Seluruh hak cipta dilindungi undang-undang.
@@ -1377,6 +1517,139 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
             >
               Tutup & Selesaikan Transaksi
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 5-VERTICAL 1-CLICK DEMO ACCOUNTS MODAL ───────────────────────── */}
+      {isDemoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-4 animate-fade-in overflow-y-auto">
+          <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden my-6">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-6 sm:px-8 py-6 relative border-b border-slate-800">
+              <button
+                onClick={() => setIsDemoModalOpen(false)}
+                className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+                title="Tutup Modal"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-amber-400 mb-1">
+                <Sparkles size={14} /> Akses Langsung Tanpa Registrasi
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                Pilih Akun Demo Industri (1-Klik Masuk)
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
+                Coba langsung sistem operasional kasir, katalog produk, dan laporan analitik real-time yang sudah terisi sampel data lengkap untuk masing-masing bidang usaha.
+              </p>
+            </div>
+
+            {/* Modal Body - 6 Cards Grid */}
+            <div className="p-6 sm:p-8 max-h-[75vh] overflow-y-auto bg-slate-50/50">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {DEMO_ACCOUNTS.map((acc) => {
+                  const isLoadingThis = demoLoading && demoTarget === acc.username;
+                  const isCurrentActive = acc.id === activeVertical;
+                  return (
+                    <div 
+                      key={acc.id}
+                      className={`relative bg-white rounded-2xl p-5 border transition-all duration-200 flex flex-col justify-between hover:shadow-lg ${
+                        isCurrentActive 
+                          ? 'border-indigo-400 shadow-md ring-2 ring-indigo-500/20' 
+                          : 'border-slate-200/90 hover:border-slate-300'
+                      }`}
+                    >
+                      {/* Top Row: Icon & Badge */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-3xl p-2 rounded-xl bg-slate-100/80 shadow-inner flex items-center justify-center">
+                            {acc.icon}
+                          </span>
+                          <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${acc.badgeBg}`}>
+                            {acc.badge}
+                          </span>
+                        </div>
+
+                        {/* Title & Category */}
+                        <div className="mb-2">
+                          <h3 className="font-extrabold text-sm sm:text-base text-slate-900 leading-snug">
+                            {acc.name}
+                          </h3>
+                          <div className="text-[11px] font-bold text-indigo-600 mt-0.5">
+                            {acc.verticalLabel}
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-slate-500 mb-3.5 leading-relaxed">
+                          {acc.desc}
+                        </p>
+
+                        {/* Feature Highlights */}
+                        <div className="space-y-1.5 mb-4 pt-3 border-t border-slate-100">
+                          {acc.features.map((f, i) => (
+                            <div key={i} className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+                              <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                              <span className="truncate">{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Bottom Credentials & CTA Button */}
+                      <div className="pt-3 border-t border-slate-100">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-2.5">
+                          <span>User: <strong className="text-slate-700">{acc.username}</strong></span>
+                          <span>PIN: <strong className="text-slate-700">{acc.password}</strong></span>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={demoLoading}
+                          onClick={() => executeDemoLogin(acc.username, acc.password, acc.name, acc.fallbackUser)}
+                          className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-70 bg-gradient-to-r ${acc.btnGradient}`}
+                        >
+                          {isLoadingThis ? (
+                            <>
+                              <RefreshCw size={13} className="animate-spin" />
+                              <span>Menyiapkan Sesi...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Zap size={14} className="fill-white" />
+                              <span>Buka Demo {acc.badge} &rarr;</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Info Banner */}
+              <div className="mt-6 p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                <div className="text-xs text-indigo-900">
+                  <span className="font-extrabold">Ingin mendaftarkan toko Anda sendiri dengan nama & logo khusus?</span>
+                  <div className="text-[11px] text-indigo-700 mt-0.5">Uji coba gratis 14 hari penuh tanpa kartu kredit. Subdomain bisnis langsung aktif.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDemoModalOpen(false);
+                    setIsRegisterOpen(true);
+                  }}
+                  className="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+                >
+                  Daftar Toko Baru Sekarang &rarr;
+                </button>
+              </div>
+
+            </div>
+
           </div>
         </div>
       )}

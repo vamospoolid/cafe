@@ -602,6 +602,9 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
     const result = await prisma.$transaction(async (tx) => {
+      // Pastikan RLS bypass untuk provisioning tenant baru
+      await tx.$executeRawUnsafe("SET LOCAL app.current_tenant_id = 'PLATFORM_SUPERADMIN';").catch(() => {});
+
       // a. Buat Tenant
       const tenant = await tx.tenant.create({
         data: {

@@ -123,8 +123,14 @@ const AppRoutes = () => {
   const isTenantSubdomain = hostname.endsWith('.codenusa.id') && hostname !== 'codenusa.id' && hostname !== 'www.codenusa.id';
   const isPlatformLandingDomain = !isTenantSubdomain;
 
-  // Rute publik landing page SaaS (bisa diakses langsung kapan saja via /landing atau /landing-page)
-  const isLandingRoute = location.pathname === '/landing' || location.pathname === '/landing-page';
+  // Rute publik landing page SaaS:
+  // Root domain codenusa.id & www.codenusa.id pada path '/' SELALU membuka LandingPageView,
+  // tanpa pernah otomatis redirect ke /login ataupun ke /dashboard.
+  const isLandingRoute = 
+    location.pathname === '/landing' || 
+    location.pathname === '/landing-page' ||
+    (isPlatformLandingDomain && location.pathname === '/');
+
   if (isLandingRoute) {
     return (
       <Suspense fallback={<RouteSuspenseFallback />}>

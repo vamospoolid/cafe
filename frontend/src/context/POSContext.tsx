@@ -425,9 +425,12 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem('pos_business_type');
     localStorage.removeItem('pos_active_shift');
 
-    // 5. Bersihkan Session Storage dan arahkan browser langsung ke /login
+    // 5. Bersihkan Session Storage dan arahkan browser:
+    // Jika di root domain codenusa.id arahkan ke Landing Page (/), jika di subdomain tenant arahkan ke /login
     sessionStorage.clear();
-    window.location.href = '/login';
+    const hostname = window.location.hostname.toLowerCase();
+    const isTenantSubdomain = hostname.endsWith('.codenusa.id') && hostname !== 'codenusa.id' && hostname !== 'www.codenusa.id';
+    window.location.href = isTenantSubdomain ? '/login' : '/';
   };
 
   // Dynamic GUI Morphing: Terapkan warna brand tenant secara dinamis
