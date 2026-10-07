@@ -849,6 +849,21 @@ router.get('/reports/analytics', authenticateToken, async (req: AuthRequest, res
     const servicePopularity: Record<string, { count: number; totalQty: number; revenue: number; unitType: string }> = {};
     const perfumeCount: Record<string, number> = {};
 
+    const speedBreakdown: Record<string, { count: number; revenue: number; surcharge: number }> = {
+      REGULAR: { count: 0, revenue: 0, surcharge: 0 },
+      KILAT_24H: { count: 0, revenue: 0, surcharge: 0 },
+      EXPRESS_6H: { count: 0, revenue: 0, surcharge: 0 }
+    };
+    const paymentMethods: Record<string, { count: number; total: number }> = {};
+    const pipelineStatus: Record<string, number> = {
+      RECEIVED: 0,
+      WASHING: 0,
+      DRYING: 0,
+      IRONING: 0,
+      READY: 0,
+      COMPLETED: 0
+    };
+
     let onTimeCount = 0;
     let lateCount = 0;
 
@@ -860,6 +875,23 @@ router.get('/reports/analytics', authenticateToken, async (req: AuthRequest, res
 
       if (ord.perfumeVariant) {
         perfumeCount[ord.perfumeVariant] = (perfumeCount[ord.perfumeVariant] || 0) + 1;
+      }
+
+      const sp = (ord.serviceSpeed || 'REGULAR') as string;
+      if (speedBreakdown[sp]) {
+        speedBreakdown[sp].count++;
+        speedBreakdown[sp].revenue += ord.totalAmount || 0;
+        speedBreakdown[sp].surcharge += ord.speedSurcharge || 0;
+      }
+
+      const pm = ord.paymentMethod || 'CASH';
+      if (!paymentMethods[pm]) paymentMethods[pm] = { count: 0, total: 0 };
+      paymentMethods[pm].count++;
+      paymentMethods[pm].total += ord.paidAmount || 0;
+
+      const st = ord.status || 'RECEIVED';
+      if (pipelineStatus[st] !== undefined) {
+        pipelineStatus[st]++;
       }
 
       // Hitung On-Time SLA
@@ -1033,6 +1065,28 @@ router.get('/reports/analytics', authenticateToken, async (req: AuthRequest, res
     const estimatedDetergentNeededLiters = parseFloat(((totalKg * 25) / 1000).toFixed(1));
     const estimatedPerfumeNeededLiters = parseFloat(((totalKg * 15) / 1000).toFixed(1));
 
+    // 6. CASHFLOW & PETTY CASH OPERASIONAL LAUNDRY
+    const cashFlows = await prisma.cashFlow.findMany({
+      where: {
+        tenantId,
+        date: { gte: periodStart, lte: periodEnd },
+        status: { not: 'REJECTED' }
+      }
+    });
+
+    let totalExpense = 0;
+    const expenseCategories: Record<string, number> = {};
+    for (const cf of cashFlows) {
+      if (cf.type === 'Pengeluaran') {
+        totalExpense += cf.amount;
+        const cat = cf.category || 'Operasional Laundry';
+        expenseCategories[cat] = (expenseCategories[cat] || 0) + cf.amount;
+      }
+    }
+
+    const netOperatingProfit = totalRevenue - totalExpense;
+    const netProfitMargin = totalRevenue > 0 ? Math.round((netOperatingProfit / totalRevenue) * 100) : 0;
+
     // Urutkan layanan terpopuler
     const topServices = Object.entries(servicePopularity)
       .map(([name, data]) => ({ name, ...data }))
@@ -1062,8 +1116,18 @@ router.get('/reports/analytics', authenticateToken, async (req: AuthRequest, res
         satuanRevenue,
         kiloanPercentage: totalSubtotal > 0 ? Math.round((kiloanRevenue / totalSubtotal) * 100) : 0,
         satuanPercentage: totalSubtotal > 0 ? Math.round((satuanRevenue / totalSubtotal) * 100) : 0,
-        onTimeRate
+        onTimeRate,
+        totalExpense,
+        netOperatingProfit,
+        netProfitMargin
       },
+      expenses: {
+        totalExpense,
+        categories: Object.entries(expenseCategories).map(([category, amount]) => ({ category, amount }))
+      },
+      speedBreakdown,
+      paymentMethods: Object.entries(paymentMethods).map(([method, data]) => ({ method, ...data })),
+      pipelineStatus,
       agingRack: {
         totalValueInRack,
         totalUnpaidInRack,

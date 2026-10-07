@@ -64,6 +64,25 @@ export const PlatformAdminLayout: React.FC<PlatformAdminLayoutProps> = ({ childr
                   user?.username === 'admin' ||
                   user?.username === 'ahmad';
 
+  const [devLoginLoading, setDevLoginLoading] = useState(false);
+  const handleDevQuickLogin = async () => {
+    setDevLoginLoading(true);
+    try {
+      const res = await fetch('/api/platform-admin/local-dev/quick-login', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.token && data.user) {
+        posContext?.login(data.user, data.token);
+        window.location.reload();
+      } else {
+        alert(data.error || 'Gagal login developer');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Gagal koneksi ke server lokal');
+    } finally {
+      setDevLoginLoading(false);
+    }
+  };
+
   // 1. Jika belum login sama sekali
   if (!token || !user) {
     return (
@@ -77,16 +96,24 @@ export const PlatformAdminLayout: React.FC<PlatformAdminLayoutProps> = ({ childr
         </p>
         <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
           <button
+            onClick={handleDevQuickLogin}
+            disabled={devLoginLoading}
+            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg active:scale-95 disabled:opacity-50"
+          >
+            <Radio size={16} className="text-slate-950 animate-pulse" />
+            <span>{devLoginLoading ? 'Menghubungkan...' : '⚡ 1-Click Dev Superadmin Login (Lokal)'}</span>
+          </button>
+          <button
             onClick={() => navigate('/login')}
             className="w-full sm:w-auto px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-95"
           >
-            <LogOut size={16} /> Masuk ke Halaman Login
+            <LogOut size={16} /> Halaman Login
           </button>
           <button
             onClick={() => navigate('/')}
             className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
           >
-            <ArrowLeft size={16} /> Ke Halaman Beranda
+            <ArrowLeft size={16} /> Beranda
           </button>
         </div>
       </div>
@@ -106,10 +133,18 @@ export const PlatformAdminLayout: React.FC<PlatformAdminLayoutProps> = ({ childr
         </p>
         <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
           <button
+            onClick={handleDevQuickLogin}
+            disabled={devLoginLoading}
+            className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg active:scale-95 disabled:opacity-50"
+          >
+            <Radio size={16} className="text-slate-950 animate-pulse" />
+            <span>{devLoginLoading ? 'Beralih...' : '⚡ Beralih ke Dev SuperAdmin (1-Click)'}</span>
+          </button>
+          <button
             onClick={() => navigate('/pos')}
             className="w-full sm:w-auto px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer transition-all border-2 border-indigo-400 shadow-md active:scale-95"
           >
-            <ArrowLeft size={16} /> Kembali ke Aplikasi POS
+            <ArrowLeft size={16} /> Kembali ke POS
           </button>
           <button
             onClick={() => {
@@ -118,7 +153,7 @@ export const PlatformAdminLayout: React.FC<PlatformAdminLayoutProps> = ({ childr
             }}
             className="w-full sm:w-auto px-5 py-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
           >
-            <LogOut size={16} /> Ganti Akun SuperAdmin
+            <LogOut size={16} /> Logout
           </button>
         </div>
       </div>

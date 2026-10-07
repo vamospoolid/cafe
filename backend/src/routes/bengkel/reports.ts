@@ -15,24 +15,37 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
 
     const { startDate, endDate } = req.query;
 
-    let dateFilter: any = {};
+    let workOrderDateFilter: any = {};
+    let standardDateFilter: any = {};
+
     if (startDate && endDate) {
       const start = new Date(`${startDate}T00:00:00.000Z`);
       const end = new Date(`${endDate}T23:59:59.999Z`);
-      dateFilter = {
-        createdAt: {
-          gte: start,
-          lte: end
-        }
+      workOrderDateFilter = {
+        OR: [
+          { deliveredAt: { gte: start, lte: end } },
+          { completedAt: { gte: start, lte: end } },
+          { updatedAt: { gte: start, lte: end } },
+          { createdAt: { gte: start, lte: end } }
+        ]
+      };
+      standardDateFilter = {
+        createdAt: { gte: start, lte: end }
       };
     } else {
       // Default: 30 hari terakhir
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      dateFilter = {
-        createdAt: {
-          gte: thirtyDaysAgo
-        }
+      workOrderDateFilter = {
+        OR: [
+          { deliveredAt: { gte: thirtyDaysAgo } },
+          { completedAt: { gte: thirtyDaysAgo } },
+          { updatedAt: { gte: thirtyDaysAgo } },
+          { createdAt: { gte: thirtyDaysAgo } }
+        ]
+      };
+      standardDateFilter = {
+        createdAt: { gte: thirtyDaysAgo }
       };
     }
 
@@ -41,7 +54,7 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       where: {
         tenantId,
         status: { in: ['PAID', 'DELIVERED'] },
-        ...dateFilter
+        ...workOrderDateFilter
       },
       include: {
         services: true,
@@ -175,8 +188,9 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
     }>();
 
     paidWorkOrders.forEach(wo => {
-      const dateStr = wo.createdAt.toISOString().split('T')[0];
-      const d = new Date(wo.createdAt);
+      const txDate = wo.deliveredAt || wo.completedAt || wo.updatedAt || wo.createdAt;
+      const dateStr = txDate.toISOString().split('T')[0];
+      const d = new Date(txDate);
       const dateFormatted = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
       const jasa = wo.totalServices || 0;
       const parts = wo.totalParts || 0;
@@ -265,7 +279,7 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
 
     // 5. Invoices & B2B Status
     const invoices = await prisma.workOrderInvoice.findMany({
-      where: { tenantId, ...dateFilter }
+      where: { tenantId, ...standardDateFilter }
     });
 
     const invoiceStats = {
@@ -296,7 +310,12 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       where: {
         tenantId,
         status: { in: ['PAID', 'DELIVERED'] },
-        createdAt: { gte: prevStart, lte: prevEnd }
+        OR: [
+          { deliveredAt: { gte: prevStart, lte: prevEnd } },
+          { completedAt: { gte: prevStart, lte: prevEnd } },
+          { updatedAt: { gte: prevStart, lte: prevEnd } },
+          { createdAt: { gte: prevStart, lte: prevEnd } }
+        ]
       },
       select: { totalServices: true, totalParts: true, discount: true }
     });
@@ -394,6 +413,48 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       .slice(0, 15);
 
     const totalTiedUpCapital = deadStockParts.reduce((sum, p) => sum + p.tiedUpCapital, 0);
+
+    // ─── 8b. Data Barang Kosong (Out-of-Stock = 0) ───
+    const outOfStockParts = await prisma.product.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        stock: { lte: 0 }
+      },
+      select: {
+        id: true,
+        name: true,
+        brand: true,
+        vehicleType: true,
+        buyPrice: true,
+        sellPrice: true,
+        minStock: true,
+        storageLocation: true
+      },
+      orderBy: { name: 'asc' },
+      take: 20
+    });
+
+    // ─── 8c. Catatan Permintaan Sparepart / Defecta (Lost Sales Alert) ───
+    const partRequests = await prisma.partRequest.findMany({
+      where: {
+        tenantId,
+        ...standardDateFilter
+      },
+      include: {
+        product: { select: { id: true, name: true, stock: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const partRequestsSummary = {
+      total: partRequests.length,
+      pending: partRequests.filter(pr => pr.status === 'PENDING').length,
+      inPurchaseList: partRequests.filter(pr => pr.status === 'IN_PURCHASE_LIST').length,
+      purchased: partRequests.filter(pr => pr.status === 'PURCHASED').length,
+      cancelled: partRequests.filter(pr => pr.status === 'CANCELLED').length,
+      recentRequests: partRequests.slice(0, 15)
+    };
 
     // ─── 9. CRM Reminder Servis Berkala & Unit Jatuh Tempo ───
     const fortyFiveDaysAgo = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
@@ -495,7 +556,9 @@ router.get('/summary', async (req: AuthRequest, res: Response) => {
       vehicleBreakdown,
       deadStockParts,
       totalTiedUpCapital,
-      serviceDueReminders
+      serviceDueReminders,
+      outOfStockParts,
+      partRequestsSummary
     });
   } catch (error: any) {
     console.error('Error fetching bengkel reports:', error);
@@ -850,6 +913,7 @@ router.get('/mechanic-today', async (req: AuthRequest, res: Response) => {
         ? Math.round(omzetJasa * m.commissionRate) : 0;
 
       return {
+        id: m.id || m.userId,
         userId: m.userId,
         name: m.user?.name || m.user?.username || 'Mekanik',
         spkCount,

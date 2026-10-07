@@ -29,7 +29,7 @@ export const enrichOrderWithJoinedTables = async (order: any, txPrisma: any = pr
 
 // Helper: Process loyalty points earning
 const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: number, orderNumber: string, tenantId?: string) => {
-  const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+  const settings = tenantId ? await tx.settings.findFirst({ where: { tenantId } }) : null;
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
   if (!loyaltyEnabled) return;
 
@@ -39,7 +39,9 @@ const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: n
   const silverMultiplier = settings ? settings.loyaltySilverMultiplier : 1.2;
   const goldMultiplier = settings ? settings.loyaltyGoldMultiplier : 1.5;
 
-  const customer = await tx.customer.findUnique({ where: { id: customerId } });
+  const customer = await tx.customer.findFirst({
+    where: tenantId ? { id: customerId, tenantId } : { id: customerId }
+  });
   if (!customer) return;
 
   let multiplier = 1.0;
@@ -82,11 +84,13 @@ const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: n
 
 // Helper: Process loyalty points redemption
 const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRedeem: number, orderNumber: string, tenantId?: string) => {
-  const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+  const settings = tenantId ? await tx.settings.findFirst({ where: { tenantId } }) : null;
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
   if (!loyaltyEnabled) return;
 
-  const customer = await tx.customer.findUnique({ where: { id: customerId } });
+  const customer = await tx.customer.findFirst({
+    where: tenantId ? { id: customerId, tenantId } : { id: customerId }
+  });
   if (!customer) return;
 
   const pointsUsed = Math.min(customer.points, pointsToRedeem);
@@ -127,10 +131,9 @@ export const generateOrderNumber = async (tenantId?: string | null, tzOffset?: n
 
   // Query hanya order milik tenant ini hari ini untuk sequence yang benar
   const lastOrder = await prisma.order.findFirst({
-    where: {
-      orderNumber: { startsWith: prefix },
-      ...(tenantId ? { tenantId } : {})
-    },
+    where: tenantId
+      ? { orderNumber: { startsWith: prefix }, tenantId }
+      : { orderNumber: { startsWith: prefix } },
     orderBy: { id: 'desc' }
   });
 
@@ -291,8 +294,10 @@ router.get('/:id', authenticateToken, async (req: Request, res: Response) => {
 
     // Jika id bukan angka murni (misal UUID RentalOrder)
     if (isNaN(Number(id))) {
+      const rentalWhere: any = { id: String(id) };
+      if (tenantId) rentalWhere.tenantId = tenantId;
       const rentalOrder = await prisma.rentalOrder.findFirst({
-        where: { id: String(id), ...(tenantId ? { tenantId } : {}) },
+        where: rentalWhere,
         include: { items: true, customer: true, outlet: true }
       });
       if (rentalOrder) {
@@ -604,10 +609,9 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
       // 1. Cek apakah sudah disinkronisasikan sebelumnya
       const existing = await prisma.order.findFirst({
-        where: { 
-          offlineId,
-          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
-        },
+        where: tenantId
+          ? { offlineId, tenantId }
+          : { offlineId },
         include: { items: true }
       });
 
@@ -665,7 +669,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         const datePaid = paidAt ? new Date(paidAt) : (isPaid ? new Date() : null);
 
         // Kurangi Stok Produk & Bahan Baku (Advanced Mode)
-        const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+        const settings = tenantId ? await tx.settings.findFirst({ where: { tenantId } }) : null;
         const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
         const hasTable = Boolean(tableId);
         const shouldAutoServe = !hasTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
@@ -774,26 +778,29 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
         // Rekalkulasi data shift jika order ini disinkronkan ke dalam shift yang sudah berstatus Closed
         if (isPaid && datePaid) {
+          const closedShiftWhere: any = {
+            userId: userId,
+            status: 'Closed',
+            waktuBuka: { lte: datePaid },
+            waktuTutup: { gte: datePaid }
+          };
+          if (tenantId) closedShiftWhere.tenantId = tenantId;
           const closedShift = await tx.shift.findFirst({
-            where: {
-              userId: userId,
-              status: 'Closed',
-              ...(tenantId ? { tenantId } : {}),
-              waktuBuka: { lte: datePaid },
-              waktuTutup: { gte: datePaid }
-            }
+            where: closedShiftWhere
           });
 
           if (closedShift) {
             // Ambil semua order paid yang masuk ke rentang shift tertutup tersebut
+            const shiftOrderWhere: any = {
+              status: 'Paid',
+              OR: [
+                { paidAt: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! } },
+                { paidAt: null, createdAt: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! } }
+              ]
+            };
+            if (closedShift.tenantId || tenantId) shiftOrderWhere.tenantId = closedShift.tenantId || tenantId;
             const shiftOrders = await tx.order.findMany({
-              where: {
-                status: 'Paid',
-                OR: [
-                  { paidAt: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! } },
-                  { paidAt: null, createdAt: { gte: closedShift.waktuBuka, lte: closedShift.waktuTutup! } }
-                ]
-              }
+              where: shiftOrderWhere
             });
 
             const getCashPortion = (pm: string | null, tot: number) => {
@@ -886,10 +893,10 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
       
       // Auto-Print KDS & Receipt
       try {
-        const settings = await prisma.settings.findFirst({ where: result.tenantId ? { tenantId: result.tenantId } : undefined });
+        const settings = result.tenantId ? await prisma.settings.findFirst({ where: { tenantId: result.tenantId } }) : null;
         if (settings) {
-          const fullOrder = await prisma.order.findUnique({
-            where: { id: result.id },
+          const fullOrder = await prisma.order.findFirst({
+            where: result.tenantId ? { id: result.id, tenantId: result.tenantId } : { id: result.id },
             include: { items: { include: { product: { include: { category: true } } } } }
           });
           if (fullOrder) {
@@ -939,8 +946,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     // Ambil userId & tenantId dari token middleware
     const user = (req as any).user;
     const userId = user.id;
-    const tenant = await prisma.tenant.findFirst();
-    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || (tenant ? tenant.id : null);
+    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+    if (!tenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     let outletId = user?.outletId || null;
 
     if (!items || items.length === 0) {
@@ -950,10 +959,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     // Proteksi Shift Kasir Wajib Aktif untuk transaksi langsung POS yang berstatus Lunas
     if (isPaid) {
       const activeShift = await prisma.shift.findFirst({
-        where: {
-          status: { in: ['Open', 'OPEN'] },
-          ...(tenantId ? { tenantId } : {})
-        }
+        where: tenantId
+          ? { status: { in: ['Open', 'OPEN'] }, tenantId }
+          : { status: { in: ['Open', 'OPEN'] } }
       });
       if (!activeShift) {
         return res.status(400).json({ 
@@ -988,10 +996,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       // 0. Ambil buyPrice untuk semua product & validasi kepemilikan tenant
       const productIds = items.map((item: any) => Number(item.productId));
       const products = await tx.product.findMany({
-        where: {
-          id: { in: productIds },
-          ...(tenantId ? { tenantId } : {})
-        }
+        where: tenantId
+          ? { id: { in: productIds }, tenantId }
+          : { id: { in: productIds } }
       });
       if (tenantId && products.length !== new Set(productIds).size) {
         throw new Error('Satu atau lebih produk tidak ditemukan atau bukan milik tenant ini.');
@@ -1039,7 +1046,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       }
 
       // Cek settings toko
-      const settings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+      const settings = tenantId ? await tx.settings.findFirst({ where: { tenantId } }) : null;
       const hasTable = Boolean(tableId);
       const isKDSEnabled = settings?.enableKDS !== false;
       const shouldAutoServe = !isKDSEnabled || (!hasTable && (settings as any)?.autoCompleteKDSOnPay === true);
@@ -1124,7 +1131,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         if (!hasRecipe) {
           // Simple Mode: tidak ada resep → kurangi product.stock langsung
           const product = await tx.product.findFirst({
-            where: { id: Number(item.productId), ...(tenantId ? { tenantId } : {}) }
+            where: tenantId
+              ? { id: Number(item.productId), tenantId }
+              : { id: Number(item.productId) }
           });
           if (product && product.stock < Number(item.qty)) {
             throw new Error(`Stok produk "${product.name}" tidak mencukupi (tersisa: ${product.stock}, dibutuhkan: ${item.qty})`);
@@ -1139,7 +1148,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             const used = recipe.qtyPerServing * Number(item.qty);
             // Atomic check: pastikan stok bahan baku mencukupi (cegah stok negatif)
             const currentIng = await tx.ingredient.findFirst({
-              where: { id: recipe.ingredientId, ...(tenantId ? { tenantId } : {}) },
+              where: tenantId
+                ? { id: recipe.ingredientId, tenantId }
+                : { id: recipe.ingredientId },
               select: { stock: true, name: true }
             });
             if (currentIng && currentIng.stock < used) {
@@ -1179,7 +1190,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       // 4. Voucher Usage Tracking (Catat penggunaan voucher promo jika ada)
       if (voucherId) {
         const v = await tx.voucher.findFirst({
-          where: { id: Number(voucherId), ...(tenantId ? { tenantId } : {}) }
+          where: tenantId
+            ? { id: Number(voucherId), tenantId }
+            : { id: Number(voucherId) }
         });
         if (v && v.status === 'Aktif') {
           await tx.voucher.update({
@@ -1225,10 +1238,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     }
 
     // Auto-print tiket dapur & bar (fire-and-forget)
-    const settingsPrint = await prisma.settings.findFirst({ where: result.tenantId ? { tenantId: result.tenantId } : undefined });
+    const settingsPrint = result.tenantId ? await prisma.settings.findFirst({ where: { tenantId: result.tenantId } }) : null;
     if (settingsPrint && (settingsPrint.autoPrintKitchen || settingsPrint.autoPrintKDS || settingsPrint.autoPrintBar)) {
-      const fullOrder = await prisma.order.findUnique({
-        where: { id: result.id },
+      const fullOrder = await prisma.order.findFirst({
+        where: result.tenantId ? { id: result.id, tenantId: result.tenantId } : { id: result.id },
         include: { items: { include: { product: { include: { category: true } } } }, table: true, user: { select: { name: true, username: true } } }
       });
       if (fullOrder) {
@@ -1272,12 +1285,15 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
     const user = (req as any).user;
     const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
     let outletId = user?.outletId || null;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
     // Proteksi Shift Kasir Wajib Aktif untuk pelunasan pembayaran tagihan
     const activeShift = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+        tenantId
       }
     });
     if (!activeShift) {
@@ -1305,7 +1321,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       const orders = await tx.order.findMany({
         where: {
           id: { in: ids },
-          ...(tenantId ? { OR: [{ tenantId }, { tenantId: null }] } : {})
+          tenantId
         }
       });
 
@@ -1316,7 +1332,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       const updatedOrders = [];
       const paidNow = new Date(); // Fix #1: timestamp tunggal untuk semua order yang dibayar bersamaan
       const effectiveTenantId = orders[0]?.tenantId || tenantId;
-      const settings = await tx.settings.findFirst({ where: effectiveTenantId ? { tenantId: effectiveTenantId } : undefined });
+      const settings = effectiveTenantId ? await tx.settings.findFirst({ where: { tenantId: effectiveTenantId } }) : null;
       const hasAnyTable = orders.some(o => Boolean(o.tableId));
       const shouldAutoServe = !hasAnyTable && (!settings || (settings as any).autoCompleteKDSOnPay || (settings as any).enableKDS === false);
       
@@ -1326,10 +1342,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       if (!finalCustomerId && req.body.customerPhone) {
         const cleanPhone = String(req.body.customerPhone).trim();
         let cust = await tx.customer.findFirst({
-          where: {
-            phone: cleanPhone,
-            ...(tenantId ? { tenantId } : {})
-          }
+          where: tenantId ? { phone: cleanPhone, tenantId } : { phone: cleanPhone }
         });
         if (!cust && req.body.customerName) {
           cust = await tx.customer.create({
@@ -1352,7 +1365,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       const vId = req.body.voucherId ? Number(req.body.voucherId) : null;
       if (vId) {
         const v = await tx.voucher.findFirst({
-          where: { id: vId, ...(tenantId ? { tenantId } : {}) }
+          where: tenantId ? { id: vId, tenantId } : { id: vId }
         });
         const alreadyUsedInThisOrder = orders.some((o: any) => o.voucherId === vId);
         if (v && (v.status === 'Aktif' || alreadyUsedInThisOrder)) {
@@ -1545,10 +1558,10 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
     }
 
     // Auto-print struk (fire-and-forget) — pakai settings tenant yang benar
-    const paySettings = await prisma.settings.findFirst({ where: { ...(targetTenantId ? { tenantId: targetTenantId } : {}) } });
+    const paySettings = targetTenantId ? await prisma.settings.findFirst({ where: { tenantId: targetTenantId } }) : null;
     if (paySettings?.autoPrintReceipt && result.length > 0) {
-      const fullOrder = await prisma.order.findUnique({
-        where: { id: result[0].id },
+      const fullOrder = await prisma.order.findFirst({
+        where: targetTenantId ? { id: result[0].id, tenantId: targetTenantId } : { id: result[0].id },
         include: { items: { include: { product: { include: { category: true } } } }, table: true, user: { select: { name: true } }, customer: true }
       });
       if (fullOrder) {
@@ -1577,9 +1590,14 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 router.patch('/:id/void', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const user = (req as any).user;
+    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+    if (!tenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     
-    const orderData = await prisma.order.findUnique({
-      where: { id: Number(id) },
+    const orderData = await prisma.order.findFirst({
+      where: tenantId ? { id: Number(id), tenantId } : { id: Number(id) },
       include: { items: true }
     });
 
@@ -1594,19 +1612,21 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
         data: { status: 'Void', kdsStatus: 'Cancelled' }
       });
 
-      // 2. Kembalikan stok produk
-      const voidSettings = await tx.settings.findFirst({ where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined });
-      const isAdvancedModeVoid = voidSettings?.ingredientTrackingEnabled ?? false;
-
+      // 2. Kembalikan stok: Jika produk memiliki resep BOM (Advanced Mode), kembalikan bahan baku.
+      // Jika TIDAK memiliki resep (Simple Mode), kembalikan stok produk langsung.
+      // Hal ini mencegah penggandaan stok siluman (phantom stock) pada produk berbahan baku.
       for (const item of orderData.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.qty } }
-        });
+        const recipes = await tx.recipeItem.findMany({ where: { productId: item.productId } });
+        const hasRecipe = recipes.length > 0;
 
-        // Advanced Mode: kembalikan stok bahan baku
-        if (isAdvancedModeVoid) {
-          const recipes = await tx.recipeItem.findMany({ where: { productId: item.productId } });
+        if (!hasRecipe) {
+          // Simple Mode: kembalikan stok produk jadi
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.qty } }
+          });
+        } else {
+          // Advanced Mode: kembalikan stok bahan baku pembentuk resep
           for (const recipe of recipes) {
             const restored = recipe.qtyPerServing * item.qty;
             await tx.ingredient.update({
@@ -1776,9 +1796,13 @@ router.post('/split', authenticateToken, async (req: Request, res: Response) => 
       const tenantIdForSplit = (req as any).user?.tenantId || null;
       const orderNumber = await generateOrderNumber(tenantIdForSplit);
       
-      // Ambil detail customer dari order pertama di meja ini
+      // Ambil detail customer dari order pertama di meja ini (terisolasi per tenant)
       const firstActiveOrder = await tx.order.findFirst({
-        where: { tableId: Number(tableId), status: 'Pending' },
+        where: { 
+          tableId: Number(tableId), 
+          status: 'Pending',
+          ...(tenantIdForSplit ? { tenantId: tenantIdForSplit } : {})
+        },
         orderBy: { id: 'asc' }
       });
 
@@ -1966,9 +1990,13 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
       return res.status(400).json({ error: 'Meja asal dan meja tujuan tidak boleh sama' });
     }
 
-    // 1. Pastikan meja tujuan aktif & kosong (tidak ada order dengan status Pending atau Paid aktif)
+    const user = (req as any).user;
+    const moveTenantId = user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+
+    // 1. Pastikan meja tujuan aktif & kosong (terisolasi ke tenant aktif ini)
     const allActiveOrders = await prisma.order.findMany({
       where: {
+        ...(moveTenantId ? { tenantId: moveTenantId } : {}),
         OR: [
           { status: 'Pending' },
           {
@@ -1977,7 +2005,7 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
           }
         ]
       },
-      select: { id: true, tableId: true, joinedTableIds: true }
+      select: { id: true, tableId: true, joinedTableIds: true, tenantId: true }
     });
 
     const isTargetOccupied = allActiveOrders.some(o => {
@@ -2033,7 +2061,6 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
     }
 
     // Emit hanya ke tenant terkait
-    const moveTenantId = (req as any).user?.tenantId;
     if (moveTenantId) {
       emitToTenant(moveTenantId, 'order:new', { message: 'Table moved', sourceTableId: sId, targetTableId: tId });
       emitToTenant(moveTenantId, 'order:paid', { sourceTableId: sId, targetTableId: tId });
@@ -2062,10 +2089,14 @@ router.post('/merge-table', authenticateToken, async (req: Request, res: Respons
       return res.status(400).json({ error: 'Meja asal dan meja tujuan tidak boleh sama' });
     }
 
+    const user = (req as any).user;
+    const mergeTenantId = user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+
     const result = await prisma.$transaction(async (tx) => {
-      // Cari semua order aktif
+      // Cari semua order aktif milik tenant ini
       const allActiveOrders = await tx.order.findMany({
         where: {
+          ...(mergeTenantId ? { tenantId: mergeTenantId } : {}),
           OR: [
             { status: 'Pending' },
             {
@@ -2129,7 +2160,6 @@ router.post('/merge-table', authenticateToken, async (req: Request, res: Respons
     });
 
     // Emit hanya ke tenant terkait
-    const mergeTenantId = (req as any).user?.tenantId;
     if (mergeTenantId) {
       emitToTenant(mergeTenantId, 'order:new', { message: 'Table merged', sourceTableId: sId, targetTableId: tId });
       emitToTenant(mergeTenantId, 'order:paid', { sourceTableId: sId, targetTableId: tId });

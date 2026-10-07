@@ -43,35 +43,34 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 2. Laci Kasir (Sales Drawer) - Menghitung Modal Awal + Omset Tunai POS + Manual In/Out Laci
     let drawerBalance = 0;
+    const shiftWhere: any = { status: 'Open' };
+    if (tenantId) shiftWhere.tenantId = tenantId;
     const activeShift = await prisma.shift.findFirst({
-      where: {
-        status: 'Open',
-        ...(tenantId ? { tenantId } : {})
-      }
+      where: shiftWhere
     });
 
     if (activeShift) {
       // Hitung order berstatus Paid sejak shift dibuka (dengan fallback createdAt jika paidAt null)
+      const orderWhere: any = {
+        status: 'Paid',
+        OR: [
+          { paidAt: { gte: activeShift.waktuBuka } },
+          { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
+        ]
+      };
+      if (tenantId) orderWhere.tenantId = tenantId;
       const activeOrders = await prisma.order.findMany({
-        where: {
-          status: 'Paid',
-          ...(tenantId ? { tenantId } : {}),
-          OR: [
-            { paidAt: { gte: activeShift.waktuBuka } },
-            { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
-          ]
-        },
+        where: orderWhere,
         select: { paymentMethod: true, total: true }
       });
 
       const cashSalesIncome = activeOrders.reduce((sum, o) => sum + getOrderCashPortion(o.paymentMethod, o.total), 0);
 
       // Pelunasan piutang tunai selama shift aktif
+      const debtWhere: any = { createdAt: { gte: activeShift.waktuBuka } };
+      if (tenantId) debtWhere.tenantId = tenantId;
       const debtPayments = await prisma.debtPayment.findMany({
-        where: {
-          ...(tenantId ? { tenantId } : {}),
-          createdAt: { gte: activeShift.waktuBuka }
-        }
+        where: debtWhere
       });
       const cashDebtIncome = debtPayments
         .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
@@ -104,8 +103,10 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       drawerBalance = (activeShift.saldoAwal || 0) + cashSalesIncome + cashDebtIncome + drawerIn - drawerOut;
     } else {
       // Jika shift sedang tutup, ambil saldo laci dari shift terakhir
+      const lastShiftWhere: any = {};
+      if (tenantId) lastShiftWhere.tenantId = tenantId;
       const lastShift = await prisma.shift.findFirst({
-        where: { ...(tenantId ? { tenantId } : {}) },
+        where: lastShiftWhere,
         orderBy: { id: 'desc' }
       });
       drawerBalance = lastShift ? (lastShift.saldoFisikLaci ?? lastShift.saldoSistem ?? 0) : 0;
@@ -156,9 +157,11 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { type, pocket, status, search, startDate, endDate, tzOffset } = req.query;
     const tenantId = (req as any).tenantId || (req as any).user?.tenantId;
+    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
     
-    const whereClause: any = {};
-    if (tenantId) whereClause.tenantId = tenantId;
+    const whereClause: any = tenantId ? { tenantId } : {};
 
     if (type && type !== 'ALL') whereClause.type = type;
     if (pocket && pocket !== 'ALL') {
@@ -250,6 +253,10 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
     const user = (req as any).user;
     const tenantId = (req as any).tenantId || user?.tenantId;
+
+    if (!tenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
     if (!type || !category || !amount || !description) {
       return res.status(400).json({ error: 'Tipe, kategori, nominal, dan keterangan wajib diisi' });
@@ -357,8 +364,10 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
     }
 
     // IDOR Guard: verifikasi kepemilikan tenant sebelum approve
+    const existingWhere: any = { id: Number(id) };
+    if (tenantId) existingWhere.tenantId = tenantId;
     const existing = await prisma.cashFlow.findFirst({
-      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+      where: existingWhere
     });
     if (!existing) {
       return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
@@ -416,8 +425,10 @@ router.patch('/:id/reject', authenticateToken, async (req: Request, res: Respons
     }
 
     // IDOR Guard: verifikasi kepemilikan tenant
+    const existingWhere: any = { id: Number(id) };
+    if (tenantId) existingWhere.tenantId = tenantId;
     const existing = await prisma.cashFlow.findFirst({
-      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+      where: existingWhere
     });
     if (!existing) {
       return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
@@ -459,9 +470,15 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
     const { id } = req.params;
     const tenantId = user?.tenantId;
 
+    if (!tenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
     // IDOR Guard: verifikasi kepemilikan tenant
+    const existingWhere: any = { id: Number(id) };
+    if (tenantId) existingWhere.tenantId = tenantId;
     const existing = await prisma.cashFlow.findFirst({
-      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+      where: existingWhere
     });
     if (!existing) {
       return res.status(404).json({ error: 'Transaksi tidak ditemukan' });

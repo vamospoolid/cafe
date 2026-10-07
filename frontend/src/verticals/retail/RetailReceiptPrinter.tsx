@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Printer, X, CheckCircle, Package, RefreshCw } from 'lucide-react';
+import { Printer, X, CheckCircle, Package, RefreshCw, FileText } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { getSavedBluetoothPrinter, printBluetoothRetailReceipt } from '../../utils/printerBluetooth';
+import { exportRetailInvoicePDF } from '../../utils/retailInvoicePdfGenerator';
 import { toast } from '../../utils/alert';
 
 interface RetailReceiptPrinterProps {
@@ -18,6 +19,7 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
   const { settings, user } = usePOS();
   const printRef = useRef<HTMLDivElement>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // Normalisasi order: ekstrak apakah data mentah atau terbungkus { order: ... }
   const actualOrder = order?.order ? { ...order.order, ...order } : (order || {});
@@ -39,6 +41,20 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const handlePrintInvoiceA4 = async () => {
+    setIsExportingPdf(true);
+    try {
+      const cashierName = actualOrder.user?.name || user?.name || actualOrder.cashierName || 'Kasir';
+      await exportRetailInvoicePDF(actualOrder, settings, cashierName);
+      toast('Faktur Penjualan A4 berhasil diunduh (PDF)', 'success');
+    } catch (err: any) {
+      console.error('Failed to export retail invoice PDF:', err);
+      toast('Gagal mencetak faktur PDF: ' + (err.message || 'Error'), 'error');
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
   const handlePrint = async () => {
@@ -112,7 +128,7 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
     >
       {/* Container Preview */}
       <div 
-        className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden flex flex-col my-auto border border-slate-200 cursor-default"
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col my-auto border border-slate-200 cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Action Bar (Hidden when printing) */}
@@ -280,22 +296,32 @@ export const RetailReceiptPrinter: React.FC<RetailReceiptPrinterProps> = ({
         </div>
 
         {/* Modal Buttons (Bottom) */}
-        <div className="p-4 bg-white border-t border-slate-200 flex gap-2 print:hidden">
+        <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row gap-2 print:hidden">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition"
+            className="sm:w-20 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-xs hover:bg-slate-50 transition"
           >
             Tutup
           </button>
           <button
             type="button"
+            onClick={handlePrintInvoiceA4}
+            disabled={isExportingPdf}
+            className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95"
+            title="Download Faktur Penjualan resmi format A4 untuk pelanggan/kontraktor"
+          >
+            {isExportingPdf ? <RefreshCw size={14} className="animate-spin" /> : <FileText size={14} />}
+            <span>Faktur A4 (PDF)</span>
+          </button>
+          <button
+            type="button"
             onClick={handlePrint}
             disabled={isPrinting}
-            className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition"
+            className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95"
           >
-            {isPrinting ? <RefreshCw size={15} className="animate-spin" /> : <Printer size={15} />}
-            {isPrinting ? 'Mencetak...' : 'Cetak Struk Thermal'}
+            {isPrinting ? <RefreshCw size={14} className="animate-spin" /> : <Printer size={14} />}
+            <span>{isPrinting ? 'Mencetak...' : 'Struk Thermal'}</span>
           </button>
         </div>
       </div>

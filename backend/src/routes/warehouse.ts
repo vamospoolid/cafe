@@ -1358,6 +1358,11 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
 
     const invoiceNumber = generateDocNumber('INV-B2B');
 
+    const tenantId = getTenantId(req);
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
     // Process & calculate items
     let totalAmount = 0;
     let totalHppCost = 0;
@@ -1370,7 +1375,7 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
 
       if (!ingId || saleQty <= 0) continue;
 
-      const ing = await prisma.ingredient.findUnique({ where: { id: ingId } });
+      const ing = await prisma.ingredient.findFirst({ where: { id: ingId, tenantId } });
       if (!ing) continue;
 
       const conversionRatio = Number(it.conversionRatio) || ing.conversionRatio || 1;
@@ -1411,7 +1416,6 @@ router.post('/sales', authenticateToken, async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Item penjualan tidak valid' });
     }
 
-    const tenantId = getTenantId(req);
     const grossProfit = totalAmount - totalHppCost;
 
     // Atomic transaction

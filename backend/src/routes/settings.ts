@@ -96,7 +96,14 @@ router.get('/public', async (req: Request, res: Response) => {
 // Get settings (Tenant Scoped)
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const tenantId = resolveSettingsTenantId(req);
+    let tenantId = resolveSettingsTenantId(req);
+    if (!tenantId) {
+      const user = (req as any).user;
+      if (user?.isPlatformAdmin || user?.role === 'SUPERADMIN' || user?.username === 'admin') {
+        const first = await prisma.tenant.findFirst({ where: { status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+        if (first) tenantId = first.id;
+      }
+    }
     if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
@@ -276,7 +283,14 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.faviconUrl !== undefined) updateData.faviconUrl = updateData.faviconUrl ? String(updateData.faviconUrl) : null;
     if (updateData.hidePlatformBranding !== undefined) updateData.hidePlatformBranding = Boolean(updateData.hidePlatformBranding);
 
-    const tenantId = resolveSettingsTenantId(req);
+    let tenantId = resolveSettingsTenantId(req);
+    if (!tenantId) {
+      const user = (req as any).user;
+      if (user?.isPlatformAdmin || user?.role === 'SUPERADMIN' || user?.username === 'admin') {
+        const first = await prisma.tenant.findFirst({ where: { status: 'ACTIVE' }, orderBy: { createdAt: 'asc' } });
+        if (first) tenantId = first.id;
+      }
+    }
     if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }

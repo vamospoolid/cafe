@@ -364,8 +364,14 @@ router.post('/:id/clear', authenticateToken, async (req: Request, res: Response)
       return false;
     });
 
-    if (activeOrders.length === 0) {
-      return res.json({ message: 'Meja sudah dalam keadaan kosong' });
+    const pendingUnpaid = activeOrders.filter(o => o.status === 'Pending');
+    if (pendingUnpaid.length > 0 && !req.body.forceDetach) {
+      const orderNums = pendingUnpaid.map(o => o.orderNumber).join(', ');
+      return res.status(400).json({
+        error: `Terdapat pesanan belum lunas (${orderNums}) di meja ini. Harap selesaikan pembayaran terlebih dahulu atau batalkan pesanan.`,
+        code: 'TABLE_HAS_UNPAID_ORDERS',
+        pendingOrders: pendingUnpaid.map(o => ({ id: o.id, orderNumber: o.orderNumber, total: o.total }))
+      });
     }
 
     const now = new Date();
@@ -376,11 +382,19 @@ router.post('/:id/clear', authenticateToken, async (req: Request, res: Response)
       },
       data: {
         kdsStatus: 'Served',
-        servedAt: now
+        servedAt: now,
+        ...(req.body.forceDetach ? { tableId: null } : {})
       }
     });
 
+    // Perbarui status meja menjadi 'Kosong' di database
+    await prisma.table.updateMany({
+      where: { id: tableId, tenantId },
+      data: { status: 'Kosong' }
+    });
+
     if (tenantId) {
+      emitToTenant(tenantId, 'table:update', { tableId, status: 'Kosong' });
       emitToTenant(tenantId, 'order:paid', { tableId });
       emitToTenant(tenantId, 'order:new', { tableId });
       emitToTenant(tenantId, 'kds:statusChanged', { tableId, kdsStatus: 'Served' });

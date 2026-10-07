@@ -27,6 +27,7 @@ import {
   Building2
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import { toast } from '../utils/alert';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -103,6 +104,113 @@ export const EXPENSE_CATEGORIES = [
       'Perbaikan Alat Dapur & Kulkas',
       'Pembelian Alat / Perkakas Baru',
       'Lain-lain / Biaya Tak Terduga'
+    ]
+  }
+];
+
+export const RETAIL_EXPENSE_CATEGORIES = [
+  {
+    id: 'Kulakan & Pasokan Barang',
+    name: 'Kulakan & Pasokan Barang (Stok)',
+    subcategories: [
+      'Kulakan Tambahan Toko',
+      'Ekspedisi / Ongkir Masuk',
+      'Stok Grosir / Eceran Darurat',
+      'Kulakan Dagangan Lainnya'
+    ]
+  },
+  {
+    id: 'Plastik Kresek & Perlengkapan',
+    name: 'Plastik Kresek & Perlengkapan Kasir',
+    subcategories: [
+      'Kantong Kresek (Kecil/Sedang/Jumbo)',
+      'Lakban, Karung & Tali Rafia',
+      'Kertas Struk Kasir & Nota Bon',
+      'Perlengkapan Toko Lainnya'
+    ]
+  },
+  {
+    id: 'Operasional Toko & Logistik',
+    name: 'Operasional Toko & Logistik (OPEX)',
+    subcategories: [
+      'BBM Pickup / Motor Pengantaran',
+      'Listrik, Air & Internet Toko',
+      'Retribusi Pasar & Kebersihan Lingkungan',
+      'Sewa Tempat & Izin Usaha',
+      'Operasional Lainnya'
+    ]
+  },
+  {
+    id: 'SDM & Tenaga Kerja',
+    name: 'SDM & Tenaga Kerja',
+    subcategories: [
+      'Upah Kuli Angkut / Bongkar Muat',
+      'Uang Makan & Lembur Kru Toko',
+      'Gaji Karyawan & Helper Kasir',
+      'SDM Lainnya'
+    ]
+  },
+  {
+    id: 'Perawatan & Aset Toko',
+    name: 'Perawatan & Aset (Maintenance)',
+    subcategories: [
+      'Servis Timbangan / Hand Pallet',
+      'Perawatan Armada Pickup / Motor',
+      'Perbaikan Rak & Etalase Toko',
+      'Pembelian Alat / Perkakas Toko'
+    ]
+  }
+];
+
+export const BENGKEL_EXPENSE_CATEGORIES = [
+  {
+    id: 'Suku Cadang & Sparepart',
+    name: 'Suku Cadang & Sparepart Cepat',
+    subcategories: [
+      'Pembelian Busi & Kampas Rem Darurat',
+      'Oli Mesin & Oli Gardan Cepat',
+      'Baut, Mur & Klip Motor/Mobil',
+      'Sparepart Lainnya'
+    ]
+  },
+  {
+    id: 'Bahan Kimia & Pelumas',
+    name: 'Cairan Kimia & Pelumas Servis',
+    subcategories: [
+      'Carb/Brake Cleaner & Penetran',
+      'Sabun Cuci Motor & Busa Cuci',
+      'Minyak Rem & Coolant Radiator',
+      'Cairan Kimia Lainnya'
+    ]
+  },
+  {
+    id: 'Operasional Bengkel',
+    name: 'Operasional Bengkel (OPEX)',
+    subcategories: [
+      'Listrik Bengkel (3-Phase/Kompresor)',
+      'Bensin Kurir Ambil Part Toko',
+      'Air & Retribusi Lingkungan',
+      'Operasional Bengkel Lainnya'
+    ]
+  },
+  {
+    id: 'SDM & Komisi Mekanik',
+    name: 'SDM & Mekanik Bengkel',
+    subcategories: [
+      'Uang Makan & Lembur Mekanik',
+      'Komisi / Uang Harian Helper Pit',
+      'Gaji Staff Administrasi Bengkel',
+      'SDM Lainnya'
+    ]
+  },
+  {
+    id: 'Perawatan Alat & Kompresor',
+    name: 'Perawatan Alat & Fasilitas Pit',
+    subcategories: [
+      'Servis Kompresor Udara & Selang',
+      'Penggantian Kunci & Toolkit Rusak',
+      'Perawatan Lift Pit / Dongkrak Hidrolik',
+      'Perawatan Aset Lainnya'
     ]
   }
 ];
@@ -197,6 +305,73 @@ const PRESET_EXPENSES = [
   }
 ];
 
+const RETAIL_PRESET_EXPENSES = [
+  {
+    label: 'Token Listrik Toko',
+    icon: Zap,
+    category: 'Operasional Toko & Logistik',
+    subCategory: 'Listrik, Air & Internet Toko',
+    desc: 'Isi Token Listrik Darurat Toko',
+    suggestedAmount: 100000
+  },
+  {
+    label: 'Kantong Kresek & Tali',
+    icon: ShoppingBag,
+    category: 'Plastik Kresek & Perlengkapan',
+    subCategory: 'Kantong Kresek (Kecil/Sedang/Jumbo)',
+    desc: 'Beli Kantong Kresek & Tali Rafia Toko',
+    suggestedAmount: 45000
+  },
+  {
+    label: 'BBM Pickup / Motor DO',
+    icon: Truck,
+    category: 'Operasional Toko & Logistik',
+    subCategory: 'BBM Pickup / Motor Pengantaran',
+    desc: 'BBM Armada Pengiriman Barang / DO',
+    suggestedAmount: 50000
+  },
+  {
+    label: 'Lakban & Kertas Kasir',
+    icon: ShoppingCart,
+    category: 'Plastik Kresek & Perlengkapan',
+    subCategory: 'Kertas Struk Kasir & Nota Bon',
+    desc: 'Beli Lakban Dus & Roll Kertas Struk/Nota',
+    suggestedAmount: 35000
+  },
+  {
+    label: 'Upah Kuli Bongkar',
+    icon: Users,
+    category: 'SDM & Tenaga Kerja',
+    subCategory: 'Upah Kuli Angkut / Bongkar Muat',
+    desc: 'Upah Kuli Bongkar Muat Kiriman Truk',
+    suggestedAmount: 75000
+  },
+  {
+    label: 'Air Galon Kru Toko',
+    icon: Droplet,
+    category: 'Operasional Toko & Logistik',
+    subCategory: 'Listrik, Air & Internet Toko',
+    desc: 'Beli Air Galon Kasir & Kru Toko',
+    suggestedAmount: 20000
+  },
+  {
+    label: 'Kulakan Darurat',
+    icon: Box,
+    category: 'Kulakan & Pasokan Barang',
+    subCategory: 'Stok Grosir / Eceran Darurat',
+    desc: 'Kulakan Tambahan Stok Cepat / Eceran',
+    suggestedAmount: 150000
+  },
+  {
+    label: 'Retribusi Pasar/Sampah',
+    icon: Building2,
+    category: 'Operasional Toko & Logistik',
+    subCategory: 'Retribusi Pasar & Kebersihan Lingkungan',
+    desc: 'Iuran Kebersihan & Keamanan Toko',
+    suggestedAmount: 25000
+  }
+];
+
 const PRESET_INFLOWS = [
   {
     label: 'Top-up Petty Cash Rp 500Rb',
@@ -239,10 +414,17 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
   const user = posContext?.user;
   const isOwnerOrAdmin = user?.role === 'Admin' || user?.role === 'Owner' || (user as any)?.isPlatformAdmin;
 
+  const { isRetail, isBengkel } = useVertical();
+  const expenseCategories = isRetail ? RETAIL_EXPENSE_CATEGORIES : isBengkel ? BENGKEL_EXPENSE_CATEGORIES : EXPENSE_CATEGORIES;
+  const presetExpenses = isRetail ? RETAIL_PRESET_EXPENSES : PRESET_EXPENSES;
+
+  const defaultExpCat = isRetail ? 'Operasional Toko & Logistik' : isBengkel ? 'Operasional Bengkel' : 'Operasional Cafe';
+  const defaultExpSub = isRetail ? 'Listrik, Air & Internet Toko' : isBengkel ? 'Listrik Bengkel (3-Phase/Kompresor)' : 'Listrik, Air & Internet / WiFi';
+
   const [type, setType] = useState<'Pengeluaran' | 'Pemasukan'>(initialType);
   const [pocket, setPocket] = useState<'OPERATIONAL' | 'DRAWER'>(initialPocket);
-  const [mainCategory, setMainCategory] = useState<string>('Operasional Cafe');
-  const [subCategory, setSubCategory] = useState<string>('Listrik, Air & Internet / WiFi');
+  const [mainCategory, setMainCategory] = useState<string>(defaultExpCat);
+  const [subCategory, setSubCategory] = useState<string>(defaultExpSub);
   const [amount, setAmount] = useState<number>(0);
   const [displayAmount, setDisplayAmount] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -268,11 +450,11 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
         setSubCategory('Tambahan Modal Kas Kecil / Petty Cash Top-up');
       } else {
         setStatus(isOwnerOrAdmin ? 'APPROVED' : 'PENDING');
-        setMainCategory('Operasional Cafe');
-        setSubCategory('Listrik, Air & Internet / WiFi');
+        setMainCategory(defaultExpCat);
+        setSubCategory(defaultExpSub);
       }
     }
-  }, [isOpen, initialType, initialPocket, isOwnerOrAdmin]);
+  }, [isOpen, initialType, initialPocket, isOwnerOrAdmin, defaultExpCat, defaultExpSub]);
 
   // Handle type change dynamically
   const handleTypeSwitch = (newType: 'Pengeluaran' | 'Pemasukan') => {
@@ -284,22 +466,22 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
       setDescription('');
     } else {
       setStatus(isOwnerOrAdmin ? 'APPROVED' : 'PENDING');
-      setMainCategory('Operasional Cafe');
-      setSubCategory('Listrik, Air & Internet / WiFi');
+      setMainCategory(defaultExpCat);
+      setSubCategory(defaultExpSub);
       setDescription('');
     }
   };
 
   // Update subcategories when main category changes
   useEffect(() => {
-    const list = type === 'Pengeluaran' ? EXPENSE_CATEGORIES : INFLOW_CATEGORIES;
+    const list = type === 'Pengeluaran' ? expenseCategories : INFLOW_CATEGORIES;
     const found = list.find(c => c.id === mainCategory);
     if (found && found.subcategories.length > 0) {
       if (!found.subcategories.includes(subCategory)) {
         setSubCategory(found.subcategories[0]);
       }
     }
-  }, [mainCategory, type]);
+  }, [mainCategory, type, expenseCategories]);
 
   if (!isOpen) return null;
 
@@ -402,7 +584,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
   };
 
   const isExpense = type === 'Pengeluaran';
-  const categoriesList = isExpense ? EXPENSE_CATEGORIES : INFLOW_CATEGORIES;
+  const categoriesList = isExpense ? expenseCategories : INFLOW_CATEGORIES;
   const currentCatObj = categoriesList.find(c => c.id === mainCategory);
 
   return (
@@ -428,7 +610,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
               </h2>
               <p className="text-[11px] text-slate-400 font-medium">
                 {isExpense 
-                  ? 'Pencatatan pembelanjaan toko (galon, gas, listrik, bahan)' 
+                  ? (isRetail ? 'Pencatatan pembelanjaan toko (kresek, BBM armada, listrik, kulakan)' : isBengkel ? 'Pencatatan pembelanjaan bengkel (part, oli, listrik, logistik)' : 'Pencatatan pembelanjaan operasional (galon, gas, listrik, bahan)') 
                   : 'Penambahan saldo kas kecil toko untuk kebutuhan harian'}
               </p>
             </div>
@@ -536,7 +718,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
             <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-black text-amber-900 flex items-center gap-1.5">
-                  ✨ Kebutuhan Rutin Kafe (Preset 1-Klik):
+                  ✨ Kebutuhan Rutin {isRetail ? 'Toko & Grosir' : isBengkel ? 'Bengkel' : 'Kafe'} (Preset 1-Klik):
                 </span>
                 <span className="text-[9px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full font-bold">
                   Auto-Kategori & Keterangan
@@ -544,7 +726,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                {PRESET_EXPENSES.map((item, idx) => {
+                {presetExpenses.map((item, idx) => {
                   const IconComponent = item.icon;
                   const isSelected = description === item.desc;
                   return (
@@ -611,8 +793,8 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
             </div>
           )}
 
-          {/* 4. Checkbox: Tambah otomatis ke stok bahan baku (Hanya Pengeluaran) */}
-          {isExpense && (
+          {/* 4. Checkbox: Tambah otomatis ke stok bahan baku (Hanya Pengeluaran Kafe) */}
+          {isExpense && !isRetail && !isBengkel && (
             <label className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 cursor-pointer select-none">
               <input 
                 type="checkbox" 
@@ -710,7 +892,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={isExpense 
-                ? "Contoh: Beli 2 Galon Aqua Dapur / Token Listrik Darurat" 
+                ? (isRetail ? "Contoh: Beli Kantong Kresek / BBM Armada Pickup DO / Token Listrik" : isBengkel ? "Contoh: Beli Busi Darurat / BBM Ambil Part / Token Listrik" : "Contoh: Beli 2 Galon Aqua Dapur / Token Listrik Darurat")
                 : "Contoh: Top-up saldo kas operasional harian toko dari Owner"}
               className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-600"
             />

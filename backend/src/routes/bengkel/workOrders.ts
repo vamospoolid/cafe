@@ -477,6 +477,13 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Status PAID hanya boleh diproses melalui pembayaran kasir /pay atau pelunasan Invoice B2B
+    if (status === 'PAID') {
+      return res.status(400).json({
+        error: 'Status Lunas (PAID) tidak dapat diubah secara manual. Silakan proses melalui pembayaran POS Kasir atau pelunasan Invoice B2B.'
+      });
+    }
+
     // Integritas Data & Finansial: Tolak pembatalan jika SPK sudah masuk invoice B2B aktif
     if (status === 'CANCELLED') {
       const activeInvoiceItem = await prisma.workOrderInvoiceItem.findFirst({
@@ -502,7 +509,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      // 1. If CANCELLED: Restore deducted stock
+      // 1. If CANCELLED: Restore deducted stock & rollback commissions if was PAID
       if (status === 'CANCELLED') {
         const parts = await tx.workOrderPart.findMany({
           where: { workOrderId: existing.id, stockDeducted: true }
@@ -520,27 +527,27 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
             });
           }
         }
-      }
 
-      // 2. If PAID: Calculate and credit commissions
-      if (status === 'PAID') {
-        const services = await tx.workOrderService.findMany({
-          where: { workOrderId: existing.id }
-        });
-
-        for (const s of services) {
-          if (!s.mechanicId) continue;
-
-          const profile = await tx.mechanicProfile.findFirst({
-            where: { userId: s.mechanicId, tenantId }
+        // Rollback commission if SPK was already PAID before being cancelled
+        if (existing.status === 'PAID') {
+          const services = await tx.workOrderService.findMany({
+            where: { workOrderId: existing.id }
           });
-
-          if (profile && profile.commissionType !== 'NONE' && profile.commissionRate > 0) {
-            const commission = s.subtotal * profile.commissionRate;
-            await tx.mechanicProfile.update({
-              where: { id: profile.id },
-              data: { pendingCommission: { increment: commission } }
+          for (const s of services) {
+            if (!s.mechanicId) continue;
+            const profile = await tx.mechanicProfile.findFirst({
+              where: { userId: s.mechanicId, tenantId }
             });
+            if (profile && profile.commissionType !== 'NONE' && profile.commissionRate > 0) {
+              const commission = s.subtotal * profile.commissionRate;
+              await tx.mechanicProfile.update({
+                where: { id: profile.id },
+                data: {
+                  pendingCommission: { decrement: commission },
+                  paidCommission: { decrement: 0 }
+                }
+              });
+            }
           }
         }
       }
@@ -704,6 +711,30 @@ router.post('/:id/services', async (req: AuthRequest, res: Response) => {
     });
     if (!wo) return res.status(404).json({ error: 'SPK tidak ditemukan' });
 
+    // IDOR Protection: Validasi kepemilikan katalog jasa dan mekanik
+    let verifiedServiceTypeId: string | null = null;
+    if (serviceTypeId) {
+      const st = await prisma.serviceType.findFirst({
+        where: { id: String(serviceTypeId), tenantId }
+      });
+      if (!st) {
+        return res.status(400).json({ error: 'Katalog jasa tidak ditemukan atau tidak memiliki akses' });
+      }
+      verifiedServiceTypeId = st.id;
+    }
+
+    let verifiedMechanicId: number | null = null;
+    if (mechanicId) {
+      const mIdNum = parseInt(String(mechanicId), 10);
+      const membership = await prisma.tenantMembership.findFirst({
+        where: { userId: mIdNum, tenantId, status: 'ACTIVE' }
+      });
+      if (!membership) {
+        return res.status(400).json({ error: 'Mekanik tidak terdaftar aktif di bengkel ini' });
+      }
+      verifiedMechanicId = mIdNum;
+    }
+
     const parsedPrice = parseFloat(price || 0);
 
     const srv = await prisma.$transaction(async (tx) => {
@@ -711,13 +742,13 @@ router.post('/:id/services', async (req: AuthRequest, res: Response) => {
         data: {
           tenantId,
           workOrderId: wo.id,
-          serviceTypeId: serviceTypeId || null,
+          serviceTypeId: verifiedServiceTypeId,
           serviceName: String(serviceName).trim(),
           vehicleType: wo.vehicleType || 'MOTOR',
           price: parsedPrice,
           qty: 1,
           subtotal: parsedPrice,
-          mechanicId: mechanicId ? parseInt(String(mechanicId), 10) : null
+          mechanicId: verifiedMechanicId
         }
       });
       await recalculateWorkOrderTotals(wo.id, tx);
@@ -761,7 +792,16 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = (req as any).tenantId;
     const { id } = req.params;
-    const { paymentMethod, paidAmount, discountAmount, discount, isDirectSale } = req.body;
+    const {
+      paymentMethod = 'TUNAI',
+      paidAmount,
+      discountAmount,
+      discount,
+      isDirectSale,
+      splitCash,
+      splitNonCash,
+      splitNonCashMethod
+    } = req.body;
 
     const wo = await prisma.workOrder.findFirst({
       where: { id: String(id), tenantId },
@@ -780,12 +820,33 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
     const rawDiscount = discountAmount != null ? discountAmount : discount;
     const parsedDiscount = rawDiscount != null ? parseFloat(rawDiscount) : wo.discount;
     const effectiveTotal = Math.max(0, wo.totalServices + wo.totalParts - parsedDiscount);
-    const parsedPaid = parseFloat(paidAmount || effectiveTotal);
+
+    const pmUpper = (paymentMethod || 'TUNAI').toUpperCase();
+    const isSplit = pmUpper === 'SPLIT';
+    const isCash = pmUpper === 'TUNAI' || pmUpper === 'CASH';
+
+    let actualCashPortion = 0;
+    let actualNonCashPortion = 0;
+    let actualTotalPaid = 0;
+
+    if (isSplit) {
+      actualCashPortion = Math.max(0, parseFloat(splitCash) || 0);
+      actualNonCashPortion = Math.max(0, parseFloat(splitNonCash) || 0);
+      actualTotalPaid = actualCashPortion + actualNonCashPortion;
+    } else if (isCash) {
+      const rawPaid = parseFloat(paidAmount || effectiveTotal);
+      actualCashPortion = Math.min(rawPaid, effectiveTotal);
+      actualTotalPaid = actualCashPortion;
+    } else {
+      const rawPaid = parseFloat(paidAmount || effectiveTotal);
+      actualNonCashPortion = Math.min(rawPaid, effectiveTotal);
+      actualTotalPaid = actualNonCashPortion;
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. If partial payment and customer exists, record debt (piutang)
-      if (parsedPaid < effectiveTotal && wo.customerId) {
-        const remainingDebt = effectiveTotal - parsedPaid;
+      if (actualTotalPaid < effectiveTotal && wo.customerId) {
+        const remainingDebt = effectiveTotal - actualTotalPaid;
         await tx.debt.create({
           data: {
             tenantId,
@@ -815,21 +876,56 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
       }
 
       // 3. Record Cash Inflow (Sinkronisasi ke Laporan Kasir & Arus Kas)
-      if (parsedPaid > 0) {
-        const pmUpper = (paymentMethod || 'TUNAI').toUpperCase();
-        const isCash = pmUpper === 'TUNAI' || pmUpper === 'CASH';
-        await tx.cashFlow.create({
-          data: {
-            tenantId,
-            outletId: wo.outletId || undefined,
-            type: 'Pemasukan',
-            category: isCash ? 'PENJUALAN_SPK - Tunai' : 'PENJUALAN_SPK - Non-Tunai',
-            amount: parsedPaid,
-            description: `Pembayaran SPK ${wo.spkNumber} (${wo.vehiclePlate || 'Umum'}) - ${paymentMethod || 'TUNAI'}`,
-            userId: Number((req as any).user?.id || 1),
-            date: new Date()
-          }
-        });
+      const currentUserId = Number((req as any).user?.id || 1);
+
+      if (isSplit) {
+        if (actualCashPortion > 0) {
+          await tx.cashFlow.create({
+            data: {
+              tenantId,
+              outletId: wo.outletId || undefined,
+              type: 'Pemasukan',
+              category: 'PENJUALAN_SPK - Tunai',
+              cashPocket: 'LACI_KASIR',
+              amount: actualCashPortion,
+              description: `Pembayaran Split (Tunai) SPK ${wo.spkNumber} (${wo.vehiclePlate || 'Umum'})`,
+              userId: currentUserId,
+              date: new Date()
+            }
+          });
+        }
+        if (actualNonCashPortion > 0) {
+          const nonCashLabel = splitNonCashMethod || 'Non-Tunai';
+          await tx.cashFlow.create({
+            data: {
+              tenantId,
+              outletId: wo.outletId || undefined,
+              type: 'Pemasukan',
+              category: `PENJUALAN_SPK - Non-Tunai (${nonCashLabel})`,
+              cashPocket: 'BANK_ACCOUNT',
+              amount: actualNonCashPortion,
+              description: `Pembayaran Split (${nonCashLabel}) SPK ${wo.spkNumber} (${wo.vehiclePlate || 'Umum'})`,
+              userId: currentUserId,
+              date: new Date()
+            }
+          });
+        }
+      } else {
+        if (actualTotalPaid > 0) {
+          await tx.cashFlow.create({
+            data: {
+              tenantId,
+              outletId: wo.outletId || undefined,
+              type: 'Pemasukan',
+              category: isCash ? 'PENJUALAN_SPK - Tunai' : `PENJUALAN_SPK - Non-Tunai (${pmUpper})`,
+              cashPocket: isCash ? 'LACI_KASIR' : 'BANK_ACCOUNT',
+              amount: actualTotalPaid,
+              description: `Pembayaran SPK ${wo.spkNumber} (${wo.vehiclePlate || 'Umum'}) - ${pmUpper}`,
+              userId: currentUserId,
+              date: new Date()
+            }
+          });
+        }
       }
 
       // 4. Update WorkOrder (Direct POS sale goes straight to DELIVERED so it doesn't pollute workshop board)
@@ -839,7 +935,7 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
         data: {
           discount: parsedDiscount,
           totalAmount: effectiveTotal,
-          paidAmount: parsedPaid,
+          paidAmount: Math.min(actualTotalPaid, effectiveTotal),
           status: targetStatus,
           ...(isDirectSale ? { deliveredAt: new Date() } : {})
         }

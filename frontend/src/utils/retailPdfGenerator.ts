@@ -74,17 +74,24 @@ const buildHeader = (
   if (settings.address) doc.text(settings.address, textX, 22);
   if (settings.phone) doc.text(`WhatsApp / Telp: ${settings.phone}`, textX, 26.5);
 
+  const docRef = `DOC/RTL/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}/${Math.abs((title + startDate).split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0)).toString().slice(0, 4)}`;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`No. Dokumen: ${docRef}`, pageW - M, 13, { align: 'right' });
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(79, 70, 229);
-  doc.text(title, pageW - M, 17, { align: 'right' });
+  doc.text(title, pageW - M, 17.5, { align: 'right' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Periode: ${fmtDate(startDate)} s/d ${fmtDate(endDate)}`, pageW - M, 21.5, { align: 'right' });
-  doc.text(`Dicetak Oleh: ${userName}`, pageW - M, 25.5, { align: 'right' });
-  doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageW - M, 29.5, { align: 'right' });
+  doc.text(`Periode: ${fmtDate(startDate)} s/d ${fmtDate(endDate)}`, pageW - M, 22, { align: 'right' });
+  doc.text(`Dicetak Oleh: ${userName}`, pageW - M, 26, { align: 'right' });
+  doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, pageW - M, 30, { align: 'right' });
 
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.4);
@@ -107,7 +114,7 @@ const buildFooter = (
   doc.setDrawColor(241, 245, 249);
   doc.line(M, pageH - 12, pageW - M, pageH - 12);
   doc.text(
-    `${settings.storeName || 'Toko Retail'} — Dokumen resmi dicetak oleh Sistem CodePOS.`,
+    `${settings.storeName || 'Toko Retail'} — Dokumen resmi dicetak oleh Sistem CodePOS. Zero Cross-Tenant Leakage Guaranteed.`,
     M, pageH - 8
   );
   doc.text(`Halaman ${pageNum} dari ${totalPages}`, pageW - M, pageH - 8, { align: 'right' });
@@ -268,7 +275,37 @@ export const exportRetailReportPDF = async (
     alternateRowStyles: { fillColor: [248, 250, 252] },
     margin: { left: M, right: M },
   });
-  curY = (doc as any).lastAutoTable.finalY + 8;
+  curY = (doc as any).lastAutoTable.finalY + 6;
+
+  // ── II.B KANAL PEMBAYARAN ─────────────────────────────────────────────────
+  const paymentMethods: any[] = reportData?.paymentMethods || [];
+  if (paymentMethods.length > 0) {
+    curY = ensureSpace(doc, curY, 40, pageH, settings, logoBase64, TITLE, startDate, endDate, userName, pageW, M);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(79, 70, 229);
+    doc.text('▲ REKAPITULASI KANAL PEMBAYARAN KASIR (TUNAI / QRIS / TRANSFER / BON)', M, curY + 4);
+    autoTable(doc, {
+      startY: curY + 6,
+      head: [['Metode Pembayaran', 'Frekuensi Transaksi', 'Total Nominal', 'Porsi Omzet (%)']],
+      body: paymentMethods.map(pm => [
+        pm.method === 'BON' ? 'Bon Tempo / Piutang' : pm.method === 'TRANSFER' ? 'Transfer Bank' : pm.method,
+        `${pm.count} Transaksi`,
+        fmt(pm.total),
+        `${pm.percentage}%`
+      ]),
+      headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      columnStyles: {
+        0: { fontStyle: 'bold' },
+        2: { halign: 'right', fontStyle: 'bold' },
+        3: { halign: 'right' }
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: M, right: M },
+    });
+    curY = (doc as any).lastAutoTable.finalY + 8;
+  }
 
   // ── III. FAST & SLOW MOVING ──────────────────────────────────────────────
   curY = ensureSpace(doc, curY, 80, pageH, settings, logoBase64, TITLE, startDate, endDate, userName, pageW, M);

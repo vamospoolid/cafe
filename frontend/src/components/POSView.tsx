@@ -187,11 +187,21 @@ export const POSView = () => {
     };
   }, [socket]);
 
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${posContext?.token}`
+    };
+    if (posContext?.user?.tenantId) {
+      headers['x-tenant-id'] = String(posContext.user.tenantId);
+    }
+    return headers;
+  };
+
   const fetchTables = async () => {
     if (navigator.onLine) {
       try {
         const res = await fetch('/api/tables', {
-          headers: { Authorization: `Bearer ${posContext?.token}` }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           const data = await res.json();
@@ -215,7 +225,7 @@ export const POSView = () => {
     if (navigator.onLine) {
       try {
         const res = await fetch('/api/categories', {
-          headers: { Authorization: `Bearer ${posContext?.token}` }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           const data = await res.json();
@@ -280,12 +290,12 @@ export const POSView = () => {
     if (navigator.onLine) {
       try {
         const res = await fetch('/api/products', {
-          headers: { Authorization: `Bearer ${posContext?.token}` }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           const data = await res.json();
           const activeProducts = (Array.isArray(data) ? data : [])
-            .filter((p: any) => p.status === 'Aktif')
+            .filter((p: any) => !p.status || p.status === 'Aktif' || String(p.status).toLowerCase() === 'aktif' || String(p.status).toLowerCase() === 'active')
             .map(normalizeProduct);
           setProducts(activeProducts);
           await offlineDb.saveCatalogToCache({ 
@@ -458,7 +468,7 @@ export const POSView = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${posContext?.token}`
+          ...getAuthHeaders()
         },
         body: JSON.stringify(payload)
       });

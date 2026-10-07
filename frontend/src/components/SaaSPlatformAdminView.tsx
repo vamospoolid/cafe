@@ -44,6 +44,7 @@ import {
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 import SaaSPlanManager from './SaaSPlanManager';
+import LocalSaaSControlDashboard from './LocalSaaSControlDashboard';
 
 interface TenantItem {
   id: string;
@@ -81,7 +82,7 @@ interface TenantItem {
 
 export const SaaSPlatformAdminView: React.FC = () => {
   const posContext = useContext(POSContext);
-  const [activeTab, setActiveTab] = useState<'overview' | 'renewal' | 'upsell' | 'tenants' | 'invoices' | 'plans'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'renewal' | 'upsell' | 'tenants' | 'invoices' | 'plans' | 'local_dev'>('local_dev');
   const [loading, setLoading] = useState<boolean>(true);
   const [overviewData, setOverviewData] = useState<any>(null);
   const [tenants, setTenants] = useState<TenantItem[]>([]);
@@ -512,6 +513,7 @@ export const SaaSPlatformAdminView: React.FC = () => {
       {/* ─── 2. NAVIGATION TABS ───────────────────────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-slate-200">
         {[
+          { id: 'local_dev', label: '⚡ Konsol Dev Lokal & Sandbox', icon: Zap, badge: 'bg-emerald-500' },
           { id: 'overview', label: 'Ringkasan & Finansial', icon: Building2 },
           { id: 'renewal', label: `Radar Perpanjangan H-7 (${renewalRadar.length})`, icon: BellRing, badge: renewalRadar.length > 0 ? 'bg-amber-500' : undefined },
           { id: 'upsell', label: `Radar Peluang Upsell (${upsellRadar.length})`, icon: Flame, badge: upsellRadar.length > 0 ? 'bg-orange-500' : undefined },
@@ -1323,6 +1325,11 @@ export const SaaSPlatformAdminView: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm animate-fade-in">
           <SaaSPlanManager />
         </div>
+      )}
+
+      {/* ─── TAB 7: LOCAL SAAS DEVELOPER CONTROLLER & SANDBOX ───────────────── */}
+      {activeTab === 'local_dev' && (
+        <LocalSaaSControlDashboard />
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}

@@ -3,7 +3,8 @@ import { Users, Flame, ChevronRight, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export interface MechanicLeaderboardItem {
-  id: string;
+  id?: string;
+  userId?: string;
   name: string;
   spkCount: number;
   omzetJasa: number;
@@ -56,7 +57,7 @@ export const BengkelMechanicLeaderboard: React.FC<BengkelMechanicLeaderboardProp
         ) : (
           data.map((m, idx) => (
             <div
-              key={m.id}
+              key={m.id || m.userId || `mech-${idx}`}
               className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 hover:bg-slate-100/70 border border-slate-100 transition-all text-xs"
             >
               <div className="flex items-center gap-2.5 min-w-0">

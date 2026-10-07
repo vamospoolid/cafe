@@ -176,9 +176,27 @@ async function runTests() {
     const jwt = require('jsonwebtoken');
     const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
 
-    // Token for real database user (id: 10) who has NO tenant memberships
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    let orphanUser = await prismaClient.user.findFirst({ where: { username: 'test_orphan_user' } });
+    if (!orphanUser) {
+      orphanUser = await prismaClient.user.create({
+        data: {
+          name: 'Test Orphan User',
+          username: 'test_orphan_user',
+          passwordHash: 'hash',
+          role: 'Staff',
+          status: 'Aktif',
+          permissions: '[]',
+          tenantId: null
+        }
+      });
+    }
+    await prismaClient.$disconnect();
+
+    // Token for real database user who has NO tenantId and NO memberships
     const orphanToken = jwt.sign(
-      { id: 10, username: 'test_audit_user_a', role: 'Admin' },
+      { id: orphanUser.id, username: orphanUser.username, role: 'Admin', permissions: ['USERS_READ', 'SETTINGS_READ', 'ALL'] },
       JWT_SECRET,
       { expiresIn: '1h' }
     );

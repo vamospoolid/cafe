@@ -240,7 +240,13 @@ router.get('/best-sellers', authenticateToken, async (req: Request, res: Respons
       }
     });
 
-    const bestSellers = orderItems
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+    const isCafe = !tenant?.businessType || tenant.businessType === 'CAFE';
+
+    let bestSellers = orderItems
       .map(item => {
         const product = products.find(p => p.id === item.productId);
         const group = getCategoryGroup(product);
@@ -250,9 +256,15 @@ router.get('/best-sellers', authenticateToken, async (req: Request, res: Respons
           qty: item._sum.qty || 0,
           group
         };
-      })
-      .filter(item => item.group === 'makanan' || item.group === 'minuman')
-      .slice(0, 5);
+      });
+
+    if (isCafe) {
+      const foodAndDrink = bestSellers.filter(item => item.group === 'makanan' || item.group === 'minuman');
+      if (foodAndDrink.length > 0) {
+        bestSellers = foodAndDrink;
+      }
+    }
+    bestSellers = bestSellers.slice(0, 5);
 
     res.json(bestSellers);
   } catch (error) {
@@ -522,6 +534,59 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     const totalCashRevenue = paymentMethods['Tunai'] || 0;
     const totalDigitalRevenue = (paymentMethods['QRIS'] || 0) + (paymentMethods['Kartu'] || 0) + (paymentMethods['Split'] || 0);
 
+    // 11. Delivery Orders Summary (Surat Jalan - Retail & Toko Grosir)
+    let deliveryOrdersSummary = { pending: 0, inTransit: 0, delivered: 0 };
+    try {
+      const [pendingDO, inTransitDO, deliveredDO] = await Promise.all([
+        prisma.deliveryOrder.count({
+          where: {
+            status: { in: ['PENDING', 'LOADING'] },
+            ...tenantWhere(tenantId)
+          }
+        }),
+        prisma.deliveryOrder.count({
+          where: {
+            status: 'IN_TRANSIT',
+            ...tenantWhere(tenantId)
+          }
+        }),
+        prisma.deliveryOrder.count({
+          where: {
+            status: 'DELIVERED',
+            deliveredAt: { gte: todayStart, lte: todayEnd },
+            ...tenantWhere(tenantId)
+          }
+        })
+      ]);
+      deliveryOrdersSummary = { pending: pendingDO, inTransit: inTransitDO, delivered: deliveredDO };
+    } catch (_) {}
+
+    // 12. AR (Bon Tempo / Piutang Pelanggan) Summary
+    let arSummary = { totalActive: 0, totalOverdue: 0, overdueCount: 0, activeCount: 0 };
+    try {
+      const unpaidDebts = await prisma.debt.findMany({
+        where: {
+          status: { not: 'Lunas' },
+          ...tenantWhere(tenantId)
+        },
+        select: {
+          amount: true,
+          remaining: true,
+          dueDate: true
+        }
+      });
+      const nowDate = new Date();
+      unpaidDebts.forEach(d => {
+        const rem = Number(d.remaining ?? d.amount ?? 0);
+        arSummary.totalActive += rem;
+        arSummary.activeCount += 1;
+        if (d.dueDate && new Date(d.dueDate) < nowDate) {
+          arSummary.totalOverdue += rem;
+          arSummary.overdueCount += 1;
+        }
+      });
+    } catch (_) {}
+
     res.json({
       revenue: totalRevenue,
       profit: totalProfit,
@@ -544,7 +609,9 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
       activeShift,
       crewOnDuty: todayAttendances,
       kitchenQueue: activeKitchenOrdersCount,
-      omzetBonusTier
+      omzetBonusTier,
+      deliveryOrdersSummary,
+      arSummary
     });
   } catch (error) {
     console.error(error);

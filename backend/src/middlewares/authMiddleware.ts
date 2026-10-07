@@ -65,36 +65,65 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
     let activeRoleId = verified.roleId;
     let permissionsArray: string[] = [];
 
+    // [SECURITY FIX] Prioritaskan x-tenant-id header untuk SEMUA user.
+    // Ini penting agar SUPERADMIN yang sedang impersonate tenant tidak bocor ke tenant lain.
+    const explicitHeaderTenant = (req.headers['x-tenant-id'] as string) || (req.query?.tenantId as string);
+    if (explicitHeaderTenant) {
+      const headerTenantCheck = await prisma.tenant.findUnique({ where: { id: explicitHeaderTenant, status: 'ACTIVE' } });
+      if (headerTenantCheck) {
+        // Untuk non-SuperAdmin: pastikan user memiliki membership di tenant tersebut
+        if (userExists.isPlatformAdmin || userExists.role === 'SUPERADMIN') {
+          activeTenantId = headerTenantCheck.id;
+        } else {
+          const hasMembership = userExists.memberships.some(m => m.tenantId === headerTenantCheck.id && m.status === 'ACTIVE');
+          if (hasMembership) activeTenantId = headerTenantCheck.id;
+        }
+      }
+    }
+
+    // Jika activeTenantId ada di token (dan belum di-override oleh header), pastikan masih eksis
+    if (activeTenantId && activeTenantId !== explicitHeaderTenant) {
+      const tenantCheck = await prisma.tenant.findUnique({ where: { id: activeTenantId } });
+      if (!tenantCheck) {
+        activeTenantId = undefined; // Auto-heal jika tenant telah dihapus
+      }
+    }
+
     // Jika token sudah membawa array permission keys
     if (Array.isArray(verified.permissions)) {
       permissionsArray = verified.permissions;
     }
 
-    // Jika tenantId belum ada di token (legacy) atau ingin me-refresh dari membership
-    if (!activeTenantId && userExists.memberships.length > 0) {
-      const firstActive = userExists.memberships.find(m => m.status === 'ACTIVE') || userExists.memberships[0];
-      activeTenantId = firstActive.tenantId;
-      if (firstActive.role) {
-        activeRole = firstActive.role.name;
-        activeRoleId = firstActive.role.id;
-        permissionsArray = firstActive.role.permissions.map(rp => rp.permission.key);
+    // Jika tenantId belum ada di token (legacy token tanpa tenantId)
+    if (!activeTenantId) {
+      if (userExists.tenantId) {
+        activeTenantId = userExists.tenantId;
+      } else if (userExists.memberships.length > 0) {
+        const firstActive = userExists.memberships.find(m => m.status === 'ACTIVE') || userExists.memberships[0];
+        activeTenantId = firstActive.tenantId;
       }
-    } else if (activeTenantId) {
+    }
+
+    if (activeTenantId) {
       const currentMembership = userExists.memberships.find(m => m.tenantId === activeTenantId && m.status === 'ACTIVE');
       if (currentMembership && currentMembership.role) {
         activeRole = currentMembership.role.name;
         activeRoleId = currentMembership.role.id;
         permissionsArray = currentMembership.role.permissions.map(rp => rp.permission.key);
-      } else if (userExists.memberships.length > 0) {
-        // Token membawa tenant lama yang tidak cocok dengan membership user aktif, auto-heal ke tenant aktif user
-        const fallbackMembership = userExists.memberships.find(m => m.status === 'ACTIVE') || userExists.memberships[0];
-        activeTenantId = fallbackMembership.tenantId;
-        if (fallbackMembership.role) {
-          activeRole = fallbackMembership.role.name;
-          activeRoleId = fallbackMembership.role.id;
-          permissionsArray = fallbackMembership.role.permissions.map(rp => rp.permission.key);
-        }
       }
+      // [SECURITY FIX] Dihapus: auto-heal fallback yang berbahaya.
+      // Sebelumnya kode ini men-override activeTenantId ke tenant random jika membership tidak cocok.
+      // Ini menyebabkan cross-tenant data leak. Biarkan request gagal dengan MISSING_TENANT_CONTEXT
+      // daripada silently redirect ke tenant yang salah.
+    }
+
+    // Platform SuperAdmin fallback ke firstTenant jika masih belum ada tenant (tidak ada header, tidak ada token tenant)
+    if (!activeTenantId && (userExists.isPlatformAdmin || userExists.role === 'SUPERADMIN')) {
+      const firstTenant = await prisma.tenant.findFirst({
+        where: { status: 'ACTIVE' },
+        orderBy: { createdAt: 'asc' }
+      });
+      if (firstTenant) activeTenantId = firstTenant.id;
     }
 
     // Fallback untuk legacy legacy boolean object permissions jika belum terisi
@@ -139,7 +168,7 @@ export const requirePermission = (requiredPermission: string | string[]) => {
     }
 
     // Super Admin / Owner bypass
-    if (req.user.isPlatformAdmin || req.user.role === 'OWNER' || req.user.role === 'Admin') {
+    if (req.user.isPlatformAdmin || req.user.role === 'SUPERADMIN' || req.user.role === 'OWNER' || req.user.role === 'Admin') {
       return next();
     }
 

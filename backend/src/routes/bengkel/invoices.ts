@@ -152,6 +152,18 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // IDOR Protection: Verifikasi customerId milik tenant
+    let verifiedCustomerId: number | null = null;
+    if (customerId) {
+      const cIdNum = parseInt(String(customerId), 10);
+      const cust = await prisma.customer.findFirst({
+        where: { id: cIdNum, tenantId }
+      });
+      if (cust) {
+        verifiedCustomerId = cust.id;
+      }
+    }
+
     // Calculate subtotal from work orders
     const subtotal = workOrders.reduce((sum, wo) => sum + wo.totalAmount, 0);
     const parsedTaxRate = taxRate != null ? parseFloat(taxRate) : 0;
@@ -165,7 +177,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         data: {
           tenantId,
           invoiceNumber,
-          customerId: customerId ? parseInt(String(customerId), 10) : null,
+          customerId: verifiedCustomerId,
           billingName: String(billingName).trim(),
           billingAddress: billingAddress ? String(billingAddress).trim() : null,
           billingNpwp: billingNpwp ? String(billingNpwp).trim() : null,
@@ -203,23 +215,93 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = (req as any).tenantId;
+    const currentUserId = Number((req as any).user?.id || 1);
     const { id } = req.params;
     const { status, paidAmount } = req.body;
 
     const existing = await prisma.workOrderInvoice.findFirst({
-      where: { id: String(id), tenantId }
+      where: { id: String(id), tenantId },
+      include: {
+        workOrders: {
+          include: {
+            workOrder: {
+              include: { services: true }
+            }
+          }
+        }
+      }
     });
 
     if (!existing) {
       return res.status(404).json({ error: 'Invoice tidak ditemukan' });
     }
 
-    const updated = await prisma.workOrderInvoice.update({
-      where: { id: existing.id },
-      data: {
-        ...(status && { status }),
-        ...(paidAmount !== undefined && { paidAmount: parseFloat(paidAmount) })
+    const targetStatus = status || existing.status;
+    const isBecomingPaid = targetStatus === 'PAID' && existing.status !== 'PAID';
+    const effectivePaid = paidAmount !== undefined ? parseFloat(paidAmount) : (isBecomingPaid ? existing.totalAmount : existing.paidAmount);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const inv = await tx.workOrderInvoice.update({
+        where: { id: existing.id },
+        data: {
+          status: targetStatus,
+          paidAmount: effectivePaid
+        }
+      });
+
+      // Jika invoice LUNAS: Update seluruh SPK terkait ke PAID, cairkan komisi mekanik, catat Arus Kas
+      if (isBecomingPaid) {
+        for (const item of existing.workOrders) {
+          const wo = item.workOrder;
+          if (!wo) continue;
+
+          // 1. Update status SPK ke PAID
+          await tx.workOrder.update({
+            where: { id: wo.id },
+            data: {
+              status: 'PAID',
+              paidAmount: wo.totalAmount
+            }
+          });
+
+          // 2. Cairkan komisi mekanik
+          for (const s of wo.services) {
+            if (!s.mechanicId) continue;
+            const profile = await tx.mechanicProfile.findFirst({
+              where: { userId: s.mechanicId, tenantId }
+            });
+            if (profile && profile.commissionType !== 'NONE' && profile.commissionRate > 0) {
+              const commission = s.subtotal * profile.commissionRate;
+              await tx.mechanicProfile.update({
+                where: { id: profile.id },
+                data: { pendingCommission: { increment: commission } }
+              });
+            }
+          }
+        }
+
+        // 3. Catat pemasukan ke CashFlow (Pemasukan Rekening Bank)
+        await tx.cashFlow.create({
+          data: {
+            tenantId,
+            type: 'Pemasukan',
+            category: 'PELUNASAN_INVOICE_B2B',
+            cashPocket: 'BANK_ACCOUNT',
+            amount: effectivePaid || existing.totalAmount,
+            description: `Pelunasan Invoice B2B #${existing.invoiceNumber} (${existing.billingName})`,
+            userId: currentUserId,
+            date: new Date()
+          }
+        });
       }
+
+      return inv;
+    });
+
+    // Real-time broadcast
+    req.app.get('io')?.to(`tenant:${tenantId}`).emit('bengkel:invoice_updated', {
+      invoiceId: updated.id,
+      status: updated.status
     });
 
     res.json(updated);

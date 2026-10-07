@@ -304,9 +304,108 @@ export const exportBengkelReportPDF = async (
     }
   });
 
-  currentY = (doc as any).lastAutoTable.finalY + 12;
+  currentY = (doc as any).lastAutoTable.finalY + 8;
 
-  // ─── 4. SIGNATURE BLOCK ───
+  // ─── 4. PERINGATAN BARANG KOSONG (OUT-OF-STOCK = 0) ───
+  const outOfStockParts = reportData?.outOfStockParts || [];
+  if (outOfStockParts.length > 0) {
+    if (currentY > pageHeight - 65) {
+      doc.addPage();
+      addHeader();
+      currentY = 38;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    doc.text('4. PERINGATAN SUKU CADANG KOSONG (OUT-OF-STOCK = 0)', margin, currentY);
+    currentY += 4;
+
+    const outRows = outOfStockParts.slice(0, 10).map((p: any, idx: number) => [
+      idx + 1,
+      p.name,
+      p.brand || '-',
+      p.vehicleType || 'Umum',
+      '0 Pcs (HABIS)',
+      `${p.minStock || 0} Pcs`,
+      p.storageLocation || 'Rak Gudang',
+      'SEGERA KULAKAN'
+    ]);
+
+    autoTable(doc, {
+      startY: currentY,
+      margin: { left: margin, right: margin },
+      head: [['No', 'Nama Suku Cadang', 'Merk', 'Tipe', 'Sisa Stok', 'Batas Min', 'Lokasi Rak', 'Status']],
+      body: outRows,
+      headStyles: {
+        fillColor: [225, 29, 72],
+        textColor: [255, 255, 255],
+        fontSize: 7.5,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        4: { fontStyle: 'bold', textColor: [225, 29, 72], halign: 'center' },
+        5: { halign: 'center' },
+        7: { fontStyle: 'bold', halign: 'center', textColor: [225, 29, 72] }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // ─── 5. CATATAN PERMINTAAN SUKU CADANG / DEFECTA (LOST SALES ALERT) ───
+  const partReqSummary = reportData?.partRequestsSummary;
+  const recentRequests = partReqSummary?.recentRequests || [];
+  if (recentRequests.length > 0) {
+    if (currentY > pageHeight - 65) {
+      doc.addPage();
+      addHeader();
+      currentY = 38;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    doc.text('5. CATATAN PERMINTAAN SUKU CADANG / DEFECTA (LOST SALES ALERT)', margin, currentY);
+    currentY += 4;
+
+    const reqRows = recentRequests.slice(0, 10).map((r: any, idx: number) => [
+      idx + 1,
+      r.partName,
+      r.brand || '-',
+      `${r.requestedQty || 1} Pcs`,
+      r.customerName || 'Pelanggan Walk-in',
+      r.status === 'PENDING' ? 'Menunggu Pengadaan' : r.status === 'IN_PURCHASE_LIST' ? 'Masuk PO Supplier' : r.status === 'PURCHASED' ? 'Sudah Terbeli' : r.status,
+      r.notes || '-'
+    ]);
+
+    autoTable(doc, {
+      startY: currentY,
+      margin: { left: margin, right: margin },
+      head: [['No', 'Part Diminta', 'Merk/Tipe', 'Qty', 'Pelanggan / Pemohon', 'Status Pengadaan', 'Catatan']],
+      body: reqRows,
+      headStyles: {
+        fillColor: [217, 119, 6],
+        textColor: [255, 255, 255],
+        fontSize: 7.5,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        3: { halign: 'center', fontStyle: 'bold' },
+        5: { fontStyle: 'bold', halign: 'center' }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 12;
+  }
+
+  // ─── 6. SIGNATURE BLOCK ───
   if (currentY > pageHeight - 35) {
     doc.addPage();
     addHeader();

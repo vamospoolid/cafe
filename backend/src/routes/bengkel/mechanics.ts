@@ -144,7 +144,10 @@ router.post('/payout', async (req: AuthRequest, res: Response) => {
 
     // Double validate mechanic profile ownership
     const profile = await prisma.mechanicProfile.findFirst({
-      where: { id: String(mechanicProfileId), tenantId }
+      where: { id: String(mechanicProfileId), tenantId },
+      include: {
+        user: { select: { id: true, name: true } }
+      }
     });
 
     if (!profile) {
@@ -153,7 +156,7 @@ router.post('/payout', async (req: AuthRequest, res: Response) => {
 
     const currentPeriod = period ? String(period) : new Date().toISOString().slice(0, 7);
 
-    // Transaction: Record payout and update profile pending/paid
+    // Transaction: Record payout, update profile pending/paid, and record cash expense
     const result = await prisma.$transaction(async (tx) => {
       const payout = await tx.commissionPayout.create({
         data: {
@@ -171,6 +174,20 @@ router.post('/payout', async (req: AuthRequest, res: Response) => {
         data: {
           pendingCommission: { decrement: payAmount },
           paidCommission: { increment: payAmount }
+        }
+      });
+
+      // Catat mutasi kas keluar operasional komisi mekanik
+      await tx.cashFlow.create({
+        data: {
+          tenantId,
+          type: 'Pengeluaran',
+          category: 'KOMISI_MEKANIK',
+          cashPocket: 'LACI_KASIR',
+          amount: payAmount,
+          description: `Pembayaran komisi mekanik (${profile.user?.name || 'Mekanik'}) - Periode ${currentPeriod}${notes ? ` (${notes})` : ''}`,
+          userId: currentUserId,
+          date: new Date()
         }
       });
 

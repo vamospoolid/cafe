@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useContext, useMemo } from "react";
+import React, { useState, useEffect, useContext, useMemo } from "react";
 import {
   Package, Plus, Search, Edit, Trash2,
   AlertTriangle, CheckCircle, XCircle, Wallet,
@@ -8,6 +8,7 @@ import {
 import ProductModal from "./ProductModal";
 import { CategoryModal } from "./CategoryModal";
 import { POSContext } from "../context/POSContext";
+import { useVertical } from "../context/VerticalContext";
 import { toast, confirmAlert } from "../utils/alert";
 
 type ViewMode = "ringkas" | "tabel" | "grid";
@@ -25,11 +26,23 @@ const ProductView = () => {
   const [filterStock, setFilterStock] = useState("Semua");
 
   const posContext = useContext(POSContext);
+  const { isBengkel, isRetail } = useVertical();
   const fmt = (val: number) => `Rp ${(val || 0).toLocaleString("id-ID")}`;
+
+  const getAuthHeaders = (extra: Record<string, string> = {}) => {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${posContext?.token}`,
+      ...extra
+    };
+    if (posContext?.user?.tenantId) {
+      headers['x-tenant-id'] = String(posContext.user.tenantId);
+    }
+    return headers;
+  };
 
   const fetchProducts = async () => {
     try {
-      const res = await fetch("/api/products", { headers: { Authorization: `Bearer ${posContext?.token}` } });
+      const res = await fetch("/api/products", { headers: getAuthHeaders() });
       const data = await res.json();
       if (res.ok) setProducts(data);
     } catch (err) { console.error(err); }
@@ -37,7 +50,7 @@ const ProductView = () => {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch("/api/categories", { headers: { Authorization: `Bearer ${posContext?.token}` } });
+      const res = await fetch("/api/categories", { headers: getAuthHeaders() });
       const data = await res.json();
       if (res.ok) setCategories(data);
     } catch (err) { console.error(err); }
@@ -47,7 +60,7 @@ const ProductView = () => {
     if (posContext?.token) {
       Promise.all([fetchProducts(), fetchCategories()]).finally(() => setLoading(false));
     }
-  }, [posContext?.token]);
+  }, [posContext?.token, posContext?.user?.tenantId]);
 
   const openAddModal = () => { setSelectedProduct(null); setIsModalOpen(true); };
   const openEditModal = (p: any) => { setSelectedProduct(p); setIsModalOpen(true); };
@@ -56,7 +69,7 @@ const ProductView = () => {
     const result = await confirmAlert("Hapus Produk?", "Apakah Anda yakin ingin menghapus produk ini?");
     if (!result.isConfirmed) return;
     try {
-      const res = await fetch(`/api/products/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${posContext?.token}` } });
+      const res = await fetch(`/api/products/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       if (res.ok) { fetchProducts(); toast("Produk berhasil dihapus", "success"); }
       else toast("Gagal menghapus produk", "error");
     } catch { toast("Terjadi kesalahan server", "error"); }
@@ -67,7 +80,7 @@ const ProductView = () => {
     try {
       const res = await fetch(isEdit ? `/api/products/${selectedProduct.id}` : "/api/products", {
         method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${posContext?.token}` },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(data)
       });
       if (res.ok) { setIsModalOpen(false); fetchProducts(); toast("Produk berhasil disimpan!", "success"); }
@@ -113,15 +126,21 @@ const ProductView = () => {
               <Package size={20} className="text-white" />
             </div>
             <div>
-              <h1 className="text-base font-extrabold text-slate-800 leading-tight">Manajemen Produk</h1>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">Kelola harga jual, stok &amp; klasifikasi kategori</p>
+              <h1 className="text-base font-extrabold text-slate-800 leading-tight">
+                {isBengkel ? 'Sparepart & Jasa Servis' : 'Manajemen Produk'}
+              </h1>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                {isBengkel
+                  ? 'Katalog suku cadang, tier harga (Umum, Bengkel, Grosir) & stok'
+                  : 'Kelola harga jual, stok & klasifikasi kategori'}
+              </p>
             </div>
           </div>
           <button
             onClick={openAddModal}
             className="flex items-center gap-1.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md shadow-violet-500/25 active:scale-95 transition-all shrink-0"
           >
-            <Plus size={15} /> Tambah
+            <Plus size={15} /> {isBengkel ? 'Tambah Sparepart' : 'Tambah'}
           </button>
         </div>
 
@@ -317,6 +336,14 @@ const ProductView = () => {
                       </div>
                       <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium mb-1 flex-wrap">
                         <span className="font-bold text-slate-500">{prod.barcode || `SKU-${prod.id}`}</span>
+                        {prod.brand && (
+                          <span className="font-bold text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100">
+                            {prod.brand}
+                          </span>
+                        )}
+                        {prod.storageLocation && (
+                          <span className="text-slate-500 font-medium">📍 {prod.storageLocation}</span>
+                        )}
                         {prod.category && (
                           <>
                             <span className="text-slate-300">•</span>
@@ -330,7 +357,21 @@ const ProductView = () => {
                           </>
                         )}
                       </div>
-                      <div className="text-xs font-black text-violet-700">Ecer: {fmt(prod.sellPrice)}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-black text-violet-700">
+                          {isBengkel ? 'Umum: ' : 'Ecer: '}{fmt(prod.sellPrice)}
+                        </span>
+                        {prod.sellPriceMitra != null && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                            {isBengkel ? 'Bengkel: ' : 'Mitra: '}{fmt(prod.sellPriceMitra)}
+                          </span>
+                        )}
+                        {prod.sellPriceGrosir != null && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                            Grosir: {fmt(prod.sellPriceGrosir)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
                       <div className="flex items-center gap-1">
@@ -390,9 +431,23 @@ const ProductView = () => {
                   </div>
                   <div className="p-3 flex flex-col flex-1">
                     <div className="text-[10px] text-violet-600 font-bold truncate mb-0.5">{prod.category?.name || "Tanpa Kategori"}</div>
-                    <h3 className="font-bold text-slate-800 text-xs leading-tight mb-2 line-clamp-2 flex-1">{prod.name}</h3>
-                    <div className="text-sm font-black text-violet-700 mb-2">{fmt(prod.sellPrice)}</div>
-                    <div className="flex gap-1 border-t border-slate-100 pt-2">
+                    <h3 className="font-bold text-slate-800 text-xs leading-tight mb-1.5 line-clamp-2 flex-1">{prod.name}</h3>
+                    <div className="text-sm font-black text-violet-700 mb-1">{fmt(prod.sellPrice)}</div>
+                    {(prod.sellPriceMitra != null || prod.sellPriceGrosir != null) && (
+                      <div className="flex gap-1 flex-wrap mb-2">
+                        {prod.sellPriceMitra != null && (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-100">
+                            {isBengkel ? 'B:' : 'M:'} {(prod.sellPriceMitra / 1000).toFixed(0)}k
+                          </span>
+                        )}
+                        {prod.sellPriceGrosir != null && (
+                          <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-100">
+                            G: {(prod.sellPriceGrosir / 1000).toFixed(0)}k
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-1 border-t border-slate-100 pt-2 mt-auto">
                       <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-violet-600 bg-violet-50 hover:bg-violet-100 transition-colors" onClick={() => openEditModal(prod)}><Edit size={13} /></button>
                       <button className="flex-1 py-1.5 flex justify-center items-center rounded-lg text-rose-500 bg-rose-50 hover:bg-rose-100 transition-colors" onClick={() => handleDelete(prod.id)}><Trash2 size={13} /></button>
                     </div>
@@ -433,7 +488,15 @@ const ProductView = () => {
                             </div>
                             <div>
                               <div className="font-bold text-slate-800">{prod.name}</div>
-                              <div className="text-[10px] text-slate-400 font-mono">{prod.barcode || "-"}</div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
+                                <span>{prod.barcode || "-"}</span>
+                                {prod.brand && (
+                                  <span className="font-bold text-blue-600 bg-blue-50 px-1 rounded border border-blue-100">{prod.brand}</span>
+                                )}
+                                {prod.storageLocation && (
+                                  <span className="text-slate-500">📍 {prod.storageLocation}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -448,6 +511,20 @@ const ProductView = () => {
                         <td className="px-4 py-3">
                           <div className="text-[10px] text-slate-400">HPP: {fmt(prod.buyPrice)}</div>
                           <div className="font-black text-violet-700">{fmt(prod.sellPrice)}</div>
+                          {(prod.sellPriceMitra != null || prod.sellPriceGrosir != null) && (
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                              {prod.sellPriceMitra != null && (
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100" title="Harga Rekan Bengkel / Mitra">
+                                  {isBengkel ? 'Bengkel' : 'Mitra'}: {fmt(prod.sellPriceMitra)}
+                                </span>
+                              )}
+                              {prod.sellPriceGrosir != null && (
+                                <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-100" title="Harga Grosir">
+                                  Grosir: {fmt(prod.sellPriceGrosir)}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${stock.cls}`}>

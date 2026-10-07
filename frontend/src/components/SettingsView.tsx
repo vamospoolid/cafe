@@ -172,6 +172,20 @@ const SettingsView = () => {
     enableBlindClose: true,
     warehouseTransferPricing: 'AT_COST',
     warehouseMarkupPercent: 0,
+    // Dynamic White-Label Theming
+    primaryColor: '#4f46e5',
+    accentColor: '#f59e0b',
+    loginLayout: 'split_modern',
+    loginCoverUrl: '/assets/images/cafe_login_cover.png',
+    loginTagline: '',
+    faviconUrl: '',
+    hidePlatformBranding: false,
+    // Jam Operasional & Kontrol Kasir
+    earlyOpenBufferMinutes: 45,
+    closingGraceMinutes: 45,
+    enforceOperatingHours: false,
+    allowOrdersAfterClose: false,
+    operatingHours: '',
     // Printer Kasir
     printerIp: '',
     printerPort: 9100,
@@ -234,6 +248,27 @@ const SettingsView = () => {
 
   const [newShift, setNewShift] = useState({ name: '', start: '08:00', end: '16:00', lateTolerance: 15 });
 
+  const [isAll24Hours, setIsAll24Hours] = useState(false);
+  const [defaultOpenTime, setDefaultOpenTime] = useState('08:00');
+  const [defaultCloseTime, setDefaultCloseTime] = useState('22:00');
+  const [showDayScheduleDetail, setShowDayScheduleDetail] = useState(false);
+  const [operatingSchedules, setOperatingSchedules] = useState<Array<{
+    day: number;
+    dayName: string;
+    isOpen: boolean;
+    openTime: string;
+    closeTime: string;
+    is24Hours: boolean;
+  }>>([
+    { day: 1, dayName: 'Senin', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 2, dayName: 'Selasa', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 3, dayName: 'Rabu', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 4, dayName: 'Kamis', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 5, dayName: 'Jumat', isOpen: true, openTime: '08:00', closeTime: '23:00', is24Hours: false },
+    { day: 6, dayName: 'Sabtu', isOpen: true, openTime: '08:00', closeTime: '23:00', is24Hours: false },
+    { day: 0, dayName: 'Minggu', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+  ]);
+
   useEffect(() => {
     if (posContext?.settings) {
       setFormData({
@@ -251,6 +286,19 @@ const SettingsView = () => {
           const parsedTiers = JSON.parse(posContext.settings.dailyOmzetTiers);
           if (Array.isArray(parsedTiers) && parsedTiers.length > 0) setDailyTiersList(parsedTiers);
         } catch {}
+      }
+      if (posContext.settings.operatingHours) {
+        try {
+          const raw = posContext.settings.operatingHours;
+          const parsedHours = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (Array.isArray(parsedHours) && parsedHours.length > 0) {
+            setOperatingSchedules(parsedHours);
+            const all24 = parsedHours.every((d: any) => Boolean(d.is24Hours || (d.openTime === '00:00' && (d.closeTime === '23:59' || d.closeTime === '24:00' || d.closeTime === '00:00'))));
+            setIsAll24Hours(all24);
+          }
+        } catch (e) {
+          console.error('Error parsing operatingHours in settings:', e);
+        }
       }
     }
   }, [posContext?.settings]);
@@ -379,6 +427,66 @@ const SettingsView = () => {
     toast('Shift berhasil dihapus', 'info');
   };
 
+  const handleToggleAll24Hours = (enable24: boolean) => {
+    setIsAll24Hours(enable24);
+    const updated = (operatingSchedules || []).map(d => ({
+      ...d,
+      isOpen: true,
+      is24Hours: enable24,
+      openTime: enable24 ? '00:00' : (d.openTime === '00:00' ? defaultOpenTime : d.openTime),
+      closeTime: enable24 ? '23:59' : (d.closeTime === '23:59' ? defaultCloseTime : d.closeTime)
+    }));
+    setOperatingSchedules(updated);
+    setFormData(prev => ({
+      ...prev,
+      operatingHours: JSON.stringify(updated),
+      enforceOperatingHours: enable24 ? false : prev.enforceOperatingHours
+    }));
+    if (enable24) {
+      toast('🌟 Mode Buka 24 Jam Non-Stop diaktifkan! Toko buka setiap hari 24/7.', 'success');
+    } else {
+      toast('⏰ Mode Jam Operasional Terjadwal diaktifkan.', 'info');
+    }
+  };
+
+  const handleApply3ShiftsTemplate = () => {
+    const template3Shifts = [
+      { id: 'shift_1', name: 'Shift 1 - Pagi', start: '07:00', end: '15:00', lateTolerance: 15 },
+      { id: 'shift_2', name: 'Shift 2 - Sore', start: '15:00', end: '23:00', lateTolerance: 15 },
+      { id: 'shift_3', name: 'Shift 3 - Dini Hari (Overnight)', start: '23:00', end: '07:00', lateTolerance: 15 },
+    ];
+    setShiftsList(template3Shifts);
+    setFormData(prev => ({ ...prev, workShifts: JSON.stringify(template3Shifts) }));
+    toast('✓ Template 3 Shift 24 Jam (Pagi, Sore, Dini Hari) berhasil diterapkan!', 'success');
+  };
+
+  const handleApplyDefaultHours = () => {
+    const updated = (operatingSchedules || []).map(d => ({
+      ...d,
+      openTime: defaultOpenTime,
+      closeTime: defaultCloseTime,
+      is24Hours: false
+    }));
+    setOperatingSchedules(updated);
+    setFormData(prev => ({ ...prev, operatingHours: JSON.stringify(updated) }));
+    toast(`Jam operasional ${defaultOpenTime} - ${defaultCloseTime} diterapkan ke seluruh hari!`, 'success');
+  };
+
+  const handleUpdateDaySchedule = (dayIndex: number, field: string, value: any) => {
+    const updated = (operatingSchedules || []).map((d, idx) => {
+      if (idx !== dayIndex) return d;
+      const next = { ...d, [field]: value };
+      if (field === 'is24Hours' && value === true) {
+        next.openTime = '00:00';
+        next.closeTime = '23:59';
+        next.isOpen = true;
+      }
+      return next;
+    });
+    setOperatingSchedules(updated);
+    setFormData(prev => ({ ...prev, operatingHours: JSON.stringify(updated) }));
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
     const checked = (e.target as HTMLInputElement).checked;
@@ -393,13 +501,18 @@ const SettingsView = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      const payload = {
+        ...formData,
+        operatingHours: JSON.stringify(operatingSchedules || []),
+        workShifts: JSON.stringify(shiftsList || [])
+      };
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${posContext?.token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {
@@ -855,6 +968,699 @@ const SettingsView = () => {
                       </>
                     )}
                   </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+                    {/* ─── TAB BRANDING & TAMPILAN ─── */}
+          {activeTab === 'branding' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Branding &amp; Tampilan Visual Toko</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Kustomisasi warna tema brand, tata letak halaman login kasir, dan identitas white-label outlet.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full">
+                    ⚡ Zero-Build Theming
+                  </span>
+                </div>
+              </div>
+
+              {/* Skema Warna Brand */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Warna Primer Brand</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Warna utama tombol kasir, sidebar aktif, dan aksen navigasi.</p>
+                    </div>
+                    <div className="w-8 h-8 rounded-xl border border-slate-200 shadow-xs" style={{ backgroundColor: formData.primaryColor || '#4f46e5' }} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={formData.primaryColor || '#4f46e5'}
+                      onChange={e => setFormData(prev => ({ ...prev, primaryColor: e.target.value }))}
+                      className="w-12 h-10 rounded-xl cursor-pointer border border-slate-200 bg-transparent p-0.5"
+                    />
+                    <input
+                      type="text"
+                      value={formData.primaryColor || '#4f46e5'}
+                      onChange={e => setFormData(prev => ({ ...prev, primaryColor: e.target.value }))}
+                      placeholder="#4f46e5"
+                      className="form-control text-xs font-mono font-bold"
+                    />
+                  </div>
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block mb-2">Preset Palet Populer:</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {[
+                        { name: 'Indigo', hex: '#4f46e5' },
+                        { name: 'Blue', hex: '#0284c7' },
+                        { name: 'Emerald', hex: '#059669' },
+                        { name: 'Crimson', hex: '#e11d48' },
+                        { name: 'Amber', hex: '#d97706' },
+                        { name: 'Slate', hex: '#0f172a' }
+                      ].map(c => (
+                        <button
+                          key={c.hex}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, primaryColor: c.hex }))}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-slate-200 flex items-center gap-1.5 hover:border-slate-400 transition-colors"
+                        >
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.hex }} />
+                          <span>{c.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Warna Aksen &amp; Highlight</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Warna lencana promo, status peringatan, dan badge member.</p>
+                    </div>
+                    <div className="w-8 h-8 rounded-xl border border-slate-200 shadow-xs" style={{ backgroundColor: formData.accentColor || '#f59e0b' }} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={formData.accentColor || '#f59e0b'}
+                      onChange={e => setFormData(prev => ({ ...prev, accentColor: e.target.value }))}
+                      className="w-12 h-10 rounded-xl cursor-pointer border border-slate-200 bg-transparent p-0.5"
+                    />
+                    <input
+                      type="text"
+                      value={formData.accentColor || '#f59e0b'}
+                      onChange={e => setFormData(prev => ({ ...prev, accentColor: e.target.value }))}
+                      placeholder="#f59e0b"
+                      className="form-control text-xs font-mono font-bold"
+                    />
+                  </div>
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block mb-2">Preset Palet Aksen:</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {[
+                        { name: 'Amber Gold', hex: '#f59e0b' },
+                        { name: 'Coral', hex: '#f97316' },
+                        { name: 'Rose Pink', hex: '#f43f5e' },
+                        { name: 'Teal Cyan', hex: '#14b8a6' },
+                        { name: 'Violet', hex: '#8b5cf6' }
+                      ].map(c => (
+                        <button
+                          key={c.hex}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, accentColor: c.hex }))}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-slate-200 flex items-center gap-1.5 hover:border-slate-400 transition-colors"
+                        >
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.hex }} />
+                          <span>{c.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pilihan Layout Login Kasir */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+                <div>
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Tata Letak Halaman Login Kasir &amp; Staf</h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Pilih gaya antarmuka login yang akan tampil pada tablet kasir dan portal staf.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    {
+                      id: 'split_modern',
+                      title: 'Split Modern',
+                      desc: 'Form login di satu sisi dan showcase cover visual di sisi lain.',
+                      badge: 'Standar Toko'
+                    },
+                    {
+                      id: 'centered_glass',
+                      title: 'Centered Glass',
+                      desc: 'Kartu login kaca melayang di tengah dengan efek blur modern.',
+                      badge: 'Populer'
+                    },
+                    {
+                      id: 'minimal_luxe',
+                      title: 'Minimalist Luxe',
+                      desc: 'Tampilan bersih, monokrom, dan fokus pada kecepatan input PIN.',
+                      badge: 'Clean'
+                    },
+                    {
+                      id: 'cafe_atmosphere',
+                      title: 'Immersive Atmos',
+                      desc: 'Wallpaper layar penuh dengan kartu transparan elegan.',
+                      badge: 'Imersif'
+                    }
+                  ].map(layout => {
+                    const isSelected = (formData.loginLayout || 'split_modern') === layout.id;
+                    return (
+                      <button
+                        key={layout.id}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, loginLayout: layout.id }))}
+                        className={`p-4 rounded-2xl text-left border-2 transition-all flex flex-col justify-between space-y-3 ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs font-black text-slate-900">{layout.title}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              {layout.badge}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-medium leading-relaxed">{layout.desc}</p>
+                        </div>
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <span className={`text-[10px] font-black ${isSelected ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            {isSelected ? '✓ Terpilih' : 'Pilih Layout'}
+                          </span>
+                          <div
+                            className="w-4 h-4 rounded-full border-2 flex items-center justify-center"
+                            style={{ borderColor: isSelected ? '#4f46e5' : '#cbd5e1' }}
+                          >
+                            {isSelected && <div className="w-2 h-2 rounded-full bg-indigo-600" />}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Wallpaper Login & Tagline */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Wallpaper Cover Login</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">URL foto suasana toko, workshop, atau dining area yang tampil di layar login.</p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">URL Gambar Cover</label>
+                    <input
+                      type="text"
+                      name="loginCoverUrl"
+                      value={formData.loginCoverUrl || ''}
+                      onChange={handleChange}
+                      placeholder="/assets/images/cafe_login_cover.png atau https://..."
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 block mb-2">Preset Wallpaper Pilihan:</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: 'Artisan Bar', url: '/assets/images/cafe_login_cover.png' },
+                        { label: 'Dining Hall', url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&q=80' },
+                        { label: 'Workshop / Garasi', url: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=1200&q=80' },
+                        { label: 'Modern Retail', url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&q=80' }
+                      ].map(p => (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, loginCoverUrl: p.url }))}
+                          className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-[10.5px] font-bold text-slate-700 hover:border-indigo-400 hover:text-indigo-600 transition-colors text-left truncate"
+                        >
+                          🖼️ {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Tagline &amp; Identitas Brand</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Slogan bisnis yang tampil di bawah logo pada halaman login kasir.</p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tagline / Slogan Usaha</label>
+                    <input
+                      type="text"
+                      name="loginTagline"
+                      value={formData.loginTagline || ''}
+                      onChange={handleChange}
+                      placeholder="Contoh: Premium Coffee & Comfort Dining Experience"
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Favicon URL (Ikon Tab Browser)</label>
+                    <input
+                      type="text"
+                      name="faviconUrl"
+                      value={formData.faviconUrl || ''}
+                      onChange={handleChange}
+                      placeholder="https://.../favicon.png"
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="pt-2 border-t border-slate-100">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="hidePlatformBranding"
+                        checked={Boolean(formData.hidePlatformBranding)}
+                        onChange={handleChange}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Sembunyikan Label Platform CodePOS</span>
+                        <span className="text-[11px] text-slate-400 block">Hapus teks footer platform agar tampak 100% brand mandiri (*Enterprise White-Label*).</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─── TAB JAM OPERASIONAL & SHIFT ─── */}
+          {activeTab === 'jam_operasional' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Clock size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Jam Operasional &amp; Shift Kasir {verticalStore}</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Atur mode buka 24 jam non-stop atau jam terjadwal, batas toleransi modal kas, dan master shift kerja karyawan.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isAll24Hours ? (
+                    <span className="text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
+                      🟢 Buka 24 Jam Non-Stop (24/7)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+                      <Clock size={12} /> Jam Operasional Terjadwal
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Mode Operasional Outlet (24 Jam vs Terjadwal) */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-5">
+                <div>
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Store size={15} className="text-indigo-600" /> Mode Operasional Toko
+                  </h4>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Pilih apakah {verticalStore.toLowerCase()} beroperasi tanpa henti 24 jam sehari atau memiliki jam buka-tutup khusus.
+                  </p>
+                </div>
+
+                {/* Mode Selector: 24 Jam vs Terjadwal */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleAll24Hours(true)}
+                    className={`p-4 rounded-2xl border-2 text-left transition-all flex items-start gap-3.5 relative overflow-hidden ${
+                      isAll24Hours 
+                        ? 'border-emerald-600 bg-emerald-50/70 shadow-sm ring-2 ring-emerald-500/20' 
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      isAll24Hours ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      <Flame size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-xs font-black text-slate-900">Buka 24 Jam Non-Stop</span>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          isAll24Hours ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {isAll24Hours ? '✓ TERPILIH' : '24/7'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Toko beroperasi 24 jam setiap hari tanpa libur. Kasir &amp; staf dapat membuka kas serta melayani transaksi siang maupun malam.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleToggleAll24Hours(false)}
+                    className={`p-4 rounded-2xl border-2 text-left transition-all flex items-start gap-3.5 relative overflow-hidden ${
+                      !isAll24Hours 
+                        ? 'border-indigo-600 bg-indigo-50/70 shadow-sm ring-2 ring-indigo-500/20' 
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      !isAll24Hours ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      <Clock size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="text-xs font-black text-slate-900">Jam Operasional Terjadwal</span>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          !isAll24Hours ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {!isAll24Hours ? '✓ TERPILIH' : 'Jam Kerja'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Toko buka sesuai jam operasional tertentu (misal: 08:00 - 22:00) dengan aturan toleransi persiapan buka dan rekonsiliasi kas.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Banner Penjelasan Mode 24 Jam */}
+                {isAll24Hours ? (
+                  <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-2.5 animate-fade-in">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                        <h5 className="text-xs font-black text-emerald-900">Operasional 24 Jam Aktif Penuh</h5>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApply3ShiftsTemplate}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs flex items-center gap-1.5 transition-all active:scale-95"
+                      >
+                        <Sparkles size={13} />
+                        <span>Terapkan Template 3 Shift 24 Jam</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      Sistem kasir siap melayani transaksi kapan saja tanpa batasan jendela waktu buka/tutup. Kasir dapat saling berganti giliran kerja menggunakan rotasi 3 shift (Pagi, Sore, dan Malam/Dini Hari).
+                    </p>
+                  </div>
+                ) : (
+                  /* Form Jadwal Jam Buka - Tutup Terjadwal */
+                  <div className="space-y-4 pt-2 border-t border-slate-100 animate-fade-in">
+                    {/* Bar Terapkan Jam Cepat ke Semua Hari */}
+                    <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                        <span>Jam Buka Default:</span>
+                        <input
+                          type="time"
+                          value={defaultOpenTime}
+                          onChange={e => setDefaultOpenTime(e.target.value)}
+                          className="form-control text-xs py-1 px-2 w-28 bg-white"
+                        />
+                        <span>s/d</span>
+                        <input
+                          type="time"
+                          value={defaultCloseTime}
+                          onChange={e => setDefaultCloseTime(e.target.value)}
+                          className="form-control text-xs py-1 px-2 w-28 bg-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyDefaultHours}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs whitespace-nowrap self-end sm:self-auto"
+                      >
+                        Terapkan ke Semua Hari
+                      </button>
+                    </div>
+
+                    {/* Rincian Jadwal 7 Hari (Senin - Minggu) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          Jadwal Operasional Mingguan
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowDayScheduleDetail(!showDayScheduleDetail)}
+                          className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+                        >
+                          {showDayScheduleDetail ? '▲ Sembunyikan Detail Hari' : '▼ Tampilkan Detail Per Hari (7 Hari)'}
+                        </button>
+                      </div>
+
+                      {showDayScheduleDetail && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                          {operatingSchedules.map((schedule, idx) => (
+                            <div
+                              key={schedule.day}
+                              className={`p-3 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                                !schedule.isOpen
+                                  ? 'bg-rose-50/40 border-rose-200'
+                                  : schedule.is24Hours
+                                  ? 'bg-emerald-50/50 border-emerald-300'
+                                  : 'bg-white border-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={schedule.isOpen}
+                                  onChange={e => handleUpdateDaySchedule(idx, 'isOpen', e.target.checked)}
+                                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                                  title="Buka / Tutup hari ini"
+                                />
+                                <div>
+                                  <span className="text-xs font-black text-slate-800 block">{schedule.dayName}</span>
+                                  <span className="text-[10px] text-slate-400 block">
+                                    {!schedule.isOpen ? 'Libur / Tutup' : (schedule.is24Hours ? '24 Jam Penuh' : 'Jam Operasional')}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {schedule.isOpen && (
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {schedule.is24Hours ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg">
+                                      24 Jam
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <input
+                                        type="time"
+                                        value={schedule.openTime}
+                                        onChange={e => handleUpdateDaySchedule(idx, 'openTime', e.target.value)}
+                                        className="form-control text-[11px] py-1 px-1.5 w-20 bg-slate-50"
+                                      />
+                                      <span className="text-[11px] text-slate-400">-</span>
+                                      <input
+                                        type="time"
+                                        value={schedule.closeTime}
+                                        onChange={e => handleUpdateDaySchedule(idx, 'closeTime', e.target.value)}
+                                        className="form-control text-[11px] py-1 px-1.5 w-20 bg-slate-50"
+                                      />
+                                    </>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateDaySchedule(idx, 'is24Hours', !schedule.is24Hours)}
+                                    className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                                      schedule.is24Hours
+                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                        : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                    }`}
+                                    title="Set hari ini buka 24 jam"
+                                  >
+                                    24H
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Early buffer & closing grace */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                          Buka Kasir Lebih Awal (Early Open Buffer)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            name="earlyOpenBufferMinutes"
+                            value={formData.earlyOpenBufferMinutes ?? 45}
+                            onChange={handleChange}
+                            className="form-control text-xs w-32"
+                          />
+                          <span className="text-xs font-bold text-slate-600">Menit sebelum operasional</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 mt-1 block">Kasir diperbolehkan membuka shift dan menghitung kas awal X menit sebelum melayani transaksi.</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                          Batas Rekonsiliasi Tutup Laci (Closing Grace Period)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            name="closingGraceMinutes"
+                            value={formData.closingGraceMinutes ?? 45}
+                            onChange={handleChange}
+                            className="form-control text-xs w-32"
+                          />
+                          <span className="text-xs font-bold text-slate-600">Menit setelah tutup toko</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 mt-1 block">Toleransi waktu bagi kasir untuk menyelesaikan rekap laci dan setoran fisik setelah tutup.</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 space-y-3">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="enforceOperatingHours"
+                          checked={Boolean(formData.enforceOperatingHours)}
+                          onChange={handleChange}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 block">Kunci Transaksi di Luar Jam Operasional (Strict Mode)</span>
+                          <span className="text-[11px] text-slate-400 block">Jika aktif, kasir tidak dapat membuat order transaksi baru di luar jendela jam buka toko.</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="allowOrdersAfterClose"
+                          checked={Boolean(formData.allowOrdersAfterClose)}
+                          onChange={handleChange}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-slate-800 block">Izinkan Selesaikan Transaksi Berjalan Setelah Jam Tutup</span>
+                          <span className="text-[11px] text-slate-400 block">Order/meja/servis yang sedang aktif tetap dapat diselesaikan pembayarannya meskipun telah melewati jam tutup.</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Master Shift Kerja Staf & Kasir */}
+              <div className="p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
+                <div className="flex justify-between items-center flex-wrap gap-2">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Clock size={15} className="text-indigo-600" /> Master Shift Kerja Kasir &amp; Karyawan
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Daftar shift kerja yang dipilih oleh kasir saat membuka laci kas atau staf saat presensi kehadiran.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApply3ShiftsTemplate}
+                    className="px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold shadow-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <Sparkles size={13} />
+                    <span>Preset 3 Shift 24 Jam (Pagi, Sore, Dini Hari)</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {shiftsList.map(shift => {
+                    const isOvernight = shift.start && shift.end && shift.start > shift.end;
+                    return (
+                      <div key={shift.id} className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2 relative group hover:border-indigo-300 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h5 className="text-xs font-black text-slate-900">{shift.name}</h5>
+                            {isOvernight && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                                🌙 Overnight
+                              </span>
+                            )}
+                          </div>
+                          {shiftsList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteShift(shift.id)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-lg"
+                              title="Hapus Shift"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-semibold space-y-0.5">
+                          <p>Jam: <strong>{shift.start} - {shift.end}</strong></p>
+                          <p>Toleransi Terlambat: <strong className="text-indigo-600">{shift.lateTolerance} Menit</strong></p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex flex-col md:flex-row items-end gap-3">
+                  <div className="flex-1 w-full">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Shift Baru</label>
+                    <input
+                      type="text"
+                      value={newShift.name}
+                      onChange={e => setNewShift({ ...newShift, name: e.target.value })}
+                      placeholder="Misal: Shift Malam (22:00 - 06:00)"
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="w-full md:w-32">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Jam Mulai</label>
+                    <input
+                      type="time"
+                      value={newShift.start}
+                      onChange={e => setNewShift({ ...newShift, start: e.target.value })}
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="w-full md:w-32">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Jam Selesai</label>
+                    <input
+                      type="time"
+                      value={newShift.end}
+                      onChange={e => setNewShift({ ...newShift, end: e.target.value })}
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <div className="w-full md:w-32">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Toleransi (Mnt)</label>
+                    <input
+                      type="number"
+                      value={newShift.lateTolerance}
+                      onChange={e => setNewShift({ ...newShift, lateTolerance: Number(e.target.value) })}
+                      className="form-control text-xs"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddShift}
+                    className="w-full md:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold whitespace-nowrap shadow-sm"
+                  >
+                    + Tambah Shift
+                  </button>
                 </div>
               </div>
             </div>
@@ -3093,7 +3899,7 @@ const SettingsView = () => {
           )}
 
           {/* Bottom Save Action for settings tabs */}
-          {['profil', 'struk', 'pajak', 'bayar', 'fitur', 'bagi_hasil', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
+          {['profil', 'branding', 'jam_operasional', 'struk', 'pajak', 'bayar', 'fitur', 'bagi_hasil', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
             <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-end">
               <button 
                 type="button"

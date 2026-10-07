@@ -9,7 +9,18 @@ const sshConfig = {
     password: 'Ahmad_dcc07'
 };
 
-const appDir = '/var/www/poscafe';
+// ============================================================================
+// SAFETY GUARD: CODEPOS SAAS DEPLOYMENT SCRIPT (codenusa.id)
+// CATATAN PENTING:
+// Muki Ramen (app.mukiramen.id) bersifat STANDALONE di /var/www/poscafe dengan
+// database mandiri 'mukiramen_db'. Skrip ini HANYA mengelola Codenusa SaaS di
+// /var/www/codenusa (branch: saas) dan PM2: codenusa-backend.
+// DILARANG KERAS MENGARAHKAN SKRIP INI KE /var/www/poscafe ATAU mukiramen_db!
+// ============================================================================
+
+const appDir = '/var/www/codenusa';
+const branch = 'saas';
+const pm2Service = 'codenusa-backend';
 
 // Target deploy: 'all', 'backend', 'frontend'
 const target = process.argv[2] || 'all';
@@ -17,7 +28,8 @@ const target = process.argv[2] || 'all';
 const commitMsg = process.argv[3] || `Deploy update: ${new Date().toLocaleString('id-ID')}`;
 
 console.log('====================================================');
-console.log(`🚀 MEMULAI PROSES DEPLOYMENT (${target.toUpperCase()})`);
+console.log(`🚀 MEMULAI PROSES DEPLOYMENT CODEPOS SAAS (${target.toUpperCase()})`);
+console.log(`📌 Target: ${appDir} (Branch: ${branch})`);
 console.log('====================================================\n');
 
 // 1. Git lokal
@@ -34,8 +46,8 @@ try {
         console.log(`   -> Commit dengan pesan: "${commitMsg}"`);
         execSync(`git commit -m "${commitMsg}"`, { stdio: 'inherit' });
         
-        console.log('   -> Mengunggah (push) kode ke GitHub...');
-        execSync('git push origin main', { stdio: 'inherit' });
+        console.log(`   -> Mengunggah (push) kode ke GitHub (${branch})...`);
+        execSync(`git push origin ${branch}`, { stdio: 'inherit' });
         console.log('✅ Git Push Berhasil!\n');
     } else {
         console.log('   -> Tidak ada perubahan lokal baru yang perlu di-commit.\n');
@@ -53,21 +65,21 @@ let remoteCmd = '';
 if (target === 'backend') {
     remoteCmd = `
     cd ${appDir}
-    echo "=== PULLING LATEST CODE ==="
-    git reset --hard && git pull origin main
+    echo "=== PULLING LATEST CODE (${branch}) ==="
+    git pull origin ${branch}
     
     echo "=== SETTING UP BACKEND ==="
     cd backend
-    npx prisma db push --accept-data-loss
     npx tsc
-    pm2 restart poscafe-backend
+    pm2 restart ${pm2Service}
     echo "✅ Backend updated & restarted!"
     `;
 } else if (target === 'frontend') {
     remoteCmd = `
     cd ${appDir}
-    echo "=== PULLING LATEST CODE ==="
-    git reset --hard && git pull origin main
+    echo "=== PULLING LATEST CODE (${branch}) ==="
+    git checkout -- frontend/package* 2>/dev/null || true
+    git pull origin ${branch}
     
     echo "=== BUILDING FRONTEND ==="
     cd frontend
@@ -79,23 +91,22 @@ if (target === 'backend') {
     // default/all
     remoteCmd = `
     cd ${appDir}
-    echo "=== PULLING LATEST CODE ==="
-    git reset --hard && git pull origin main
+    echo "=== PULLING LATEST CODE (${branch}) ==="
+    git checkout -- frontend/package* 2>/dev/null || true
+    git pull origin ${branch}
     
     echo "=== SETTING UP BACKEND ==="
     cd backend
     npm install
-    npx prisma db push --accept-data-loss
-    node update_muki_ramen_settings.js
-    node update_gps.js 2>/dev/null || true
+    npx prisma generate
     npx tsc
-    pm2 restart poscafe-backend
+    pm2 restart ${pm2Service}
     
     echo "=== BUILDING FRONTEND ==="
     cd ../frontend
     npm install
     npm run build
-    echo "✅ All components updated successfully!"
+    echo "✅ All SaaS components updated successfully!"
     `;
 }
 

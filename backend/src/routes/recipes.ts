@@ -103,10 +103,11 @@ router.put('/product/:productId', authenticateToken, async (req: Request, res: R
       // Hapus semua resep lama
       await tx.recipeItem.deleteMany({ where: { productId: Number(productId) } });
 
-      // Buat resep baru
+      // Buat resep baru (terikat ke tenantId)
       if (items.length > 0) {
         await tx.recipeItem.createMany({
           data: items.map((item: any) => ({
+            tenantId,
             productId: Number(productId),
             ingredientId: Number(item.ingredientId),
             qtyPerServing: Number(item.qtyPerServing)

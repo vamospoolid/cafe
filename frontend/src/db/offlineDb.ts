@@ -229,20 +229,11 @@ export class CodenusaOfflineDatabase extends Dexie {
 
   async getCachedProducts(tenantId?: string): Promise<CachedProduct[]> {
     const activeTenantId = tenantId || this.getActiveTenantId();
-    let list: CachedProduct[];
-
-    if (activeTenantId) {
-      list = await this.cachedProducts.where('tenantId').equals(activeTenantId).toArray();
-      // Fallback untuk backward compatibility data legacy tanpa tenantId
-      if (list.length === 0) {
-        const all = await this.cachedProducts.toArray();
-        if (!all.some(p => p.tenantId)) {
-          list = all;
-        }
-      }
-    } else {
-      list = await this.cachedProducts.toArray();
+    if (!activeTenantId) {
+      return [];
     }
+
+    const list = await this.cachedProducts.where('tenantId').equals(activeTenantId).toArray();
 
     return list.map(p => {
       const val = Number(p.sellPrice ?? p.price ?? 0);
@@ -256,19 +247,11 @@ export class CodenusaOfflineDatabase extends Dexie {
 
   async getCachedCategories(tenantId?: string): Promise<CachedCategory[]> {
     const activeTenantId = tenantId || this.getActiveTenantId();
-    let list: CachedCategory[];
-
-    if (activeTenantId) {
-      list = await this.cachedCategories.where('tenantId').equals(activeTenantId).toArray();
-      if (list.length === 0) {
-        const all = await this.cachedCategories.toArray();
-        if (!all.some(c => c.tenantId)) {
-          list = all;
-        }
-      }
-    } else {
-      list = await this.cachedCategories.toArray();
+    if (!activeTenantId) {
+      return [];
     }
+
+    const list = await this.cachedCategories.where('tenantId').equals(activeTenantId).toArray();
 
     return list.sort((a, b) => {
       const orderA = a.sortOrder ?? 0;
@@ -280,25 +263,20 @@ export class CodenusaOfflineDatabase extends Dexie {
 
   async getCachedTables(tenantId?: string): Promise<CachedTable[]> {
     const activeTenantId = tenantId || this.getActiveTenantId();
-    if (activeTenantId) {
-      const list = await this.cachedTables.where('tenantId').equals(activeTenantId).toArray();
-      if (list.length > 0) return list;
-      const all = await this.cachedTables.toArray();
-      if (!all.some(t => t.tenantId)) return all;
-      return list;
+    if (!activeTenantId) {
+      return [];
     }
-    return this.cachedTables.toArray();
+    return this.cachedTables.where('tenantId').equals(activeTenantId).toArray();
   }
 
   async getCachedSettings(tenantId?: string): Promise<CachedSetting | undefined> {
     const activeTenantId = tenantId || this.getActiveTenantId();
-    if (activeTenantId) {
-      const scoped = await this.cachedSettings.where('tenantId').equals(activeTenantId).first();
-      if (scoped) return scoped;
-      const byKey = await this.cachedSettings.get(`settings_${activeTenantId}`);
-      if (byKey) return byKey;
+    if (!activeTenantId) {
+      return undefined;
     }
-    return this.cachedSettings.get('current_settings');
+    const scoped = await this.cachedSettings.where('tenantId').equals(activeTenantId).first();
+    if (scoped) return scoped;
+    return this.cachedSettings.get(`settings_${activeTenantId}`);
   }
 
   // ─── Table & Local Stock Optimistic Management ──────────────────────────────
@@ -462,7 +440,7 @@ export class CodenusaOfflineDatabase extends Dexie {
    * tanpa menghapus antrean order/attendance offline yang belum tersinkronisasi.
    */
   async clearCatalogCache(tenantId?: string): Promise<void> {
-    const activeTenantId = tenantId || this.getActiveTenantId();
+    const activeTenantId = tenantId;
     await this.transaction('rw', [
       this.cachedProducts,
       this.cachedCategories,

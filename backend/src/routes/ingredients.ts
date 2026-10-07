@@ -1683,7 +1683,7 @@ router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWN
   try {
     const tenantId = (req as any).tenantId;
     const { id } = req.params;
-    const { change, type, description, newBuyPrice } = req.body;
+    const { change, type, description, newBuyPrice, costingMethod = 'WAC' } = req.body;
     // type: 'Restock' | 'Penyesuaian' | 'Rusak'
     const amount = Number(change);
     if (isNaN(amount) || amount === 0) {
@@ -1697,15 +1697,21 @@ router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWN
       if (!current) throw new Error('Bahan baku tidak ditemukan atau Anda tidak memiliki akses');
 
       let nextBuyPrice = current.buyPrice;
-      if (type === 'Restock' && newBuyPrice !== undefined && newBuyPrice !== null) {
+      if (type === 'Restock' && newBuyPrice !== undefined && newBuyPrice !== null && costingMethod !== 'KEEP') {
         const incomingPrice = Number(newBuyPrice);
         if (!isNaN(incomingPrice) && incomingPrice > 0) {
-          const currentStock = Math.max(0, current.stock);
-          const totalStock = currentStock + amount;
-          if (totalStock > 0) {
-            nextBuyPrice = Math.round(((currentStock * current.buyPrice) + (amount * incomingPrice)) / totalStock);
+          if (costingMethod === 'LATEST') {
+            nextBuyPrice = Number(incomingPrice.toFixed(2));
           } else {
-            nextBuyPrice = incomingPrice;
+            // Default WAC (Weighted Average Costing)
+            const currentStock = Math.max(0, current.stock);
+            const totalStock = currentStock + amount;
+            if (totalStock > 0) {
+              const rawWac = ((currentStock * current.buyPrice) + (amount * incomingPrice)) / totalStock;
+              nextBuyPrice = Number(rawWac.toFixed(2));
+            } else {
+              nextBuyPrice = Number(incomingPrice.toFixed(2));
+            }
           }
         }
       }
@@ -1718,7 +1724,14 @@ router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWN
         }
       });
 
-      const wacNote = (nextBuyPrice !== current.buyPrice) ? ` [WAC Baru: Rp ${nextBuyPrice.toLocaleString('id-ID')}/${current.unit}]` : '';
+      let priceNote = '';
+      if (nextBuyPrice !== current.buyPrice) {
+        const diff = nextBuyPrice - current.buyPrice;
+        const pct = current.buyPrice > 0 ? Math.abs(Number(((diff / current.buyPrice) * 100).toFixed(1))) : 100;
+        priceNote = diff > 0 
+          ? ` [🔺 HPP Naik +${pct}%: Rp ${current.buyPrice.toLocaleString('id-ID')} ➔ Rp ${nextBuyPrice.toLocaleString('id-ID')}/${current.unit}]`
+          : ` [🔻 HPP Turun -${pct}%: Rp ${current.buyPrice.toLocaleString('id-ID')} ➔ Rp ${nextBuyPrice.toLocaleString('id-ID')}/${current.unit}]`;
+      }
 
       await tx.ingredientLog.create({
         data: {
@@ -1726,7 +1739,7 @@ router.post('/:id/adjust', authenticateToken, requireRole('Admin', 'Owner', 'OWN
           ingredientId: Number(id),
           change: amount,
           type: type || 'Penyesuaian',
-          description: (description || 'Penyesuaian stok') + wacNote,
+          description: (description || 'Penyesuaian stok') + priceNote,
           userId: (req as any).user?.id || null
         }
       });

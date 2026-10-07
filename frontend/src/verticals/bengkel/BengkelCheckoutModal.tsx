@@ -199,10 +199,7 @@ export const BengkelCheckoutModal: React.FC<BengkelCheckoutModalProps> = ({
         : 'PIUTANG';
 
       const paidAmount = 
-        paymentMethod === 'tunai' ? (cashGiven > 0 ? cashGiven : finalTotal)
-        : paymentMethod === 'split' ? splitCash
-        : paymentMethod === 'piutang' ? 0
-        : finalTotal;
+        paymentMethod === 'piutang' ? 0 : finalTotal;
 
       const directSaleFlag = isDirectSale !== undefined ? isDirectSale : !existingWorkOrderId;
 
@@ -217,6 +214,10 @@ export const BengkelCheckoutModal: React.FC<BengkelCheckoutModalProps> = ({
           paymentMethod: paymentMethodBackend,
           discount: totalDiscount,
           isDirectSale: directSaleFlag,
+          splitCash: paymentMethod === 'split' ? splitCash : undefined,
+          splitNonCash: paymentMethod === 'split' ? nonCash : undefined,
+          splitNonCashMethod: 'QRIS/Transfer',
+          cashGiven: paymentMethod === 'tunai' ? cashGiven : undefined,
           notes: paymentMethod === 'piutang' ? (debtNotes || `Jatuh tempo: ${dueDate}`) : undefined
         })
       });

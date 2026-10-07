@@ -48,9 +48,9 @@ router.get('/', async (req: Request, res: Response) => {
       }
     }
 
-    const settings = tenant?.settings?.[0] || await prisma.settings.findFirst({
-      where: tenant ? { tenantId: tenant.id } : undefined
-    });
+    const settings = tenant?.settings?.[0] || (tenant ? await prisma.settings.findFirst({
+      where: { tenantId: tenant.id }
+    }) : null);
 
     const storeName = settings?.storeName || tenant?.name || 'CodePOS Platform';
     const logoUrl = settings?.logoUrl || tenant?.logoUrl || '/logo.png';

@@ -6,6 +6,7 @@ import {
   Users, Hash, Barcode, Sparkles, ChevronDown, Store
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import { toast } from '../utils/alert';
 import { compressImageFile } from '../utils/imageCompressor';
 import BarcodeScannerModal from './BarcodeScannerModal';
@@ -35,12 +36,16 @@ const ProductModal: React.FC<ProductModalProps> = ({
     buyPrice: '',
     sellPrice: '',
     sellPriceRetail: '',
+    sellPriceMitra: '',
     sellPriceGrosir: '',
     minQtyGrosir: '5',
     stock: '',
     minStock: '1',
     status: 'Aktif',
-    imageUrl: ''
+    imageUrl: '',
+    brand: '',
+    vehicleType: 'MOTOR',
+    storageLocation: ''
   });
 
   const [activeTab, setActiveTab] = useState<'info' | 'pricing' | 'recipe'>('info');
@@ -50,10 +55,9 @@ const ProductModal: React.FC<ProductModalProps> = ({
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
   const posContext = useContext(POSContext);
+  const { isBengkel, isRetail, isCafe, profile } = useVertical();
+  const hasPriceTiers = isRetail || isBengkel || profile?.enablePriceTiers;
   const isAdvancedMode = posContext?.settings?.ingredientTrackingEnabled;
-  const businessType = (posContext?.user as any)?.businessType || posContext?.settings?.businessType || 'CAFE';
-  const isRetail = ['RETAIL', 'GROSIR', 'BANGUNAN'].includes(String(businessType).toUpperCase());
-  const isBengkel = String(businessType).toUpperCase() === 'BENGKEL';
 
   const [aiLoading, setAiLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -82,7 +86,10 @@ const ProductModal: React.FC<ProductModalProps> = ({
       data.append('image', optimizedFile, optimizedFile.name || 'product.webp');
       const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${posContext?.token}` },
+        headers: {
+          Authorization: `Bearer ${posContext?.token}`,
+          ...(posContext?.user?.tenantId ? { 'x-tenant-id': String(posContext.user.tenantId) } : {})
+        },
         body: data
       });
       const resData = await res.json();
@@ -110,12 +117,14 @@ const ProductModal: React.FC<ProductModalProps> = ({
   // ─── Fetch ingredients ────────────────────────────────────────────────────
   useEffect(() => {
     if (isOpen && isAdvancedMode && posContext?.token) {
-      fetch('/api/ingredients', { headers: { Authorization: `Bearer ${posContext.token}` } })
+      const h: Record<string, string> = { Authorization: `Bearer ${posContext.token}` };
+      if (posContext?.user?.tenantId) h['x-tenant-id'] = String(posContext.user.tenantId);
+      fetch('/api/ingredients', { headers: h })
         .then(r => r.json())
-        .then(data => setIngredients(data))
+        .then(data => setIngredients(Array.isArray(data) ? data : []))
         .catch(e => console.error(e));
     }
-  }, [isOpen, isAdvancedMode, posContext?.token]);
+  }, [isOpen, isAdvancedMode, posContext?.token, posContext?.user?.tenantId]);
 
   // ─── Reset / populate form ────────────────────────────────────────────────
   useEffect(() => {
@@ -128,13 +137,17 @@ const ProductModal: React.FC<ProductModalProps> = ({
           barcode: initialData.barcode || '',
           buyPrice: initialData.buyPrice ? String(initialData.buyPrice) : '',
           sellPrice: initialData.sellPrice ? String(initialData.sellPrice) : '',
-          sellPriceRetail: initialData.sellPriceRetail ? String(initialData.sellPriceRetail) : '',
+          sellPriceRetail: initialData.sellPriceRetail ? String(initialData.sellPriceRetail) : (initialData.sellPrice ? String(initialData.sellPrice) : ''),
+          sellPriceMitra: initialData.sellPriceMitra ? String(initialData.sellPriceMitra) : '',
           sellPriceGrosir: initialData.sellPriceGrosir ? String(initialData.sellPriceGrosir) : '',
           minQtyGrosir: initialData.minQtyGrosir ? String(initialData.minQtyGrosir) : '5',
           stock: initialData.stock !== undefined ? String(initialData.stock) : '',
           minStock: initialData.minStock !== undefined ? String(initialData.minStock) : '1',
           status: initialData.status || 'Aktif',
-          imageUrl: initialData.imageUrl || ''
+          imageUrl: initialData.imageUrl || '',
+          brand: initialData.brand || '',
+          vehicleType: initialData.vehicleType || 'MOTOR',
+          storageLocation: initialData.storageLocation || ''
         });
         if (initialData.recipes?.length > 0) {
           setRecipeItems(initialData.recipes.map((r: any) => ({
@@ -151,8 +164,9 @@ const ProductModal: React.FC<ProductModalProps> = ({
         setFormData({
           name: '', categoryId: categories.length > 0 ? String(categories[0].id) : '',
           subCategoryId: '', barcode: '', buyPrice: '', sellPrice: '',
-          sellPriceRetail: '', sellPriceGrosir: '', minQtyGrosir: '5',
-          stock: '', minStock: '1', status: 'Aktif', imageUrl: ''
+          sellPriceRetail: '', sellPriceMitra: '', sellPriceGrosir: '', minQtyGrosir: '5',
+          stock: '', minStock: '1', status: 'Aktif', imageUrl: '',
+          brand: '', vehicleType: 'MOTOR', storageLocation: ''
         });
         setRecipeItems([]);
       }
@@ -175,6 +189,18 @@ const ProductModal: React.FC<ProductModalProps> = ({
     const { name, value } = e.target;
     if (name === 'categoryId') {
       setFormData(prev => ({ ...prev, categoryId: value, subCategoryId: '' }));
+    } else if (name === 'sellPrice') {
+      setFormData(prev => ({
+        ...prev,
+        sellPrice: value,
+        sellPriceRetail: (!prev.sellPriceRetail || prev.sellPriceRetail === prev.sellPrice) ? value : prev.sellPriceRetail
+      }));
+    } else if (name === 'sellPriceRetail') {
+      setFormData(prev => ({
+        ...prev,
+        sellPriceRetail: value,
+        sellPrice: value
+      }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -195,21 +221,28 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) return toast('Nama produk harus diisi', 'error');
-    if (!formData.categoryId) return toast('Kategori produk harus dipilih', 'error');
-    if (!formData.sellPrice || Number(formData.sellPrice) < 0) return toast('Harga jual tidak valid', 'error');
+    if (!formData.name.trim()) return toast('Nama produk/sparepart harus diisi', 'error');
+    if (!formData.categoryId) return toast('Kategori harus dipilih', 'error');
+    
+    const effSellPrice = Number(formData.sellPrice) || Number(formData.sellPriceRetail) || 0;
+    if (effSellPrice <= 0) return toast('Harga jual tidak valid (harus lebih dari 0)', 'error');
+    const effRetail = formData.sellPriceRetail ? Number(formData.sellPriceRetail) : effSellPrice;
 
     const payload: any = {
       ...formData,
       categoryId: Number(formData.categoryId),
       subCategoryId: formData.subCategoryId ? Number(formData.subCategoryId) : null,
       buyPrice: Number(formData.buyPrice) || 0,
-      sellPrice: Number(formData.sellPrice),
-      sellPriceRetail: formData.sellPriceRetail ? Number(formData.sellPriceRetail) : undefined,
-      sellPriceGrosir: formData.sellPriceGrosir ? Number(formData.sellPriceGrosir) : undefined,
-      minQtyGrosir: formData.minQtyGrosir ? Number(formData.minQtyGrosir) : undefined,
+      sellPrice: effSellPrice,
+      sellPriceRetail: effRetail,
+      sellPriceMitra: formData.sellPriceMitra !== '' && formData.sellPriceMitra !== null ? Number(formData.sellPriceMitra) : null,
+      sellPriceGrosir: formData.sellPriceGrosir !== '' && formData.sellPriceGrosir !== null ? Number(formData.sellPriceGrosir) : null,
+      minQtyGrosir: formData.minQtyGrosir !== '' && formData.minQtyGrosir !== null ? Number(formData.minQtyGrosir) : null,
       stock: Number(formData.stock) || 0,
       minStock: Number(formData.minStock) || 0,
+      brand: formData.brand?.trim() || undefined,
+      vehicleType: formData.vehicleType || undefined,
+      storageLocation: formData.storageLocation?.trim() || undefined
     };
 
     if (isAdvancedMode) {
@@ -238,12 +271,14 @@ const ProductModal: React.FC<ProductModalProps> = ({
     }
     setAiLoading(true);
     try {
+      const h: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${posContext?.token}`
+      };
+      if (posContext?.user?.tenantId) h['x-tenant-id'] = String(posContext.user.tenantId);
       const res = await fetch('/api/recipes/ai-suggest', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${posContext?.token}`
-        },
+        headers: h,
         body: JSON.stringify({
           productName: formData.name,
           category: selectedCat?.name || 'DRINK'
@@ -308,9 +343,9 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
   // Tab definitions
   const tabs = [
-    { id: 'info', label: 'Info Produk', icon: Package },
-    ...(isRetail ? [{ id: 'pricing', label: 'Harga Jual', icon: TrendingUp }] : []),
-    ...(isAdvancedMode ? [{ id: 'recipe', label: 'Resep & HPP', icon: Beaker }] : [])
+    { id: 'info', label: isBengkel ? 'Info Sparepart' : 'Info Produk', icon: Package },
+    ...(hasPriceTiers ? [{ id: 'pricing', label: isBengkel ? 'Tier Harga Bengkel' : 'Harga Jual (3-Tier)', icon: TrendingUp }] : []),
+    ...(isAdvancedMode && isCafe ? [{ id: 'recipe', label: 'Resep & HPP', icon: Beaker }] : [])
   ] as { id: string; label: string; icon: any }[];
 
   return (
@@ -353,10 +388,14 @@ const ProductModal: React.FC<ProductModalProps> = ({
               </div>
               <div>
                 <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
-                  {initialData ? 'Edit Data Produk' : 'Tambah Produk Baru'}
+                  {initialData 
+                    ? (isBengkel ? 'Edit Sparepart & Jasa' : 'Edit Data Produk') 
+                    : (isBengkel ? 'Tambah Sparepart / Jasa Baru' : 'Tambah Produk Baru')}
                 </h2>
                 <p className="text-xs text-slate-500 font-medium">
-                  {initialData ? `Perbarui info ${initialData.name}` : 'Input produk ke katalog POS & inventaris'}
+                  {initialData 
+                    ? `Perbarui info ${initialData.name}` 
+                    : (isBengkel ? 'Input suku cadang, oli, atau jasa ke katalog POS Bengkel' : 'Input produk ke katalog POS & inventaris')}
                 </p>
               </div>
             </div>
@@ -572,64 +611,259 @@ const ProductModal: React.FC<ProductModalProps> = ({
                   {/* ── Kolom Kanan: Nama, Harga, Stok, Status ── */}
                   <div className="md:col-span-2 space-y-4">
 
-                    {/* Nama Produk */}
+                    {/* Nama Produk / Sparepart */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                        Nama Produk <span className="text-rose-500">*</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          {isBengkel ? 'Nama Sparepart / Jasa' : 'Nama Produk'} <span className="text-rose-500">*</span>
+                        </label>
+                        {isBengkel && (
+                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                            Katalog Bengkel
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="text"
                         name="name"
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-base font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                        placeholder={isRetail ? 'Contoh: Beras Premium 5 Kg' : 'Contoh: Ramen Kuah Paitan Spesial'}
+                        placeholder={
+                          isBengkel
+                            ? 'Contoh: Kampas Rem Depan Vario 150 / Oli MPX2 0.8L / Busi Denso'
+                            : isRetail
+                            ? 'Contoh: Beras Premium 5 Kg'
+                            : 'Contoh: Ramen Kuah Paitan Spesial'
+                        }
                         value={formData.name}
                         onChange={handleChange}
                         required
                       />
                     </div>
 
-                    {/* Harga Modal + Harga Jual */}
-                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                      <p className="text-[11px] font-black text-slate-500 uppercase tracking-wider">Harga Dasar</p>
-                      <div className="grid grid-cols-2 gap-3">
+                    {/* Atribut Khusus Bengkel: Merk, Jenis Kendaraan, Lokasi Rak */}
+                    {isBengkel && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200">
                         <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1">
-                            Harga Modal (HPP)
-                            {isAdvancedMode && recipeItems.length > 0 && (
-                              <span className="ml-1 text-indigo-600 text-[10px]">(Auto)</span>
-                            )}
+                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                            Merk / Brand Part
+                          </label>
+                          <input
+                            type="text"
+                            name="brand"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 transition-all"
+                            placeholder="AHM, Yamaha, Aspira..."
+                            value={formData.brand}
+                            onChange={handleChange}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                            Jenis Kendaraan
                           </label>
                           <div className="relative">
-                            <span className="absolute left-3 top-[9px] text-slate-400 font-bold text-xs">Rp</span>
-                            <input
-                              type="number"
-                              name="buyPrice"
-                              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 transition-all"
-                              placeholder="0"
-                              value={formData.buyPrice}
+                            <select
+                              name="vehicleType"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 transition-all appearance-none"
+                              value={formData.vehicleType}
                               onChange={handleChange}
-                              readOnly={isAdvancedMode && recipeItems.length > 0}
-                            />
+                            >
+                              <option value="MOTOR">Sepeda Motor</option>
+                              <option value="MOBIL">Mobil / Roda 4</option>
+                              <option value="UMUM">Universal / Semua</option>
+                            </select>
+                            <ChevronDown size={14} className="absolute right-3 top-[10px] text-slate-400 pointer-events-none" />
                           </div>
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-indigo-700 mb-1">
-                            Harga Jual Kasir <span className="text-rose-500">*</span>
+                          <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                            Lokasi Rak / Bin Gudang
                           </label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-[9px] text-indigo-600 font-bold text-xs">Rp</span>
-                            <input
-                              type="number"
-                              name="sellPrice"
-                              className="w-full pl-9 pr-3 py-2 bg-white border border-indigo-300 rounded-xl text-xs font-black text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-sm"
-                              placeholder="0"
-                              value={formData.sellPrice}
-                              onChange={handleChange}
-                              required
-                            />
-                          </div>
+                          <input
+                            type="text"
+                            name="storageLocation"
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 transition-all"
+                            placeholder="Contoh: RAK-A1, Box 03"
+                            value={formData.storageLocation}
+                            onChange={handleChange}
+                          />
                         </div>
                       </div>
+                    )}
+
+                    {/* Harga Dasar & Tier Harga */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                            {hasPriceTiers ? (isBengkel ? 'Struktur Harga Bengkel (3-Tier)' : 'Struktur Harga Retail (3-Tier)') : 'Harga Dasar'}
+                          </p>
+                          {hasPriceTiers && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700 uppercase">
+                              3-Tier POS
+                            </span>
+                          )}
+                        </div>
+                        {hasPriceTiers && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('pricing')}
+                            className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
+                          >
+                            <TrendingUp size={12} /> Rincian &amp; Simulator
+                          </button>
+                        )}
+                      </div>
+
+                      {hasPriceTiers ? (
+                        /* TIER PRICING INPUTS: HPP, Harga Umum, Harga Mitra, Harga Grosir */
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Modal HPP */}
+                            <div>
+                              <label className="block text-xs font-bold text-slate-600 mb-1">
+                                Harga Modal (HPP / Beli)
+                                {isAdvancedMode && recipeItems.length > 0 && (
+                                  <span className="ml-1 text-indigo-600 text-[10px]">(Auto)</span>
+                                )}
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-[9px] text-slate-400 font-bold text-xs">Rp</span>
+                                <input
+                                  type="number"
+                                  name="buyPrice"
+                                  className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 transition-all"
+                                  placeholder="0"
+                                  value={formData.buyPrice}
+                                  onChange={handleChange}
+                                  readOnly={isAdvancedMode && recipeItems.length > 0}
+                                />
+                              </div>
+                            </div>
+
+                            {/* 1. Harga UMUM */}
+                            <div>
+                              <label className="block text-xs font-bold text-blue-700 mb-1 flex items-center justify-between">
+                                <span>1. {isBengkel ? 'Harga Umum (Walk-in / Konsumen)' : 'Harga Eceran (Umum)'} <span className="text-rose-500">*</span></span>
+                                <span className="text-[10px] font-normal text-blue-600">Tier Utama</span>
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-[9px] text-blue-600 font-bold text-xs">Rp</span>
+                                <input
+                                  type="number"
+                                  name="sellPrice"
+                                  className="w-full pl-9 pr-3 py-2 bg-white border-2 border-blue-300 rounded-xl text-xs font-black text-blue-900 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm"
+                                  placeholder="0"
+                                  value={formData.sellPrice}
+                                  onChange={handleChange}
+                                  required
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Baris 2: Harga Rekan Bengkel (Mitra) + Harga Grosir */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
+                            {/* 2. Harga MITRA */}
+                            <div className="p-3 bg-white rounded-xl border border-emerald-200 shadow-2xs">
+                              <label className="block text-xs font-bold text-emerald-800 mb-1 flex items-center justify-between">
+                                <span>2. {isBengkel ? 'Harga Rekan Bengkel (Mitra)' : 'Harga Mitra (Langganan)'}</span>
+                                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">Opsional</span>
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-[9px] text-emerald-600 font-bold text-xs">Rp</span>
+                                <input
+                                  type="number"
+                                  name="sellPriceMitra"
+                                  className="w-full pl-9 pr-3 py-2 bg-emerald-50/40 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-900 outline-none focus:border-emerald-500 focus:bg-white transition-all"
+                                  placeholder={isBengkel ? 'Khusus sesama bengkel/ojol' : 'Khusus warung rekanan'}
+                                  value={formData.sellPriceMitra}
+                                  onChange={handleChange}
+                                />
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                {isBengkel ? 'Digunakan saat memilih tier MITRA di POS / SPK' : 'Otomatis untuk member tier Mitra'}
+                              </p>
+                            </div>
+
+                            {/* 3. Harga GROSIR */}
+                            <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs">
+                              <label className="block text-xs font-bold text-amber-800 mb-1 flex items-center justify-between">
+                                <span>3. {isBengkel ? 'Harga Grosir (Toko Part)' : 'Harga Grosir (Partai)'}</span>
+                                <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">Opsional</span>
+                              </label>
+                              <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                  <span className="absolute left-3 top-[9px] text-amber-600 font-bold text-xs">Rp</span>
+                                  <input
+                                    type="number"
+                                    name="sellPriceGrosir"
+                                    className="w-full pl-9 pr-2 py-2 bg-amber-50/40 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 outline-none focus:border-amber-500 focus:bg-white transition-all"
+                                    placeholder="Rp Grosir"
+                                    value={formData.sellPriceGrosir}
+                                    onChange={handleChange}
+                                  />
+                                </div>
+                                <div className="w-24 shrink-0">
+                                  <input
+                                    type="number"
+                                    name="minQtyGrosir"
+                                    min="1"
+                                    className="w-full px-2 py-2 bg-amber-50/40 border border-amber-200 rounded-xl text-xs font-bold text-amber-900 text-center outline-none focus:border-amber-500 focus:bg-white transition-all"
+                                    placeholder="Min Qty"
+                                    title="Minimal kuantitas pembelian grosir"
+                                    value={formData.minQtyGrosir}
+                                    onChange={handleChange}
+                                  />
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                Min. <span className="font-bold text-amber-800">{formData.minQtyGrosir || 5}</span> pcs untuk dapat harga grosir
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Standard Single Price for Cafe */
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">
+                              Harga Modal (HPP)
+                              {isAdvancedMode && recipeItems.length > 0 && (
+                                <span className="ml-1 text-indigo-600 text-[10px]">(Auto)</span>
+                              )}
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-[9px] text-slate-400 font-bold text-xs">Rp</span>
+                              <input
+                                type="number"
+                                name="buyPrice"
+                                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 transition-all"
+                                placeholder="0"
+                                value={formData.buyPrice}
+                                onChange={handleChange}
+                                readOnly={isAdvancedMode && recipeItems.length > 0}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-indigo-700 mb-1">
+                              Harga Jual Kasir <span className="text-rose-500">*</span>
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-[9px] text-indigo-600 font-bold text-xs">Rp</span>
+                              <input
+                                type="number"
+                                name="sellPrice"
+                                className="w-full pl-9 pr-3 py-2 bg-white border border-indigo-300 rounded-xl text-xs font-black text-indigo-900 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-sm"
+                                placeholder="0"
+                                value={formData.sellPrice}
+                                onChange={handleChange}
+                                required
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Margin realtime */}
                       {marginInfo && (
@@ -647,27 +881,29 @@ const ProductModal: React.FC<ProductModalProps> = ({
                       )}
                     </div>
 
-                    {/* Harga Grosir (untuk RETAIL) — Shortcut ke tab pricing */}
-                    {isRetail && (
+                    {/* Shortcut ke tab pricing */}
+                    {hasPriceTiers && (
                       <button
                         type="button"
                         onClick={() => setActiveTab('pricing')}
-                        className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-all text-left"
+                        className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/70 transition-all text-left"
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-amber-400 flex items-center justify-center">
-                            <Store size={15} className="text-white" />
+                          <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
+                            <Store size={15} />
                           </div>
                           <div>
-                            <p className="text-xs font-black text-amber-900">Atur Harga Grosir & Eceran</p>
-                            <p className="text-[10px] text-amber-700">
-                              {formData.sellPriceGrosir
-                                ? `Grosir: Rp ${Number(formData.sellPriceGrosir).toLocaleString('id-ID')} (min ${formData.minQtyGrosir} pcs)`
-                                : 'Belum diatur — tap untuk mengisi harga tier'}
+                            <p className="text-xs font-black text-indigo-950">
+                              {isBengkel ? 'Kelola Tier Harga Bengkel (Umum, Rekan Bengkel, Grosir)' : 'Atur Harga Grosir & Eceran'}
+                            </p>
+                            <p className="text-[10px] text-indigo-700">
+                              {formData.sellPriceMitra || formData.sellPriceGrosir
+                                ? `Mitra: ${formData.sellPriceMitra ? `Rp ${Number(formData.sellPriceMitra).toLocaleString('id-ID')}` : 'Tidak diatur'} · Grosir: ${formData.sellPriceGrosir ? `Rp ${Number(formData.sellPriceGrosir).toLocaleString('id-ID')} (min ${formData.minQtyGrosir || 1} pcs)` : 'Tidak diatur'}`
+                                : 'Tap untuk buka simulator & rincian tier harga di POS'}
                             </p>
                           </div>
                         </div>
-                        <ChevronDown size={16} className="text-amber-700 -rotate-90" />
+                        <ChevronDown size={16} className="text-indigo-700 -rotate-90" />
                       </button>
                     )}
 
@@ -729,19 +965,22 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 </div>
               )}
 
-              {/* ══ TAB: HARGA RETAIL (3-TIER) ══ */}
-              {activeTab === 'pricing' && isRetail && (
+              {/* ══ TAB: HARGA JUAL & 3-TIER (RETAIL / BENGKEL) ══ */}
+              {activeTab === 'pricing' && hasPriceTiers && (
                 <div className="space-y-5">
                   {/* Banner info */}
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-200 rounded-2xl p-4 flex gap-3 items-start">
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-amber-50 border border-indigo-200/80 rounded-2xl p-4 flex gap-3 items-start shadow-xs">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
                       <Info size={16} />
                     </div>
                     <div>
-                      <p className="font-black text-amber-900 text-xs sm:text-sm mb-0.5">Sistem Harga 3 Tier Retail</p>
-                      <p className="text-[11px] text-amber-800 leading-relaxed">
-                        Kasir akan otomatis menerapkan harga grosir jika qty produk ≥ minimum grosir.
-                        Harga Eceran = fallback ke Harga Jual Kasir jika kosong.
+                      <p className="font-black text-indigo-950 text-xs sm:text-sm mb-0.5">
+                        {isBengkel ? 'Sistem Harga 3-Tier Bengkel Motor & Mobil' : 'Sistem Harga 3-Tier Retail'}
+                      </p>
+                      <p className="text-[11px] text-indigo-900 leading-relaxed">
+                        {isBengkel
+                          ? 'Kasir POS Bengkel dan modul Work Order / SPK otomatis mengalihkan harga berdasarkan tier pelanggan: Umum (Walk-in), Rekan Bengkel (Mitra), atau Grosir jika kuantitas part mencapai batas minimum.'
+                          : 'Kasir akan otomatis menerapkan harga grosir jika qty produk ≥ minimum grosir. Harga Eceran = fallback ke Harga Jual Kasir jika kosong.'}
                       </p>
                     </div>
                   </div>
@@ -751,99 +990,171 @@ const ProductModal: React.FC<ProductModalProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <ShoppingCart size={16} className="text-indigo-600" />
-                        <span className="text-sm font-black text-indigo-900">Harga Kasir Utama</span>
+                        <span className="text-sm font-black text-indigo-900">
+                          {isBengkel ? 'Harga Umum / Kasir Utama' : 'Harga Kasir Utama'}
+                        </span>
                       </div>
                       <span className="text-base font-black text-indigo-700">
                         Rp {Number(formData.sellPrice || 0).toLocaleString('id-ID')}
                       </span>
                     </div>
-                    <p className="text-[11px] text-indigo-600 mt-1 ml-6">Diatur di tab Info Produk</p>
+                    <p className="text-[11px] text-indigo-600 mt-1 ml-6">
+                      {isBengkel ? 'Tarif dasar untuk pelanggan servis umum & walk-in' : 'Diatur di tab Info Produk'}
+                    </p>
                   </div>
 
-                  {/* Grid harga tier */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Grid harga tier (3-Tier: Umum, Mitra, Grosir) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
-                    {/* Harga Eceran */}
-                    <div className="p-4 bg-white rounded-2xl border-2 border-blue-200 shadow-sm">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center">
-                          <Users size={15} className="text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-blue-900">Harga Eceran</p>
-                          <p className="text-[10px] text-blue-600">Untuk pembeli satuan umum</p>
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <span className="absolute left-3 top-[9px] text-blue-600 font-bold text-xs">Rp</span>
-                        <input
-                          type="number"
-                          name="sellPriceRetail"
-                          className="w-full pl-9 pr-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-black text-blue-900 outline-none focus:ring-2 focus:ring-blue-500/20"
-                          placeholder={formData.sellPrice || '0'}
-                          value={formData.sellPriceRetail}
-                          onChange={handleChange}
-                        />
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1.5">Kosong = pakai Harga Kasir Utama</p>
-                    </div>
-
-                    {/* Harga Grosir */}
-                    <div className="p-4 bg-white rounded-2xl border-2 border-amber-300 shadow-sm">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center">
-                          <Store size={15} className="text-amber-600" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-amber-900">Harga Grosir</p>
-                          <p className="text-[10px] text-amber-600">Diskon otomatis saat qty ≥ minimum</p>
-                        </div>
-                      </div>
-                      <div className="relative mb-3">
-                        <span className="absolute left-3 top-[9px] text-amber-600 font-bold text-xs">Rp</span>
-                        <input
-                          type="number"
-                          name="sellPriceGrosir"
-                          className="w-full pl-9 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-black text-amber-900 outline-none focus:ring-2 focus:ring-amber-500/20"
-                          placeholder="0"
-                          value={formData.sellPriceGrosir}
-                          onChange={handleChange}
-                        />
-                      </div>
-                      {/* Min Qty Grosir */}
+                    {/* 1. Harga Eceran (Umum) */}
+                    <div className="p-4 bg-white rounded-2xl border-2 border-blue-200 shadow-sm flex flex-col justify-between">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
-                          Min. Qty untuk Harga Grosir
-                        </label>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center">
+                            <Users size={15} className="text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-blue-900">
+                              {isBengkel ? '1. Harga Umum' : '1. Harga Eceran'}
+                            </p>
+                            <p className="text-[10px] text-blue-600">
+                              {isBengkel ? 'Servis umum & walk-in customer' : 'Pelanggan umum / satuan'}
+                            </p>
+                          </div>
+                        </div>
                         <div className="relative">
-                          <Hash size={13} className="absolute left-3 top-[11px] text-slate-400" />
+                          <span className="absolute left-3 top-[9px] text-blue-600 font-bold text-xs">Rp</span>
                           <input
                             type="number"
-                            name="minQtyGrosir"
-                            className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
-                            placeholder="5"
-                            min="1"
-                            value={formData.minQtyGrosir}
+                            name="sellPriceRetail"
+                            className="w-full pl-9 pr-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-black text-blue-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                            placeholder={formData.sellPrice || '0'}
+                            value={formData.sellPriceRetail}
                             onChange={handleChange}
                           />
                         </div>
                       </div>
+                      <p className="text-[10px] text-slate-400 mt-2">Kosong = pakai Harga Kasir Utama</p>
+                    </div>
+
+                    {/* 2. Harga Mitra (Rekan Bengkel / Langganan) */}
+                    <div className="p-4 bg-white rounded-2xl border-2 border-emerald-300 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center">
+                            <Store size={15} className="text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-emerald-900">
+                              {isBengkel ? '2. Harga Rekan Bengkel' : '2. Harga Mitra'}
+                            </p>
+                            <p className="text-[10px] text-emerald-600">
+                              {isBengkel ? 'Sesama bengkel, ojol, & komunitas' : 'Warung langganan & toko cabang'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="relative">
+                          <span className="absolute left-3 top-[9px] text-emerald-600 font-bold text-xs">Rp</span>
+                          <input
+                            type="number"
+                            name="sellPriceMitra"
+                            className="w-full pl-9 pr-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-black text-emerald-900 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            placeholder="0"
+                            value={formData.sellPriceMitra}
+                            onChange={handleChange}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-2">
+                        {isBengkel ? 'Otomatis aktif saat pilih tier MITRA di POS Bengkel' : 'Otomatis saat pilih member tier MITRA'}
+                      </p>
+                    </div>
+
+                    {/* 3. Harga Grosir (Volume / Partai / Toko Part) */}
+                    <div className="p-4 bg-white rounded-2xl border-2 border-amber-300 shadow-sm flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center">
+                            <Sparkles size={15} className="text-amber-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-amber-900">
+                              {isBengkel ? '3. Harga Grosir Part' : '3. Harga Grosir'}
+                            </p>
+                            <p className="text-[10px] text-amber-600">
+                              {isBengkel ? 'Reseller / pembelian suku cadang partai' : 'Diskon otomatis saat qty ≥ min'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="relative mb-2.5">
+                          <span className="absolute left-3 top-[9px] text-amber-600 font-bold text-xs">Rp</span>
+                          <input
+                            type="number"
+                            name="sellPriceGrosir"
+                            className="w-full pl-9 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-black text-amber-900 outline-none focus:ring-2 focus:ring-amber-500/20"
+                            placeholder="0"
+                            value={formData.sellPriceGrosir}
+                            onChange={handleChange}
+                          />
+                        </div>
+                        {/* Min Qty Grosir */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                            Min. Qty Grosir
+                          </label>
+                          <div className="relative">
+                            <Hash size={13} className="absolute left-3 top-[11px] text-slate-400" />
+                            <input
+                              type="number"
+                              name="minQtyGrosir"
+                              className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                              placeholder="5"
+                              min="1"
+                              value={formData.minQtyGrosir}
+                              onChange={handleChange}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-2">Otomatis saat kasir input qty &ge; target</p>
                     </div>
                   </div>
 
                   {/* Preview perbandingan harga */}
-                  {(formData.sellPrice || formData.sellPriceGrosir) && (
+                  {(formData.sellPrice || formData.sellPriceMitra || formData.sellPriceGrosir) && (
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                      <p className="text-[11px] font-black text-slate-500 uppercase tracking-wider mb-3">Preview Harga di Kasir</p>
+                      <p className="text-[11px] font-black text-slate-500 uppercase tracking-wider mb-3">
+                        {isBengkel ? 'Preview Simulasi Tier Harga di Kasir POS Bengkel' : 'Preview Tier Harga di Kasir'}
+                      </p>
                       <div className="space-y-2">
                         {[
-                          { label: 'Kasir / Eceran', price: Number(formData.sellPriceRetail || formData.sellPrice || 0), badge: 'umum', color: 'blue' },
-                          { label: `Grosir (min ${formData.minQtyGrosir} pcs)`, price: Number(formData.sellPriceGrosir || 0), badge: 'grosir', color: 'amber' }
+                          { 
+                            label: isBengkel ? 'Umum / Servis Walk-in' : 'Kasir / Eceran (Umum)', 
+                            price: Number(formData.sellPriceRetail || formData.sellPrice || 0), 
+                            badge: 'UMUM', 
+                            color: 'blue' 
+                          },
+                          { 
+                            label: isBengkel ? 'Rekan Bengkel / Mitra Fleet' : 'Mitra / Warung Langganan', 
+                            price: Number(formData.sellPriceMitra || 0), 
+                            badge: 'MITRA', 
+                            color: 'emerald' 
+                          },
+                          { 
+                            label: isBengkel ? `Grosir Toko Part (min ${formData.minQtyGrosir || 1} pcs)` : `Grosir Partai (min ${formData.minQtyGrosir || 1} pcs)`, 
+                            price: Number(formData.sellPriceGrosir || 0), 
+                            badge: 'GROSIR', 
+                            color: 'amber' 
+                          }
                         ].map(item => item.price > 0 && (
                           <div key={item.label} className="flex items-center justify-between py-2 border-b border-slate-200 last:border-0">
                             <div className="flex items-center gap-2">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                                item.color === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                                item.color === 'blue' 
+                                  ? 'bg-blue-100 text-blue-700' 
+                                  : item.color === 'emerald'
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-amber-100 text-amber-700'
                               }`}>
                                 {item.badge}
                               </span>

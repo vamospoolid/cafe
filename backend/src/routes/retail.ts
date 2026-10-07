@@ -722,12 +722,21 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       orderBy: { waktuBuka: 'desc' }
     });
 
+    // 7. CashFlow Opex (Pengeluaran Kas Operasional Toko)
+    const opexExpenses = await prisma.cashFlow.findMany({
+      where: {
+        tenantId,
+        type: 'Pengeluaran',
+        date: { gte: start, lte: end }
+      }
+    });
+    const totalCashOut = opexExpenses.reduce((sum, c) => sum + (c.amount || 0), 0);
+
     let totalCashIn = 0;
-    let totalCashOut = 0;
     const shiftRows = shifts.map(s => {
       const opening = s.saldoAwal || 0;
       const closing = s.saldoFisikLaci || s.saldoSistem || 0;
-      // Total penjualan kasir dalam shift = selisih saldo akhir - saldo awal + pengeluaran (estimasi)
+      // Total penjualan kasir dalam shift = selisih saldo akhir - saldo awal
       const shiftSales = Math.max(0, closing - opening);
       totalCashIn += shiftSales;
       return {
@@ -736,7 +745,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
         shiftLabel: s.waktuTutup ? `Shift ${new Date(s.waktuBuka).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} - ${new Date(s.waktuTutup).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Shift Aktif',
         openingCash: opening,
         totalSales: shiftSales,
-        totalExpenses: 0, // Pengeluaran petty cash bisa di-extend dari CashFlow table
+        totalExpenses: totalCashOut,
         closingCash: closing,
         status: s.status === 'Open' ? 'OPEN' : 'CLOSED'
       };
@@ -749,6 +758,21 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       netCash: totalCashIn - totalCashOut,
       shifts: shiftRows
     };
+
+    // 8. Payment Methods Breakdown
+    const paymentMethodsMap: Record<string, { count: number; total: number }> = {};
+    for (const ord of orders) {
+      const pm = (ord.paymentMethod || 'TUNAI').toUpperCase();
+      if (!paymentMethodsMap[pm]) paymentMethodsMap[pm] = { count: 0, total: 0 };
+      paymentMethodsMap[pm].count += 1;
+      paymentMethodsMap[pm].total += ord.total || 0;
+    }
+    const paymentMethods = Object.entries(paymentMethodsMap).map(([method, val]) => ({
+      method,
+      count: val.count,
+      total: val.total,
+      percentage: totalSales > 0 ? Number(((val.total / totalSales) * 100).toFixed(1)) : 0
+    }));
 
     res.json({
       summary: {
@@ -780,7 +804,8 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       },
       deliverySummary,
       dailyTrend,
-      shiftSummary
+      shiftSummary,
+      paymentMethods
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Gagal mengambil laporan retail.' });

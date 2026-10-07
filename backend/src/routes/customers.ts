@@ -63,11 +63,11 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
     const { id } = req.params;
 
     // IDOR Guard: verifikasi kepemilikan tenant
+    const customerWhere: any = { id: Number(id) };
+    if (tenantId) customerWhere.tenantId = tenantId;
+
     const customer = await prisma.customer.findFirst({
-      where: {
-        id: Number(id),
-        ...(tenantId ? { tenantId } : {})
-      },
+      where: customerWhere,
       include: {
         orders: {
           orderBy: { createdAt: 'desc' },
@@ -152,7 +152,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     if (!tenantId && !req.user?.isPlatformAdmin) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
-    const { name, phone, email, birthday } = req.body;
+    const { name, phone, email, birthday, priceTier, creditLimit, creditTermDays, isCreditBlocked } = req.body;
 
     if (!name || !phone) {
       return res.status(400).json({ error: 'Nama dan nomor telepon wajib diisi' });
@@ -161,19 +161,25 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
     const cleanPhone = phone.trim();
 
     // Check unique phone within tenant
+    const phoneWhere: any = { phone: cleanPhone };
+    if (tenantId) phoneWhere.tenantId = tenantId;
     const existingPhone = await prisma.customer.findFirst({
-      where: {
-        phone: cleanPhone,
-        ...(tenantId ? { tenantId } : {})
-      }
+      where: phoneWhere
     });
 
     if (existingPhone) {
-      // Jika nama berbeda atau ingin di-update, update nama
-      if (name && name.trim() && name.trim() !== existingPhone.name) {
+      // Jika nama berbeda atau ingin di-update, update nama & tier
+      const updateData: any = {};
+      if (name && name.trim() && name.trim() !== existingPhone.name) updateData.name = name.trim();
+      if (priceTier) updateData.priceTier = String(priceTier).toUpperCase();
+      if (creditLimit !== undefined) updateData.creditLimit = Number(creditLimit) || 0;
+      if (creditTermDays !== undefined) updateData.creditTermDays = Number(creditTermDays) || 14;
+      if (isCreditBlocked !== undefined) updateData.isCreditBlocked = Boolean(isCreditBlocked);
+
+      if (Object.keys(updateData).length > 0) {
         const updated = await prisma.customer.update({
           where: { id: existingPhone.id },
-          data: { name: name.trim() }
+          data: updateData
         });
         return res.status(200).json({ ...updated, alreadyExists: true });
       }
@@ -182,11 +188,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
     // Check unique email within tenant if provided
     if (email) {
+      const emailWhere: any = { email: email.trim() };
+      if (tenantId) emailWhere.tenantId = tenantId;
       const existingEmail = await prisma.customer.findFirst({
-        where: {
-          email: email.trim(),
-          ...(tenantId ? { tenantId } : {})
-        }
+        where: emailWhere
       });
       if (existingEmail) {
         return res.status(400).json({ error: 'Email sudah terdaftar di outlet Anda' });
@@ -200,6 +205,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         phone: cleanPhone,
         email: email ? email.trim() : null,
         birthday: birthday || null,
+        priceTier: priceTier ? String(priceTier).toUpperCase() : 'UMUM',
+        creditLimit: creditLimit !== undefined ? Number(creditLimit) : 0,
+        creditTermDays: creditTermDays !== undefined ? Number(creditTermDays) : 14,
+        isCreditBlocked: Boolean(isCreditBlocked),
         points: 0,
         tier: 'Bronze',
         totalSpent: 0
@@ -221,10 +230,12 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
     const { id } = req.params;
-    const { name, phone, email, birthday, pointsAdjustment, adjustmentReason } = req.body;
+    const { name, phone, email, birthday, pointsAdjustment, adjustmentReason, priceTier, creditLimit, creditTermDays, isCreditBlocked } = req.body;
 
+    const custWhere: any = { id: Number(id) };
+    if (tenantId) custWhere.tenantId = tenantId;
     const existingCustomer = await prisma.customer.findFirst({
-      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+      where: custWhere
     });
 
     if (!existingCustomer) {
@@ -233,8 +244,10 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 
     // Check phone uniqueness if updated
     if (phone && phone !== existingCustomer.phone) {
+      const phoneCheck: any = { phone, id: { not: Number(id) } };
+      if (tenantId) phoneCheck.tenantId = tenantId;
       const existingPhone = await prisma.customer.findFirst({
-        where: { phone, ...(tenantId ? { tenantId } : {}), id: { not: Number(id) } }
+        where: phoneCheck
       });
       if (existingPhone) {
         return res.status(400).json({ error: 'Nomor telepon sudah terdaftar di outlet Anda' });
@@ -243,8 +256,10 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
 
     // Check email uniqueness if updated
     if (email && email !== existingCustomer.email) {
+      const emailCheck: any = { email, id: { not: Number(id) } };
+      if (tenantId) emailCheck.tenantId = tenantId;
       const existingEmail = await prisma.customer.findFirst({
-        where: { email, ...(tenantId ? { tenantId } : {}), id: { not: Number(id) } }
+        where: emailCheck
       });
       if (existingEmail) {
         return res.status(400).json({ error: 'Email sudah terdaftar di outlet Anda' });
@@ -257,6 +272,11 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response) =>
       email: email || null,
       birthday: birthday || null
     };
+
+    if (priceTier !== undefined) updateData.priceTier = String(priceTier).toUpperCase();
+    if (creditLimit !== undefined) updateData.creditLimit = Number(creditLimit) || 0;
+    if (creditTermDays !== undefined) updateData.creditTermDays = Number(creditTermDays) || 14;
+    if (isCreditBlocked !== undefined) updateData.isCreditBlocked = Boolean(isCreditBlocked);
 
     // Handle manual points adjustment if requested by admin
     let pointsLogData = null;
@@ -309,8 +329,11 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res: Response)
     }
     const { id } = req.params;
 
+    const delWhere: any = { id: Number(id) };
+    if (tenantId) delWhere.tenantId = tenantId;
+
     const customer = await prisma.customer.findFirst({
-      where: { id: Number(id), ...(tenantId ? { tenantId } : {}) }
+      where: delWhere
     });
 
     if (!customer) {

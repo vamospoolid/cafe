@@ -26,7 +26,8 @@ import {
   Percent,
   CheckCircle,
   Clock,
-  MessageSquare
+  MessageSquare,
+  Store
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -35,7 +36,7 @@ import SettingsWhatsAppGateway from './settings/SettingsWhatsAppGateway';
 
 const CRMView = () => {
   const posContext = useContext(POSContext);
-  const { isBengkel, isRental } = useVertical();
+  const { isBengkel, isRental, isRetail } = useVertical();
   const isAdminOrOwner = posContext?.user?.role?.toUpperCase() === 'ADMIN' || posContext?.user?.role?.toUpperCase() === 'OWNER';
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,9 @@ const CRMView = () => {
     phone: '',
     email: '',
     birthday: '',
+    priceTier: 'UMUM',
+    creditLimit: 0,
+    creditTermDays: 14,
     pointsAdjustment: 0,
     adjustmentReason: ''
   });
@@ -320,6 +324,9 @@ const CRMView = () => {
         phone: customer.phone,
         email: customer.email || '',
         birthday: customer.birthday || '',
+        priceTier: customer.priceTier || 'UMUM',
+        creditLimit: customer.creditLimit || 0,
+        creditTermDays: customer.creditTermDays || 14,
         pointsAdjustment: 0,
         adjustmentReason: ''
       });
@@ -330,6 +337,9 @@ const CRMView = () => {
         phone: '',
         email: '',
         birthday: '',
+        priceTier: 'UMUM',
+        creditLimit: 0,
+        creditTermDays: 14,
         pointsAdjustment: 0,
         adjustmentReason: ''
       });
@@ -607,9 +617,16 @@ const CRMView = () => {
                             </div>
                           </div>
                         </div>
-                        <span className={`text-[10px] px-2.5 py-0.5 font-extrabold rounded-full border ${getTierColor(c.tier)} shrink-0`}>
-                          {c.tier}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {c.priceTier && c.priceTier !== 'UMUM' && (
+                            <span className="text-[10px] px-2 py-0.5 font-black rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              {c.priceTier}
+                            </span>
+                          )}
+                          <span className={`text-[10px] px-2.5 py-0.5 font-extrabold rounded-full border ${getTierColor(c.tier)}`}>
+                            {c.tier}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Points & Spent Grid */}
@@ -712,9 +729,16 @@ const CRMView = () => {
                             )}
                           </td>
                           <td className="p-3.5">
-                            <span className={`text-[10px] px-2 py-0.5 font-bold rounded-full border ${getTierColor(c.tier)}`}>
-                              {c.tier}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`text-[10px] px-2 py-0.5 font-bold rounded-full border ${getTierColor(c.tier)}`}>
+                                {c.tier}
+                              </span>
+                              {c.priceTier && c.priceTier !== 'UMUM' && (
+                                <span className="text-[10px] px-2 py-0.5 font-black rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  {c.priceTier}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-3.5 text-right font-bold text-indigo-600">
                             {c.points} <span className="text-[10px] font-normal text-slate-400">pts</span>
@@ -1384,6 +1408,53 @@ const CRMView = () => {
                     value={formData.birthday}
                     onChange={e => setFormData({ ...formData, birthday: e.target.value })}
                   />
+                </div>
+
+                {/* Price Tier & Plafon Bon Kredit (Retail & Bengkel) */}
+                <div className="p-3 border border-indigo-100 bg-indigo-50/50 rounded-xl space-y-3">
+                  <div className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                    <Store size={14} className="text-indigo-600" />
+                    <span>Klasifikasi Tier Harga &amp; Bon Tempo</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Tier Harga Pelanggan</label>
+                      <select
+                        className="form-control w-full text-xs font-bold"
+                        value={formData.priceTier}
+                        onChange={e => setFormData({ ...formData, priceTier: e.target.value })}
+                      >
+                        <option value="UMUM">UMUM (Harga Eceran)</option>
+                        <option value="MITRA">MITRA (Warung Langganan)</option>
+                        <option value="GROSIR">GROSIR (Partai / Volume)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Plafon Bon Kredit (Rp)</label>
+                      <input
+                        type="number"
+                        className="form-control w-full text-xs"
+                        placeholder="Contoh: 5000000"
+                        value={formData.creditLimit || ''}
+                        onChange={e => setFormData({ ...formData, creditLimit: Number(e.target.value) || 0 })}
+                      />
+                      <span className="text-[9.5px] text-slate-400">0 = Tanpa limit / tunai saja</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Termin Jatuh Tempo (Hari)</label>
+                    <input
+                      type="number"
+                      className="form-control w-full text-xs"
+                      placeholder="14"
+                      value={formData.creditTermDays || 14}
+                      onChange={e => setFormData({ ...formData, creditTermDays: Number(e.target.value) || 14 })}
+                    />
+                    <span className="text-[9.5px] text-slate-400">Batas waktu pelunasan bon nota (Net-14, Net-30)</span>
+                  </div>
                 </div>
 
                 {/* Points Adjustment (Only for Admin when editing) */}

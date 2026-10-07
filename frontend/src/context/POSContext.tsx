@@ -387,6 +387,10 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     setToken(newToken);
     localStorage.setItem('pos_user', JSON.stringify(userData));
     localStorage.setItem('pos_token', newToken);
+    if (userData.tenantId) {
+      localStorage.setItem('tenantId', String(userData.tenantId));
+      localStorage.setItem('activeTenantId', String(userData.tenantId));
+    }
     if (userData.businessType) {
       localStorage.setItem('pos_business_type', userData.businessType);
     }
@@ -416,6 +420,8 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     // 4. Bersihkan LocalStorage sesi pengguna (Konfigurasi hardware printer tetap dipertahankan)
     localStorage.removeItem('pos_user');
     localStorage.removeItem('pos_token');
+    localStorage.removeItem('tenantId');
+    localStorage.removeItem('activeTenantId');
     localStorage.removeItem('pos_business_type');
     localStorage.removeItem('pos_active_shift');
 

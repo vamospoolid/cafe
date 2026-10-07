@@ -6,11 +6,11 @@ import { PrinterService } from '../services/PrinterService';
 const router = Router();
 
 // Helper to load complete order with product categories
-const getFullOrder = async (orderId: number, tenantId?: string) => {
+const getFullOrder = async (orderId: number, tenantId: string) => {
   return await prisma.order.findFirst({
     where: {
       id: Number(orderId),
-      ...(tenantId ? { tenantId } : {})
+      tenantId
     },
     include: {
       items: {
@@ -27,17 +27,27 @@ const getFullOrder = async (orderId: number, tenantId?: string) => {
   });
 };
 
+// Router-level fail-closed guard: ensure valid tenantId
+router.use(authenticateToken);
+router.use((req: Request, res: Response, next) => {
+  const tenantId = (req as any).user?.tenantId;
+  if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+    return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+  }
+  next();
+});
+
 // GET /api/printer/status — cek koneksi printer kasir
-router.get('/status', authenticateToken, async (req: Request, res: Response) => {
+router.get('/status', async (req: Request, res: Response) => {
   try {
     const tenantId = (req as any).user?.tenantId;
-    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    const settings = tenantId ? await prisma.settings.findFirst({ where: { tenantId } }) : null;
     const ip   = settings?.printerIp || '';
     const port = settings?.printerPort || 9100;
 
     if (!ip) return res.json({ status: 'unconfigured', message: 'IP printer belum dikonfigurasi' });
 
-    await PrinterService.testPrint(ip, port, settings?.storeName || 'SOL CAFE', 'KASIR');
+    await PrinterService.testPrint(ip, port, settings?.storeName || 'CodePOS', 'KASIR');
     res.json({ status: 'online', ip, port });
   } catch (error: any) {
     res.json({ status: 'offline', message: error.message });
@@ -45,10 +55,10 @@ router.get('/status', authenticateToken, async (req: Request, res: Response) => 
 });
 
 // POST /api/printer/test — cetak halaman uji (bisa untuk Kasir, Dapur, atau Bar)
-router.post('/test', authenticateToken, async (req: Request, res: Response) => {
+router.post('/test', async (req: Request, res: Response) => {
   try {
     const tenantId = (req as any).user?.tenantId;
-    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    const settings = tenantId ? await prisma.settings.findFirst({ where: { tenantId } }) : null;
     const roleName = req.body.roleName || 'PRINTER';
     let ip   = req.body.ip;
     let port = req.body.port;
@@ -68,7 +78,7 @@ router.post('/test', authenticateToken, async (req: Request, res: Response) => {
 
     if (!ip) return res.status(400).json({ error: `IP printer ${roleName} wajib diisi` });
 
-    await PrinterService.testPrint(ip, Number(port || 9100), settings?.storeName || 'SOL CAFE', roleName);
+    await PrinterService.testPrint(ip, Number(port || 9100), settings?.storeName || 'CodePOS', roleName);
     res.json({ message: `Halaman uji printer ${roleName} berhasil dicetak!` });
   } catch (error: any) {
     res.status(500).json({ error: `Gagal mencetak: ${error.message}` });
@@ -76,11 +86,14 @@ router.post('/test', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // POST /api/printer/receipt — cetak struk kasir
-router.post('/receipt', authenticateToken, async (req: Request, res: Response) => {
+router.post('/receipt', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
     const tenantId = (req as any).user?.tenantId;
-    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const settings = await prisma.settings.findFirst({ where: { tenantId } });
     const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
@@ -93,11 +106,14 @@ router.post('/receipt', authenticateToken, async (req: Request, res: Response) =
 });
 
 // POST /api/printer/kitchen — cetak tiket pesanan dapur (makanan)
-router.post('/kitchen', authenticateToken, async (req: Request, res: Response) => {
+router.post('/kitchen', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
     const tenantId = (req as any).user?.tenantId;
-    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const settings = await prisma.settings.findFirst({ where: { tenantId } });
     const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
@@ -110,11 +126,14 @@ router.post('/kitchen', authenticateToken, async (req: Request, res: Response) =
 });
 
 // POST /api/printer/bar — cetak tiket pesanan bar (minuman)
-router.post('/bar', authenticateToken, async (req: Request, res: Response) => {
+router.post('/bar', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
     const tenantId = (req as any).user?.tenantId;
-    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const settings = await prisma.settings.findFirst({ where: { tenantId } });
     const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
@@ -127,11 +146,14 @@ router.post('/bar', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // POST /api/printer/all — cetak struk kasir, tiket dapur, & tiket bar sekaligus
-router.post('/all', authenticateToken, async (req: Request, res: Response) => {
+router.post('/all', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.body;
     const tenantId = (req as any).user?.tenantId;
-    const settings = await prisma.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const settings = await prisma.settings.findFirst({ where: { tenantId } });
     const order = await getFullOrder(Number(orderId), tenantId);
 
     if (!order) return res.status(404).json({ error: 'Order tidak ditemukan' });
@@ -144,7 +166,7 @@ router.post('/all', authenticateToken, async (req: Request, res: Response) => {
 });
 
 // POST /api/printer/send-whatsapp — antrekan pengiriman struk digital / notifikasi WA di background
-router.post('/send-whatsapp', authenticateToken, async (req: Request, res: Response) => {
+router.post('/send-whatsapp', async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
@@ -179,7 +201,7 @@ router.post('/send-whatsapp', authenticateToken, async (req: Request, res: Respo
 });
 
 // POST /api/printer/network-print — Relay raw ESC/POS bytes / command ke printer LAN/WiFi TCP Port 9100
-router.post('/network-print', authenticateToken, async (req: Request, res: Response) => {
+router.post('/network-print', async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
@@ -214,4 +236,3 @@ router.post('/network-print', authenticateToken, async (req: Request, res: Respo
 });
 
 export default router;
-

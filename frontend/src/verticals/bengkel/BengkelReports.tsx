@@ -249,6 +249,8 @@ export const BengkelReports: React.FC = () => {
   const vehicleBreakdown = reportData?.vehicleBreakdown || [];
   const serviceDueReminders = reportData?.serviceDueReminders || [];
   const invoiceStats = reportData?.invoiceStats || {};
+  const outOfStockParts = reportData?.outOfStockParts || [];
+  const partRequestsSummary = reportData?.partRequestsSummary || { total: 0, pending: 0, inPurchaseList: 0, purchased: 0, recentRequests: [] };
 
   const totalRev = summary.totalOmzetBersih || 0;
   const totalHpp = summary.hppParts || 0;
@@ -1145,6 +1147,167 @@ export const BengkelReports: React.FC = () => {
                         </tr>
                       );
                     })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Tabel 3: Data Barang Kosong (Out-of-Stock = 0) */}
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-rose-200 p-5 space-y-4 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-black text-base text-rose-950 flex items-center gap-2">
+                  <AlertCircle size={18} className="text-rose-600" />
+                  <span>Daftar Suku Cadang Kosong (Out-of-Stock = 0 Pcs)</span>
+                </h3>
+                <p className="text-xs text-rose-700/80 mt-0.5">
+                  Suku cadang yang habis total di gudang dan berpotensi menghambat pengerjaan servis atau menyebabkan lost sales.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-200 self-start sm:self-auto">
+                {outOfStockParts.length} Item Habis
+              </span>
+            </div>
+
+            <div className="overflow-x-auto border border-rose-100 rounded-2xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-rose-50/60 text-rose-900 font-bold uppercase border-b border-rose-100">
+                  <tr>
+                    <th className="py-3 px-4">Nama Suku Cadang</th>
+                    <th className="py-3 px-4">Merk &amp; Tipe</th>
+                    <th className="py-3 px-4 text-center">Sisa Stok</th>
+                    <th className="py-3 px-4 text-center">Batas Min</th>
+                    <th className="py-3 px-4 text-center">Lokasi Rak</th>
+                    <th className="py-3 px-4 text-right">Harga Modal</th>
+                    <th className="py-3 px-4 text-center">Tindakan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-rose-50">
+                  {outOfStockParts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-emerald-600 font-medium">
+                        ✓ Stok aman! Tidak ada suku cadang yang berstatus kosong (0 Pcs).
+                      </td>
+                    </tr>
+                  ) : (
+                    outOfStockParts.map((p: any) => (
+                      <tr key={p.id} className="hover:bg-rose-50/30 transition">
+                        <td className="py-3 px-4 font-bold text-slate-900">{p.name}</td>
+                        <td className="py-3 px-4 text-slate-600">
+                          {p.brand || '-'} <span className="text-[10px] text-slate-400">({p.vehicleType || 'Umum'})</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-black text-rose-700 bg-rose-50/50">
+                          0 Pcs
+                        </td>
+                        <td className="py-3 px-4 text-center text-slate-500">{p.minStock || 0} Pcs</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px] text-slate-700">
+                            {p.storageLocation || 'Rak Gudang'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right text-slate-700 font-medium">
+                          {formatCurrency(p.buyPrice)}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-200">
+                            SEGERA PO KULAKAN
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Tabel 4: Catatan Permintaan Suku Cadang (Part Requests / Defecta) */}
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 p-5 space-y-4 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                  <Boxes size={18} className="text-amber-600" />
+                  <span>Catatan Permintaan Suku Cadang / Defecta (Lost Sales Alert)</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Daftar suku cadang yang diminta oleh mekanik saat membongkar unit atau ditanyakan pelanggan namun stok tidak tersedia.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  {partRequestsSummary.pending || 0} Menunggu
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                  {partRequestsSummary.inPurchaseList || 0} Masuk PO
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  {partRequestsSummary.purchased || 0} Terbeli
+                </span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-4">Nama Part Diminta</th>
+                    <th className="py-3 px-4">Merk &amp; Tipe</th>
+                    <th className="py-3 px-4 text-center">Jumlah</th>
+                    <th className="py-3 px-4">Pelanggan / Pemohon</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4">Catatan Kendala</th>
+                    <th className="py-3 px-4 text-center">Waktu Request</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(!partRequestsSummary.recentRequests || partRequestsSummary.recentRequests.length === 0) ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                        Belum ada catatan permintaan suku cadang (buku defecta) pada periode ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    partRequestsSummary.recentRequests.map((r: any) => (
+                      <tr key={r.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-3 px-4 font-bold text-slate-900">{r.partName}</td>
+                        <td className="py-3 px-4 text-slate-600">
+                          {r.brand || '-'} <span className="text-[10px] text-slate-400">({r.vehicleType || 'Umum'})</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-bold text-indigo-700 bg-indigo-50/30">
+                          {r.requestedQty || 1} Pcs
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-slate-800">{r.customerName || 'Pelanggan Umum'}</div>
+                          {r.customerPhone && <div className="text-[10px] text-slate-400">{r.customerPhone}</div>}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {r.status === 'PENDING' ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              Menunggu Pengadaan
+                            </span>
+                          ) : r.status === 'IN_PURCHASE_LIST' ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                              Masuk PO Supplier
+                            </span>
+                          ) : r.status === 'PURCHASED' ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              Sudah Terbeli
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
+                              {r.status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate" title={r.notes || ''}>
+                          {r.notes || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-center text-slate-400 text-[11px]">
+                          {formatDateID(r.createdAt)}
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>

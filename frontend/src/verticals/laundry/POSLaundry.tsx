@@ -34,12 +34,17 @@ import {
   Droplets,
   Package,
   Scissors,
-  CheckCircle
+  CheckCircle,
+  Usb,
+  Settings2,
+  Lock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
 import { LaundryReceiptPrinter } from './LaundryReceiptPrinter';
+import { scaleDriver, type ScaleConnectionStatus } from '../../utils/digitalScaleDriver';
+import { DigitalScaleModal } from './DigitalScaleModal';
 
 interface LaundryItem {
   id: string;
@@ -59,6 +64,7 @@ interface ServiceCatalogItem {
   price: number;
   description?: string;
   iconType?: string;
+  imageUrl?: string;
 }
 
 const SCENT_OPTIONS = [
@@ -103,6 +109,48 @@ export const POSLaundry: React.FC = () => {
   // Interactive Digital Scale State
   const [scaleService, setScaleService] = useState<ServiceCatalogItem | null>(null);
   const [scaleWeight, setScaleWeight] = useState<string>('3.50');
+  const [scaleStatus, setScaleStatus] = useState<ScaleConnectionStatus>(scaleDriver.getStatus());
+  const [isScaleStable, setIsScaleStable] = useState<boolean>(true);
+  const [showScaleModal, setShowScaleModal] = useState<boolean>(false);
+
+  // Auto-reconnect & Stream event listener untuk timbangan hardware
+  useEffect(() => {
+    scaleDriver.autoReconnect();
+
+    const unsubStatus = scaleDriver.onStatusChange(st => setScaleStatus(st));
+    const unsubReading = scaleDriver.onReading(r => {
+      setScaleWeight(r.weight.toFixed(2));
+      setIsScaleStable(r.isStable);
+    });
+    const unsubLock = scaleDriver.onStableLock(() => {
+      triggerHaptic?.();
+    });
+
+    return () => {
+      unsubStatus();
+      unsubReading();
+      unsubLock();
+    };
+  }, [triggerHaptic]);
+
+  const handleToggleScaleConnection = async () => {
+    if (scaleStatus === 'CONNECTED') {
+      await scaleDriver.disconnect();
+      toast('Timbangan serial USB diputuskan.', 'info');
+    } else if (scaleStatus === 'SIMULATING') {
+      scaleDriver.stopSimulation();
+      toast('Mode simulasi timbangan dihentikan.', 'info');
+    } else {
+      try {
+        const ok = await scaleDriver.connect();
+        if (ok) {
+          toast('Timbangan serial USB berhasil terhubung!', 'success');
+        }
+      } catch (err: any) {
+        toast(err.message || 'Gagal menyambungkan timbangan', 'error');
+      }
+    }
+  };
 
   // Dual-Payment & Pembayaran
   const [paymentOption, setPaymentOption] = useState<'PAY_NOW' | 'PAY_LATER'>('PAY_NOW');
@@ -124,9 +172,11 @@ export const POSLaundry: React.FC = () => {
     const fetchServices = async () => {
       setIsLoadingCatalog(true);
       try {
-        const res = await fetch('/api/products?limit=100', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const headers: Record<string, string> = { 
+          Authorization: `Bearer ${token}`,
+          ...(user?.tenantId ? { 'x-tenant-id': user.tenantId } : {})
+        };
+        const res = await fetch('/api/products?limit=100', { headers });
         if (res.ok) {
           const data = await res.json();
           const items = Array.isArray(data) ? data : data.products || [];
@@ -140,7 +190,8 @@ export const POSLaundry: React.FC = () => {
               category: isPcs ? 'SATUAN' : 'KILOAN',
               unitType: isPcs ? 'PCS' : 'KG',
               price: p.sellPrice || 0,
-              description: p.description || ''
+              description: p.description || '',
+              imageUrl: p.imageUrl || ''
             };
           });
           setCatalog(mapped);
@@ -154,7 +205,7 @@ export const POSLaundry: React.FC = () => {
       }
     };
     fetchServices();
-  }, [token]);
+  }, [token, user?.tenantId]);
 
   // Kalkulasi Speed Surcharge & Estimasi Selesai
   const speedDetails = useMemo(() => {
@@ -499,24 +550,74 @@ export const POSLaundry: React.FC = () => {
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
             
             {/* High-Tech Digital Scale LED Display Box */}
-            <div className="flex-1 bg-slate-950 rounded-2xl p-3.5 border-2 border-cyan-500/50 flex items-center justify-between shadow-inner">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
-                  <Scale size={20} className="animate-bounce" />
+            <div className="flex-1 bg-slate-950 rounded-2xl p-3.5 border-2 border-cyan-500/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-inner">
+              <div className="flex items-center justify-between sm:justify-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400 shrink-0">
+                  <Scale size={20} className={scaleStatus === 'CONNECTED' || scaleStatus === 'SIMULATING' ? 'animate-pulse' : ''} />
                 </div>
                 <div>
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-cyan-400 font-bold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-                    Timbangan Digital Aktif
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleToggleScaleConnection}
+                      className={`text-[10px] font-mono uppercase tracking-widest font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
+                        scaleStatus === 'CONNECTED'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 hover:bg-emerald-500/30'
+                          : scaleStatus === 'SIMULATING'
+                          ? 'bg-purple-500/20 text-purple-300 border border-purple-400/40 hover:bg-purple-500/30'
+                          : scaleStatus === 'CONNECTING'
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                          : 'bg-slate-850 text-slate-400 border border-slate-700 hover:text-cyan-400 hover:border-cyan-500/50'
+                      }`}
+                      title={scaleStatus === 'CONNECTED' ? 'Klik untuk memutus port' : 'Klik untuk menyambungkan USB timbangan'}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full inline-block ${
+                          scaleStatus === 'CONNECTED'
+                            ? 'bg-emerald-400 animate-ping'
+                            : scaleStatus === 'SIMULATING'
+                            ? 'bg-purple-400 animate-ping'
+                            : 'bg-slate-500'
+                        }`}
+                      />
+                      {scaleStatus === 'CONNECTED'
+                        ? 'USB COM TERHUBUNG'
+                        : scaleStatus === 'SIMULATING'
+                        ? 'SIMULATOR AKTIF'
+                        : 'SAMBUNGKAN USB TIMBANGAN'}
+                    </button>
+
+                    {/* Stable / Unstable Badge */}
+                    <span
+                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                        isScaleStable
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-amber-950 text-amber-400 border border-amber-500/40 animate-pulse'
+                      }`}
+                    >
+                      <Lock size={10} />
+                      {isScaleStable ? 'STABLE' : 'UNSTABLE'}
+                    </span>
+
+                    {/* Hardware Modal Config Button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowScaleModal(true)}
+                      className="p-1 rounded-md text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-all cursor-pointer"
+                      title="Konfigurasi Port Serial & Terminal Monitor"
+                    >
+                      <Settings2 size={13} />
+                    </button>
                   </div>
-                  <div className="text-xs text-white font-bold truncate max-w-[200px] mt-0.5">
+
+                  <div className="text-xs text-white font-bold truncate max-w-[220px] mt-1">
                     {scaleService?.name || 'Pilih Layanan Kiloan'}
                   </div>
                 </div>
               </div>
 
               {/* Digit Readout */}
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline justify-end gap-2 shrink-0">
                 <input
                   type="number"
                   step="0.01"
@@ -655,9 +756,20 @@ export const POSLaundry: React.FC = () => {
               <div
                 key={item.id}
                 onClick={() => handleSelectServiceCard(item)}
-                className="group relative p-4 rounded-2xl bg-white hover:border-cyan-500 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+                className="group relative p-4 rounded-2xl bg-white hover:border-cyan-500 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden"
               >
                 <div>
+                  {item.imageUrl && (
+                    <div className="w-full h-28 -mx-4 -mt-4 mb-3 overflow-hidden rounded-t-2xl relative bg-slate-100">
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+                    </div>
+                  )}
                   <div className="flex items-start justify-between gap-2">
                     <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${
                       isKilo
@@ -1001,6 +1113,13 @@ export const POSLaundry: React.FC = () => {
           onClose={() => setShowReceiptModal(false)}
         />
       )}
+
+      {/* ─── MODAL KONFIGURASI TIMBANGAN DIGITAL ─────────────────────────────── */}
+      <DigitalScaleModal
+        isOpen={showScaleModal}
+        onClose={() => setShowScaleModal(false)}
+        onApplyWeight={w => setScaleWeight(w.toFixed(2))}
+      />
 
     </div>
   );

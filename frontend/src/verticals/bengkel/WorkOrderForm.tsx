@@ -64,6 +64,11 @@ export const WorkOrderForm: React.FC = () => {
   const [payAmount, setPayAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
 
+  // Custom / Non-Catalog Part Input
+  const [showCustomPartInput, setShowCustomPartInput] = useState<boolean>(false);
+  const [customPartName, setCustomPartName] = useState<string>('');
+  const [customPartPrice, setCustomPartPrice] = useState<string>('');
+
   const [loading, setLoading] = useState<boolean>(false);
 
   // Load Catalogs
@@ -224,6 +229,28 @@ export const WorkOrderForm: React.FC = () => {
         subtotal: price
       }
     ]);
+  };
+
+  // Add Custom / Non-Catalog Part
+  const handleAddCustomPart = () => {
+    if (!customPartName.trim()) {
+      toast('Nama sparepart wajib diisi', 'warning');
+      return;
+    }
+    const price = Math.max(0, parseFloat(customPartPrice) || 0);
+    setParts(prev => [
+      ...prev,
+      {
+        productId: null,
+        partName: customPartName.trim(),
+        qty: 1,
+        price,
+        subtotal: price
+      }
+    ]);
+    setCustomPartName('');
+    setCustomPartPrice('');
+    setShowCustomPartInput(false);
   };
 
   // Totals Calculation
@@ -873,7 +900,7 @@ export const WorkOrderForm: React.FC = () => {
               </div>
 
               {/* Add Part Selector */}
-              <div className="w-full sm:w-auto">
+              <div className="w-full sm:w-auto flex items-center gap-2">
                 <select
                   onChange={(e) => {
                     if (e.target.value) {
@@ -883,15 +910,59 @@ export const WorkOrderForm: React.FC = () => {
                   }}
                   className="w-full sm:w-auto px-3 py-2 sm:py-1.5 border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-purple-500 focus:outline-none bg-slate-50/50"
                 >
-                  <option value="">+ Tambah Sparepart...</option>
+                  <option value="">+ Dari Katalog Sparepart...</option>
                   {availableProducts.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.name} (Stok: {p.stock} | Rp {p.sellPrice.toLocaleString('id-ID')})
                     </option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomPartInput(v => !v)}
+                  className="px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold whitespace-nowrap transition cursor-pointer"
+                >
+                  + Part Manual
+                </button>
               </div>
             </div>
+
+            {/* Custom Part Input Form */}
+            {showCustomPartInput && (
+              <div className="mb-4 p-3 bg-purple-50/60 border border-purple-200 rounded-xl flex flex-wrap items-center gap-2 animate-fade-in">
+                <input
+                  type="text"
+                  placeholder="Nama Sparepart (misal: Busi Iridium NGK)"
+                  value={customPartName}
+                  onChange={e => setCustomPartName(e.target.value)}
+                  className="flex-1 min-w-[200px] px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium outline-none focus:border-purple-500"
+                />
+                <div className="relative w-36">
+                  <span className="absolute left-2.5 top-1.5 text-xs text-slate-400 font-bold">Rp</span>
+                  <input
+                    type="number"
+                    placeholder="Harga Satuan"
+                    value={customPartPrice}
+                    onChange={e => setCustomPartPrice(e.target.value)}
+                    className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold outline-none focus:border-purple-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddCustomPart}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-xs"
+                >
+                  Tambahkan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomPartInput(false)}
+                  className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-lg text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+              </div>
+            )}
 
             {/* Parts Table */}
             {parts.length === 0 ? (

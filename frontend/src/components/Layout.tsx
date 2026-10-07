@@ -43,6 +43,8 @@ import {
   LayoutGrid,
   Sliders,
   Shirt,
+  Car,
+  Wrench,
   LogOut
 } from 'lucide-react';
 
@@ -146,7 +148,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/absensi': 'Absensi Karyawan',
     '/shift': 'Riwayat Shift & Kasir',
     '/crm': isRetail ? 'Pelanggan & Bon Piutang' : (isBengkel ? 'Pelanggan & Kendaraan' : 'Pelanggan & CRM'),
-    '/laporan': 'Laporan Penjualan',
+    '/bengkel/board': 'Papan Status SPK & Servis',
+    '/bengkel/pengadaan': 'Rencana Belanja & Hutang Supplier',
+    '/bengkel/kendaraan': 'Riwayat Servis Kendaraan',
+    '/bengkel/jasa': 'Tarif & Jasa Servis',
+    '/bengkel/mekanik': 'Data Mekanik & Komisi',
+    '/bengkel/invoices': 'Invoice B2B & Faktur',
+    '/bengkel/laporan': 'Laporan Finansial Bengkel',
+    '/laporan': isBengkel ? 'Laporan Finansial Bengkel' : 'Laporan Penjualan',
     '/audit-log': 'Audit Trail & Log Aktivitas',
     '/cabang': 'Manajemen Cabang',
     '/pengaturan': 'Pengaturan Sistem'
@@ -274,6 +283,40 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <NavLink to="/pos" title={isRental ? "POS Sewa Busana" : "POS / Penjualan"} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <ShoppingCart size={20} className="shrink-0" />
                 <span>{isRental ? 'POS Sewa Busana' : 'POS / Penjualan'}</span>
+              </NavLink>
+            )}
+            {isBengkel && checkAccess(['Admin', 'Kasir']) && (
+              <>
+                <NavLink to="/bengkel/board" title="Papan SPK (Servis)" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Layers size={20} className="shrink-0 text-purple-400" />
+                  <span>Papan SPK (Servis)</span>
+                </NavLink>
+                <NavLink to="/bengkel/pengadaan" title="Pengadaan & Defecta" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <ClipboardList size={20} className="shrink-0 text-amber-400" />
+                  <span>Pengadaan Sparepart</span>
+                </NavLink>
+                <NavLink to="/bengkel/kendaraan" title="Riwayat Kendaraan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Car size={20} className="shrink-0 text-blue-400" />
+                  <span>Riwayat Kendaraan</span>
+                </NavLink>
+                <NavLink to="/bengkel/jasa" title="Katalog Jasa & Tarif" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Wrench size={20} className="shrink-0 text-emerald-400" />
+                  <span>Katalog Jasa Servis</span>
+                </NavLink>
+                <NavLink to="/bengkel/mekanik" title="Mekanik & Komisi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Users size={20} className="shrink-0 text-indigo-400" />
+                  <span>Mekanik &amp; Komisi</span>
+                </NavLink>
+                <NavLink to="/bengkel/invoices" title="Invoice B2B / Faktur" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <FileText size={20} className="shrink-0 text-violet-400" />
+                  <span>Invoice B2B</span>
+                </NavLink>
+              </>
+            )}
+            {isRetail && checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/retail/surat-jalan" title="Surat Jalan & Armada" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Truck size={20} className="shrink-0 text-purple-400" />
+                <span>Surat Jalan (DO)</span>
               </NavLink>
             )}
             {isRental && checkAccess(['Admin', 'Kasir']) && (
@@ -923,6 +966,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     <span className="text-[10px] font-bold text-slate-700 leading-tight">Inventaris</span>
                   </NavLink>
                 </>
+              )}
+
+              {isRetail && checkAccess(['Admin', 'Kasir']) && (
+                <NavLink to="/retail/surat-jalan" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-purple-100 flex items-center justify-center">
+                    <Truck size={20} className="text-purple-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Surat Jalan</span>
+                </NavLink>
               )}
 
               {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (

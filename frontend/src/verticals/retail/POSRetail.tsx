@@ -63,6 +63,7 @@ interface Product {
   sellPriceMitra?: number | null;
   sellPriceGrosir?: number | null;
   minQtyGrosir?: number | null;
+  imageUrl?: string | null;
   productUoms?: ProductUOM[];
   priceTiers?: ProductPriceTier[];
   category?: { id: number; name: string };
@@ -120,7 +121,10 @@ export const POSRetail: React.FC = () => {
   const loadCatalogs = async () => {
     if (!token) return;
     setLoading(true);
-    const headers = { Authorization: `Bearer ${token}` };
+    const headers: Record<string, string> = { 
+      Authorization: `Bearer ${token}`,
+      ...(user?.tenantId ? { 'x-tenant-id': user.tenantId } : {})
+    };
 
     try {
       const [prodRes, catRes] = await Promise.all([
@@ -148,7 +152,7 @@ export const POSRetail: React.FC = () => {
 
   useEffect(() => {
     loadCatalogs();
-  }, [token]);
+  }, [token, user?.tenantId]);
 
   // Autofocus scanner input
   useEffect(() => {
@@ -661,9 +665,19 @@ export const POSRetail: React.FC = () => {
                 <div
                   key={`prod-${p.id}`}
                   onClick={() => handleAddProduct(p)}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.98]"
+                  className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.98] overflow-hidden"
                 >
                   <div>
+                    {p.imageUrl && (
+                      <div className="w-full h-28 -mx-3.5 -mt-3.5 mb-2.5 overflow-hidden bg-slate-100 relative">
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
                         p.stock === 0

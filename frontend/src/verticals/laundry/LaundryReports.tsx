@@ -26,96 +26,22 @@ import {
   TrendingDown,
   Percent,
   Search,
-  ArrowUpRight
+  ArrowUpRight,
+  FileDown
 } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
+import { exportLaundryReportPDF, type LaundryReportData } from '../../utils/laundryPdfGenerator';
 
 type QuickFilterType = 'today' | 'week' | 'month' | 'last_month' | 'custom';
 type ActiveTabType = 'overview' | 'aging_rack' | 'margin_matrix' | 'chemical' | 'churn_guard';
 
-interface AnalyticsData {
-  period: {
-    type: string;
-    startDate: string;
-    endDate: string;
-  };
-  summary: {
-    totalOrders: number;
-    totalKg: number;
-    totalPcs: number;
-    totalRevenue: number;
-    totalSubtotal: number;
-    totalSurcharge: number;
-    totalDiscount: number;
-    avgTicket: number;
-    kiloanRevenue: number;
-    satuanRevenue: number;
-    kiloanPercentage: number;
-    satuanPercentage: number;
-    onTimeRate: number;
-  };
-  agingRack: {
-    totalValueInRack: number;
-    totalUnpaidInRack: number;
-    rackOrdersCount: number;
-    buckets: {
-      days0_3: { count: number; amount: number; unpaidAmount: number };
-      days4_7: { count: number; amount: number; unpaidAmount: number };
-      days8_14: { count: number; amount: number; unpaidAmount: number };
-      days15_30: { count: number; amount: number; unpaidAmount: number };
-      daysOver30: { count: number; amount: number; unpaidAmount: number };
-    };
-    overdueOrders: Array<{
-      id: string;
-      orderNumber: string;
-      customerName: string;
-      customerPhone?: string;
-      rackLocation: string;
-      daysInRack: number;
-      readyAt?: string;
-      totalAmount: number;
-      paidAmount: number;
-      unpaidAmount: number;
-      paymentStatus: string;
-    }>;
-  };
-  topServices: Array<{
-    name: string;
-    count: number;
-    totalQty: number;
-    revenue: number;
-    unitType: string;
-  }>;
-  perfumePopularity: Array<{
-    name: string;
-    count: number;
-  }>;
-  chemicalEfficiency: {
-    totalKgDicuci: number;
-    estimatedDetergentNeededLiters: number;
-    estimatedPerfumeNeededLiters: number;
-    currentStock: Array<{
-      id: string;
-      name: string;
-      stock: number;
-      unit: string;
-      costPerUnit?: number;
-      buyPrice?: number;
-    }>;
-  };
-  atRiskCustomers: Array<{
-    customerName: string;
-    customerPhone?: string;
-    lastOrderDate: string;
-    totalSpend: number;
-    orderCount: number;
-  }>;
-}
+interface AnalyticsData extends LaundryReportData {}
 
 export const LaundryReports: React.FC = () => {
-  const { token, settings } = usePOS();
+  const { user, token, settings } = usePOS();
   const [loading, setLoading] = useState<boolean>(true);
+  const [exportingPdf, setExportingPdf] = useState<boolean>(false);
   const [data, setData] = useState<AnalyticsData | null>(null);
 
   // Filters
@@ -194,7 +120,7 @@ export const LaundryReports: React.FC = () => {
   };
 
   // WhatsApp Re-engagement handler for churn risk customers
-  const sendWhatsAppChurnOffer = (cust: AnalyticsData['atRiskCustomers'][0]) => {
+  const sendWhatsAppChurnOffer = (cust: NonNullable<AnalyticsData['atRiskCustomers']>[0]) => {
     if (!cust.customerPhone) {
       toast('Nomor WhatsApp pelanggan belum tercatat', 'error');
       return;
@@ -211,6 +137,32 @@ export const LaundryReports: React.FC = () => {
 
     const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
     window.open(waUrl, '_blank');
+  };
+
+  // Export Laporan PDF Resmi A4 Laundry
+  const handleExportPDF = async () => {
+    if (!data) {
+      toast('Data analitik laundry belum tersedia', 'error');
+      return;
+    }
+
+    try {
+      setExportingPdf(true);
+      toast('Menyiapkan dokumen PDF resmi laundry...', 'info');
+      await exportLaundryReportPDF(
+        settings || {},
+        data,
+        data.period?.startDate || startDate,
+        data.period?.endDate || endDate,
+        user?.name || user?.username || 'Administrator Kasir'
+      );
+      toast('Dokumen PDF Laporan Laundry berhasil diunduh!', 'success');
+    } catch (err: any) {
+      console.error('[PDF Export Error]', err);
+      toast('Gagal mengekspor laporan PDF: ' + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   // Print Summary Thermal
@@ -308,11 +260,21 @@ export const LaundryReports: React.FC = () => {
               </button>
 
               <button
+                onClick={handleExportPDF}
+                disabled={exportingPdf || loading || !data}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-600 text-white text-xs font-semibold hover:bg-cyan-700 transition-all shadow-sm shadow-cyan-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Unduh Dokumen Laporan Resmi PDF A4"
+              >
+                <FileDown size={15} className={exportingPdf ? 'animate-bounce' : ''} />
+                <span>{exportingPdf ? 'Menyiapkan PDF...' : 'Export Laporan PDF'}</span>
+              </button>
+
+              <button
                 onClick={handlePrintSummary}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-all shadow-sm"
               >
                 <Printer size={15} />
-                <span>Cetak Ringkasan</span>
+                <span>Cetak Cepat</span>
               </button>
             </div>
           </div>
@@ -333,7 +295,7 @@ export const LaundryReports: React.FC = () => {
                 id: 'churn_guard',
                 label: 'Pelanggan Churn Risk',
                 icon: Users,
-                badge: data?.atRiskCustomers.length || 0
+                badge: data?.atRiskCustomers?.length || 0
               }
             ].map(tab => {
               const Icon = tab.icon;
@@ -566,6 +528,107 @@ export const LaundryReports: React.FC = () => {
                 <div className="p-3 bg-white/10 rounded-xl backdrop-blur-xs border border-white/10 text-xs flex items-center justify-between">
                   <span>Target Margin Usaha Ideal:</span>
                   <span className="font-bold text-cyan-300">55% - 65%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Ikhtisar Laba Rugi Operasional & Kecepatan SLA */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Card P&L Operasional */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <DollarSign size={16} className="text-emerald-600" />
+                      Laba Rugi & Arus Kas Operasional (P&L)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Omzet cuci dikurangi beban kas kecil operasional (petty cash)
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {data?.summary.netProfitMargin ?? (data?.summary.totalRevenue ? Math.round(((data.summary.totalRevenue - (data?.expenses?.totalExpense || 0)) / data.summary.totalRevenue) * 100) : 0)}% Net Margin
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-xs text-slate-600">Total Pendapatan Bersih Cuci:</span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {formatCurrency(data?.summary.totalRevenue)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-rose-50/50 border border-rose-100">
+                    <span className="text-xs text-rose-700">Total Beban Operasional Kasir (Petty Cash):</span>
+                    <span className="text-sm font-bold text-rose-600">
+                      -{formatCurrency(data?.expenses?.totalExpense || data?.summary.totalExpense || 0)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3.5 rounded-xl bg-cyan-50 border border-cyan-200/80">
+                    <div>
+                      <span className="text-xs font-bold text-cyan-900 block">Estimasi Laba Bersih Operasional:</span>
+                      <span className="text-[10px] text-cyan-600">Setelah beban bahan kimia, gas & kemasan</span>
+                    </div>
+                    <span className="text-base font-black text-cyan-800">
+                      {formatCurrency((data?.summary.totalRevenue || 0) - (data?.expenses?.totalExpense || data?.summary.totalExpense || 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card Distribusi Kecepatan SLA */}
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <Clock size={16} className="text-cyan-600" />
+                      Distribusi Kecepatan Layanan & Surcharge
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Volume nota dan kontribusi premi surcharge kilat
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">
+                    {data?.summary.onTimeRate || 100}% Tepat Janji
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">Reguler (Standar 2 Hari)</span>
+                      <span className="text-[10px] text-slate-400">Tarif dasar kiloan/satuan normal</span>
+                    </div>
+                    <span className="text-xs font-bold text-slate-700">
+                      {data?.speedBreakdown?.REGULAR.count ?? data?.summary.totalOrders ?? 0} nota
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-amber-50/50 border border-amber-100">
+                    <div>
+                      <span className="text-xs font-bold text-amber-900 block">Kilat (Selesai 24 Jam)</span>
+                      <span className="text-[10px] text-amber-700">
+                        Surcharge: +{formatCurrency(data?.speedBreakdown?.KILAT_24H.surcharge || 0)}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-amber-800">
+                      {data?.speedBreakdown?.KILAT_24H.count || 0} nota
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center p-3 rounded-xl bg-purple-50/50 border border-purple-100">
+                    <div>
+                      <span className="text-xs font-bold text-purple-900 block">Express (Selesai 6 Jam)</span>
+                      <span className="text-[10px] text-purple-700">
+                        Surcharge: +{formatCurrency(data?.speedBreakdown?.EXPRESS_6H.surcharge || 0)}
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-purple-800">
+                      {data?.speedBreakdown?.EXPRESS_6H.count || 0} nota
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -37,6 +37,7 @@ import { useVertical } from '../context/VerticalContext';
 import OpenShiftModal from './OpenShiftModal';
 import useSocket from '../hooks/useSocket';
 
+const BengkelDashboardStats = lazy(() => import('../verticals/bengkel/BengkelDashboardStats').then(m => ({ default: m.BengkelDashboardStats })));
 const RentalDashboardStats = lazy(() => import('../verticals/rental/RentalDashboardStats').then(m => ({ default: m.RentalDashboardStats })));
 
 
@@ -51,10 +52,7 @@ interface LowStockProduct {
 
 const DashboardView = () => {
   const navigate = useNavigate();
-  const { isRental, isBengkel: _isBengkel, isRetail: _isRetail } = useVertical();
-  const isBengkel = false;
-  const isRetail = false;
-  const isCafe = !isRental;
+  const { isRental, isBengkel, isRetail, isCafe } = useVertical();
   const [summary, setSummary] = useState<any>({
     revenue: 0,
     profit: 0,
@@ -164,6 +162,22 @@ const DashboardView = () => {
       if (chartMode === 'monthly') fetchSalesChart(30);
     }
   }, [chartMode]);
+
+  // ─── BENGKEL VERTICAL: Tampilkan dashboard bengkel khusus ────────────────
+  if (isBengkel) {
+    return (
+      <div className="p-3 sm:p-6 pb-28 sm:pb-16 w-full max-w-[1600px] mx-auto">
+        <Suspense fallback={
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-slate-500">Memuat dashboard bengkel...</p>
+          </div>
+        }>
+          <BengkelDashboardStats />
+        </Suspense>
+      </div>
+    );
+  }
 
   // ─── RENTAL VERTICAL: Tampilkan dashboard rental khusus ──────────────────
   if (isRental) {
@@ -652,124 +666,272 @@ const DashboardView = () => {
 
       </div>
 
-      {/* ─── 4. ROW 3: OPERASIONAL RESTORAN (DAPUR, MEJA, MENU TERLARIS) ─── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-        
-        {/* Card 1: Kecepatan Dapur & Antrean KDS */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <Clock size={17} className="text-indigo-600" /> Kecepatan Saji Dapur (KDS)
-            </h3>
-            {summary.kitchenQueue > 0 ? (
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black text-[10px] animate-pulse">
-                {summary.kitchenQueue} Pesanan Antre
-              </span>
-            ) : (
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-100">
-                Lancar
-              </span>
-            )}
-          </div>
+      {/* ─── 4. ROW 3: OPERASIONAL (RETAIL: ARMADA & PIUTANG vs CAFE: DAPUR & MEJA) ─── */}
+      {isRetail ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+          
+          {/* Card 1: Status Pengiriman Armada & Surat Jalan (DO) */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Truck size={17} className="text-purple-600" /> Pengiriman Armada &amp; Surat Jalan
+              </h3>
+              {(summary.deliveryOrdersSummary?.inTransit || 0) > 0 ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-black text-[10px] animate-pulse">
+                  {summary.deliveryOrdersSummary?.inTransit} In-Transit
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px] border border-slate-200">
+                  Armada Standby
+                </span>
+              )}
+            </div>
 
-          <div className="flex items-center justify-around py-4 bg-slate-50 rounded-xl border border-slate-100 my-2">
-            <div className="flex flex-col items-center justify-center">
-              <div className="w-16 h-16 rounded-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200" style={{ background: serviceSpeed.bg }}>
-                <div className="text-xl font-black" style={{ color: serviceSpeed.color }}>{summary.averageServiceTime}</div>
-                <div className="text-[9px] font-bold text-slate-500 uppercase -mt-0.5">Menit</div>
+            <div className="grid grid-cols-3 gap-2 py-3 bg-purple-50/40 rounded-xl border border-purple-100 my-2 text-center">
+              <div className="flex flex-col items-center justify-center p-2">
+                <span className="text-xs font-bold text-amber-700">Antre / Muat</span>
+                <span className="text-xl font-black text-amber-900 mt-0.5">
+                  {summary.deliveryOrdersSummary?.pending || 0}
+                </span>
+                <span className="text-[9px] text-amber-600/80">Pending DO</span>
               </div>
-              <div className="text-[11px] font-bold mt-1.5" style={{ color: serviceSpeed.color }}>{serviceSpeed.label}</div>
+              <div className="flex flex-col items-center justify-center p-2 border-x border-purple-100">
+                <span className="text-xs font-bold text-purple-700">Jalan</span>
+                <span className="text-xl font-black text-purple-900 mt-0.5">
+                  {summary.deliveryOrdersSummary?.inTransit || 0}
+                </span>
+                <span className="text-[9px] text-purple-600/80">Di Armada</span>
+              </div>
+              <div className="flex flex-col items-center justify-center p-2">
+                <span className="text-xs font-bold text-emerald-700">Terkirim</span>
+                <span className="text-xl font-black text-emerald-900 mt-0.5">
+                  {summary.deliveryOrdersSummary?.delivered || 0}
+                </span>
+                <span className="text-[9px] text-emerald-600/80">Hari Ini</span>
+              </div>
             </div>
 
-            <div className="h-12 w-px bg-slate-200" />
-
-            <div className="flex flex-col items-center justify-center text-center">
-              <div className="text-2xl font-black text-slate-800">{summary.kitchenQueue || 0}</div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Sedang Dimasak</div>
-              <div className="text-[10px] text-indigo-600 font-bold mt-1">Live Queue KDS</div>
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-400 leading-snug flex items-center gap-1.5 mt-2">
-            <Utensils size={12} className="text-indigo-500 shrink-0" />
-            <span>Rerata waktu dari order kasir hingga hidangan disajikan.</span>
-          </div>
-        </div>
-
-        {/* Card 2: Live Keterisian Meja */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <Users size={17} className="text-indigo-600" /> Keterisian Meja (Dine-In)
-            </h3>
-            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px] border border-slate-200">
-              {summary.tableOccupancy?.occupied}/{summary.tableOccupancy?.total} Meja
-            </span>
-          </div>
-
-          <div className="flex flex-col justify-center items-center py-4 bg-slate-50 rounded-xl border border-slate-100 my-2">
-            <div className="text-3xl font-black text-slate-900 tracking-tight">
-              {summary.tableOccupancy?.percentage || 0}%
-            </div>
-            <div className="text-xs font-bold text-slate-500 mt-0.5">Tingkat Okupansi Meja Saat Ini</div>
-
-            <div className="w-44 h-2.5 rounded-full bg-slate-200 mt-3 overflow-hidden">
-              <div 
-                className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                style={{ width: `${summary.tableOccupancy?.percentage || 0}%` }}
-              />
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px]">
+              <span className="text-slate-500 font-medium">Logistik pickup &amp; ekspedisi</span>
+              <button
+                type="button"
+                onClick={() => navigate('/retail/surat-jalan')}
+                className="text-purple-700 hover:text-purple-900 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                <span>Kelola Surat Jalan</span>
+                <ArrowUpRight size={13} />
+              </button>
             </div>
           </div>
 
-          <div className="text-[11px] text-slate-500 flex justify-between items-center mt-2 px-1">
-            <span>Terisi: <strong className="text-slate-800">{summary.tableOccupancy?.occupied || 0} Meja</strong></span>
-            <span>Kosong: <strong className="text-emerald-600">{(summary.tableOccupancy?.total || 0) - (summary.tableOccupancy?.occupied || 0)} Meja</strong></span>
-          </div>
-        </div>
+          {/* Card 2: Buku Piutang Pelanggan & Bon Tempo (AR) */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Wallet size={17} className="text-rose-600" /> Buku Piutang &amp; Bon Tempo
+              </h3>
+              {(summary.arSummary?.overdueCount || 0) > 0 ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-black text-[10px] animate-pulse">
+                  {summary.arSummary?.overdueCount} Lewat Tempo
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-100">
+                  Lancar
+                </span>
+              )}
+            </div>
 
-        {/* Card 3: Top 5 Menu Paling Laris */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <Award size={17} className="text-amber-500" /> Top Menu Terlaris (Favorit)
-            </h3>
-            <span className="text-[10px] text-slate-400 font-semibold">Top 5</span>
+            <div className="flex flex-col justify-center items-center py-3 bg-slate-50 rounded-xl border border-slate-100 my-2">
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Piutang Belum Lunas</div>
+              <div className="text-2xl font-black text-slate-900 tracking-tight mt-0.5">
+                {formatCurrency(summary.arSummary?.totalActive || 0)}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">
+                {summary.arSummary?.activeCount || 0} Nota Bon Pelanggan Aktif
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px]">
+              <span className="text-slate-500 font-medium">
+                {(summary.arSummary?.overdueCount || 0) > 0 ? (
+                  <strong className="text-rose-600 font-bold">Macet: {formatCurrency(summary.arSummary?.totalOverdue || 0)}</strong>
+                ) : (
+                  <span>Tidak ada tunggakan macet</span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/laporan')}
+                className="text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                <span>Buku Piutang</span>
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-1.5 flex-1 justify-center my-1">
-            {bestSellers.slice(0, 5).map((item, index) => {
-              const maxQty = bestSellers[0]?.qty || 1;
-              const percent = (item.qty / maxQty) * 100;
-              
-              return (
-                <div key={item.id} className="relative overflow-hidden rounded-xl bg-slate-50 border border-slate-100 p-2 flex items-center justify-between">
-                  <div className="absolute top-0 left-0 h-full bg-indigo-50/70" style={{ width: `${percent}%`, zIndex: 0 }} />
-                  
-                  <div className="flex items-center gap-2 relative z-10 min-w-0 pr-2">
-                    <div className="w-5 h-5 rounded-md bg-white shadow-xs border border-slate-200/60 flex items-center justify-center text-[10px] font-black shrink-0" style={{ color: COLORS[index % COLORS.length] }}>
-                      #{index + 1}
+          {/* Card 3: Top 5 Produk Grosir / Sembako Terlaris */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Award size={17} className="text-amber-500" /> Top Produk Terlaris
+              </h3>
+              <span className="text-[10px] text-slate-400 font-semibold">Top 5</span>
+            </div>
+
+            <div className="flex flex-col gap-1.5 flex-1 justify-center my-1">
+              {bestSellers.slice(0, 5).map((item, index) => {
+                const maxQty = bestSellers[0]?.qty || 1;
+                const percent = (item.qty / maxQty) * 100;
+                
+                return (
+                  <div key={item.id} className="relative overflow-hidden rounded-xl bg-slate-50 border border-slate-100 p-2 flex items-center justify-between">
+                    <div className="absolute top-0 left-0 h-full bg-amber-50/80" style={{ width: `${percent}%`, zIndex: 0 }} />
+                    
+                    <div className="flex items-center gap-2 relative z-10 min-w-0 pr-2">
+                      <div className="w-5 h-5 rounded-md bg-white shadow-xs border border-slate-200/60 flex items-center justify-center text-[10px] font-black shrink-0" style={{ color: COLORS[index % COLORS.length] }}>
+                        #{index + 1}
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
                     </div>
-                    <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
+                    <div className="relative z-10 text-[11px] font-black text-slate-800 bg-white px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0 shadow-2xs">
+                      {item.qty} <span className="text-[9px] text-slate-400 font-bold">unit</span>
+                    </div>
                   </div>
-                  <div className="relative z-10 text-[11px] font-black text-slate-800 bg-white px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0 shadow-2xs">
-                    {item.qty} <span className="text-[9px] text-slate-400 font-bold">porsi</span>
-                  </div>
+                );
+              })}
+              {bestSellers.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6 text-xs">
+                  Belum ada transaksi barang hari ini
                 </div>
-              );
-            })}
-            {bestSellers.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6 text-xs">
-                Belum ada penjualan menu hari ini
-              </div>
-            )}
+              )}
+            </div>
+
+            <div className="text-[10px] text-slate-400 flex justify-between items-center mt-1">
+              <span>Akumulasi penjualan barang toko hari ini.</span>
+            </div>
           </div>
 
-          <div className="text-[10px] text-slate-400 flex justify-between items-center mt-1">
-            <span>Dihitung dari seluruh pesanan sukses hari ini.</span>
-          </div>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+          
+          {/* Card 1: Kecepatan Dapur & Antrean KDS */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Clock size={17} className="text-indigo-600" /> Kecepatan Saji Dapur (KDS)
+              </h3>
+              {summary.kitchenQueue > 0 ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black text-[10px] animate-pulse">
+                  {summary.kitchenQueue} Pesanan Antre
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-100">
+                  Lancar
+                </span>
+              )}
+            </div>
 
-      </div>
+            <div className="flex items-center justify-around py-4 bg-slate-50 rounded-xl border border-slate-100 my-2">
+              <div className="flex flex-col items-center justify-center">
+                <div className="w-16 h-16 rounded-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200" style={{ background: serviceSpeed.bg }}>
+                  <div className="text-xl font-black" style={{ color: serviceSpeed.color }}>{summary.averageServiceTime}</div>
+                  <div className="text-[9px] font-bold text-slate-500 uppercase -mt-0.5">Menit</div>
+                </div>
+                <div className="text-[11px] font-bold mt-1.5" style={{ color: serviceSpeed.color }}>{serviceSpeed.label}</div>
+              </div>
+
+              <div className="h-12 w-px bg-slate-200" />
+
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="text-2xl font-black text-slate-800">{summary.kitchenQueue || 0}</div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Sedang Dimasak</div>
+                <div className="text-[10px] text-indigo-600 font-bold mt-1">Live Queue KDS</div>
+              </div>
+            </div>
+
+            <div className="text-[10px] text-slate-400 leading-snug flex items-center gap-1.5 mt-2">
+              <Utensils size={12} className="text-indigo-500 shrink-0" />
+              <span>Rerata waktu dari order kasir hingga hidangan disajikan.</span>
+            </div>
+          </div>
+
+          {/* Card 2: Live Keterisian Meja */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Users size={17} className="text-indigo-600" /> Keterisian Meja (Dine-In)
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px] border border-slate-200">
+                {summary.tableOccupancy?.occupied}/{summary.tableOccupancy?.total} Meja
+              </span>
+            </div>
+
+            <div className="flex flex-col justify-center items-center py-4 bg-slate-50 rounded-xl border border-slate-100 my-2">
+              <div className="text-3xl font-black text-slate-900 tracking-tight">
+                {summary.tableOccupancy?.percentage || 0}%
+              </div>
+              <div className="text-xs font-bold text-slate-500 mt-0.5">Tingkat Okupansi Meja Saat Ini</div>
+
+              <div className="w-44 h-2.5 rounded-full bg-slate-200 mt-3 overflow-hidden">
+                <div 
+                  className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                  style={{ width: `${summary.tableOccupancy?.percentage || 0}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 flex justify-between items-center mt-2 px-1">
+              <span>Terisi: <strong className="text-slate-800">{summary.tableOccupancy?.occupied || 0} Meja</strong></span>
+              <span>Kosong: <strong className="text-emerald-600">{(summary.tableOccupancy?.total || 0) - (summary.tableOccupancy?.occupied || 0)} Meja</strong></span>
+            </div>
+          </div>
+
+          {/* Card 3: Top 5 Menu Paling Laris */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Award size={17} className="text-amber-500" /> Top Menu Terlaris (Favorit)
+              </h3>
+              <span className="text-[10px] text-slate-400 font-semibold">Top 5</span>
+            </div>
+
+            <div className="flex flex-col gap-1.5 flex-1 justify-center my-1">
+              {bestSellers.slice(0, 5).map((item, index) => {
+                const maxQty = bestSellers[0]?.qty || 1;
+                const percent = (item.qty / maxQty) * 100;
+                
+                return (
+                  <div key={item.id} className="relative overflow-hidden rounded-xl bg-slate-50 border border-slate-100 p-2 flex items-center justify-between">
+                    <div className="absolute top-0 left-0 h-full bg-indigo-50/70" style={{ width: `${percent}%`, zIndex: 0 }} />
+                    
+                    <div className="flex items-center gap-2 relative z-10 min-w-0 pr-2">
+                      <div className="w-5 h-5 rounded-md bg-white shadow-xs border border-slate-200/60 flex items-center justify-center text-[10px] font-black shrink-0" style={{ color: COLORS[index % COLORS.length] }}>
+                        #{index + 1}
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
+                    </div>
+                    <div className="relative z-10 text-[11px] font-black text-slate-800 bg-white px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0 shadow-2xs">
+                      {item.qty} <span className="text-[9px] text-slate-400 font-bold">porsi</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {bestSellers.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6 text-xs">
+                  Belum ada penjualan menu hari ini
+                </div>
+              )}
+            </div>
+
+            <div className="text-[10px] text-slate-400 flex justify-between items-center mt-1">
+              <span>Dihitung dari seluruh pesanan sukses hari ini.</span>
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {/* ─── 5. ROW 4: KRU BERTUGAS & PERINGATAN STOK ─────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
@@ -831,7 +993,7 @@ const DashboardView = () => {
         <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-              <AlertTriangle size={17} className="text-rose-600" /> Peringatan Stok Menipis
+              <AlertTriangle size={17} className="text-rose-600" /> {isRetail ? 'Peringatan Stok Menipis (Gudang/Rak)' : 'Peringatan Stok Menipis'}
             </h3>
             <span className="text-[10px] text-rose-700 font-bold bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
               {summary.lowStockProducts?.length || 0} Item Kritis
@@ -842,8 +1004,12 @@ const DashboardView = () => {
             {(!summary.lowStockProducts || summary.lowStockProducts.length === 0) ? (
               <div className="flex flex-col items-center justify-center py-8 gap-1.5 bg-emerald-50/50 rounded-xl border border-emerald-100 text-center">
                 <CheckCircle2 size={24} className="text-emerald-600" />
-                <div className="text-xs font-bold text-emerald-950">Semua Stok Bahan &amp; Produk Aman</div>
-                <div className="text-[10px] text-emerald-700/80">Tidak ada produk atau bahan yang perlu restock darurat.</div>
+                <div className="text-xs font-bold text-emerald-950">
+                  {isRetail ? 'Semua Stok Barang Dagangan &amp; Gudang Aman' : 'Semua Stok Bahan &amp; Produk Aman'}
+                </div>
+                <div className="text-[10px] text-emerald-700/80">
+                  {isRetail ? 'Tidak ada produk atau stok barang yang perlu restock darurat.' : 'Tidak ada produk atau bahan yang perlu restock darurat.'}
+                </div>
               </div>
             ) : (
               summary.lowStockProducts.map((p: LowStockProduct) => (

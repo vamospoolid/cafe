@@ -90,10 +90,11 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       return t > max ? t : max;
     }, shifts[0].waktuTutup || now);
 
-    // Fetch semua order, cashflow, debtpayment dalam rentang global sekaligus
+    // Fetch semua order, cashflow, debtpayment dalam rentang tenant ini sekaligus (efisien / batch)
     const [allOrders, allCashFlows, allDebtPayments] = await Promise.all([
       prisma.order.findMany({
         where: {
+          tenantId,
           OR: [
             { paidAt: { gte: earliestOpen, lte: latestClose } },
             { paidAt: null, createdAt: { gte: earliestOpen, lte: latestClose } }
@@ -102,11 +103,11 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         select: { status: true, paymentMethod: true, total: true, paidAt: true, createdAt: true }
       }),
       prisma.cashFlow.findMany({
-        where: { date: { gte: earliestOpen, lte: latestClose } },
+        where: { tenantId, date: { gte: earliestOpen, lte: latestClose } },
         select: { type: true, amount: true, category: true, date: true, cashPocket: true, status: true }
       }),
       prisma.debtPayment.findMany({
-        where: { createdAt: { gte: earliestOpen, lte: latestClose } },
+        where: { tenantId, createdAt: { gte: earliestOpen, lte: latestClose } },
         select: { paymentMethod: true, amountPaid: true, createdAt: true }
       })
     ]);
@@ -136,13 +137,31 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       const voidCashTotal = voidOrders.reduce((s, o) => s + getCashPortion(o.paymentMethod, o.total), 0);
       const voidNonCashTotal = voidOrders.reduce((s, o) => s + getNonCashPortion(o.paymentMethod, o.total), 0);
 
-      // CashFlow dalam shift ini - Hanya uang laci (pocket = DRAWER atau legacy) yang mempengaruhi rekonsiliasi laci kasir
+      // CashFlow dalam shift ini - Hanya uang laci (pocket = DRAWER atau LACI_KASIR) yang mempengaruhi rekonsiliasi laci kasir
       const shiftCashFlows = allCashFlows.filter(cf => inRange(cf.date));
+      const isDrawerCashItem = (cf: any) => {
+        if (cf.cashPocket === 'BANK_ACCOUNT') return false;
+        if (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER') return true;
+        if (!cf.cashPocket) {
+          const cat = (cf.category || '').toLowerCase();
+          return !cat.includes('non-tunai') && !cat.includes('transfer') && !cat.includes('qris') && !cat.includes('debit');
+        }
+        return false;
+      };
+      const isElectronicInItem = (cf: any) => {
+        if (cf.cashPocket === 'BANK_ACCOUNT') return true;
+        const cat = (cf.category || '').toLowerCase();
+        return cat.includes('non-tunai') || cat.includes('transfer') || cat.includes('qris') || cat.includes('debit');
+      };
+
       const manualCashIn = shiftCashFlows
-        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
+        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isDrawerCashItem(cf))
         .reduce((s, cf) => s + cf.amount, 0);
       const manualCashOut = shiftCashFlows
-        .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
+        .filter(cf => cf.type === 'Pengeluaran' && isDrawerCashItem(cf) && cf.status === 'APPROVED')
+        .reduce((s, cf) => s + cf.amount, 0);
+      const manualNonCashIn = shiftCashFlows
+        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isElectronicInItem(cf))
         .reduce((s, cf) => s + cf.amount, 0);
 
       // Debt payments dalam shift ini
@@ -157,7 +176,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       return {
         ...shift,
         cashSales,
-        nonCashSales,
+        nonCashSales: nonCashSales + manualNonCashIn,
         voidCount,
         voidCashTotal,
         voidNonCashTotal,
@@ -183,11 +202,15 @@ router.post('/open', authenticateToken, async (req: Request, res: Response) => {
     const tenantId = user.tenantId;
     const { saldoAwal } = req.body;
 
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
     // Fail-closed: hanya shift tenant ini
     const existingActive = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...(tenantId ? { tenantId } : {})
+        tenantId
       },
       include: {
         user: { select: { id: true, name: true, username: true } }
@@ -242,13 +265,14 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
-    // Fail-closed: ambil shift aktif hanya milik tenant ini
-    const tenantCondition = tenantId ? { tenantId } : {};
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
 
     const activeShift = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...tenantCondition
+        tenantId
       },
       include: { user: { select: { name: true, username: true } } }
     });
@@ -257,15 +281,11 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       return res.status(404).json({ error: 'Tidak ada shift aktif' });
     }
 
-    const orderWhere = {
-      ...(tenantId ? { tenantId } : {})
-    };
-
     // Gunakan paidAt jika tersedia, fallback ke createdAt untuk order lama
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
-        ...orderWhere,
+        tenantId,
         OR: [
           { paidAt: { gte: activeShift.waktuBuka } },
           { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
@@ -280,6 +300,7 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
     const voidOrders = await prisma.order.findMany({
       where: {
         status: 'Void',
+        tenantId,
         OR: [
           { paidAt: { gte: activeShift.waktuBuka } },
           { createdAt: { gte: activeShift.waktuBuka } }
@@ -290,11 +311,11 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
     const voidNonCashTotal = voidOrders.reduce((sum, o) => sum + getNonCashPortion(o.paymentMethod, o.total), 0);
 
     const cashFlows = await prisma.cashFlow.findMany({
-      where: { date: { gte: activeShift.waktuBuka } }
+      where: { tenantId, date: { gte: activeShift.waktuBuka } }
     });
 
     const debtPayments = await prisma.debtPayment.findMany({
-      where: { createdAt: { gte: activeShift.waktuBuka } }
+      where: { tenantId, createdAt: { gte: activeShift.waktuBuka } }
     });
 
     const cashDebtIncome = debtPayments
@@ -305,21 +326,40 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
+    const isDrawerCash = (cf: any) => {
+      if (cf.cashPocket === 'BANK_ACCOUNT') return false;
+      if (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER') return true;
+      if (!cf.cashPocket) {
+        const cat = (cf.category || '').toLowerCase();
+        return !cat.includes('non-tunai') && !cat.includes('transfer') && !cat.includes('qris') && !cat.includes('debit');
+      }
+      return false;
+    };
+
+    const isElectronicIn = (cf: any) => {
+      if (cf.cashPocket === 'BANK_ACCOUNT') return true;
+      const cat = (cf.category || '').toLowerCase();
+      return cat.includes('non-tunai') || cat.includes('transfer') || cat.includes('qris') || cat.includes('debit');
+    };
+
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isDrawerCash(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
-      .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
+      .filter(cf => cf.type === 'Pengeluaran' && isDrawerCash(cf) && cf.status === 'APPROVED')
+      .reduce((sum, cf) => sum + cf.amount, 0);
+    const manualNonCashIn = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isElectronicIn(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
 
     // Catatan: cashSalesIncome hanya menghitung pesanan berstatus 'Paid'.
     // Pesanan 'Void' otomatis sudah tidak masuk ke cashSalesIncome, sehingga tidak dikurangkan ganda.
     const expectedCash = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
-    const expectedNonCash = nonCashSalesIncome + nonCashDebtIncome;
+    const expectedNonCash = nonCashSalesIncome + nonCashDebtIncome + manualNonCashIn;
 
     // Periksa konfigurasi Blind Cash Drawer Count dari Settings
     const settings = await prisma.settings.findFirst({
-      where: tenantId ? { tenantId } : undefined
+      where: { tenantId }
     });
     const enableBlindClose = (settings as any)?.enableBlindClose ?? false;
     const userRole = ((req as any).user?.role || '').toLowerCase();
@@ -367,13 +407,16 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
   try {
     const user = (req as any).user;
     const tenantId = user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
     const { saldoFisikLaci, cashDenominations, denominations, catatan, varianceReason, forceClose } = req.body;
 
     // Fail-closed: ambil shift aktif hanya milik tenant ini
     const activeShift = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...(tenantId ? { tenantId } : {})
+        tenantId
       }
     });
 
@@ -385,7 +428,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const pendingOrders = await prisma.order.findMany({
       where: {
         status: 'Pending',
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
         createdAt: { gte: activeShift.waktuBuka }
       },
       include: { table: true }
@@ -411,7 +454,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
         OR: [
           { paidAt: { gte: effectiveStart, lte: effectiveEnd } },
           { paidAt: null, createdAt: { gte: effectiveStart, lte: effectiveEnd } }
@@ -426,7 +469,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const voidOrders = await prisma.order.findMany({
       where: {
         status: 'Void',
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
         OR: [
           { paidAt: { gte: activeShift.waktuBuka } },
           { createdAt: { gte: activeShift.waktuBuka } }
@@ -439,14 +482,14 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     // Hitung pengeluaran/pemasukan manual kas tenant ini
     const cashFlows = await prisma.cashFlow.findMany({
       where: {
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
         date: { gte: activeShift.waktuBuka }
       }
     });
 
     const debtPayments = await prisma.debtPayment.findMany({
       where: {
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
         createdAt: { gte: activeShift.waktuBuka }
       }
     });
@@ -459,16 +502,35 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
+    const isDrawerCash = (cf: any) => {
+      if (cf.cashPocket === 'BANK_ACCOUNT') return false;
+      if (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER') return true;
+      if (!cf.cashPocket) {
+        const cat = (cf.category || '').toLowerCase();
+        return !cat.includes('non-tunai') && !cat.includes('transfer') && !cat.includes('qris') && !cat.includes('debit');
+      }
+      return false;
+    };
+
+    const isElectronicIn = (cf: any) => {
+      if (cf.cashPocket === 'BANK_ACCOUNT') return true;
+      const cat = (cf.category || '').toLowerCase();
+      return cat.includes('non-tunai') || cat.includes('transfer') || cat.includes('qris') || cat.includes('debit');
+    };
+
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isDrawerCash(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
-      .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
+      .filter(cf => cf.type === 'Pengeluaran' && isDrawerCash(cf) && cf.status === 'APPROVED')
+      .reduce((sum, cf) => sum + cf.amount, 0);
+    const manualNonCashIn = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isElectronicIn(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
 
     // Periksa setting Blind Count
     const settings = await prisma.settings.findFirst({
-      where: tenantId ? { tenantId } : undefined
+      where: { tenantId }
     });
     const enableBlindClose = (settings as any)?.enableBlindClose ?? false;
     const userRole = ((req as any).user?.role || '').toLowerCase();
@@ -476,7 +538,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
 
     // Saldo sistem kas dihitung dari kas masuk bersih yang sah (Void otomatis sudah tidak masuk di cashSalesIncome)
     const saldoSistem = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
-    const saldoElektronik = nonCashSalesIncome + nonCashDebtIncome;
+    const saldoElektronik = nonCashSalesIncome + nonCashDebtIncome + manualNonCashIn;
     const fisikLaci = Number(saldoFisikLaci) || 0;
     const selisih = Math.round((fisikLaci - saldoSistem) * 100) / 100;
 
@@ -724,8 +786,17 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
       return res.status(403).json({ error: 'Hanya Admin/Owner yang berwenang melakukan Force Close Shift.' });
     }
 
-    const shift = await prisma.shift.findUnique({
-      where: { id: shiftId },
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    if (!tenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    const shift = await prisma.shift.findFirst({
+      where: {
+        id: shiftId,
+        ...(!user?.isPlatformAdmin ? { tenantId } : (tenantId ? { tenantId } : {}))
+      },
       include: { user: true }
     });
 
