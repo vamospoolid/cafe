@@ -268,7 +268,7 @@ body {
   width: 72px;
 }
 .sidebar-collapsed .brand-text,
-.sidebar-collapsed .nav-item span:not(.badge-count),
+.sidebar-collapsed .nav-item span:not(.badge-count):not(.plan-badge),
 .sidebar-collapsed .sidebar-section-title span,
 .sidebar-collapsed .sidebar-collapse-btn {
   display: none;
@@ -302,6 +302,49 @@ body {
   height: 14px;
   padding: 0 3px;
 }
+
+/* SaaS Plan Locked Badge in Sidebar */
+.plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  line-height: 1;
+}
+
+.plan-badge-growth {
+  background: rgba(245, 158, 11, 0.18);
+  color: #FCD34D;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.plan-badge-business {
+  background: rgba(168, 85, 247, 0.18);
+  color: #D8B4FE;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+}
+
+.nav-item.active .plan-badge {
+  background: rgba(26, 16, 51, 0.2) !important;
+  color: #1A1033 !important;
+  border-color: rgba(26, 16, 51, 0.4) !important;
+}
+
+.nav-item.active .plan-badge svg {
+  color: #1A1033 !important;
+}
+
+.sidebar-collapsed .nav-item .plan-badge span {
+  display: none !important;
+}
+
+.sidebar-collapsed .nav-item .plan-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 3px !important;
+  margin: 0 !important;
+}
+
 
 .main-content {
   flex: 1;

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Crown, Sparkles, CheckCircle2, ArrowRight, ShieldCheck, 
   Boxes, CreditCard, ChefHat, PackageSearch, Fingerprint, 
-  Award, Calendar, Grid, MessageCircle
+  Award, Calendar, Grid, MessageCircle, Store
 } from 'lucide-react';
 import { usePOS } from '../context/POSContext';
 
@@ -152,6 +152,22 @@ const FEATURE_REGISTRY: Record<string, FeatureMeta> = {
       { title: 'Monitoring Stok Terpusat', desc: 'Pantau persediaan bahan baku di seluruh cabang dalam satu layar eksekutif.' }
     ],
     badgeColor: 'from-blue-600 to-cyan-600'
+  },
+  'multi_outlet': {
+    title: 'Multi-Outlet & Sentralisasi Cabang',
+    category: 'SKALABILITAS BISNIS CABANG',
+    requiredPlan: 'BUSINESS',
+    requiredPlanName: 'Paket Business',
+    priceTag: 'Rp 299.000 / bln',
+    icon: <Store className="text-indigo-600" size={32} />,
+    heroHeadline: 'Kelola Banyak Cabang Toko dalam Satu Akun Terpusat',
+    description: 'Buka cabang baru tanpa ribet. Pantau laporan omset tiap outlet cabang, transfer persediaan, dan kontrol operasional multi-cabang dari satu akun dashboard.',
+    highlights: [
+      { title: 'Konsolidasi Seluruh Cabang', desc: 'Pantau performa penjualan dan pendapatan antar outlet cabang secara real-time.' },
+      { title: 'Sentralisasi Manajemen Staf', desc: 'Kelola penempatan kasir, barista, dan manajer cabang dengan hak akses terisolasi.' },
+      { title: 'Skalabilitas Bisnis Tanpa Batas', desc: 'Ekspansi jaringan gerai kafe Anda dengan cepat tanpa perlu instalasi ulang.' }
+    ],
+    badgeColor: 'from-indigo-600 to-violet-600'
   }
 };
 

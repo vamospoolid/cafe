@@ -45,6 +45,7 @@ import {
   Shirt,
   Car,
   Wrench,
+  Lock,
   LogOut
 } from 'lucide-react';
 
@@ -238,6 +239,40 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     });
   };
 
+  const renderPlanBadge = (featureKey: string, requiredPlan: 'GROWTH' | 'BUSINESS') => {
+    if (posContext?.user?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || posContext?.user?.username === 'developer') {
+      return null;
+    }
+    const hasAccess = posContext?.hasFeature ? posContext.hasFeature(featureKey) : true;
+    if (hasAccess) return null;
+
+    const isGrowth = requiredPlan === 'GROWTH';
+    return (
+      <span 
+        className={`plan-badge ml-auto inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0 transition-all ${
+          isGrowth ? 'plan-badge-growth' : 'plan-badge-business'
+        }`}
+        title={`Fitur ini terkunci di paket Anda. Upgrade ke Paket ${isGrowth ? 'Growth' : 'Business'} untuk mengaktifkan.`}
+      >
+        <Lock size={10} className="shrink-0" />
+        <span>{isGrowth ? 'Growth' : 'Biz'}</span>
+      </span>
+    );
+  };
+
+  const renderMobileLock = (featureKey: string) => {
+    if (posContext?.user?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || posContext?.user?.username === 'developer') {
+      return null;
+    }
+    const hasAccess = posContext?.hasFeature ? posContext.hasFeature(featureKey) : true;
+    if (hasAccess) return null;
+    return (
+      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-slate-900 border border-amber-400/80 text-amber-400 flex items-center justify-center shadow-xs">
+        <Lock size={9} />
+      </span>
+    );
+  };
+
   return (
     <div className={`app-container ${(isCollapsed && !isMobile) ? 'sidebar-collapsed' : ''}`}>
       {/* Sidebar */}
@@ -407,11 +442,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <NavLink to="/purchase-order" title="Purchase Order" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                     <ClipboardList size={20} className="shrink-0" />
                     <span>Purchase Order</span>
+                    {renderPlanBadge('warehouse.management', 'BUSINESS')}
                   </NavLink>
                 )}
                 <NavLink to="/gudang" title="Gudang Pusat" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Boxes size={20} className="shrink-0" />
                   <span>Gudang Pusat</span>
+                  {renderPlanBadge('warehouse.management', 'BUSINESS')}
                 </NavLink>
                 {isCafe && posContext?.settings && (posContext.settings as any).ingredientTrackingEnabled && (
                   <NavLink to="/bahan-baku" title="Bahan Baku" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -436,18 +473,21 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <NavLink to="/crm" title="CRM & Member" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Award size={20} className="shrink-0" />
                 <span>CRM & Member</span>
+                {renderPlanBadge('crm.loyalty', 'GROWTH')}
               </NavLink>
             )}
             {checkAccess(['Admin']) && (
               <NavLink to="/absensi" title="Absensi Karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Fingerprint size={20} className="shrink-0" />
                 <span>Absensi Karyawan</span>
+                {renderPlanBadge('hr.attendance', 'GROWTH')}
               </NavLink>
             )}
             {checkAccess(['Admin']) && (
               <NavLink to="/kasbon" title="Kasbon Karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <CreditCard size={20} className="shrink-0" />
                 <span>Kasbon Karyawan</span>
+                {renderPlanBadge('finance.loans', 'BUSINESS')}
               </NavLink>
             )}
             {checkAccess(['Admin', 'Kasir']) && (
@@ -483,6 +523,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <NavLink to="/cabang" title="Cabang & Tenant Hub" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Store size={20} className="shrink-0" />
                   <span>Cabang &amp; Tenant Hub</span>
+                  {renderPlanBadge('multi_outlet', 'BUSINESS')}
                 </NavLink>
                 {Boolean((posContext?.user as any)?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user?.role === 'OWNER' && (posContext?.user?.username === 'admin' || posContext?.user?.username === 'ahmad')) || posContext?.user?.username === 'admin') && (
                   <NavLink to="/platform-admin" title="Master SaaS Console" className={({isActive}) => `nav-item ${isActive ? 'active' : ''} text-indigo-400 hover:text-indigo-300 font-bold`}>
@@ -1003,9 +1044,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
               {checkAccess(['Admin', 'Dapur']) && (
                 <NavLink to="/gudang" onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
-                  <div className="w-11 h-11 rounded-2xl bg-cyan-100 flex items-center justify-center">
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm relative">
+                  <div className="w-11 h-11 rounded-2xl bg-cyan-100 flex items-center justify-center relative">
                     <Boxes size={20} className="text-cyan-600" />
+                    {renderMobileLock('warehouse.management')}
                   </div>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">Gudang</span>
                 </NavLink>
@@ -1023,9 +1065,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
               {checkAccess(['Admin', 'Dapur']) && localStorage.getItem('feature_enable_po') === 'true' && (
                 <NavLink to="/purchase-order" onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
-                  <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center">
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm relative">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center relative">
                     <ClipboardList size={20} className="text-amber-600" />
+                    {renderMobileLock('warehouse.management')}
                   </div>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">PO Belanja</span>
                 </NavLink>
@@ -1073,9 +1116,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
               {checkAccess(['Admin']) && (
                 <NavLink to="/crm" onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
-                  <div className="w-11 h-11 rounded-2xl bg-pink-100 flex items-center justify-center">
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm relative">
+                  <div className="w-11 h-11 rounded-2xl bg-pink-100 flex items-center justify-center relative">
                     <Award size={20} className="text-pink-600" />
+                    {renderMobileLock('crm.loyalty')}
                   </div>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">CRM Member</span>
                 </NavLink>
@@ -1083,9 +1127,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
               {checkAccess(['Admin']) && (
                 <NavLink to="/absensi" onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
-                  <div className="w-11 h-11 rounded-2xl bg-yellow-100 flex items-center justify-center">
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm relative">
+                  <div className="w-11 h-11 rounded-2xl bg-yellow-100 flex items-center justify-center relative">
                     <Fingerprint size={20} className="text-yellow-600" />
+                    {renderMobileLock('hr.attendance')}
                   </div>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">Absensi</span>
                 </NavLink>
@@ -1093,9 +1138,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
               {checkAccess(['Admin']) && (
                 <NavLink to="/kasbon" onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
-                  <div className="w-11 h-11 rounded-2xl bg-rose-100 flex items-center justify-center">
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm relative">
+                  <div className="w-11 h-11 rounded-2xl bg-rose-100 flex items-center justify-center relative">
                     <CreditCard size={20} className="text-rose-600" />
+                    {renderMobileLock('finance.loans')}
                   </div>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">Kasbon Staf</span>
                 </NavLink>

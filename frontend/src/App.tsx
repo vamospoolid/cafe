@@ -346,7 +346,7 @@ const AppRoutes = () => {
                   <Route path="/purchase-order" element={<FeatureGuard featureKey="warehouse.management"><PurchaseOrderView /></FeatureGuard>} />
                   <Route path="/gudang" element={<FeatureGuard featureKey="warehouse.management"><WarehouseView /></FeatureGuard>} />
                   <Route path="/audit-log" element={<AuditLogView />} />
-                  <Route path="/cabang" element={<TenantOutletHubView />} />
+                  <Route path="/cabang" element={<FeatureGuard featureKey="multi_outlet"><TenantOutletHubView /></FeatureGuard>} />
                   <Route path="/activate-tablet" element={<DeviceActivationView onSuccess={(data) => { context?.login(data.device || { username: 'tablet', role: 'CASHIER' }, data.token); navigate('/pos'); }} onSwitchToManualLogin={() => navigate('/dashboard')} />} />
 
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
