@@ -36,6 +36,7 @@ const RentalInventoryView = React.lazy(() => import('./verticals/rental/RentalIn
 const RentalCalendarView = React.lazy(() => import('./verticals/rental/RentalCalendarView'));
 const ReportViewAdaptive = React.lazy(() => import('./components/ReportViewAdaptive'));
 const ProductView = React.lazy(() => import('./components/ProductView'));
+const AIMenuStudioView = React.lazy(() => import('./views/AIMenuStudioView'));
 const TransactionHistoryView = React.lazy(() => import('./components/TransactionHistoryView'));
 const ShiftHistoryView = React.lazy(() => import('./components/ShiftHistoryView'));
 const CashFlowView = React.lazy(() => import('./components/CashFlowView'));
@@ -332,6 +333,14 @@ const AppRoutes = () => {
                   <Route path="/qrcode" element={<QRCodeView />} />
                   <Route path="/reservasi" element={<FeatureGuard featureKey="pos.reservations"><ReservationView /></FeatureGuard>} />
                   <Route path="/produk" element={<ProductView />} />
+                  <Route
+                    path="/ai-menu-studio"
+                    element={
+                      <VerticalGuard allow="CAFE">
+                        <AIMenuStudioView />
+                      </VerticalGuard>
+                    }
+                  />
                   <Route path="/kas" element={<CashFlowView />} />
                   <Route path="/karyawan" element={<UserView />} />
                   <Route path="/absensi" element={<FeatureGuard featureKey="hr.attendance"><AttendanceView /></FeatureGuard>} />

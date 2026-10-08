@@ -3312,7 +3312,44 @@ export const exportProfitSharingPDF = async (
   const pageWidth = doc.internal.pageSize.width || 210;
   const pageHeight = doc.internal.pageSize.height || 297;
   const margin = 14;
-  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const bType = data?.businessType || data?.summary?.businessType || 'CAFE';
+  const defaultStoreName = 
+    bType === 'BENGKEL' ? 'BENGKEL & SERVIS' :
+    bType === 'RETAIL' ? 'TOKO GROSIR & RETAIL' :
+    bType === 'LAUNDRY' ? 'LAUNDRY EXPRESS' :
+    bType === 'RENTAL' ? 'SANGGAR SEWA BUSANA' :
+    'KAFE & RESTORAN';
+  const storeName = settings?.storeName || defaultStoreName;
+
+  const div1Title = data?.summary?.div1Title || data?.foodDivision?.title || (
+    bType === 'BENGKEL' ? 'Divisi Jasa Servis & Mekanik' :
+    bType === 'RETAIL' ? 'Divisi Retail & Eceran' :
+    bType === 'LAUNDRY' ? 'Divisi Laundry Kiloan' :
+    bType === 'RENTAL' ? 'Divisi Sewa Busana' :
+    'Divisi Makanan (Kitchen)'
+  );
+  const div1Pj = data?.summary?.div1Pj || data?.foodDivision?.pjTitle || (
+    bType === 'BENGKEL' ? 'PJ Servis' :
+    bType === 'RETAIL' ? 'PJ Retail' :
+    bType === 'LAUNDRY' ? 'PJ Kiloan' :
+    bType === 'RENTAL' ? 'PJ Busana' :
+    'Pengelola Makanan'
+  );
+  const div2Title = data?.summary?.div2Title || data?.drinkDivision?.title || (
+    bType === 'BENGKEL' ? 'Divisi Suku Cadang & Pelumas' :
+    bType === 'RETAIL' ? 'Divisi Grosir & Partai' :
+    bType === 'LAUNDRY' ? 'Divisi Laundry Satuan & Dry Clean' :
+    bType === 'RENTAL' ? 'Divisi Aksesoris & Rias' :
+    'Divisi Minuman (Bar)'
+  );
+  const div2Pj = data?.summary?.div2Pj || data?.drinkDivision?.pjTitle || (
+    bType === 'BENGKEL' ? 'PJ Sparepart' :
+    bType === 'RETAIL' ? 'PJ Grosir' :
+    bType === 'LAUNDRY' ? 'PJ Satuan' :
+    bType === 'RENTAL' ? 'PJ Aksesoris' :
+    'Pengelola Minuman'
+  );
+  const div3Title = data?.summary?.div3Title || data?.otherDivision?.title || 'Produk Netral / Retail';
 
   const food = data?.foodDivision || {};
   const drink = data?.drinkDivision || {};
@@ -3327,7 +3364,7 @@ export const exportProfitSharingPDF = async (
       pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 15, 15);
       textXOffset = margin + 18;
     } else {
-      pdfDoc.setFillColor(234, 88, 12); // Ramen Orange
+      pdfDoc.setFillColor(234, 88, 12);
       pdfDoc.rect(margin, 10, 4, 16, 'F');
       textXOffset = margin + 7;
     }
@@ -3335,7 +3372,7 @@ export const exportProfitSharingPDF = async (
     pdfDoc.setFont('helvetica', 'bold');
     pdfDoc.setFontSize(13);
     pdfDoc.setTextColor(30, 41, 59);
-    pdfDoc.text(settings?.storeName || 'KAFE & RESTORAN', textXOffset, 15);
+    pdfDoc.text(storeName, textXOffset, 15);
 
     pdfDoc.setFont('helvetica', 'normal');
     pdfDoc.setFontSize(7.5);
@@ -3377,7 +3414,7 @@ export const exportProfitSharingPDF = async (
   autoTable(doc, {
     startY: currentY,
     margin: { left: margin, right: margin },
-    head: [['TOTAL OMZET RESTO', 'LABA BERSIH TOTAL', 'HAK PEMILIK (OWNER)', 'TOTAL HAK PENGELOLA']],
+    head: [['TOTAL OMZET USAHA', 'LABA BERSIH TOTAL', 'HAK PEMILIK (OWNER)', 'TOTAL HAK PENGELOLA']],
     body: [[
       formatCurrency(summary.totalRevenue || 0),
       formatCurrency(summary.totalNetProfit || 0),
@@ -3408,18 +3445,18 @@ export const exportProfitSharingPDF = async (
   const drinkOwnerPct = drink.ownerPct || (100 - (config.drinkPct || 20));
 
   const splitRows = [
-    ['Owner (Pemilik Usaha)', 'Divisi Makanan + Minuman', `${config.ownerPct || 80}%`, formatCurrency(summary.ownerShare || 0), 'Laba Bersih gabungan setelah potongan beban'],
-    ['Pengelola Makanan', 'Divisi Makanan (Kitchen)', `${config.ramenPct || 20}%`, formatCurrency(summary.pjRamenShare || 0), `Hak ${config.ramenPct || 20}% dari laba bersih Dapur (${formatCurrency(food.netProfit || 0)})`],
-    ['Pengelola Minuman', 'Divisi Minuman (Bar)', `${config.drinkPct || 20}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak ${config.drinkPct || 20}% dari laba bersih Bar (${formatCurrency(drink.netProfit || 0)})`]
+    ['Owner (Pemilik Usaha)', `${div1Title} + ${div2Title}`, `${config.ownerPct || 80}%`, formatCurrency(summary.ownerShare || 0), 'Laba Bersih gabungan setelah potongan beban'],
+    [div1Pj, div1Title, `${config.ramenPct || 20}%`, formatCurrency(summary.pjRamenShare || 0), `Hak ${config.ramenPct || 20}% dari laba bersih ${div1Title} (${formatCurrency(food.netProfit || 0)})`],
+    [div2Pj, div2Title, `${config.drinkPct || 20}%`, formatCurrency(summary.pjDrinkShare || 0), `Hak ${config.drinkPct || 20}% dari laba bersih ${div2Title} (${formatCurrency(drink.netProfit || 0)})`]
   ];
 
   if (summary.other && (summary.other.revenue > 0 || summary.other.finalNet > 0)) {
     splitRows.push([
-      'Owner (Produk Netral / Retail)',
-      'Air Mineral & Toko',
+      `Owner (${div3Title})`,
+      div3Title,
       '100%',
       formatCurrency(summary.other.ownerShare || summary.other.finalNet || 0),
-      `Hak 100% Owner dari laba bersih produk netral (${formatCurrency(summary.other.finalNet || 0)})`
+      `Hak 100% Owner dari laba bersih ${div3Title} (${formatCurrency(summary.other.finalNet || 0)})`
     ]);
   }
 
@@ -3463,7 +3500,7 @@ export const exportProfitSharingPDF = async (
   autoTable(doc, {
     startY: currentY + 1,
     margin: { left: margin, right: margin },
-    head: [['Pos Laporan Keuangan', 'Divisi Makanan (Kitchen)', 'Divisi Minuman (Bar)', 'Total Resto']],
+    head: [['Pos Laporan Keuangan', div1Title, div2Title, 'Total Usaha']],
     body: divRows,
     headStyles: { fillColor: [234, 88, 12], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
     columnStyles: {
@@ -3506,7 +3543,7 @@ export const exportProfitSharingPDF = async (
     autoTable(doc, {
       startY: currentY + 1,
       margin: { left: margin, right: margin },
-      head: [['No', 'Tgl', 'Hari', 'Omzet Makanan', `PJ Mkn (${config.ramenPct || 20}%)`, 'Omzet Minuman', `PJ Mnm (${config.drinkPct || 20}%)`, 'Shared OPEX', 'Total Omzet', 'Hak Owner']],
+      head: [['No', 'Tgl', 'Hari', `Omzet ${div1Pj}`, `${div1Pj} (${config.ramenPct || 20}%)`, `Omzet ${div2Pj}`, `${div2Pj} (${config.drinkPct || 20}%)`, 'Shared OPEX', 'Total Omzet', 'Hak Owner']],
       body: dailyTableRows,
       foot: [[
         'TOT',

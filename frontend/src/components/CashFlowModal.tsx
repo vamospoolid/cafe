@@ -24,7 +24,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   ShieldCheck,
-  Building2
+  Building2,
+  Wrench
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { useVertical } from '../context/VerticalContext';
@@ -372,6 +373,73 @@ const RETAIL_PRESET_EXPENSES = [
   }
 ];
 
+const BENGKEL_PRESET_EXPENSES = [
+  {
+    label: 'Baut, Mur & Klip',
+    icon: Wrench,
+    category: 'Suku Cadang & Sparepart',
+    subCategory: 'Baut, Mur & Klip Motor/Mobil',
+    desc: 'Beli Baut, Mur & Klip Tambahan Pit',
+    suggestedAmount: 25000
+  },
+  {
+    label: 'Busi & Kampas Rem',
+    icon: Box,
+    category: 'Suku Cadang & Sparepart',
+    subCategory: 'Pembelian Busi & Kampas Rem Darurat',
+    desc: 'Beli Busi / Kampas Rem Cepat Toko Sebelah',
+    suggestedAmount: 65000
+  },
+  {
+    label: 'Carb/Brake Cleaner',
+    icon: Droplet,
+    category: 'Bahan Kimia & Pelumas',
+    subCategory: 'Carb/Brake Cleaner & Penetran',
+    desc: 'Beli Cairan Cleaner / Penetran Kaleng',
+    suggestedAmount: 35000
+  },
+  {
+    label: 'Bensin Kurir Part',
+    icon: Truck,
+    category: 'Operasional Bengkel',
+    subCategory: 'Bensin Kurir Ambil Part Toko',
+    desc: 'Bensin Kurir Ambil Sparepart ke Distributor',
+    suggestedAmount: 20000
+  },
+  {
+    label: 'Token Listrik Bengkel',
+    icon: Zap,
+    category: 'Operasional Bengkel',
+    subCategory: 'Listrik Bengkel (3-Phase/Kompresor)',
+    desc: 'Isi Token Listrik 3-Phase Bengkel',
+    suggestedAmount: 100000
+  },
+  {
+    label: 'Air & Sabun Cuci Pit',
+    icon: Droplet,
+    category: 'Operasional Bengkel',
+    subCategory: 'Air & Retribusi Lingkungan',
+    desc: 'Beli Air Galon Staf & Sabun Cuci Tangan Mekanik',
+    suggestedAmount: 25000
+  },
+  {
+    label: 'Uang Makan Mekanik',
+    icon: Users,
+    category: 'SDM & Komisi Mekanik',
+    subCategory: 'Uang Makan & Lembur Mekanik',
+    desc: 'Uang Makan / Snack Lembur Tim Mekanik',
+    suggestedAmount: 50000
+  },
+  {
+    label: 'Alat & Toolkit Pit',
+    icon: Wrench,
+    category: 'Perawatan Alat & Kompresor',
+    subCategory: 'Penggantian Kunci & Toolkit Rusak',
+    desc: 'Ganti Kunci / Selang Kompresor Rusak',
+    suggestedAmount: 45000
+  }
+];
+
 const PRESET_INFLOWS = [
   {
     label: 'Top-up Petty Cash Rp 500Rb',
@@ -392,7 +460,7 @@ const PRESET_INFLOWS = [
     amount: 2000000,
     category: 'Modal & Injeksi',
     subCategory: 'Tambahan Modal Kas Kecil / Petty Cash Top-up',
-    desc: 'Injeksi Dana Operasional Mingguan Kafe'
+    desc: 'Injeksi Dana Operasional Mingguan dari Owner'
   },
   {
     label: 'Sisa Kembalian Belanja',
@@ -416,7 +484,7 @@ const CashFlowModal: React.FC<CashFlowModalProps> = ({
 
   const { isRetail, isBengkel } = useVertical();
   const expenseCategories = isRetail ? RETAIL_EXPENSE_CATEGORIES : isBengkel ? BENGKEL_EXPENSE_CATEGORIES : EXPENSE_CATEGORIES;
-  const presetExpenses = isRetail ? RETAIL_PRESET_EXPENSES : PRESET_EXPENSES;
+  const presetExpenses = isRetail ? RETAIL_PRESET_EXPENSES : isBengkel ? BENGKEL_PRESET_EXPENSES : PRESET_EXPENSES;
 
   const defaultExpCat = isRetail ? 'Operasional Toko & Logistik' : isBengkel ? 'Operasional Bengkel' : 'Operasional Cafe';
   const defaultExpSub = isRetail ? 'Listrik, Air & Internet Toko' : isBengkel ? 'Listrik Bengkel (3-Phase/Kompresor)' : 'Listrik, Air & Internet / WiFi';

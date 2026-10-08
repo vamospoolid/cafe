@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { io, emitToTenant } from '../index';
 import { TenantContext } from '../utils/tenantContext';
+import { cacheService } from '../services/CacheService';
 
 const router = Router();
 
@@ -127,6 +128,46 @@ router.post('/public/call-waiter', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Call waiter error:', error);
     res.status(500).json({ error: 'Gagal memanggil pelayan' });
+  }
+});
+
+// ─── Vertical Guard: Manajemen Meja khusus untuk profil usaha CAFE / F&B ─────
+router.use(async (req: Request, res: Response, next: any) => {
+  // Biarkan public routes lolos tanpa guard
+  if (req.path.startsWith('/public')) {
+    return next();
+  }
+  try {
+    const user = (req as AuthRequest).user;
+    const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+    if (!tenantId) {
+      return next();
+    }
+    const businessType = await cacheService.remember(
+      `cache:tenant:businessType:${tenantId}`,
+      300,
+      async () => {
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { businessType: true }
+        });
+        return tenant?.businessType || 'CAFE';
+      }
+    );
+
+    if (businessType !== 'CAFE') {
+      if (req.method === 'GET') {
+        return res.json([]);
+      }
+      return res.status(403).json({
+        error: 'Fitur manajemen meja hanya tersedia untuk profil usaha Kafe / Restoran.',
+        currentBusinessType: businessType
+      });
+    }
+    next();
+  } catch (err) {
+    console.error('Tables Vertical Guard error:', err);
+    next();
   }
 });
 

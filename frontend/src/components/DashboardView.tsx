@@ -52,7 +52,7 @@ interface LowStockProduct {
 
 const DashboardView = () => {
   const navigate = useNavigate();
-  const { isRental, isBengkel, isRetail, isCafe } = useVertical();
+  const { isRental, isBengkel, isRetail, isCafe, isLaundry } = useVertical();
   const [summary, setSummary] = useState<any>({
     revenue: 0,
     profit: 0,
@@ -353,7 +353,7 @@ const DashboardView = () => {
             </span>
           </button>
 
-          {/* 3. Vertikal Spesifik: Surat Jalan (Retail) atau Meja (Cafe) */}
+          {/* 3. Vertikal Spesifik: Surat Jalan (Retail), Papan Cucian (Laundry), atau Meja (Cafe) */}
           {isRetail ? (
             <button
               type="button"
@@ -367,6 +367,20 @@ const DashboardView = () => {
                 Surat Jalan
               </span>
               <span className="text-[8.5px] font-semibold text-purple-600/80 leading-none">Armada Toko</span>
+            </button>
+          ) : isLaundry ? (
+            <button
+              type="button"
+              onClick={() => { posContext?.triggerHaptic(15); navigate('/laundry-kanban'); }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-cyan-50/60 hover:bg-cyan-100/60 border border-cyan-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+                <Layers size={17} />
+              </div>
+              <span className="text-[10.5px] font-extrabold text-cyan-950 tracking-tight leading-tight line-clamp-1">
+                Papan Cucian
+              </span>
+              <span className="text-[8.5px] font-semibold text-cyan-600/80 leading-none">Status Kanban</span>
             </button>
           ) : (
             <button
@@ -809,6 +823,137 @@ const DashboardView = () => {
 
             <div className="text-[10px] text-slate-400 flex justify-between items-center mt-1">
               <span>Akumulasi penjualan barang toko hari ini.</span>
+            </div>
+          </div>
+
+        </div>
+      ) : isLaundry ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+          
+          {/* Card 1: Antrean Cucian & Status Kanban */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Clock size={17} className="text-cyan-600" /> Antrean Cucian Aktif
+              </h3>
+              {(summary.laundryQueue || summary.kitchenQueue || 0) > 0 ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 font-black text-[10px] animate-pulse">
+                  {summary.laundryQueue || summary.kitchenQueue || 0} Nota Antre
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold text-[10px] border border-emerald-100">
+                  Antrean Bersih
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 py-3 bg-cyan-50/40 rounded-xl border border-cyan-100 my-2 text-center">
+              <div className="flex flex-col items-center justify-center p-2">
+                <span className="text-xs font-bold text-amber-700">Antre Cuci</span>
+                <span className="text-xl font-black text-amber-900 mt-0.5">
+                  {summary.kitchenQueue || 0}
+                </span>
+                <span className="text-[9px] text-amber-600/80">Belum Dicuci</span>
+              </div>
+              <div className="flex flex-col items-center justify-center p-2 border-x border-cyan-100">
+                <span className="text-xs font-bold text-cyan-700">Proses</span>
+                <span className="text-xl font-black text-cyan-900 mt-0.5">
+                  {summary.inProgressCount || 0}
+                </span>
+                <span className="text-[9px] text-cyan-600/80">Cuci / Kering</span>
+              </div>
+              <div className="flex flex-col items-center justify-center p-2">
+                <span className="text-xs font-bold text-emerald-700">Siap Ambil</span>
+                <span className="text-xl font-black text-emerald-900 mt-0.5">
+                  {summary.readyCount || 0}
+                </span>
+                <span className="text-[9px] text-emerald-600/80">Di Rak Simpan</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px]">
+              <span className="text-slate-500 font-medium">Monitoring antrean &amp; mesin cuci</span>
+              <button
+                type="button"
+                onClick={() => navigate('/laundry-kanban')}
+                className="text-cyan-700 hover:text-cyan-900 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                <span>Papan Kanban</span>
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
+          </div>
+
+          {/* Card 2: Keterisian Rak Simpan Cucian */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Layers size={17} className="text-cyan-600" /> Keterisian Rak Cucian
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px] border border-slate-200">
+                {summary.tableOccupancy?.occupied || 0}/{summary.tableOccupancy?.total || 10} Slot Rak
+              </span>
+            </div>
+
+            <div className="flex flex-col justify-center items-center py-4 bg-slate-50 rounded-xl border border-slate-100 my-2">
+              <div className="text-3xl font-black text-slate-900 tracking-tight">
+                {summary.tableOccupancy?.percentage || 0}%
+              </div>
+              <div className="text-xs font-bold text-slate-500 mt-0.5">Kapasitas Rak Simpan Terpakai</div>
+
+              <div className="w-44 h-2.5 rounded-full bg-slate-200 mt-3 overflow-hidden">
+                <div 
+                  className="h-full bg-cyan-600 rounded-full transition-all duration-500"
+                  style={{ width: `${summary.tableOccupancy?.percentage || 0}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 flex justify-between items-center mt-2 px-1">
+              <span>Slot Terisi: <strong className="text-slate-800">{summary.tableOccupancy?.occupied || 0} Rak</strong></span>
+              <span>Slot Kosong: <strong className="text-emerald-600">{(summary.tableOccupancy?.total || 10) - (summary.tableOccupancy?.occupied || 0)} Rak</strong></span>
+            </div>
+          </div>
+
+          {/* Card 3: Top Layanan Cuci Terlaris */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex flex-col justify-between shadow-xs">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Award size={17} className="text-amber-500" /> Top Layanan Cuci Terlaris
+              </h3>
+              <span className="text-[10px] text-slate-400 font-semibold">Top 5</span>
+            </div>
+
+            <div className="flex flex-col gap-1.5 flex-1 justify-center my-1">
+              {bestSellers.slice(0, 5).map((item, index) => {
+                const maxQty = bestSellers[0]?.qty || 1;
+                const percent = (item.qty / maxQty) * 100;
+                
+                return (
+                  <div key={item.id} className="relative overflow-hidden rounded-xl bg-slate-50 border border-slate-100 p-2 flex items-center justify-between">
+                    <div className="absolute top-0 left-0 h-full bg-cyan-50/70" style={{ width: `${percent}%`, zIndex: 0 }} />
+                    
+                    <div className="flex items-center gap-2 relative z-10 min-w-0 pr-2">
+                      <div className="w-5 h-5 rounded-md bg-white shadow-xs border border-slate-200/60 flex items-center justify-center text-[10px] font-black shrink-0" style={{ color: COLORS[index % COLORS.length] }}>
+                        #{index + 1}
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 truncate">{item.name}</span>
+                    </div>
+                    <div className="relative z-10 text-[11px] font-black text-slate-800 bg-white px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0 shadow-2xs">
+                      {item.qty} <span className="text-[9px] text-slate-400 font-bold">order</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {bestSellers.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 py-6 text-xs">
+                  Belum ada transaksi cucian hari ini
+                </div>
+              )}
+            </div>
+
+            <div className="text-[10px] text-slate-400 flex justify-between items-center mt-1">
+              <span>Akumulasi transaksi kiloan &amp; satuan hari ini.</span>
             </div>
           </div>
 

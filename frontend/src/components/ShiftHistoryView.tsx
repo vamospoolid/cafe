@@ -211,7 +211,7 @@ const ShiftHistoryView = () => {
       const firstShiftDate = shifts[shifts.length - 1]?.waktuBuka ? shifts[shifts.length - 1].waktuBuka.split('T')[0] : todayStr;
       await exportFinancialPDF(
         'shifts',
-        posContext?.settings || { storeName: 'MUKI RAMEN' },
+        posContext?.settings || { storeName: posContext?.user?.memberships?.[0]?.tenantName || 'KASIR POS' },
         shifts,
         firstShiftDate,
         todayStr,

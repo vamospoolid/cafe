@@ -137,6 +137,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     '/meja': profile.tableTerm || 'Manajemen Meja',
     '/riwayat': 'Riwayat Transaksi',
     '/produk': profile.itemTerm || 'Katalog Produk',
+    '/ai-menu-studio': 'AI Culinary Menu Studio',
     '/kategori': 'Kategori Produk',
     '/reservasi': 'Buku Reservasi',
     '/kds': 'Dapur (KDS)',
@@ -255,7 +256,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         title={`Fitur ini terkunci di paket Anda. Upgrade ke Paket ${isGrowth ? 'Growth' : 'Business'} untuk mengaktifkan.`}
       >
         <Lock size={10} className="shrink-0" />
-        <span>{isGrowth ? 'Growth' : 'Biz'}</span>
+        <span>{isGrowth ? 'GR' : 'Biz'}</span>
       </span>
     );
   };
@@ -401,6 +402,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <NavLink to="/produk" title={profile.itemTerm || 'Produk'} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Package size={20} className="shrink-0" />
                 <span>{profile.itemTerm || 'Produk'}</span>
+              </NavLink>
+            )}
+            {isCafe && checkAccess(['Admin']) && (
+              <NavLink to="/ai-menu-studio" title="Scan Menu AI Studio" className={({isActive}) => `nav-item relative ${isActive ? 'active' : ''}`}>
+                <Sparkles size={20} className="shrink-0 text-amber-400" />
+                <span>Scan Menu AI</span>
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-indigo-600 text-white ml-auto shadow-xs">
+                  AI
+                </span>
               </NavLink>
             )}
             {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (
@@ -978,6 +988,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     <Package size={20} className="text-violet-600" />
                   </div>
                   <span className="text-[10px] font-bold text-slate-700 leading-tight">{isRental ? 'Katalog' : 'Produk'}</span>
+                </NavLink>
+              )}
+
+              {isCafe && checkAccess(['Admin']) && (
+                <NavLink to="/ai-menu-studio" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm relative overflow-hidden">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-100 to-indigo-100 flex items-center justify-center text-amber-600">
+                    <Sparkles size={20} />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Scan AI</span>
+                    <span className="text-[8px] font-black px-1 py-0.2 rounded-full bg-amber-500 text-white">AI</span>
+                  </div>
                 </NavLink>
               )}
 

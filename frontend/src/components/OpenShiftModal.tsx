@@ -164,7 +164,7 @@ const OpenShiftModal: React.FC<OpenShiftModalProps> = ({ isOpen, onClose, onSucc
 
   const handlePrintThermalSlip = () => {
     if (!summary) return;
-    const storeName = posContext?.settings?.storeName || 'MUKI RAMEN';
+    const storeName = posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'KASIR POS';
     const cashier = posContext?.user?.username || summary.activeShift?.user?.name || 'Kasir';
     const waktuBuka = new Date(summary.activeShift.waktuBuka).toLocaleString('id-ID');
     const waktuTutup = new Date().toLocaleString('id-ID');

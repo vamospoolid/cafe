@@ -15,7 +15,7 @@ const PrintQRModal: React.FC<PrintQRModalProps> = ({ isOpen, onClose, tableData 
 
   if (!isOpen || !tableData) return null;
 
-  const storeName = posContext?.settings?.storeName || 'MUKI RAMEN';
+  const storeName = posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe & Resto';
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(tableData.url)}`;
 
   const handlePrint = () => {

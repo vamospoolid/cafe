@@ -122,7 +122,22 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         where: { tenantId }
       });
 
-      const initialStoreName = tenant?.name || 'Kafe Mitra';
+      const bType = tenant?.businessType || 'CAFE';
+      const initialStoreName = tenant?.name || (
+        bType === 'BENGKEL' ? 'Bengkel Mitra' :
+        bType === 'RETAIL' ? 'Toko Mitra' :
+        bType === 'LAUNDRY' ? 'Laundry Mitra' :
+        bType === 'RENTAL' ? 'Rental Mitra' :
+        'Kafe Mitra'
+      );
+
+      const initialFooter = 
+        bType === 'BENGKEL' ? 'Terima kasih atas kepercayaan Anda merawat kendaraan!\nGaransi servis & suku cadang berlaku sesuai ketentuan.' :
+        bType === 'RETAIL' ? 'Terima kasih telah berbelanja!\nBarang yang sudah dibeli dapat ditukar sesuai ketentuan.' :
+        bType === 'LAUNDRY' ? 'Terima kasih telah mempercayakan cucian Anda!\nHarap periksa cucian Anda saat pengambilan.' :
+        bType === 'RENTAL' ? 'Terima kasih atas kepercayaan Anda menyewa busana!\nHarap menjaga keutuhan pakaian & aksesoris.' :
+        'Terima kasih atas kunjungan Anda!\nSilakan datang kembali';
+
       const initialAddress = tenantOutlet?.address || '';
       const initialPhone = tenantOutlet?.phone || '';
       const initialLogo = tenant?.logoUrl || '/logo.png';
@@ -139,7 +154,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
           taxRate: 0,
           serviceCharge: 0,
           receiptHeader: initialAddress ? `${initialStoreName}\n${initialAddress}` : initialStoreName,
-          receiptFooter: 'Terima kasih atas kunjungan Anda!\nSilakan datang kembali',
+          receiptFooter: initialFooter,
           storeLatitude: initialLat,
           storeLongitude: initialLng,
           gpsRadiusMeters: 200,

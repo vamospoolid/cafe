@@ -1,5 +1,11 @@
 const { Client } = require('ssh2');
 
+// SAFETY GUARD: ABORT EXECUTION
+console.error('⛔ DILARANG MENJALANKAN SKRIP INI!');
+console.error('Muki Ramen (app.mukiramen.id) sudah menjadi STANDALONE dengan mukiramen_db.');
+console.error('Gunakan deploy.js untuk mengelola CodePOS SaaS (codenusa.id).');
+process.exit(1);
+
 const config = {
     host: '173.212.243.240',
     port: 22,

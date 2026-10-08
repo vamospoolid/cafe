@@ -246,7 +246,7 @@ const QRCodeView = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredTables.map(table => {
             const badgeNum = getTableBadgeNumber(table.tableNo || table.no);
-            const storeName = posContext?.settings?.storeName || 'MUKI RAMEN';
+            const storeName = posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe & Resto';
 
             return (
               <div 

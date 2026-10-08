@@ -546,7 +546,7 @@ export const IngredientView: React.FC = () => {
   };
 
   const copySupplierOrderToWA = (sup: any) => {
-    const store = posContext?.settings?.storeName || 'MUKI RAMEN';
+    const store = posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe Mitra';
     const dateStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     
     let text = `*ORDER PEMBELIAN BAHAN BAKU*\n`;
@@ -578,7 +578,7 @@ export const IngredientView: React.FC = () => {
   };
 
   const copyAllShoppingToWA = () => {
-    const store = posContext?.settings?.storeName || 'MUKI RAMEN';
+    const store = posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe Mitra';
     const dateStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     
     let text = `*DAFTAR KEBUTUHAN BELANJA DAPUR*\n`;
@@ -1374,7 +1374,7 @@ export const IngredientView: React.FC = () => {
               Master Bahan Baku & Intelijen Stok
             </h2>
             <span className="px-2.5 py-0.5 bg-purple-50 text-indigo-700 border border-purple-200/80 rounded-full text-xs font-black">
-              {posContext?.settings?.storeName || 'MUKI RAMEN'}
+              {posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe Mitra'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">

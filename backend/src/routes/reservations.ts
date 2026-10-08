@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { TenantContext } from '../utils/tenantContext';
 import { whatsAppTriggerService } from '../services/WhatsAppTriggerService';
+import { cacheService } from '../services/CacheService';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ function tenantWhere(tenantId: string | undefined): { tenantId: string } {
 
 // Router-level fail-closed guard: all reservation operations require authentication & tenant context
 router.use(authenticateToken);
-router.use((req: Request, res: Response, next) => {
+router.use(async (req: Request, res: Response, next) => {
   const tenantId = getTenantId(req);
   if (!tenantId) {
     return res.status(400).json({ 
@@ -26,7 +27,34 @@ router.use((req: Request, res: Response, next) => {
       code: 'MISSING_TENANT_CONTEXT' 
     });
   }
-  next();
+
+  try {
+    const businessType = await cacheService.remember(
+      `cache:tenant:businessType:${tenantId}`,
+      300,
+      async () => {
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { businessType: true }
+        });
+        return tenant?.businessType || 'CAFE';
+      }
+    );
+
+    if (businessType !== 'CAFE') {
+      if (req.method === 'GET') {
+        return res.json([]);
+      }
+      return res.status(403).json({
+        error: 'Fitur reservasi meja hanya tersedia untuk profil usaha Kafe / Restoran.',
+        currentBusinessType: businessType
+      });
+    }
+    next();
+  } catch (err) {
+    console.error('Reservation Vertical Guard error:', err);
+    next();
+  }
 });
 
 router.get('/', authenticateToken, async (req: Request, res: Response) => {

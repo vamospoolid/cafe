@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { io, emitToTenant } from '../index';
 import { TenantContext } from '../utils/tenantContext';
+import { cacheService } from '../services/CacheService';
 
 const router = Router();
 
@@ -16,6 +17,40 @@ router.use((req: Request, res: Response, next) => {
   }
   (req as any).tenantId = tenantId;
   next();
+});
+
+// Vertical Guard: KDS khusus untuk profil usaha CAFE / F&B
+router.use(async (req: Request, res: Response, next) => {
+  try {
+    const tenantId = (req as any).tenantId;
+    const businessType = await cacheService.remember(
+      `cache:tenant:businessType:${tenantId}`,
+      300,
+      async () => {
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { businessType: true }
+        });
+        return tenant?.businessType || 'CAFE';
+      }
+    );
+
+    (req as any).businessType = businessType;
+
+    if (businessType !== 'CAFE') {
+      if (req.method === 'GET') {
+        return res.json([]);
+      }
+      return res.status(403).json({
+        error: 'Fitur Kitchen Display System (KDS) hanya tersedia untuk profil usaha Kafe / Restoran.',
+        currentBusinessType: businessType
+      });
+    }
+    next();
+  } catch (err) {
+    console.error('KDS Vertical Guard error:', err);
+    next();
+  }
 });
 
 // GET Active KDS Orders (Dapur) - Terisolasi per Tenant

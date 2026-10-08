@@ -1,6 +1,13 @@
 const { Client } = require('ssh2');
 const config = { host: '173.212.243.240', port: 22, username: 'root', password: 'Ahmad_dcc07' };
-const cmd = 'cat -n /etc/nginx/sites-enabled/demobilliard';
+const cmd = `
+echo "=== /etc/nginx/sites-available/app.mukiramen.id ==="
+cat /etc/nginx/sites-available/app.mukiramen.id
+echo ""
+echo "=== /etc/nginx/sites-available/cafe.codenusa.id ==="
+cat /etc/nginx/sites-available/cafe.codenusa.id
+`;
+
 const conn = new Client();
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {

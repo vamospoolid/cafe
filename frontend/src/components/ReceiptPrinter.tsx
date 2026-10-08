@@ -69,7 +69,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
     if (!forceBrowser && (savedBt || localStorage.getItem('bluetooth_printer_mac'))) {
       console.log('ReceiptPrinter: executing silent print via Bluetooth Thermal Printer');
       printBluetoothReceipt(order, {
-        name: storeSettings?.storeName || storeSettings?.name || 'MUKI RAMEN',
+        name: storeSettings?.storeName || storeSettings?.name || order?.tenant?.name || 'CodePOS',
         address: storeSettings?.address || '',
         phone: storeSettings?.phone || '',
         footer: storeSettings?.receiptFooter || 'Terima kasih atas kunjungannya!'
@@ -191,7 +191,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
     if (order.tableName) return order.tableName.toUpperCase();
     if (order.tableId) return `MEJA ${order.tableId}`;
     if (order.orderType === 'Dine In' || order.orderType === 'DINE IN') return 'DINE IN';
-    return (order.orderType || 'TAKE AWAY').toUpperCase();
+    return '';
   };
 
   // ── Sub-component: Kitchen Ticket ──
@@ -338,7 +338,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
       {/* ═══ HEADER ═══ */}
       <div style={{ textAlign: 'center', marginBottom: '1mm' }}>
         <div style={{ fontSize: '14pt', fontWeight: '900', letterSpacing: '1px' }}>
-          {storeSettings?.storeName || 'KAFE & RESTORAN'}
+          {storeSettings?.storeName || storeSettings?.name || order?.tenant?.name || 'STRUK PENJUALAN'}
         </div>
         {storeSettings?.address && (
           <div style={{ fontSize: '9pt' }}>{storeSettings.address}</div>
@@ -360,7 +360,7 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
           <tr><td style={{ ...tdL, width: '14mm' }}>No</td><td style={tdL}>: {order.orderNumber}</td></tr>
           <tr><td style={{ ...tdL, width: '14mm' }}>Kasir</td><td style={tdL}>: {order.user?.name || '-'}</td></tr>
           <tr><td style={{ ...tdL, width: '14mm' }}>Plgn</td><td style={tdL}>: {order.customerName || 'Umum'}</td></tr>
-          {getTableDisplay() !== 'TAKE AWAY' && (
+          {getTableDisplay() !== '' && (
             <tr><td style={{ ...tdL, width: '14mm', fontWeight: 900 }}>Meja</td><td style={{ ...tdL, fontWeight: 900 }}>: {getTableDisplay()}</td></tr>
           )}
         </tbody>

@@ -42,11 +42,48 @@ function autoFitColumns(ws: XLSX.WorkSheet, data: any[][], minWidth = 12) {
 
 export function exportProfitSharingExcel(data: any, settings: any, period: { startDate: string; endDate: string }) {
   const wb = XLSX.utils.book_new();
-  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+  const bType = data?.businessType || data?.summary?.businessType || 'CAFE';
+  const defaultStoreName = 
+    bType === 'BENGKEL' ? 'BENGKEL & SERVIS' :
+    bType === 'RETAIL' ? 'TOKO GROSIR & RETAIL' :
+    bType === 'LAUNDRY' ? 'LAUNDRY EXPRESS' :
+    bType === 'RENTAL' ? 'SANGGAR SEWA BUSANA' :
+    'KAFE & RESTORAN';
+  const storeName = settings?.storeName || defaultStoreName;
   const address = settings?.address || '';
   const phone = settings?.phone || '081298765432';
   const periodText = `${formatDateIndo(period.startDate)} s/d ${formatDateIndo(period.endDate)}`;
   const printedAt = new Date().toLocaleString('id-ID');
+
+  const div1Title = data?.summary?.div1Title || data?.foodDivision?.title || (
+    bType === 'BENGKEL' ? 'Divisi Jasa Servis & Mekanik' :
+    bType === 'RETAIL' ? 'Divisi Retail & Eceran' :
+    bType === 'LAUNDRY' ? 'Divisi Laundry Kiloan' :
+    bType === 'RENTAL' ? 'Divisi Sewa Busana' :
+    'Divisi Makanan (Food)'
+  );
+  const div1Pj = data?.summary?.div1Pj || data?.foodDivision?.pjTitle || (
+    bType === 'BENGKEL' ? 'PJ Servis' :
+    bType === 'RETAIL' ? 'PJ Retail' :
+    bType === 'LAUNDRY' ? 'PJ Kiloan' :
+    bType === 'RENTAL' ? 'PJ Busana' :
+    'Penanggung Jawab Makanan'
+  );
+  const div2Title = data?.summary?.div2Title || data?.drinkDivision?.title || (
+    bType === 'BENGKEL' ? 'Divisi Suku Cadang & Pelumas' :
+    bType === 'RETAIL' ? 'Divisi Grosir & Partai' :
+    bType === 'LAUNDRY' ? 'Divisi Laundry Satuan & Dry Clean' :
+    bType === 'RENTAL' ? 'Divisi Aksesoris & Rias' :
+    'Divisi Minuman (Drink)'
+  );
+  const div2Pj = data?.summary?.div2Pj || data?.drinkDivision?.pjTitle || (
+    bType === 'BENGKEL' ? 'PJ Sparepart' :
+    bType === 'RETAIL' ? 'PJ Grosir' :
+    bType === 'LAUNDRY' ? 'PJ Satuan' :
+    bType === 'RENTAL' ? 'PJ Aksesoris' :
+    'Penanggung Jawab Minuman'
+  );
+  const div3Title = data?.summary?.div3Title || data?.otherDivision?.title || 'Produk Netral / Retail';
 
   const food = data?.foodDivision || {};
   const drink = data?.drinkDivision || {};
@@ -65,50 +102,50 @@ export function exportProfitSharingExcel(data: any, settings: any, period: { sta
     [],
     ['=== PARAMETER KONFIGURASI BAGI HASIL ==='],
     ['Bagian Owner (%):', `${config.ownerPct || 80}%`],
-    ['Bagian PJ Makanan (%):', `${config.ramenPct || 20}%`],
-    ['Bagian PJ Minuman (%):', `${config.drinkPct || 20}%`],
-    ['Mode Beban Bersama (OPEX):', config.opexMode === 'BEFORE_SPLIT' ? 'Dipotong Proporsional Sebelum Bagi Hasil' : (config.opexMode === 'OWNER_COVERED' ? 'Ditanggung Penuh Oleh Owner' : 'Split Beban 50% Owner : 25% Ramen : 25% Drink')],
+    [`Bagian ${div1Pj} (%):`, `${config.ramenPct || 20}%`],
+    [`Bagian ${div2Pj} (%):`, `${config.drinkPct || 20}%`],
+    ['Mode Beban Bersama (OPEX):', config.opexMode === 'BEFORE_SPLIT' ? 'Dipotong Proporsional Sebelum Bagi Hasil' : (config.opexMode === 'OWNER_COVERED' ? 'Ditanggung Penuh Oleh Owner' : `Split Beban 50% Owner : 25% ${div1Pj} : 25% ${div2Pj}`)],
     [],
     ['=== REKAP EKSEKUTIF PEMBAGIAN LABA BERSIH ==='],
     ['Entitas Penerima', 'Divisi', 'Porsi (%)', 'Nominal Pembagian (Rp)', 'Keterangan'],
-    ['Owner (Pemilik Modal)', 'Gabungan (Ramen + Drink)', `${config.ownerPct || 80}%`, summary.ownerShare || 0, 'Laba Bersih setelah beban'],
-    ['Penanggung Jawab Makanan', 'Divisi Makanan (Food)', `${config.ramenPct || 20}%`, summary.pjRamenShare || 0, 'Bagi hasil bersih divisi makanan'],
-    ['Penanggung Jawab Minuman', 'Divisi Minuman (Drink)', `${config.drinkPct || 20}%`, summary.pjDrinkShare || 0, 'Bagi hasil bersih divisi minuman'],
+    ['Owner (Pemilik Modal)', `Gabungan (${div1Title} + ${div2Title})`, `${config.ownerPct || 80}%`, summary.ownerShare || 0, 'Laba Bersih setelah beban'],
+    [div1Pj, div1Title, `${config.ramenPct || 20}%`, summary.pjRamenShare || 0, `Bagi hasil bersih ${div1Title}`],
+    [div2Pj, div2Title, `${config.drinkPct || 20}%`, summary.pjDrinkShare || 0, `Bagi hasil bersih ${div2Title}`],
     ['TOTAL LABA BERSIH DIBAGIKAN', 'Semua Divisi', '100%', summary.totalNetProfit || 0, 'Total laba bersih usaha periode ini'],
     [],
-    ['=== KINERJA DIVISI 1: FOOD & KITCHEN ==='],
+    [`=== KINERJA DIVISI 1: ${div1Title.toUpperCase()} ===`],
     ['Metrik Finansial', 'Nilai (Rp / Qty)', 'Catatan'],
-    ['Total Omzet Makanan', food.revenue || 0, `Porsi ${food.percentage || 0}% dari total penjualan`],
-    ['Jumlah Porsi Terjual', food.qtySold || 0, 'Porsi/item makanan'],
-    ['Total Beban Belanja Dapur / HPP', food.totalExpense || 0, 'Belanja bahan baku makanan'],
-    ['Laba Kotor Divisi Ramen', food.grossProfit || 0, 'Omzet - Beban Belanja'],
-    ['Alokasi Beban Bersama (Shared OPEX)', food.sharedOpexPortion || 0, 'Listrik, gas, kemasan, dll'],
-    ['Laba Bersih Divisi Ramen', food.netProfit || 0, 'Laba setelah beban bersama'],
-    [`Bagian Owner Ramen (${config.ownerPct || 80}%)`, food.ownerShare || 0, 'Setoran ke Owner'],
-    [`Bagian PJ Ramen (${config.ramenPct || 20}%)`, food.pjShare || 0, 'Hak PJ Makanan'],
+    [`Total Omzet ${div1Title}`, food.revenue || 0, `Porsi ${food.percentage || 0}% dari total penjualan`],
+    ['Jumlah Item/Porsi Terjual', food.qtySold || 0, `Item/layanan ${div1Title}`],
+    ['Total Beban Belanja / HPP', food.totalExpense || 0, `Belanja modal / bahan ${div1Title}`],
+    [`Laba Kotor ${div1Title}`, food.grossProfit || 0, 'Omzet - Beban Belanja'],
+    ['Alokasi Beban Bersama (Shared OPEX)', food.sharedOpexPortion || 0, 'Listrik, sewa, operasional umum'],
+    [`Laba Bersih ${div1Title}`, food.netProfit || 0, 'Laba setelah beban bersama'],
+    [`Bagian Owner (${config.ownerPct || 80}%)`, food.ownerShare || 0, 'Setoran ke Owner'],
+    [`Bagian ${div1Pj} (${config.ramenPct || 20}%)`, food.pjShare || 0, `Hak ${div1Pj}`],
     [],
-    ['=== KINERJA DIVISI 2: BEVERAGE & BAR ==='],
+    [`=== KINERJA DIVISI 2: ${div2Title.toUpperCase()} ===`],
     ['Metrik Finansial', 'Nilai (Rp / Qty)', 'Catatan'],
-    ['Total Omzet Minuman', drink.revenue || 0, `Porsi ${drink.percentage || 0}% dari total penjualan`],
-    ['Jumlah Cup Terjual', drink.qtySold || 0, 'Cup/porsi minuman'],
-    ['Total Beban Belanja Bar / HPP', drink.totalExpense || 0, 'Belanja bahan baku minuman'],
-    ['Laba Kotor Divisi Drink', drink.grossProfit || 0, 'Omzet - Beban Belanja'],
-    ['Alokasi Beban Bersama (Shared OPEX)', drink.sharedOpexPortion || 0, 'Listrik, es, kemasan, dll'],
-    ['Laba Bersih Divisi Drink', drink.netProfit || 0, 'Laba setelah beban bersama'],
-    [`Bagian Owner Drink (${config.ownerPct || 80}%)`, drink.ownerShare || 0, 'Setoran ke Owner'],
-    [`Bagian PJ Drink (${config.drinkPct || 20}%)`, drink.pjShare || 0, 'Hak PJ Minuman'],
+    [`Total Omzet ${div2Title}`, drink.revenue || 0, `Porsi ${drink.percentage || 0}% dari total penjualan`],
+    ['Jumlah Item/Porsi Terjual', drink.qtySold || 0, `Item/layanan ${div2Title}`],
+    ['Total Beban Belanja / HPP', drink.totalExpense || 0, `Belanja modal / bahan ${div2Title}`],
+    [`Laba Kotor ${div2Title}`, drink.grossProfit || 0, 'Omzet - Beban Belanja'],
+    ['Alokasi Beban Bersama (Shared OPEX)', drink.sharedOpexPortion || 0, 'Listrik, sewa, operasional umum'],
+    [`Laba Bersih ${div2Title}`, drink.netProfit || 0, 'Laba setelah beban bersama'],
+    [`Bagian Owner (${config.ownerPct || 80}%)`, drink.ownerShare || 0, 'Setoran ke Owner'],
+    [`Bagian ${div2Pj} (${config.drinkPct || 20}%)`, drink.pjShare || 0, `Hak ${div2Pj}`],
     [],
-    ['=== KINERJA DIVISI 3: PRODUK NETRAL / RETAIL (AIR MINERAL & TOKO) ==='],
+    [`=== KINERJA DIVISI 3: ${div3Title.toUpperCase()} ===`],
     ['Metrik Finansial', 'Nilai (Rp / Qty)', 'Catatan'],
-    ['Total Omzet Air Mineral / Retail', summary.other?.revenue || 0, 'Penjualan produk netral'],
-    ['Total Modal Belanja / HPP', summary.other?.expense || 0, 'Belanja dus air mineral / retail'],
-    ['Laba Bersih Masuk ke Owner (100%)', summary.other?.finalNet || 0, '100% Hak Owner / Kas Toko'],
+    [`Total Omzet ${div3Title}`, summary.other?.revenue || 0, 'Penjualan produk divisi tambahan'],
+    ['Total Modal Belanja / HPP', summary.other?.expense || 0, 'Belanja modal / HPP'],
+    ['Laba Bersih Masuk ke Owner (100%)', summary.other?.finalNet || 0, '100% Hak Owner / Kas Usaha'],
     [],
     ['=== BEBAN OPERASIONAL BERSAMA (SHARED OPEX) ==='],
     ['Metrik', 'Nilai (Rp)', 'Keterangan'],
-    ['Total Beban Operasional Bersama', shared.total || 0, 'Listrik, air, gas, sewa, wifi, kemasan umum'],
-    ['Alokasi Beban ke Divisi Ramen', shared.foodPortion || 0, 'Proporsional terhadap omzet'],
-    ['Alokasi Beban ke Divisi Drink', shared.drinkPortion || 0, 'Proporsional terhadap omzet'],
+    ['Total Beban Operasional Bersama', shared.total || 0, 'Listrik, air, sewa, wifi, operasional umum'],
+    [`Alokasi Beban ke ${div1Title}`, shared.foodPortion || 0, 'Proporsional terhadap omzet'],
+    [`Alokasi Beban ke ${div2Title}`, shared.drinkPortion || 0, 'Proporsional terhadap omzet'],
     ['Alokasi Beban ke Owner Langsung', shared.ownerPortion || 0, 'Jika mode OWNER_COVERED / SPLIT_50_50']
   ];
 
@@ -121,14 +158,14 @@ export function exportProfitSharingExcel(data: any, settings: any, period: { sta
     'No',
     'Tanggal',
     'Hari',
-    'Omzet Ramen (Rp)',
-    'Belanja Ramen (Rp)',
-    'Laba Ramen (Rp)',
-    `Hak PJ Ramen (${config.ramenPct || 20}%)`,
-    'Omzet Drink (Rp)',
-    'Belanja Drink (Rp)',
-    'Laba Drink (Rp)',
-    `Hak PJ Drink (${config.drinkPct || 20}%)`,
+    `Omzet ${div1Pj} (Rp)`,
+    `Belanja ${div1Pj} (Rp)`,
+    `Laba ${div1Pj} (Rp)`,
+    `Hak ${div1Pj} (${config.ramenPct || 20}%)`,
+    `Omzet ${div2Pj} (Rp)`,
+    `Belanja ${div2Pj} (Rp)`,
+    `Laba ${div2Pj} (Rp)`,
+    `Hak ${div2Pj} (${config.drinkPct || 20}%)`,
     'Beban Bersama (Rp)',
     'Total Omzet (Rp)',
     'Hak Bersih Owner (Rp)'

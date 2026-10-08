@@ -231,6 +231,7 @@ import tenantsRoutes from './routes/tenants';
 import platformAdminRoutes from './routes/platformAdmin';
 import fastProvisioningRoutes from './routes/fastProvisioning';
 import publicInvoiceRoutes from './routes/publicInvoice';
+import aiMenuRoutes from './routes/aiMenu';
 import { whatsAppManager } from './services/WhatsAppManager';
 
 app.use('/api/public/invoice', publicInvoiceRoutes);
@@ -297,6 +298,7 @@ app.use('/api/employee-loans', employeeLoansRoutes);
 app.use('/api/platform-admin', platformAdminRoutes);
 app.use('/api/fast-provisioning', fastProvisioningRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/ai-menu', aiMenuRoutes);
 
 // Error handling
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

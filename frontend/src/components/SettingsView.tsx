@@ -144,7 +144,7 @@ const SettingsView = () => {
   };
 
   const [formData, setFormData] = useState({
-    storeName: 'MUKI RAMEN',
+    storeName: '',
     phone: '',
     address: '',
     logoUrl: '',
@@ -910,7 +910,7 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.logoUrl} 
                         onChange={handleChange} 
-                        placeholder="/logo-muki-ramen.png"
+                        placeholder="/logo.png"
                       />
                     </div>
                   </div>
@@ -925,7 +925,7 @@ const SettingsView = () => {
                         style={{ paddingLeft: '2.5rem' }} 
                         value={formData.qrCodeBaseUrl || ''} 
                         onChange={handleChange} 
-                        placeholder="Contoh: http://mukiramen.com"
+                        placeholder="Contoh: https://pos.mitra-usaha.com"
                       />
                     </div>
                   </div>
@@ -2003,10 +2003,20 @@ const SettingsView = () => {
                       className="form-control text-sm" 
                       value={formData.receiptHeader} 
                       onChange={handleChange}
-                      placeholder={isRental ? "Contoh: SANGGAR BUSANA ADAT BUGIS — Syarat: Wajib menjaga keutuhan kain & aksesoris adat." : "Contoh: Selamat Datang di MUKI RAMEN! Nikmati hidangan autentik kami."}
+                      placeholder={
+                        isRental ? "Contoh: SANGGAR BUSANA ADAT BUGIS — Syarat: Wajib menjaga keutuhan kain & aksesoris adat." :
+                        isBengkel ? "Contoh: BENGKEL MOTOR BERGARANSI — Servis Berkala & Suku Cadang Asli Terpercaya." :
+                        isRetail ? "Contoh: TOKO BANGUNAN & GROSIR — Bahan Berkualitas, Melayani Eceran & Proyek." :
+                        isLaundry ? "Contoh: LAUNDRY KILOAN & SATUAN EXPRESS — Bersih, Wangi, Higienis, Rapi." :
+                        "Contoh: Selamat Datang! Nikmati hidangan istimewa & kopi pilihan kami."
+                      }
                     ></textarea>
                     <p className="text-[10px] font-semibold text-slate-400 mt-1">
-                      {isRental ? 'Muncul di baris teratas nota kontrak sewa setelah nama sanggar busana.' : 'Muncul di baris teratas struk printer setelah nama restoran.'}
+                      {isRental ? 'Muncul di baris teratas nota kontrak sewa setelah nama sanggar.' :
+                       isBengkel ? 'Muncul di baris teratas nota servis / SPK setelah nama bengkel.' :
+                       isRetail ? 'Muncul di baris teratas struk belanja setelah nama toko.' :
+                       isLaundry ? 'Muncul di baris teratas nota cucian setelah nama laundry.' :
+                       'Muncul di baris teratas struk kasir setelah nama restoran.'}
                     </p>
                   </div>
                   <div>
@@ -2019,10 +2029,20 @@ const SettingsView = () => {
                       className="form-control text-sm" 
                       value={formData.receiptFooter} 
                       onChange={handleChange}
-                      placeholder={isRental ? "Contoh: Pengembalian H+1 maks pukul 17:00 WITA. Busana sutra dicuci khusus oleh sanggar (penyewa tidak perlu mencuci)." : "Contoh: Arigatou Gozaimasu! Follow Instagram @mukiramen.id"}
+                      placeholder={
+                        isRental ? "Contoh: Pengembalian H+1 maks pukul 17:00 WITA. Busana sutra dicuci khusus oleh sanggar (penyewa tidak perlu mencuci)." :
+                        isBengkel ? "Contoh: Terima kasih atas kepercayaan Anda! Garansi servis berlaku 7 hari kerja dengan membawa nota ini." :
+                        isRetail ? "Contoh: Terima kasih telah berbelanja! Barang yang sudah dibeli dapat ditukar maksimal 3 hari kerja." :
+                        isLaundry ? "Contoh: Harap periksa cucian saat pengambilan. Komplain maksimal 1x24 jam dengan membawa nota ini." :
+                        "Contoh: Terima kasih atas kunjungan Anda! Silakan datang kembali."
+                      }
                     ></textarea>
                     <p className="text-[10px] font-semibold text-slate-400 mt-1">
-                      {isRental ? 'Muncul di bagian bawah nota sewa sebagai pengingat batas pengembalian dan jaminan.' : 'Muncul di baris paling bawah struk belanja setelah rincian total bayar.'}
+                      {isRental ? 'Muncul di bagian bawah nota sewa sebagai pengingat batas pengembalian.' :
+                       isBengkel ? 'Muncul di bagian bawah nota servis sebagai klausul garansi mekanik.' :
+                       isRetail ? 'Muncul di baris paling bawah struk belanja sebagai info retur barang.' :
+                       isLaundry ? 'Muncul di baris paling bawah nota cucian sebagai SOP komplain.' :
+                       'Muncul di baris paling bawah struk belanja setelah rincian total bayar.'}
                     </p>
                   </div>
                 </div>
@@ -2030,16 +2050,34 @@ const SettingsView = () => {
                 {/* Preview Struk Premium */}
                 <div className="flex flex-col items-center justify-center bg-slate-50 border border-slate-200/60 rounded-3xl p-6 shadow-inner">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-amber-500 animate-pulse" /> {isRental ? 'Live Preview Nota Sewa Busana' : 'Live Preview Struk Kasir'}
+                    <Sparkles size={12} className="text-amber-500 animate-pulse" /> {
+                      isRental ? 'Live Preview Nota Sewa Busana' :
+                      isBengkel ? 'Live Preview Nota Servis & SPK' :
+                      isRetail ? 'Live Preview Nota Belanja' :
+                      isLaundry ? 'Live Preview Nota Cucian' :
+                      'Live Preview Struk Kasir'
+                    }
                   </div>
                   
                   {/* Mock Receipt Container */}
                   <div className="bg-white w-64 p-5 font-mono text-[10px] text-slate-700 shadow-lg border border-slate-200 relative">
                     <div className="font-black text-center text-xs text-slate-800 uppercase tracking-wide mb-1">
-                      {formData.storeName || (isRental ? 'SANGGAR BUSANA ADAT BUGIS' : 'MUKI RAMEN')}
+                      {formData.storeName || (
+                        isRental ? 'SANGGAR BUSANA ADAT BUGIS' :
+                        isBengkel ? 'BENGKEL MOTOR MITRA JAYA' :
+                        isRetail ? 'TOKO BANGUNAN MITRA MAKMUR' :
+                        isLaundry ? 'LAUNDRY BERSIH WANGI' :
+                        'KAFE & RESTO MITRA'
+                      )}
                     </div>
                     <div className="text-center text-[8px] text-slate-400 mb-2 leading-tight whitespace-pre-wrap">
-                      {formData.address || (isRental ? 'Jl. Somba Opu No. 45, Makassar' : 'Jl. Senopati No. 88, Jakarta Selatan')}
+                      {formData.address || (
+                        isRental ? 'Jl. Somba Opu No. 45, Makassar' :
+                        isBengkel ? 'Jl. Otista Raya No. 12, Jakarta Timur' :
+                        isRetail ? 'Jl. Industri No. 25, Bekasi' :
+                        isLaundry ? 'Jl. Melati No. 8, Bandung' :
+                        'Jl. Senopati No. 88, Jakarta Selatan'
+                      )}
                     </div>
                     
                     {formData.receiptHeader ? (
@@ -2074,16 +2112,38 @@ const SettingsView = () => {
                         </div>
                         <div className="text-[7.5px] text-indigo-500 pl-2">*Refundable saat busana kembali utuh</div>
                       </div>
+                    ) : isBengkel ? (
+                      <div className="text-left space-y-1 my-3">
+                        <div className="flex justify-between"><span>1x Oli Mesin Synthetic 10W-40</span><span>65.000</span></div>
+                        <div className="flex justify-between"><span>1x Kampas Rem Depan Ori</span><span>45.000</span></div>
+                        <div className="flex justify-between"><span>1x Jasa Tune-up & Servis</span><span>50.000</span></div>
+                      </div>
+                    ) : isRetail ? (
+                      <div className="text-left space-y-1 my-3">
+                        <div className="flex justify-between"><span>2x Semen Tiga Roda 50kg</span><span>130.000</span></div>
+                        <div className="flex justify-between"><span>5x Paku Kayu 5cm (Kg)</span><span>75.000</span></div>
+                        <div className="flex justify-between"><span>1x Cat Tembok 5kg Putih</span><span>110.000</span></div>
+                      </div>
+                    ) : isLaundry ? (
+                      <div className="text-left space-y-1 my-3">
+                        <div className="flex justify-between"><span>1x Cuci Komplit Reguler (4.5 Kg)</span><span>36.000</span></div>
+                        <div className="flex justify-between"><span>1x Bed Cover King Size</span><span>35.000</span></div>
+                        <div className="flex justify-between"><span>1x Parfum Aroma Lavender</span><span>5.000</span></div>
+                      </div>
                     ) : (
                       <div className="text-left space-y-1 my-3">
-                        <div className="flex justify-between"><span>2x Tori Paitan Ramen</span><span>116.000</span></div>
-                        <div className="flex justify-between"><span>1x Gyoza Panggang</span><span>28.000</span></div>
+                        <div className="flex justify-between"><span>2x Iced Latte Aren</span><span>56.000</span></div>
+                        <div className="flex justify-between"><span>1x Croissant Butter</span><span>28.000</span></div>
                         <div className="flex justify-between"><span>2x Ocha Dingin</span><span>24.000</span></div>
                       </div>
                     )}
                     
                     <div className="border-t border-dashed border-slate-300 mt-2 pt-2 text-right font-black text-slate-800 text-[11px]">
-                      {isRental ? 'TOTAL TAGIHAN: Rp 500.000' : 'TOTAL: Rp 184.800'}
+                      {isRental ? 'TOTAL TAGIHAN: Rp 500.000' :
+                       isBengkel ? 'TOTAL BIAYA: Rp 160.000' :
+                       isRetail ? 'TOTAL BELANJA: Rp 315.000' :
+                       isLaundry ? 'TOTAL BIAYA: Rp 76.000' :
+                       'TOTAL: Rp 108.000'}
                     </div>
 
                     {formData.receiptFooter ? (
@@ -2216,6 +2276,12 @@ const SettingsView = () => {
                   <div>
                     {isRental 
                       ? 'Aturan operasional ini berlaku sebagai parameter default saat kasir membuat kontrak persewaan baju adat baru dan pencetakan nota perjanjian.' 
+                      : isBengkel
+                      ? 'Aturan operasional ini menyesuaikan alur kerja penerbitan SPK, estimasi servis, dan transaksi kasir bengkel.'
+                      : isRetail
+                      ? 'Aturan operasional ini menyesuaikan alur transaksi kasir toko grosir, nota tempo, dan armada pengiriman.'
+                      : isLaundry
+                      ? 'Aturan operasional ini menyesuaikan alur penerimaan cucian, timbangan nota kasir, dan penomoran rak.'
                       : 'Mengaktifkan fitur-fitur di bawah ini akan menambahkan parameter opsional pada saat kasir membuat pesanan makanan/minuman di terminal POS.'}
                   </div>
                 </div>
@@ -2304,7 +2370,7 @@ const SettingsView = () => {
                 )}
 
                 {/* Drink Customization Toggle Card (ONLY FOR CAFE / F&B) */}
-                {!isRental && (
+                {isCafe && (
                   <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${formData.enableDrinkCustomization ? 'bg-indigo-50/20 border-indigo-200' : 'bg-white border-slate-200'} shadow-sm`}>
                     <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
                       <div className="space-y-1.5 flex-1 min-w-0 pr-2">
@@ -2849,48 +2915,160 @@ const SettingsView = () => {
                 </div>
               ) : (
                 <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: false }))} className="cursor-pointer"
-                  style={{ border: !formData.ingredientTrackingEnabled ? '2.5px solid #4f46e5' : '2px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', background: !formData.ingredientTrackingEnabled ? '#f5f3ff' : 'white', transition: 'all .2s' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '.75rem' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Package size={18} className="text-indigo-600" />
-                      <span>Simple Mode</span>
+              {/* ── BENGKEL INVENTORY CARD ── */}
+              {isBengkel && (
+                <div className="space-y-4">
+                  <div className="p-5 sm:p-6 rounded-2xl border border-indigo-200 bg-indigo-50/40 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm">
+                          <Wrench size={20} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-800">Mode Inventaris Suku Cadang &amp; Pelumas</h4>
+                          <p className="text-xs text-slate-500">Stok suku cadang, pelumas, dan consumable bengkel terkelola secara presisi per unit fisik (Pcs, Botol, Set).</p>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700 border border-indigo-200">
+                        STANDAR BENGKEL
+                      </span>
                     </div>
-                    {!formData.ingredientTrackingEnabled && <span style={{ background: '#4f46e5', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
-                  </div>
-                  <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
-                    <li>HPP diinput manual per produk</li>
-                    <li>Stok dilacak per produk jadi</li>
-                    <li>PO → naikkan stok produk langsung</li>
-                    <li>✓ Cocok untuk kafe baru / operasi sederhana</li>
-                  </ul>
-                </div>
-                <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: true }))} className="cursor-pointer"
-                  style={{ border: formData.ingredientTrackingEnabled ? '2.5px solid #7c3aed' : '2px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', background: formData.ingredientTrackingEnabled ? '#faf5ff' : 'white', transition: 'all .2s' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '.75rem' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Sliders size={18} className="text-indigo-600" />
-                      <span>Advanced Mode</span>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">🔧 Potong Stok Otomatis SPK</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Suku cadang yang dipasang mekanik otomatis memotong saldo stok saat SPK diselesaikan.</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">⚠️ Ambang Batas Kritis (Min Stock)</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Peringatan otomatis saat stok sparepart berada di bawah batas minimum agar segera diorder.</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">📦 Valuasi Modal Aset Fisik</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Total nilai aset gudang dihitung otomatis berdasarkan HPP beli terakhir dikali jumlah stok riil.</p>
+                      </div>
                     </div>
-                    {formData.ingredientTrackingEnabled && <span style={{ background: '#7c3aed', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
                   </div>
-                  <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
-                    <li>HPP otomatis dari resep bahan baku</li>
-                    <li>Stok dilacak per bahan baku (gram, ml)</li>
-                    <li>Order → kurangi stok bahan baku otomatis</li>
-                    <li>PO → naikkan stok bahan baku</li>
-                    <li>✓ Cocok untuk kafe dengan kontrol biaya ketat</li>
-                  </ul>
                 </div>
-              </div>
-              <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', gap: '.75rem' }}>
-                <Info size={18} color="#92400e" style={{ flexShrink: 0, marginTop: '.1rem' }} />
-                <p style={{ fontSize: '.8rem', color: '#78350f', lineHeight: 1.7, margin: 0 }}>
-                  Mengubah mode tidak menghapus data. Menu <strong>Bahan Baku</strong> di sidebar hanya muncul jika Advanced Mode aktif.
-                  Isi resep menu di <strong>Produk → Edit → Tab Resep</strong> sebelum mengaktifkan Advanced Mode.
-                </p>
-              </div>
+              )}
+
+              {/* ── RETAIL INVENTORY CARD ── */}
+              {isRetail && (
+                <div className="space-y-4">
+                  <div className="p-5 sm:p-6 rounded-2xl border border-amber-200 bg-amber-50/40 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold shadow-sm">
+                          <Boxes size={20} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-800">Mode Inventaris Grosir &amp; Multi-Satuan (UOM)</h4>
+                          <p className="text-xs text-slate-500">Mendukung hierarki multi-satuan bertingkat (Dus, Slop, Pack, Pcs), penataan rak gudang, dan sinkronisasi Surat Jalan.</p>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                        MULTI-UOM AKTIF
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">📦 Konversi Satuan Bertingkat</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Jual dalam satuan ecer atau grosir partai besar dengan pemotongan stok otomatis dari unit induk.</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">🚚 Sinkronisasi Surat Jalan (DO)</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Stok barang otomatis terpotong saat pengiriman armada diberangkatkan ke toko langganan.</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">🏷️ Manajemen Rak &amp; Gudang</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Pelabelan lokasi rak dan lorong gudang mempermudah kasir &amp; helper menemukan barang pesanan.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── LAUNDRY INVENTORY CARD ── */}
+              {isLaundry && (
+                <div className="space-y-4">
+                  <div className="p-5 sm:p-6 rounded-2xl border border-cyan-200 bg-cyan-50/40 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-bold shadow-sm">
+                          <Package size={20} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-800">Mode Inventaris Konsumabel &amp; Rak Laundry</h4>
+                          <p className="text-xs text-slate-500">Pelacakan konsumsi bahan deterjen, pelembut, parfum cucian, dan penomoran rak simpan baju.</p>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 border border-cyan-200">
+                        STANDAR LAUNDRY
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">🧴 Bahan Baku &amp; Kimia Laundry</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Deterjen cair, pelembut, dan parfum cucian dicatat di pengeluaran operasional atau inventaris bahan.</p>
+                      </div>
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-1">
+                        <div className="text-xs font-bold text-slate-800">🧺 Nomor Rak &amp; Keranjang Simpan</div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Manajemen nomor rak cucian bersih terhubung dengan nota timbangan kasir dan papan status cuci.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── CAFE INVENTORY CARD (SIMPLE VS ADVANCED RESEP) ── */}
+              {isCafe && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: false }))} className="cursor-pointer"
+                      style={{ border: !formData.ingredientTrackingEnabled ? '2.5px solid #4f46e5' : '2px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', background: !formData.ingredientTrackingEnabled ? '#f5f3ff' : 'white', transition: 'all .2s' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '.75rem' }}>
+                        <div style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <Package size={18} className="text-indigo-600" />
+                          <span>Simple Mode</span>
+                        </div>
+                        {!formData.ingredientTrackingEnabled && <span style={{ background: '#4f46e5', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
+                      </div>
+                      <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
+                        <li>HPP diinput manual per produk</li>
+                        <li>Stok dilacak per produk jadi</li>
+                        <li>PO → naikkan stok produk langsung</li>
+                        <li>✓ Cocok untuk kafe baru / operasi sederhana</li>
+                      </ul>
+                    </div>
+                    <div onClick={() => setFormData(p => ({ ...p, ingredientTrackingEnabled: true }))} className="cursor-pointer"
+                      style={{ border: formData.ingredientTrackingEnabled ? '2.5px solid #7c3aed' : '2px solid #e2e8f0', borderRadius: '1.25rem', padding: '1.5rem', background: formData.ingredientTrackingEnabled ? '#faf5ff' : 'white', transition: 'all .2s' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '.75rem' }}>
+                        <div style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <Sliders size={18} className="text-indigo-600" />
+                          <span>Advanced Mode (Resep BOM)</span>
+                        </div>
+                        {formData.ingredientTrackingEnabled && <span style={{ background: '#7c3aed', color: 'white', fontSize: '.65rem', fontWeight: 700, padding: '.2rem .6rem', borderRadius: '.375rem' }}>AKTIF</span>}
+                      </div>
+                      <ul style={{ fontSize: '.8rem', color: '#475569', lineHeight: 1.8, paddingLeft: '1rem' }}>
+                        <li>HPP otomatis dari resep bahan baku</li>
+                        <li>Stok dilacak per bahan baku (gram, ml)</li>
+                        <li>Order → kurangi stok bahan baku otomatis</li>
+                        <li>PO → naikkan stok bahan baku</li>
+                        <li>✓ Cocok untuk kafe dengan kontrol biaya ketat</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div style={{ background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '1rem', padding: '1rem 1.25rem', display: 'flex', gap: '.75rem' }}>
+                    <Info size={18} color="#92400e" style={{ flexShrink: 0, marginTop: '.1rem' }} />
+                    <p style={{ fontSize: '.8rem', color: '#78350f', lineHeight: 1.7, margin: 0 }}>
+                      Mengubah mode tidak menghapus data. Menu <strong>Bahan Baku</strong> di sidebar hanya muncul jika Advanced Mode aktif.
+                      Isi resep menu di <strong>Produk → Edit → Tab Resep</strong> sebelum mengaktifkan Advanced Mode.
+                    </p>
+                  </div>
+                </>
+              )}
 
               {/* Kontrol Dapur & Mode Audit Opsional (HANYA KAFE / F&B) */}
               {isCafe && (

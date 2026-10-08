@@ -21,12 +21,11 @@ const getOrderCashPortion = (paymentMethod: string | null, total: number): numbe
 // GET /api/cashflow/summary - Agregasi Metrik Kas Operasional, Laci Kasir, Approval, dan Burn Rate
 router.get('/summary', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const tenantId = (req as any).tenantId || (req as any).user?.tenantId;
-    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+    const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string);
+    if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
-    const baseWhere: any = {};
-    if (tenantId) baseWhere.tenantId = tenantId;
+    const baseWhere: any = { tenantId };
 
     // 1. Kas Operasional (Petty Cash Toko) - Approved
     const opInAgg = await prisma.cashFlow.aggregate({
@@ -156,12 +155,12 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { type, pocket, status, search, startDate, endDate, tzOffset } = req.query;
-    const tenantId = (req as any).tenantId || (req as any).user?.tenantId;
-    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+    const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string);
+    if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
     
-    const whereClause: any = tenantId ? { tenantId } : {};
+    const whereClause: any = { tenantId };
 
     if (type && type !== 'ALL') whereClause.type = type;
     if (pocket && pocket !== 'ALL') {
@@ -300,32 +299,39 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       }
     });
 
-    // Jika langsung approved dan autoStock aktif
-    if (finalStatus === 'APPROVED' && autoStock && ingredientId) {
+    // Jika langsung approved dan autoStock aktif (dengan anti-IDOR validation)
+    if (finalStatus === 'APPROVED' && autoStock && ingredientId && tenantId) {
       try {
         const qtyNum = Number(ingredientQty) || 1;
-        await prisma.ingredient.update({
-          where: { id: Number(ingredientId) },
-          data: { stock: { increment: qtyNum } }
+        const validIngredient = await prisma.ingredient.findFirst({
+          where: { id: Number(ingredientId), tenantId }
         });
-        await prisma.ingredientLog.create({
-          data: {
-            tenantId,
-            ingredientId: Number(ingredientId),
-            change: qtyNum,
-            cost: Number(amount),
-            type: 'Restock',
-            reason: `Petty Cash Restock: ${description}`,
-            userId: user.id
-          }
-        });
+        if (validIngredient) {
+          await prisma.ingredient.update({
+            where: { id: validIngredient.id },
+            data: { stock: { increment: qtyNum } }
+          });
+          await prisma.ingredientLog.create({
+            data: {
+              tenantId,
+              ingredientId: validIngredient.id,
+              change: qtyNum,
+              cost: Number(amount),
+              type: 'Restock',
+              reason: `Petty Cash Restock: ${description}`,
+              userId: user.id
+            }
+          });
+        } else {
+          console.warn(`[CashFlow IDOR Block] Ingredient ${ingredientId} tidak ditemukan untuk tenant ${tenantId}`);
+        }
       } catch (stkErr) {
         console.warn('[CashFlow] Failed to auto-increment stock:', stkErr);
       }
     }
 
     // Socket Notification — hanya ke tenant terkait
-    const cashflowTenantId = (req as any).user?.tenantId;
+    const cashflowTenantId = tenantId || (req as any).user?.tenantId;
     if (cashflowTenantId) {
       if (finalStatus === 'PENDING') {
         emitToTenant(cashflowTenantId, 'cashflow:pending', cashflow);
@@ -358,19 +364,17 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
     }
 
     const { id } = req.params;
-    const tenantId = (req as any).user?.tenantId;
-    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+    const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string);
+    if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
 
     // IDOR Guard: verifikasi kepemilikan tenant sebelum approve
-    const existingWhere: any = { id: Number(id) };
-    if (tenantId) existingWhere.tenantId = tenantId;
     const existing = await prisma.cashFlow.findFirst({
-      where: existingWhere
+      where: { id: Number(id), tenantId }
     });
     if (!existing) {
-      return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan atau bukan milik tenant ini' });
     }
 
     // Idempotent protection: jika sudah disetujui, return langsung
@@ -379,7 +383,7 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
     }
 
     const updated = await prisma.cashFlow.update({
-      where: { id: Number(id) },
+      where: { id: existing.id },
       data: {
         status: 'APPROVED',
         approvedBy: user.id,
@@ -419,23 +423,21 @@ router.patch('/:id/reject', authenticateToken, async (req: Request, res: Respons
 
     const { id } = req.params;
     const { reason } = req.body;
-    const tenantId = (req as any).user?.tenantId;
-    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
+    const tenantId = (req as any).tenantId || (req as any).user?.tenantId || (req.headers['x-tenant-id'] as string);
+    if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
 
     // IDOR Guard: verifikasi kepemilikan tenant
-    const existingWhere: any = { id: Number(id) };
-    if (tenantId) existingWhere.tenantId = tenantId;
     const existing = await prisma.cashFlow.findFirst({
-      where: existingWhere
+      where: { id: Number(id), tenantId }
     });
     if (!existing) {
-      return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan atau bukan milik tenant ini' });
     }
 
     const updated = await prisma.cashFlow.update({
-      where: { id: Number(id) },
+      where: { id: existing.id },
       data: {
         status: 'REJECTED',
         rejectionReason: reason || 'Ditolak oleh Owner',
@@ -468,20 +470,18 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
   try {
     const user = (req as any).user;
     const { id } = req.params;
-    const tenantId = user?.tenantId;
+    const tenantId = (req as any).tenantId || user?.tenantId || (req.headers['x-tenant-id'] as string);
 
-    if (!tenantId && !user?.isPlatformAdmin) {
+    if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
     }
 
     // IDOR Guard: verifikasi kepemilikan tenant
-    const existingWhere: any = { id: Number(id) };
-    if (tenantId) existingWhere.tenantId = tenantId;
     const existing = await prisma.cashFlow.findFirst({
-      where: existingWhere
+      where: { id: Number(id), tenantId }
     });
     if (!existing) {
-      return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan atau bukan milik tenant ini' });
     }
 
     const isAdminOrOwner = user.role === 'Admin' || user.role === 'Owner' || user.isPlatformAdmin;
@@ -491,7 +491,7 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
       return res.status(403).json({ error: 'Anda tidak memiliki akses untuk menghapus transaksi ini' });
     }
 
-    await prisma.cashFlow.delete({ where: { id: Number(id) } });
+    await prisma.cashFlow.delete({ where: { id: existing.id } });
 
     if (tenantId) {
       emitToTenant(tenantId, 'cashflow:deleted', { id: Number(id) });

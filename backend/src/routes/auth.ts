@@ -116,8 +116,8 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
 
   const membershipsList = (user.memberships || []).map(m => ({
     tenantId: m.tenantId,
-    tenantName: m.tenant?.name || 'Muki Ramen',
-    tenantSlug: m.tenant?.slug || 'muki-ramen',
+    tenantName: m.tenant?.name || 'Mitra POS',
+    tenantSlug: m.tenant?.slug || 'mitra-pos',
     businessType: m.tenant?.businessType || 'CAFE',
     roleName: m.role?.name || user.role,
     status: m.status

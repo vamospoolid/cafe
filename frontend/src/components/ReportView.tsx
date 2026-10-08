@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import { toast, confirmAlert } from '../utils/alert';
 import { exportFinancialPDF, exportProfitSharingPDF, exportDailyBonusPDF } from '../utils/pdfGenerator';
 import { exportProfitSharingExcel, exportDailyBonusExcel, exportPettyCashExcel, exportSalesReportExcel, exportInventoryValuationExcel } from '../utils/excelGenerator';
@@ -20,6 +21,7 @@ type MainTabType = 'dashboard' | 'products' | 'shifts_transactions' | 'inventory
 export const ReportView: React.FC = () => {
   const posContext = useContext(POSContext);
   const token = posContext?.token;
+  const { isBengkel, isRental, isRetail, isLaundry, isCafe } = useVertical();
 
   // AI Menu Advisor Modal State
   const [showAiMenuModal, setShowAiMenuModal] = useState(false);
@@ -534,7 +536,11 @@ export const ReportView: React.FC = () => {
             id: 'profit_sharing', 
             title: 'Bagi Hasil (80:20)', 
             mobileTitle: 'Bagi Hasil',
-            subtitle: 'Ramen vs Minuman & Owner', 
+            subtitle: isBengkel ? 'Servis vs Sparepart & Owner' :
+                      isRetail ? 'Retail vs Grosir & Owner' :
+                      isLaundry ? 'Kiloan vs Satuan & Owner' :
+                      isRental ? 'Busana vs Rias & Owner' :
+                      'Divisi 1 vs Divisi 2 & Owner', 
             icon: Percent,
             badge: profitSharingData?.summary ? `Rp ${Math.round((profitSharingData.summary.grandTotalNetProfit || 0) / 1000)}k` : null
           }] : []),
@@ -548,11 +554,11 @@ export const ReportView: React.FC = () => {
           },
           { 
             id: 'products', 
-            title: 'Penjualan Menu', 
-            mobileTitle: 'Penjualan Menu',
+            title: isBengkel ? 'Penjualan Part & Jasa' : isRetail ? 'Penjualan Barang' : isLaundry ? 'Layanan Cuci' : isRental ? 'Sewa Busana' : 'Penjualan Menu', 
+            mobileTitle: isBengkel ? 'Part & Jasa' : isRetail ? 'Produk' : isLaundry ? 'Layanan' : isRental ? 'Busana' : 'Menu',
             subtitle: 'Best Seller & Laba', 
-            icon: Utensils, 
-            badge: totalQtySold > 0 ? `${totalQtySold} Porsi` : null
+            icon: isBengkel ? Package : isRetail ? ShoppingBag : Utensils, 
+            badge: totalQtySold > 0 ? `${totalQtySold} ${isCafe ? 'Porsi' : isLaundry ? 'Trx' : 'Item'}` : null
           },
           { 
             id: 'shifts_transactions', 
@@ -564,11 +570,11 @@ export const ReportView: React.FC = () => {
           },
           { 
             id: 'inventory', 
-            title: 'Mutasi & Stok', 
+            title: isBengkel ? 'Stok Sparepart' : isRetail ? 'Gudang & Stok' : isLaundry ? 'Bahan & Konsumabel' : 'Mutasi & Stok', 
             mobileTitle: 'Mutasi Stok',
             subtitle: 'Valuasi HPP & Kritis', 
             icon: Boxes,
-            badge: (inventoryData.inventory?.length || 0) > 0 ? `${inventoryData.inventory?.length} Bahan` : null
+            badge: (inventoryData.inventory?.length || 0) > 0 ? `${inventoryData.inventory?.length} ${isCafe ? 'Bahan' : 'Item'}` : null
           },
           { 
             id: 'accounting', 
@@ -2041,19 +2047,38 @@ export const ReportView: React.FC = () => {
           TAB: BAGI HASIL (80:20) - RAMEN VS MINUMAN & OWNER
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'profit_sharing' && (() => {
-        const ps = profitSharingData?.summary;
-        const daily = profitSharingData?.dailyBreakdown || [];
-        const exp = profitSharingData?.expensesBreakdown || { foodExpenses: [], drinkExpenses: [], sharedExpenses: [] };
+        const div1Label = ps?.div1Title || (
+          isBengkel ? 'Divisi Jasa Servis & Mekanik' :
+          isRetail ? 'Divisi Retail & Eceran' :
+          isLaundry ? 'Divisi Laundry Kiloan' :
+          isRental ? 'Divisi Sewa Busana' :
+          'Divisi Makanan (Kitchen)'
+        );
+        const div1PjLabel = ps?.div1Pj || (
+          isBengkel ? 'PJ Servis' :
+          isRetail ? 'PJ Retail' :
+          isLaundry ? 'PJ Kiloan' :
+          isRental ? 'PJ Busana' :
+          'PJ Makanan'
+        );
+        const div1Icon = isBengkel ? '🔧' : isRetail ? '📦' : isLaundry ? '🧺' : isRental ? '👘' : '🍜';
 
-        if (!ps || !ps.food || !ps.drink) {
-          return (
-            <div className="bg-white rounded-2xl p-8 text-center text-slate-500 border border-slate-200">
-              <Percent className="w-12 h-12 mx-auto text-indigo-400 mb-2 animate-bounce" />
-              <p className="font-bold text-slate-700">Memuat atau belum ada data bagi hasil...</p>
-              <p className="text-xs text-slate-400 mt-1">Pastikan ada transaksi penjualan atau pengeluaran pada periode {startDate} s/d {endDate}</p>
-            </div>
-          );
-        }
+        const div2Label = ps?.div2Title || (
+          isBengkel ? 'Divisi Suku Cadang & Pelumas' :
+          isRetail ? 'Divisi Grosir & Partai' :
+          isLaundry ? 'Divisi Laundry Satuan & Dry Clean' :
+          isRental ? 'Divisi Aksesoris & Rias' :
+          'Divisi Minuman (Bar)'
+        );
+        const div2PjLabel = ps?.div2Pj || (
+          isBengkel ? 'PJ Sparepart' :
+          isRetail ? 'PJ Grosir' :
+          isLaundry ? 'PJ Satuan' :
+          isRental ? 'PJ Aksesoris' :
+          'PJ Minuman'
+        );
+        const div2Icon = isBengkel ? '⚙️' : isRetail ? '🛒' : isLaundry ? '👔' : isRental ? '✨' : '🍹';
+        const div3Label = ps?.div3Title || 'Produk Netral / Retail';
 
         return (
           <div className="flex flex-col gap-3.5 sm:gap-5">
@@ -2073,10 +2098,10 @@ export const ReportView: React.FC = () => {
                     </span>
                   </div>
                   <h3 className="text-sm sm:text-lg font-black text-white mt-1 leading-snug truncate">
-                    Rekapitulasi Bagi Hasil {posContext?.settings?.storeName || 'Restoran & Bar'}
+                    Rekapitulasi Bagi Hasil {posContext?.settings?.storeName || (isBengkel ? 'Bengkel & Servis' : isRetail ? 'Toko Retail & Grosir' : isLaundry ? 'Laundry Express' : isRental ? 'Sanggar Sewa Busana' : 'Restoran & Bar')}
                   </h3>
                   <p className="text-[10px] sm:text-xs text-slate-300 mt-0.5 line-clamp-1 sm:line-clamp-none">
-                    Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Formula: Laba Bersih = Omzet - Belanja Bahan
+                    Periode: <span className="text-white font-bold">{startDate} s/d {endDate}</span> • Formula: Laba Bersih = Omzet - Belanja Modal/Bahan
                   </p>
                 </div>
               </div>
@@ -2111,8 +2136,8 @@ export const ReportView: React.FC = () => {
                 <div className="mt-1.5 sm:mt-2">
                   <div className="text-xs sm:text-lg lg:text-xl font-black text-slate-900 tracking-tight truncate">{formatCurrency(ps.grandTotalRevenue)}</div>
                   <div className="text-[9px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 flex flex-col sm:flex-row sm:justify-between gap-0.5">
-                    <span className="truncate">Ramen: {formatCurrency(ps.food.revenue)}</span>
-                    <span className="truncate">Drink: {formatCurrency(ps.drink.revenue)}</span>
+                    <span className="truncate">{div1PjLabel}: {formatCurrency(ps.food.revenue)}</span>
+                    <span className="truncate">{div2PjLabel}: {formatCurrency(ps.drink.revenue)}</span>
                   </div>
                 </div>
               </div>
@@ -2128,7 +2153,7 @@ export const ReportView: React.FC = () => {
                 <div className="mt-1.5 sm:mt-2">
                   <div className="text-xs sm:text-lg lg:text-xl font-black text-rose-600 tracking-tight truncate">{formatCurrency(ps.grandTotalExpense)}</div>
                   <div className="text-[9px] sm:text-[11px] text-slate-500 mt-0.5 sm:mt-1 truncate">
-                    Bahan: {formatCurrency(ps.food.expense + ps.drink.expense)} | OPEX: {formatCurrency(ps.sharedOpexTotal)}
+                    Belanja: {formatCurrency(ps.food.expense + ps.drink.expense)} | OPEX: {formatCurrency(ps.sharedOpexTotal)}
                   </div>
                 </div>
               </div>
@@ -2160,7 +2185,7 @@ export const ReportView: React.FC = () => {
                 <div className="mt-1.5 sm:mt-2">
                   <div className="text-xs sm:text-lg lg:text-xl font-black text-white tracking-tight truncate">{formatCurrency(ps.totalOwnerShare)}</div>
                   <div className="text-[9px] sm:text-[11px] text-indigo-100/90 mt-0.5 sm:mt-1 truncate">
-                    Makanan: {formatCurrency(ps.food.ownerShare)} + Drink: {formatCurrency(ps.drink.ownerShare)}
+                    {div1PjLabel}: {formatCurrency(ps.food.ownerShare)} + {div2PjLabel}: {formatCurrency(ps.drink.ownerShare)}
                   </div>
                 </div>
               </div>
@@ -2174,7 +2199,7 @@ export const ReportView: React.FC = () => {
                 <div className="mt-1.5 sm:mt-2">
                   <div className="text-xs sm:text-lg lg:text-xl font-black text-white tracking-tight truncate">{formatCurrency(ps.totalPjShare)}</div>
                   <div className="text-[9px] sm:text-[11px] text-emerald-100/90 mt-0.5 sm:mt-1 truncate">
-                    PJ Ramen: {formatCurrency(ps.food.pjShare)} | PJ Drink: {formatCurrency(ps.drink.pjShare)}
+                    {div1PjLabel}: {formatCurrency(ps.food.pjShare)} | {div2PjLabel}: {formatCurrency(ps.drink.pjShare)}
                   </div>
                 </div>
               </div>
@@ -2182,37 +2207,37 @@ export const ReportView: React.FC = () => {
 
             {/* Division Comparison Breakdown Cards */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-              {/* Divisi 1: Makanan */}
+              {/* Divisi 1 */}
               <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between pb-2.5 sm:pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                       <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black text-sm sm:text-base shrink-0">
-                        🍜
+                        {div1Icon}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">Divisi Makanan (Kitchen)</h4>
+                        <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">{div1Label}</h4>
                         <span className="text-[10px] sm:text-xs text-slate-400 block truncate">Penanggung Jawab: Bagi Hasil {ps.food.profitSharingPct}%</span>
                       </div>
                     </div>
                     <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-black bg-orange-50 text-orange-700 border border-orange-200 shrink-0">
-                      Food
+                      {div1PjLabel}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 my-2.5 sm:my-4">
                     <div className="p-2 sm:p-3 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100">
-                      <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet Ramen</span>
+                      <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet {div1PjLabel}</span>
                       <span className="text-xs sm:text-base font-black text-slate-800 tracking-tight block truncate">{formatCurrency(ps.food.revenue)}</span>
                     </div>
                     <div className="p-2 sm:p-3 bg-rose-50/50 rounded-lg sm:rounded-xl border border-rose-100">
-                      <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Bahan Ramen</span>
+                      <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Modal / Bahan</span>
                       <span className="text-xs sm:text-base font-black text-rose-700 tracking-tight block truncate">-{formatCurrency(ps.food.expense)}</span>
                     </div>
                   </div>
 
                   <div className="p-2.5 sm:p-3.5 bg-slate-100/70 rounded-xl sm:rounded-2xl flex justify-between items-center mb-2.5 sm:mb-4">
-                    <span className="text-[11px] sm:text-xs font-bold text-slate-700">Laba Bersih Makanan</span>
+                    <span className="text-[11px] sm:text-xs font-bold text-slate-700">Laba Bersih {div1Label}</span>
                     <span className="text-xs sm:text-base font-black text-indigo-900">{formatCurrency(ps.food.finalNet)}</span>
                   </div>
                 </div>
@@ -2227,7 +2252,7 @@ export const ReportView: React.FC = () => {
                   </div>
                   <div className="p-2 sm:p-3 bg-emerald-50/70 rounded-lg sm:rounded-xl border border-emerald-100">
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 truncate">PJ Makanan ({ps.food.profitSharingPct}%)</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 truncate">{div1PjLabel} ({ps.food.profitSharingPct}%)</span>
                       <span className="text-[9px] sm:text-[10px] bg-emerald-200/60 text-emerald-800 px-1 sm:px-1.5 py-0.5 rounded font-bold shrink-0">PJ Tim</span>
                     </div>
                     <div className="text-xs sm:text-base font-black text-emerald-900 mt-1 truncate">{formatCurrency(ps.food.pjShare)}</div>
@@ -2235,37 +2260,37 @@ export const ReportView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Divisi 2: Minuman */}
+              {/* Divisi 2 */}
               <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between pb-2.5 sm:pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                       <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center font-black text-sm sm:text-base shrink-0">
-                        🍹
+                        {div2Icon}
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">Divisi Minuman (Bar)</h4>
+                        <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">{div2Label}</h4>
                         <span className="text-[10px] sm:text-xs text-slate-400 block truncate">Penanggung Jawab: Bagi Hasil {ps.drink.profitSharingPct}%</span>
                       </div>
                     </div>
                     <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-black bg-cyan-50 text-cyan-700 border border-cyan-200 shrink-0">
-                      Drink
+                      {div2PjLabel}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 sm:gap-3 my-2.5 sm:my-4">
                     <div className="p-2 sm:p-3 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100">
-                      <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet Minuman</span>
+                      <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet {div2PjLabel}</span>
                       <span className="text-xs sm:text-base font-black text-slate-800 tracking-tight block truncate">{formatCurrency(ps.drink.revenue)}</span>
                     </div>
                     <div className="p-2 sm:p-3 bg-rose-50/50 rounded-lg sm:rounded-xl border border-rose-100">
-                      <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Bahan Minuman</span>
+                      <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Modal / Bahan</span>
                       <span className="text-xs sm:text-base font-black text-rose-700 tracking-tight block truncate">-{formatCurrency(ps.drink.expense)}</span>
                     </div>
                   </div>
 
                   <div className="p-2.5 sm:p-3.5 bg-slate-100/70 rounded-xl sm:rounded-2xl flex justify-between items-center mb-2.5 sm:mb-4">
-                    <span className="text-[11px] sm:text-xs font-bold text-slate-700">Laba Bersih Minuman</span>
+                    <span className="text-[11px] sm:text-xs font-bold text-slate-700">Laba Bersih {div2Label}</span>
                     <span className="text-xs sm:text-base font-black text-cyan-900">{formatCurrency(ps.drink.finalNet)}</span>
                   </div>
                 </div>
@@ -2280,7 +2305,7 @@ export const ReportView: React.FC = () => {
                   </div>
                   <div className="p-2 sm:p-3 bg-emerald-50/70 rounded-lg sm:rounded-xl border border-emerald-100">
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 truncate">PJ Drink ({ps.drink.profitSharingPct}%)</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-emerald-700 truncate">{div2PjLabel} ({ps.drink.profitSharingPct}%)</span>
                       <span className="text-[9px] sm:text-[10px] bg-emerald-200/60 text-emerald-800 px-1 sm:px-1.5 py-0.5 rounded font-bold shrink-0">PJ Tim</span>
                     </div>
                     <div className="text-xs sm:text-base font-black text-emerald-900 mt-1 truncate">{formatCurrency(ps.drink.pjShare)}</div>
@@ -2288,7 +2313,7 @@ export const ReportView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Divisi 3: Produk Netral / Retail (Air Mineral & Toko) */}
+              {/* Divisi 3: Produk Netral / Lainnya */}
               {ps.other && (ps.other.revenue > 0 || ps.other.expense > 0) && (
                 <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between lg:col-span-2">
                   <div>
@@ -2298,8 +2323,8 @@ export const ReportView: React.FC = () => {
                           💧
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">Produk Netral / Retail (Air Mineral & Toko)</h4>
-                          <span className="text-[10px] sm:text-xs text-slate-400 block truncate">100% Hak Owner / Kas Toko (Tanpa Bagi Hasil PJ)</span>
+                          <h4 className="font-black text-slate-900 text-sm sm:text-base truncate">{div3Label}</h4>
+                          <span className="text-[10px] sm:text-xs text-slate-400 block truncate">100% Hak Owner / Kas Usaha (Tanpa Bagi Hasil PJ)</span>
                         </div>
                       </div>
                       <span className="px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-black bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
@@ -2309,11 +2334,11 @@ export const ReportView: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 my-2.5 sm:my-4">
                       <div className="p-2 sm:p-3 bg-slate-50 rounded-lg sm:rounded-xl border border-slate-100">
-                        <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet Air Mineral / Retail</span>
+                        <span className="text-[10px] sm:text-[11px] text-slate-500 font-bold block truncate">Omzet {div3Label}</span>
                         <span className="text-xs sm:text-base font-black text-slate-800 tracking-tight block truncate">{formatCurrency(ps.other.revenue)}</span>
                       </div>
                       <div className="p-2 sm:p-3 bg-rose-50/50 rounded-lg sm:rounded-xl border border-rose-100">
-                        <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Modal / HPP Dus</span>
+                        <span className="text-[10px] sm:text-[11px] text-rose-600 font-bold block truncate">Belanja Modal / HPP</span>
                         <span className="text-xs sm:text-base font-black text-rose-700 tracking-tight block truncate">-{formatCurrency(ps.other.expense)}</span>
                       </div>
                       <div className="p-2 sm:p-3 bg-indigo-50/70 rounded-lg sm:rounded-xl border border-indigo-100">
@@ -2331,7 +2356,7 @@ export const ReportView: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h4 className="font-black text-slate-900 text-sm sm:text-base">Tabel Rincian Harian Bagi Hasil</h4>
-                  <p className="text-[10px] sm:text-xs text-slate-500">Omzet, Belanja Bahan & Alokasi Bagi Hasil Per Hari</p>
+                  <p className="text-[10px] sm:text-xs text-slate-500">Omzet, Belanja Modal & Alokasi Bagi Hasil Per Hari</p>
                 </div>
                 <span className="text-[10px] sm:text-xs bg-slate-100 text-slate-600 px-2.5 sm:px-3 py-1 rounded-lg font-bold w-fit">
                   {daily.length} Hari Transaksi
@@ -2343,17 +2368,17 @@ export const ReportView: React.FC = () => {
                   <thead className="bg-slate-100/90 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider border-b border-slate-200">
                     <tr>
                       <th className="p-3 rounded-l-xl">Tanggal</th>
-                      <th className="p-3 text-right">Omzet Ramen</th>
-                      <th className="p-3 text-right">Belanja Ramen</th>
-                      <th className="p-3 text-right">Laba Ramen</th>
-                      <th className="p-3 text-right">Omzet Drink</th>
-                      <th className="p-3 text-right">Belanja Drink</th>
-                      <th className="p-3 text-right">Laba Drink</th>
+                      <th className="p-3 text-right">Omzet {div1PjLabel}</th>
+                      <th className="p-3 text-right">Belanja {div1PjLabel}</th>
+                      <th className="p-3 text-right">Laba {div1PjLabel}</th>
+                      <th className="p-3 text-right">Omzet {div2PjLabel}</th>
+                      <th className="p-3 text-right">Belanja {div2PjLabel}</th>
+                      <th className="p-3 text-right">Laba {div2PjLabel}</th>
                       <th className="p-3 text-right text-rose-600">OPEX Bersama</th>
                       <th className="p-3 text-right text-indigo-700">Laba Bersih</th>
-                      <th className="p-3 text-right text-indigo-800">Owner (80%)</th>
-                      <th className="p-3 text-right text-emerald-700">PJ Ramen (20%)</th>
-                      <th className="p-3 text-right text-emerald-700 rounded-r-xl">PJ Drink (20%)</th>
+                      <th className="p-3 text-right text-indigo-800">Owner ({ps.food.ownerPct}%)</th>
+                      <th className="p-3 text-right text-emerald-700">{div1PjLabel} ({ps.food.profitSharingPct}%)</th>
+                      <th className="p-3 text-right text-emerald-700 rounded-r-xl">{div2PjLabel} ({ps.drink.profitSharingPct}%)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -2379,15 +2404,15 @@ export const ReportView: React.FC = () => {
                       <td className="p-3 rounded-l-xl">TOTAL</td>
                       <td className="p-3 text-right">{formatCurrency(ps.food.revenue)}</td>
                       <td className="p-3 text-right text-rose-300">-{formatCurrency(ps.food.expense)}</td>
-                      <td className="p-3 text-right text-amber-300">{formatCurrency(ps.food.grossNet)}</td>
+                      <td className="p-3 text-right">{formatCurrency(ps.food.grossNet)}</td>
                       <td className="p-3 text-right">{formatCurrency(ps.drink.revenue)}</td>
                       <td className="p-3 text-right text-rose-300">-{formatCurrency(ps.drink.expense)}</td>
-                      <td className="p-3 text-right text-amber-300">{formatCurrency(ps.drink.grossNet)}</td>
+                      <td className="p-3 text-right">{formatCurrency(ps.drink.grossNet)}</td>
                       <td className="p-3 text-right text-rose-300">-{formatCurrency(ps.sharedOpexTotal)}</td>
-                      <td className="p-3 text-right text-emerald-300">{formatCurrency(ps.grandTotalNetProfit)}</td>
-                      <td className="p-3 text-right text-indigo-200">{formatCurrency(ps.totalOwnerShare)}</td>
-                      <td className="p-3 text-right text-teal-200">{formatCurrency(ps.food.pjShare)}</td>
-                      <td className="p-3 text-right text-teal-200 rounded-r-xl">{formatCurrency(ps.drink.pjShare)}</td>
+                      <td className="p-3 text-right text-emerald-400">{formatCurrency(ps.grandTotalNetProfit)}</td>
+                      <td className="p-3 text-right text-indigo-300">{formatCurrency(ps.totalOwnerShare)}</td>
+                      <td className="p-3 text-right text-emerald-300">{formatCurrency(ps.food.pjShare)}</td>
+                      <td className="p-3 text-right text-emerald-300 rounded-r-xl">{formatCurrency(ps.drink.pjShare)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -2735,13 +2760,65 @@ export const ReportView: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '.6rem' }}>
               {[
-                ...(enableProfitSharing ? [{ type: 'profit_sharing', title: '💰 Laporan Rekapitulasi Bagi Hasil (80:20)', desc: 'Pembagian laba bersih Owner vs PJ Ramen & PJ Drink setelah beban operasional' }] : []),
+                ...(enableProfitSharing ? [{ 
+                  type: 'profit_sharing', 
+                  title: '💰 Laporan Rekapitulasi Bagi Hasil (80:20)', 
+                  desc: isBengkel 
+                    ? 'Pembagian laba bersih Owner vs PJ Jasa Servis & PJ Sparepart' 
+                    : isRetail 
+                    ? 'Pembagian laba bersih Owner vs PJ Retail & PJ Grosir' 
+                    : isLaundry 
+                    ? 'Pembagian laba bersih Owner vs PJ Kiloan & PJ Satuan' 
+                    : isRental 
+                    ? 'Pembagian laba bersih Owner vs PJ Busana & PJ Aksesoris' 
+                    : 'Pembagian laba bersih Owner vs PJ Makanan & PJ Minuman setelah beban operasional' 
+                }] : []),
                 { type: 'daily_bonus', title: '🏆 Matriks Bonus Omzet Harian & Rekap Staf', desc: 'Matriks kehadiran karyawan Full-Time vs Daily Worker & pencapaian bonus tier omzet harian' },
-                { type: 'products', title: '🍜 Laporan Penjualan Menu & Margin (Best Seller)', desc: 'Ranking menu terlaris, kuantitas terjual, total omzet, HPP, laba dan margin' },
+                { 
+                  type: 'products', 
+                  title: isBengkel 
+                    ? '🔧 Laporan Penjualan Sparepart & Jasa Servis' 
+                    : isRetail 
+                    ? '📦 Laporan Penjualan Barang & Grosir' 
+                    : isLaundry 
+                    ? '🧺 Laporan Layanan Cuci Kiloan & Satuan' 
+                    : isRental 
+                    ? '👘 Laporan Sewa Busana & Aksesoris' 
+                    : '🍜 Laporan Penjualan Menu & Margin (Best Seller)', 
+                  desc: isBengkel 
+                    ? 'Ranking sparepart & jasa terlaris, kuantitas, omzet, modal, dan laba kotor' 
+                    : isRetail 
+                    ? 'Ranking produk terlaris, kuantitas terjual, omzet, harga modal, dan laba' 
+                    : isLaundry 
+                    ? 'Ranking paket cuci terpopuler, total kg/pcs, omzet, dan margin keuntungan' 
+                    : isRental 
+                    ? 'Ranking busana & paket rias terlaris, durasi sewa, total omzet, dan laba' 
+                    : 'Ranking menu terlaris, kuantitas terjual, total omzet, HPP, laba dan margin' 
+                },
                 { type: 'pl', title: '📊 Laporan Laba Rugi (Profit & Loss)', desc: 'Format standar akuntansi: Pendapatan, HPP, OPEX, dan Laba Bersih' },
                 { type: 'cashflow', title: '💵 Laporan Arus Kas (Cash Flow)', desc: 'Rincian kas masuk penjualan dan kas keluar operasional' },
                 { type: 'shifts', title: '👥 Laporan Rekapitulasi Audit Shift Kasir', desc: 'Detail saldo awal, kas sistem, fisik laci, dan selisih kas per shift' },
-                { type: 'inventory', title: '📦 Laporan Mutasi & Valuasi Stok Bahan Baku', desc: 'Pergerakan stok awal, masuk restock, keluar masak, dan nilai aset' },
+                { 
+                  type: 'inventory', 
+                  title: isBengkel 
+                    ? '📦 Laporan Mutasi & Valuasi Stok Sparepart' 
+                    : isRetail 
+                    ? '📦 Laporan Mutasi & Valuasi Stok Barang Dagangan' 
+                    : isLaundry 
+                    ? '🧴 Laporan Pemakaian Sabun, Deterjen & Parfum' 
+                    : isRental 
+                    ? '👘 Laporan Kondisi & Ketersediaan Koleksi Busana' 
+                    : '📦 Laporan Mutasi & Valuasi Stok Bahan Baku', 
+                  desc: isBengkel 
+                    ? 'Pergerakan stok awal, masuk pengadaan, keluar servis, dan nilai aset sparepart' 
+                    : isRetail 
+                    ? 'Pergerakan stok awal, masuk kulakan, keluar kasir, dan valuasi aset toko' 
+                    : isLaundry 
+                    ? 'Pergerakan stok deterjen, pewangi, plastik, dan biaya operasional bahan' 
+                    : isRental 
+                    ? 'Kondisi barang sewa (Tersedia, Tersewa, Dicuci, Rusak) dan nilai valuasi aset' 
+                    : 'Pergerakan stok awal, masuk restock, keluar masak, dan nilai aset' 
+                },
                 { type: 'dashboard', title: '📈 Laporan Ringkasan Performa Operasional', desc: 'Executive overview, ringkasan harian, dan breakdown metode pembayaran' },
               ].map((doc) => (
                 <button

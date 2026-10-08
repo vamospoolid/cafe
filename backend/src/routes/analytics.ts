@@ -82,12 +82,81 @@ function getPastDays(days: number, tzOffsetMinutes: number | string = -420) {
   return result;
 }
 
-// Helper to classify food vs drink vs lainnya (netral / retail)
-export function getCategoryGroup(prod: any): 'makanan' | 'minuman' | 'lainnya' {
+// Helper to classify food/div1 vs drink/div2 vs lainnya (netral / retail) per vertical
+export function getCategoryGroup(prod: any, businessType: string = 'CAFE'): 'makanan' | 'minuman' | 'lainnya' {
   const target = (prod?.category?.printerTarget || '').toUpperCase();
   const cat = (prod?.category?.name || '').toLowerCase();
   const name = (prod?.name || '').toLowerCase();
 
+  if (businessType === 'BENGKEL') {
+    // Divisi 1: Jasa Servis & Mekanik
+    if (
+      cat.includes('jasa') || cat.includes('servis') || cat.includes('service') || 
+      cat.includes('ongkos') || cat.includes('tune') || cat.includes('montir') ||
+      name.includes('jasa') || name.includes('servis') || name.includes('ongkos') ||
+      name.includes('tune up') || name.includes('ganti oli') || name.includes('stel')
+    ) {
+      return 'makanan'; // Memetakan ke Divisi 1 (Jasa)
+    }
+
+    // Divisi 2: Suku Cadang & Pelumas
+    if (
+      cat.includes('part') || cat.includes('sparepart') || cat.includes('oli') || 
+      cat.includes('pelumas') || cat.includes('ban') || cat.includes('busi') ||
+      cat.includes('kampas') || cat.includes('aki') || cat.includes('rantai') ||
+      name.includes('oli') || name.includes('filter') || name.includes('busi') || 
+      name.includes('kampas') || name.includes('ban') || name.includes('bearing') ||
+      name.includes('roller') || name.includes('v-belt') || name.includes('aki')
+    ) {
+      return 'minuman'; // Memetakan ke Divisi 2 (Sparepart)
+    }
+
+    return 'lainnya'; // Divisi 3 (Aksesoris / Produk Tambahan)
+  }
+
+  if (businessType === 'RETAIL') {
+    // Divisi 2: Grosir & Partai (Berdasarkan pack, dus, sak, karton)
+    if (
+      cat.includes('grosir') || cat.includes('partai') || cat.includes('dus') ||
+      name.includes('dus') || name.includes('karton') || name.includes('sak') || 
+      name.includes('ball') || name.includes('slop') || name.includes('karung')
+    ) {
+      return 'minuman'; // Memetakan ke Divisi 2 (Grosir)
+    }
+
+    // Divisi 3: Konsinyasi / Titipan
+    if (cat.includes('titip') || cat.includes('konsinyasi') || cat.includes('netral')) {
+      return 'lainnya';
+    }
+
+    return 'makanan'; // Memetakan ke Divisi 1 (Retail Eceran)
+  }
+
+  if (businessType === 'LAUNDRY') {
+    // Divisi 1: Kiloan
+    if (cat.includes('kilo') || name.includes('kilo') || name.includes('kg')) {
+      return 'makanan';
+    }
+    // Divisi 2: Satuan & Dry Clean
+    if (cat.includes('satuan') || cat.includes('dry') || cat.includes('bed cover') || name.includes('satuan') || name.includes('jas') || name.includes('sepatu')) {
+      return 'minuman';
+    }
+    return 'lainnya';
+  }
+
+  if (businessType === 'RENTAL') {
+    // Divisi 1: Sewa Busana
+    if (cat.includes('baju') || cat.includes('busana') || cat.includes('gaun') || cat.includes('kebaya') || name.includes('sewa')) {
+      return 'makanan';
+    }
+    // Divisi 2: Aksesoris & Rias
+    if (cat.includes('aksesoris') || cat.includes('rias') || cat.includes('makeup') || name.includes('kalung') || name.includes('keris')) {
+      return 'minuman';
+    }
+    return 'lainnya';
+  }
+
+  // --- DEFAULT CAFE / RESTO LOGIC ---
   // 1. Explicit Printer Target Priority
   if (target === 'BAR') return 'minuman';
   if (target === 'KITCHEN') return 'makanan';
@@ -141,12 +210,36 @@ export function getCategoryGroup(prod: any): 'makanan' | 'minuman' | 'lainnya' {
 }
 
 // Helper to classify petty cash / expenses for profit sharing division
-export function getExpenseDivision(cf: { category?: string; description?: string }): 'food' | 'drink' | 'shared_opex' {
+export function getExpenseDivision(cf: { category?: string; description?: string }, businessType: string = 'CAFE'): 'food' | 'drink' | 'shared_opex' {
   const cat = (cf.category || '').toLowerCase();
   const desc = (cf.description || '').toLowerCase();
   const text = `${cat} ${desc}`;
 
-  // Kategori eksplisit
+  if (businessType === 'BENGKEL') {
+    // Divisi 1: Biaya operasional servis / pit
+    if (text.includes('mekanik') || text.includes('pit') || text.includes('toolkit') || text.includes('alat bengkel')) {
+      return 'food';
+    }
+    // Divisi 2: Belanja Suku Cadang & Pelumas
+    if (text.includes('oli') || text.includes('sparepart') || text.includes('part') || text.includes('baut') || text.includes('carb cleaner') || text.includes('kurir')) {
+      return 'drink';
+    }
+    return 'shared_opex';
+  }
+
+  if (businessType === 'RETAIL') {
+    if (text.includes('grosir') || text.includes('dus') || text.includes('armada')) return 'drink';
+    if (text.includes('kulakan') || text.includes('eceran')) return 'food';
+    return 'shared_opex';
+  }
+
+  if (businessType === 'LAUNDRY') {
+    if (text.includes('deterjen') || text.includes('parfum') || text.includes('pewangi')) return 'food';
+    if (text.includes('dry clean') || text.includes('hanger') || text.includes('plastik')) return 'drink';
+    return 'shared_opex';
+  }
+
+  // Kategori F&B eksplisit
   if (cat.includes('makanan') || cat.includes('dapur') || cat.includes('kitchen') || cat.includes('food')) return 'food';
   if (cat.includes('minuman') || cat.includes('bar') || cat.includes('drink') || cat.includes('beverage')) return 'drink';
 
@@ -1538,10 +1631,13 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
     const eStr = (endDate as string) || sStr;
     const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
 
-    // 1. Fetch settings
-    const settings = await prisma.settings.findFirst({
-      where: tenantWhere(tenantId)
-    });
+    // 1. Fetch settings & tenant profile
+    const [settings, tenant] = await Promise.all([
+      prisma.settings.findFirst({ where: tenantWhere(tenantId) }),
+      prisma.tenant.findUnique({ where: { id: tenantId }, select: { businessType: true, name: true } })
+    ]);
+    const bType = tenant?.businessType || 'CAFE';
+
     const ownerPct = settings?.profitSharingOwnerPercent ?? 80;
     const ramenPct = settings?.profitSharingRamenPercent ?? 20;
     const drinkPct = settings?.profitSharingDrinkPercent ?? 20;
@@ -1594,7 +1690,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       order.items.forEach(item => {
         const buyPrice = item.buyPrice || item.product?.buyPrice || 0;
         const itemCost = buyPrice * item.qty;
-        const grp = getCategoryGroup(item.product);
+        const grp = getCategoryGroup(item.product, bType);
 
         if (grp === 'makanan') {
           foodRevenue += item.subtotal;
@@ -1623,7 +1719,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
 
     cashFlows.forEach(cf => {
       if (cf.type === 'Pengeluaran') {
-        const division = getExpenseDivision(cf);
+        const division = getExpenseDivision(cf, bType);
         if (division === 'food') {
           foodDirectExpense += cf.amount;
         } else if (division === 'drink') {
@@ -1799,9 +1895,52 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
       iterDate.setUTCDate(iterDate.getUTCDate() + 1);
     }
 
-    const storeLabel = settings?.storeName || 'Resto';
+    let div1Title = 'Divisi Makanan (Kitchen)';
+    let div1Pj = 'PJ Makanan';
+    let div2Title = 'Divisi Minuman (Bar)';
+    let div2Pj = 'PJ Minuman';
+    let div3Title = 'Produk Netral / Retail';
+
+    if (bType === 'BENGKEL') {
+      div1Title = 'Divisi Jasa Servis & Mekanik';
+      div1Pj = 'PJ Servis';
+      div2Title = 'Divisi Suku Cadang & Pelumas';
+      div2Pj = 'PJ Sparepart';
+      div3Title = 'Aksesoris & Produk Tambahan';
+    } else if (bType === 'RETAIL') {
+      div1Title = 'Divisi Retail & Eceran';
+      div1Pj = 'PJ Retail';
+      div2Title = 'Divisi Grosir & Partai';
+      div2Pj = 'PJ Grosir';
+      div3Title = 'Barang Konsinyasi & Lainnya';
+    } else if (bType === 'LAUNDRY') {
+      div1Title = 'Divisi Laundry Kiloan';
+      div1Pj = 'PJ Kiloan';
+      div2Title = 'Divisi Laundry Satuan & Dry Clean';
+      div2Pj = 'PJ Satuan';
+      div3Title = 'Konsumabel & Pewangi';
+    } else if (bType === 'RENTAL') {
+      div1Title = 'Divisi Sewa Busana Adat';
+      div1Pj = 'PJ Busana';
+      div2Title = 'Divisi Aksesoris & Rias';
+      div2Pj = 'PJ Aksesoris';
+      div3Title = 'Denda & Deposit';
+    }
+
+    const defaultStoreLabel = 
+      bType === 'BENGKEL' ? 'Bengkel' :
+      bType === 'RETAIL' ? 'Toko' :
+      bType === 'LAUNDRY' ? 'Laundry' :
+      bType === 'RENTAL' ? 'Sanggar' : 'Resto';
+    const storeLabel = settings?.storeName || tenant?.name || defaultStoreLabel;
 
     res.json({
+      businessType: bType,
+      div1Title,
+      div1Pj,
+      div2Title,
+      div2Pj,
+      div3Title,
       period: { startDate: sStr, endDate: eStr },
       config: {
         ownerPct,
@@ -1812,7 +1951,9 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         opexMode
       },
       foodDivision: {
-        name: `${storeLabel} (Food & Kitchen)`,
+        name: `${storeLabel} (${div1Title})`,
+        title: div1Title,
+        pjTitle: div1Pj,
         revenue: foodRevenue,
         hpp: foodHpp,
         directExpense: foodDirectExpense,
@@ -1828,7 +1969,9 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         percentage: totalGrossRevenue > 0 ? Math.round((foodRevenue / totalGrossRevenue) * 100) : 0
       },
       drinkDivision: {
-        name: `${storeLabel} (Beverage & Bar)`,
+        name: `${storeLabel} (${div2Title})`,
+        title: div2Title,
+        pjTitle: div2Pj,
         revenue: drinkRevenue,
         hpp: drinkHpp,
         directExpense: drinkDirectExpense,
@@ -1844,7 +1987,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         percentage: totalGrossRevenue > 0 ? Math.round((drinkRevenue / totalGrossRevenue) * 100) : 0
       },
       otherDivision: {
-        name: 'PRODUK NETRAL / RETAIL (Air Mineral & Toko)',
+        name: div3Title.toUpperCase(),
+        title: div3Title,
         revenue: otherRevenue,
         hpp: otherHpp,
         directExpense: otherDirectExpense,
@@ -1866,6 +2010,12 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         items: expenseList
       },
       summary: {
+        businessType: bType,
+        div1Title,
+        div1Pj,
+        div2Title,
+        div2Pj,
+        div3Title,
         totalRevenue: totalGrossRevenue,
         grandTotalRevenue: totalGrossRevenue,
         totalDirectExpense: foodTotalExpense + drinkTotalExpense + otherTotalExpense,
@@ -1879,9 +2029,13 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
         totalOwnerShare: totalOwnerProfit,
         pjRamenShare: totalPjRamenProfit,
         pjDrinkShare: totalPjDrinkProfit,
+        pjDiv1Share: totalPjRamenProfit,
+        pjDiv2Share: totalPjDrinkProfit,
         totalPjShare: totalPjRamenProfit + totalPjDrinkProfit,
         opexMode,
         food: {
+          title: div1Title,
+          pjTitle: div1Pj,
           revenue: foodRevenue,
           expense: foodTotalExpense,
           grossNet: foodGrossProfit,
@@ -1893,6 +2047,8 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
           ownerPct: ownerFoodPct
         },
         drink: {
+          title: div2Title,
+          pjTitle: div2Pj,
           revenue: drinkRevenue,
           expense: drinkTotalExpense,
           grossNet: drinkGrossProfit,
@@ -1904,6 +2060,7 @@ router.get('/profit-sharing', authenticateToken, async (req: Request, res: Respo
           ownerPct: ownerDrinkPct
         },
         other: {
+          title: div3Title,
           revenue: otherRevenue,
           expense: otherTotalExpense,
           grossNet: otherGrossProfit,
