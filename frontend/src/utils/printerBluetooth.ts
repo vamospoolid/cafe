@@ -671,27 +671,98 @@ export const printRawBytes = async (bytes: Uint8Array, role: PrinterRole = 'cash
 };
 
 /**
+ * Deteksi apakah nama perangkat printer adalah hardware thermal 58mm (max 32 karakter per baris Font A)
+ */
+export const isKnown58mmPrinter = (name?: string): boolean => {
+  if (!name) return false;
+  const n = name.toLowerCase();
+  if (/80|3inch|300|xp-n|xp-c|xp-q|tm-t/i.test(n)) {
+    return false;
+  }
+  return /rpp|58|pt[-_]?210|pos[-_]?58|mpt|mtp|zj[-_]?58|mini|goojprt|ble_pos|bluetooth/i.test(n);
+};
+
+/**
+ * Dapatkan lebar baris karakter efektif (32 karakter untuk 58mm, 48 karakter untuk 80mm)
+ */
+export const getEffectiveLineWidth = (paperWidthSetting?: '58mm' | '80mm', role: PrinterRole = 'cashier'): number => {
+  const saved = getSavedBluetoothPrinter(role) || getSavedBluetoothPrinter('cashier');
+  const devName = saved?.name || '';
+  
+  // Jika perangkat Bluetooth adalah hardware 58mm (seperti RPP02N_BLE milik user), paksa 32 kolom agar garis tidak patah/meluber
+  if (isKnown58mmPrinter(devName)) {
+    return 32;
+  }
+  
+  const widthPref = paperWidthSetting || (localStorage.getItem('printer_paper_width') as '58mm' | '80mm') || '58mm';
+  return widthPref === '80mm' ? 48 : 32;
+};
+
+/**
+ * Word wrap helper: memotong teks menjadi array baris sesuai batas karakter tanpa memutus suku kata
+ */
+export const wrapText = (text: string, maxWidth: number): string[] => {
+  if (!text) return [];
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    if (!currentLine) {
+      if (word.length > maxWidth) {
+        for (let i = 0; i < word.length; i += maxWidth) {
+          lines.push(word.substring(i, i + maxWidth));
+        }
+      } else {
+        currentLine = word;
+      }
+    } else {
+      if ((currentLine + ' ' + word).length <= maxWidth) {
+        currentLine += ' ' + word;
+      } else {
+        lines.push(currentLine);
+        if (word.length > maxWidth) {
+          for (let i = 0; i < word.length; i += maxWidth) {
+            lines.push(word.substring(i, i + maxWidth));
+          }
+          currentLine = '';
+        } else {
+          currentLine = word;
+        }
+      }
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines;
+};
+
+/**
  * Test Print Function (Kasir atau Dapur)
  */
 export const testPrintBluetooth = async (role: PrinterRole = 'cashier'): Promise<void> => {
   const isKitchen = role === 'kitchen';
+  const lineWidth = getEffectiveLineWidth(undefined, role);
+  const divider = '='.repeat(lineWidth);
+  const subDivider = '-'.repeat(lineWidth);
+
   const encoder = new EscPosEncoder();
   const bytes = encoder
     .initialize()
     .align('center')
-    .line('================================')
+    .line(divider)
     .bold(true)
-    .line(isKitchen ? 'TIKET UJI COBA PRINTER DAPUR' : 'STRUK UJI COBA PRINTER KASIR')
+    .line(isKitchen ? '*** TIKET UJI DAPUR ***' : '*** STRUK UJI KASIR ***')
     .bold(false)
-    .line(isKitchen ? 'TEST PRINTER DAPUR OK' : 'TEST PRINTER KASIR OK')
-    .line('================================')
+    .line(isKitchen ? '[ TEST PRINTER DAPUR OK ]' : '[ TEST PRINTER KASIR OK ]')
+    .line(divider)
     .align('left')
-    .line(`Waktu  : ${new Date().toLocaleString('id-ID')}`)
-    .line(`Target : ${isKitchen ? 'Printer Dapur (Tiket Makanan)' : 'Printer Kasir (Struk Konsumen)'}`)
-    .line('Status : Berhasil Terhubung!')
-    .line('--------------------------------')
+    .line(`Kertas : ${lineWidth} Kolom (${lineWidth === 32 ? '58mm' : '80mm'})`)
+    .line(`Waktu  : ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`)
+    .line(`Target : ${isKitchen ? 'Dapur (Tiket Makanan)' : 'Kasir (Struk Konsumen)'}`)
+    .line('Status : Terhubung & Siap')
+    .line(subDivider)
     .align('center')
-    .line(isKitchen ? 'Pesanan Siap Diproses Koki' : 'Printer Siap Digunakan Kasir')
+    .line(isKitchen ? 'Pesanan Siap Diproses Koki' : 'Printer Siap Digunakan')
     .line('\n\n\n')
     .cut()
     .encode();
@@ -796,8 +867,8 @@ export const printBluetoothReceipt = async (
   options?: { autoKickDrawer?: boolean }
 ): Promise<void> => {
   try {
-    const is80mm = settings.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
-    const lineWidth = is80mm ? 48 : 32;
+    const lineWidth = getEffectiveLineWidth(settings.paperWidth, 'cashier');
+    const is80mm = lineWidth >= 48;
     const divider = '='.repeat(lineWidth);
     const subDivider = '-'.repeat(lineWidth);
 
@@ -809,33 +880,38 @@ export const printBluetoothReceipt = async (
       .initialize()
       .align('center')
       .bold(true)
-      .line(settings.name || 'KAFE & RESTORAN')
+      .line(settings.name || 'MUKI RAMEN')
       .bold(false);
 
     if (settings.address) {
-      encoded = encoded.line(settings.address);
+      const addrLines = wrapText(settings.address, lineWidth);
+      addrLines.forEach(l => { encoded = encoded.line(l); });
     }
     if (settings.phone) {
       encoded = encoded.line(`Telp: ${settings.phone}`);
     }
 
     // Informasi Order & NOMOR MEJA
+    const orderTime = new Date(order.paidAt || order.createdAt || Date.now());
+    const timeStr = orderTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = orderTime.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
     encoded = encoded
       .line(divider)
       .align('left')
-      .line(`No Struk : ${order.orderNumber || order.id}`)
-      .line(`Tanggal  : ${new Date(order.paidAt || order.createdAt || Date.now()).toLocaleString('id-ID')}`)
-      .line(`Kasir    : ${order.user?.name || order.cashierName || 'Kasir'}`)
+      .line(`No Struk : ${(order.orderNumber || `#${order.id}` || '').substring(0, 20)}`)
+      .line(`Waktu    : ${timeStr}  ${dateStr}`)
+      .line(`Kasir    : ${(order.user?.name || order.cashierName || 'Kasir').substring(0, 20)}`)
       .bold(true)
       .line(`${isDineIn ? 'Meja     ' : 'Tipe     '}: ${tableLabel}`)
       .bold(false);
 
     if (order.customerName) {
-      encoded = encoded.line(`Pelanggan: ${order.customerName}`);
+      encoded = encoded.line(`Pelanggan: ${order.customerName.substring(0, 20)}`);
     }
     encoded = encoded.line(subDivider);
 
-    // Items list (formatted for 32 chars 58mm or 48 chars 80mm)
+    // Items list (penanganan 58mm 2-baris vs 80mm 1-baris tanpa overflow)
     const items = order.items || [];
     items.forEach((item: any) => {
       const productName = item.product?.name || item.productName || item.name || 'Item';
@@ -843,47 +919,63 @@ export const printBluetoothReceipt = async (
       const price = item.price || item.unitPrice || 0;
       const total = item.subtotal || (qty * price);
 
-      const qtyPriceStr = `${qty}x${Math.round(price).toLocaleString('id-ID')}`;
+      const qtyPriceStr = `${qty} x ${Math.round(price).toLocaleString('id-ID')}`;
       const totalStr = Math.round(total).toLocaleString('id-ID');
       
-      const maxNameLen = is80mm ? 24 : 14;
-      const shortName = productName.length > maxNameLen ? productName.substring(0, maxNameLen) : productName.padEnd(maxNameLen, ' ');
-      const paddedQty = qtyPriceStr.padStart(is80mm ? 12 : 9, ' ');
-      const paddedTotal = totalStr.padStart(is80mm ? 12 : 9, ' ');
+      if (is80mm) {
+        // 80mm (48 kolom)
+        const shortName = productName.length > 24 ? productName.substring(0, 24) : productName.padEnd(24, ' ');
+        const paddedQty = qtyPriceStr.padStart(12, ' ');
+        const paddedTotal = totalStr.padStart(10, ' ');
+        encoded = encoded.line(`${shortName} ${paddedQty} ${paddedTotal}`);
+      } else {
+        // 58mm (32 kolom): Layout 2-baris profesional agar nama produk tidak terpotong & harga tidak meluap
+        encoded = encoded.line(productName);
+        const leftPart = `  ${qtyPriceStr}`;
+        const spaceCount = Math.max(1, 32 - leftPart.length - totalStr.length);
+        encoded = encoded.line(`${leftPart}${' '.repeat(spaceCount)}${totalStr}`);
+      }
 
-      encoded = encoded.line(`${shortName} ${paddedQty} ${paddedTotal}`);
-      if (item.notes) {
-        encoded = encoded.line(` * ${item.notes}`);
+      if (item.notes && item.notes.trim()) {
+        const noteWrapped = wrapText(item.notes.trim(), lineWidth - 4);
+        noteWrapped.forEach(n => {
+          encoded = encoded.line(`  * ${n}`);
+        });
       }
     });
 
     // Totals Section
     const subtotal = order.subtotal || order.total || 0;
     const tax = order.tax || 0;
-    const discount = order.discountAmount || 0;
+    const discount = order.discountAmount || order.discount || 0;
     const grandTotal = order.total || order.grandTotal || subtotal;
     const cashReceived = order.cashReceived || grandTotal;
     const changeDue = order.changeDue || Math.max(0, cashReceived - grandTotal);
     const paymentMethod = (order.paymentMethod || 'TUNAI').toUpperCase();
 
+    const makeTotalLine = (label: string, value: string): string => {
+      const valStr = `Rp ${value}`;
+      const spaceCount = Math.max(1, lineWidth - label.length - valStr.length);
+      return `${label}${' '.repeat(spaceCount)}${valStr}`;
+    };
+
     encoded = encoded
       .line(subDivider)
-      .align('right')
-      .line(`Subtotal: Rp ${Math.round(subtotal).toLocaleString('id-ID')}`);
+      .line(makeTotalLine('Subtotal', Math.round(subtotal).toLocaleString('id-ID')));
 
     if (discount > 0) {
-      encoded = encoded.line(`Diskon: -Rp ${Math.round(discount).toLocaleString('id-ID')}`);
+      encoded = encoded.line(makeTotalLine('Diskon', `-${Math.round(discount).toLocaleString('id-ID')}`));
     }
     if (tax > 0) {
-      encoded = encoded.line(`Pajak: Rp ${Math.round(tax).toLocaleString('id-ID')}`);
+      encoded = encoded.line(makeTotalLine('PB1 (Pajak)', Math.round(tax).toLocaleString('id-ID')));
     }
 
     encoded = encoded
       .bold(true)
-      .line(`TOTAL: Rp ${Math.round(grandTotal).toLocaleString('id-ID')}`)
+      .line(makeTotalLine('TOTAL', Math.round(grandTotal).toLocaleString('id-ID')))
       .bold(false)
-      .line(`Bayar (${paymentMethod}): Rp ${Math.round(cashReceived).toLocaleString('id-ID')}`)
-      .line(`Kembali: Rp ${Math.round(changeDue).toLocaleString('id-ID')}`)
+      .line(makeTotalLine(`Bayar (${paymentMethod})`, Math.round(cashReceived).toLocaleString('id-ID')))
+      .line(makeTotalLine('Kembali', Math.round(changeDue).toLocaleString('id-ID')))
       .line(divider)
       .align('center')
       .line(settings.footer || 'Terima Kasih Atas Kunjungan Anda!')
@@ -906,6 +998,7 @@ export const printBluetoothReceipt = async (
 
 /**
  * Print Kitchen / Bar Ticket to Bluetooth Thermal Printer (Tiket Dapur & Bar)
+ * Format rapi, nomor meja besar, tanpa wrap berantakan pada printer 58mm maupun 80mm
  */
 export const printBluetoothKitchenTicket = async (
   order: any,
@@ -913,14 +1006,15 @@ export const printBluetoothKitchenTicket = async (
   settings?: { storeName?: string; paperWidth?: '58mm' | '80mm' }
 ): Promise<void> => {
   try {
-    const is80mm = settings?.paperWidth === '80mm' || localStorage.getItem('printer_paper_width') === '80mm';
-    const lineWidth = is80mm ? 48 : 32;
+    const isKitchen = target === 'kitchen';
+    const role: PrinterRole = isKitchen ? 'kitchen' : 'cashier';
+    const lineWidth = getEffectiveLineWidth(settings?.paperWidth, role);
     const divider = '='.repeat(lineWidth);
     const subDivider = '-'.repeat(lineWidth);
 
     const encoder = new EscPosEncoder();
-    const isKitchen = target === 'kitchen';
-    const title = isKitchen ? '*** TIKET DAPUR (MAKANAN) ***' : '*** TIKET BAR (MINUMAN) ***';
+    const title = isKitchen ? 'TIKET DAPUR' : 'TIKET BAR';
+    const subTitle = isKitchen ? '[ PESANAN MAKANAN ]' : '[ PESANAN MINUMAN ]';
 
     // Filter items
     const allItems = order.items || [];
@@ -934,26 +1028,52 @@ export const printBluetoothKitchenTicket = async (
 
     const { isDineIn, label: tableLabel } = formatOrderTableLabel(order);
 
+    const orderTime = new Date(order.createdAt || Date.now());
+    const timeStr = orderTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = orderTime.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const cashierName = (order.user?.name || order.cashierName || 'Kasir').substring(0, 14);
+    const orderNum = (order.orderNumber || `#${order.id || ''}`).substring(0, 18);
+
     let encoded = encoder
       .initialize()
       .align('center')
       .line(divider)
       .bold(true)
-      .line(title)
+      .line(`*** ${title} ***`)
       .bold(false)
-      .line(divider)
-      .align('left')
-      // TAMPILKAN NOMOR MEJA TEBAL & BESAR DI TIKET DAPUR
-      .bold(true)
-      .line(`${isDineIn ? 'MEJA     ' : 'TIPE     '}: ${tableLabel}`)
-      .bold(false)
-      .line(`No Order : ${order.orderNumber || `#${order.id}`}`)
-      .line(`Waktu    : ${new Date(order.createdAt || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} (${new Date(order.createdAt || Date.now()).toLocaleDateString('id-ID')})`)
-      .line(`Pelayan  : ${order.user?.name || order.cashierName || 'Kasir'}`);
+      .line(subTitle)
+      .line(divider);
 
+    // NOMOR MEJA SANGAT BESAR DI TENGAH TIKET (Double Height & Width)
+    encoded = encoded
+      .align('center')
+      .bold(true)
+      .width(2)
+      .height(2)
+      .line(tableLabel || (isDineIn ? 'DINE IN' : 'TAKE AWAY'))
+      .width(1)
+      .height(1)
+      .bold(false)
+      .line(isDineIn ? '--- DINE IN ---' : '--- TAKE AWAY ---')
+      .line(subDivider)
+      .align('left');
+
+    // Meta Order yang dibatasi tepat pada lebar baris
+    // Baris 1: No Order & Jam
+    const rightTime = `${timeStr} ${dateStr}`;
+    const leftNo = `No: ${orderNum}`;
+    const spaceMeta = Math.max(1, lineWidth - leftNo.length - rightTime.length);
+    encoded = encoded.line(`${leftNo}${' '.repeat(spaceMeta)}${rightTime}`);
+
+    // Baris 2: Kasir & Tamu
+    let line2 = `Kasir: ${cashierName}`;
     if (order.customerName) {
-      encoded = encoded.line(`Tamu     : ${order.customerName}`);
+      const guest = ` | Tamu: ${order.customerName.substring(0, 10)}`;
+      if ((line2 + guest).length <= lineWidth) {
+        line2 += guest;
+      }
     }
+    encoded = encoded.line(line2);
 
     encoded = encoded
       .line(subDivider)
@@ -961,24 +1081,57 @@ export const printBluetoothKitchenTicket = async (
       .line(isKitchen ? 'DAFTAR PESANAN MAKANAN:' : 'DAFTAR PESANAN MINUMAN:')
       .bold(false);
 
-    filteredItems.forEach((item: any) => {
+    let totalQty = 0;
+    filteredItems.forEach((item: any, idx: number) => {
       const productName = item.product?.name || item.productName || item.name || 'Item';
       const qty = item.quantity || item.qty || 1;
-      
-      encoded = encoded
-        .bold(true)
-        .line(`[${qty}x] ${productName}`)
-        .bold(false);
+      totalQty += Number(qty) || 1;
 
-      if (item.notes) {
-        encoded = encoded.line(`   * Catatan: ${item.notes}`);
+      // Header Baris: [2x] NAMA PRODUK (Besar & Tebal)
+      const prefix = `[${qty}x] `;
+      const wrappedName = wrapText(productName.toUpperCase(), lineWidth - prefix.length);
+
+      encoded = encoded.bold(true);
+      if (wrappedName.length === 0) {
+        encoded = encoded.line(`${prefix}${productName.toUpperCase()}`);
+      } else {
+        encoded = encoded.line(`${prefix}${wrappedName[0]}`);
+        for (let i = 1; i < wrappedName.length; i++) {
+          encoded = encoded.line(`     ${wrappedName[i]}`);
+        }
+      }
+      encoded = encoded.bold(false);
+
+      // Catatan Koki (Notes)
+      if (item.notes && item.notes.trim()) {
+        const notePrefix = `  >> Note: `;
+        const wrappedNotes = wrapText(item.notes.trim(), lineWidth - notePrefix.length);
+        encoded = encoded.bold(true);
+        if (wrappedNotes.length === 0) {
+          encoded = encoded.line(`${notePrefix}${item.notes}`);
+        } else {
+          encoded = encoded.line(`${notePrefix}${wrappedNotes[0]}`);
+          for (let i = 1; i < wrappedNotes.length; i++) {
+            encoded = encoded.line(`           ${wrappedNotes[i]}`);
+          }
+        }
+        encoded = encoded.bold(false);
+      }
+
+      // Beri jarak antar menu agar chef mudah membaca
+      if (idx < filteredItems.length - 1) {
+        encoded = encoded.line('');
       }
     });
 
     encoded = encoded
+      .line(subDivider)
+      .line(`Total: ${filteredItems.length} menu (${totalQty} porsi)`)
       .line(divider)
       .align('center')
-      .line(isKitchen ? 'Mohon segera diproses & disajikan!' : 'Sajikan dingin & segar!')
+      .bold(true)
+      .line(isKitchen ? 'MOHON SEGERA DIPROSES!' : 'SAJIKAN DINGIN & SEGAR!')
+      .bold(false)
       .line('\n\n\n')
       .cut();
 

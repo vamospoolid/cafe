@@ -15,9 +15,9 @@ const CMD = {
   DOUBLE_OFF:   Buffer.from([GS,  0x21, 0x00]),
   CUT:          Buffer.from([GS,  0x56, 0x41, 0x05]),
   LF:           Buffer.from([0x0a]),
-  LINE_CHAR:    '─'.repeat(47) + '\n',
-  LINE_DASH:    '-'.repeat(47) + '\n',
-  LINE_DOUBLE:  '='.repeat(47) + '\n',
+  LINE_CHAR:    '-'.repeat(42) + '\n',
+  LINE_DASH:    '-'.repeat(42) + '\n',
+  LINE_DOUBLE:  '='.repeat(42) + '\n',
 };
 
 const str = (text: string) => Buffer.from(text + '\n', 'utf-8');

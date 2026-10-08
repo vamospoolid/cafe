@@ -1494,29 +1494,30 @@ input:checked + .toggle-slider:before {
   html, body {
     margin: 0 !important;
     padding: 0 !important;
-    width: 80mm !important;
-    overflow: hidden !important;
+    width: 100% !important;
+    max-width: 80mm !important;
+    overflow: visible !important;
   }
 
   body * {
     visibility: hidden;
   }
 
-  /* ── Ukuran kertas 80mm tanpa margin ── */
+  /* ── Ukuran kertas thermal tanpa margin baku ── */
   @page {
     margin: 0mm;
     padding: 0mm;
-    size: 80mm auto;
+    size: auto;
   }
 
-  /* ── Container struk: isi penuh 80mm ── */
+  /* ── Container struk: responsif untuk 58mm maupun 80mm ── */
   .receipt-printer-container {
     display: block !important;
     visibility: visible;
     position: absolute;
     left: 0;
     top: 0;
-    width: 80mm !important;
+    width: 100% !important;
     max-width: 80mm !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -1546,18 +1547,17 @@ input:checked + .toggle-slider:before {
     box-sizing: border-box;
   }
 
-  /* ── Table info isi penuh ── */
+  /* ── Table info isi penuh tanpa terpotong ellipsis ── */
   .receipt-printer-container table {
     width: 100% !important;
-    table-layout: fixed !important;
+    table-layout: auto !important;
   }
 
   .receipt-printer-container table td {
     padding: 0 !important;
     margin: 0 !important;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    word-break: break-word !important;
+    white-space: normal !important;
   }
 
   /* ── Flex items isi penuh ── */

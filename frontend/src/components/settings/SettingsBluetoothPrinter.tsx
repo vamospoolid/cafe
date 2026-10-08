@@ -31,7 +31,8 @@ import {
   listPairedBluetoothDevices,
   discoverUnpairedBluetoothDevices,
   connectBluetoothPrinter,
-  disconnectBluetoothPrinter
+  disconnectBluetoothPrinter,
+  isKnown58mmPrinter
 } from '../../utils/printerBluetooth';
 import { usePrinter } from '../../context/PrinterContext';
 
@@ -142,7 +143,15 @@ export const SettingsBluetoothPrinter: React.FC = () => {
         setCashierPrinter(paired);
       }
       localStorage.setItem('printer_brand', selectedBrand);
-      localStorage.setItem('printer_paper_width', paperWidth);
+
+      // Otomatis adaptasi jika perangkat thermal 58mm (Rongta / PT-210 / Goojprt / Mini Thermal)
+      if (isKnown58mmPrinter(paired.name)) {
+        setPaperWidth('58mm');
+        localStorage.setItem('printer_paper_width', '58mm');
+      } else {
+        localStorage.setItem('printer_paper_width', paperWidth);
+      }
+
       localStorage.setItem('printer_auto_connect', autoConnect ? 'true' : 'false');
       toast(`✅ Printer ${activeRole === 'kitchen' ? 'Dapur' : 'Kasir'} "${paired.name}" berhasil disambungkan!`, 'success');
       if (activeRole === 'cashier') {
@@ -495,6 +504,12 @@ export const SettingsBluetoothPrinter: React.FC = () => {
                 </button>
               ))}
             </div>
+            {isKnown58mmPrinter(currentSaved?.name) && (
+              <div className="text-[11px] text-indigo-700 bg-indigo-50/80 p-2 rounded-xl border border-indigo-200/80 mt-1 flex items-center gap-1.5 font-medium">
+                <Info size={14} className="shrink-0 text-indigo-600" />
+                <span>Printer <strong>{currentSaved.name}</strong> terdeteksi sebagai tipe 58mm. Gunakan <strong>58mm</strong> agar garis pemisah & teks rapi tidak terpotong.</span>
+              </div>
+            )}
           </div>
 
           {/* Auto Connect */}

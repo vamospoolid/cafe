@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { getSavedBluetoothPrinter, printBluetoothReceipt } from '../utils/printerBluetooth';
+import { getSavedBluetoothPrinter, printBluetoothReceipt, printBluetoothKitchenTicket } from '../utils/printerBluetooth';
 
 export type PrintModeType = 'receipt' | 'kitchen' | 'bar' | 'all';
 
@@ -63,14 +63,34 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
     }
 
     // Check if Bluetooth Printer is configured
-    const savedBt = getSavedBluetoothPrinter();
+    const savedBt = getSavedBluetoothPrinter('cashier') || getSavedBluetoothPrinter('kitchen');
     if (savedBt || localStorage.getItem('bluetooth_printer_mac')) {
-      console.log('ReceiptPrinter: executing silent print via Bluetooth Thermal Printer');
+      console.log(`ReceiptPrinter: executing silent print via Bluetooth Thermal Printer with mode: ${printMode}`);
+      const paperWidth = (localStorage.getItem('printer_paper_width') as any) || '58mm';
+      const storeName = storeSettings?.storeName || storeSettings?.name || 'MUKI RAMEN';
+
+      if (printMode === 'kitchen' || printMode === 'bar') {
+        printBluetoothKitchenTicket(order, printMode, {
+          storeName,
+          paperWidth
+        })
+          .then(() => {
+            console.log(`Bluetooth ${printMode} ticket print success`);
+            onClose();
+          })
+          .catch((err) => {
+            console.warn(`Bluetooth ${printMode} print failed, falling back to window.print():`, err);
+            window.print();
+          });
+        return;
+      }
+
       printBluetoothReceipt(order, {
-        name: storeSettings?.storeName || storeSettings?.name || 'MUKI RAMEN',
+        name: storeName,
         address: storeSettings?.address || '',
         phone: storeSettings?.phone || '',
-        footer: storeSettings?.receiptFooter || 'Terima kasih atas kunjungannya!'
+        footer: storeSettings?.receiptFooter || 'Terima kasih atas kunjungannya!',
+        paperWidth
       }, { autoKickDrawer: true })
         .then(() => {
           console.log('Bluetooth print success');
@@ -194,34 +214,46 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
 
   // ── Sub-component: Kitchen Ticket ──
   const renderKitchenTicket = () => (
-    <div style={{ marginBottom: '6mm' }}>
+    <div style={{ marginBottom: '6mm', padding: '0 1mm' }}>
       <div style={{ textAlign: 'center', padding: '1mm 0' }}>
         <div style={{ fontSize: '15pt', fontWeight: 900, letterSpacing: '1px' }}>
           *** TIKET DAPUR ***
         </div>
-        <div style={{ fontSize: '10pt', fontWeight: 900 }}>[ MAKANAN / KITCHEN ]</div>
+        <div style={{ fontSize: '10pt', fontWeight: 900 }}>[ PESANAN MAKANAN ]</div>
       </div>
 
       {doubleDivider}
 
-      <table style={{ ...tbl, fontSize: '11pt', margin: '1mm 0' }}>
+      {/* PROMINENT TABLE BADGE */}
+      <div style={{ textAlign: 'center', margin: '2mm 0', padding: '2mm 1mm', border: '2px solid #000', borderRadius: '4px' }}>
+        <div style={{ fontSize: '16pt', fontWeight: 900, letterSpacing: '1px' }}>
+          {getTableDisplay()}
+        </div>
+        <div style={{ fontSize: '9pt', fontWeight: 800 }}>
+          {order.orderType === 'Take Away' || order.orderType === 'TAKE AWAY' ? '--- TAKE AWAY ---' : '--- DINE IN ---'}
+        </div>
+      </div>
+
+      <table style={{ ...tbl, fontSize: '9.5pt', margin: '1mm 0' }}>
         <tbody>
           <tr>
-            <td style={{ ...tdL, width: '16mm', fontSize: '13pt', fontWeight: 900 }}>MEJA</td>
-            <td style={{ ...tdL, fontSize: '14pt', fontWeight: 900 }}>: {getTableDisplay()}</td>
+            <td style={{ ...tdL, width: '22mm', fontWeight: 700 }}>No. Order</td>
+            <td style={{ ...tdL, fontWeight: 700 }}>: {order.orderNumber || `#${order.id}`}</td>
           </tr>
           <tr>
-            <td style={{ ...tdL, fontSize: '9pt' }}>No. Ord</td>
-            <td style={{ ...tdL, fontSize: '9pt' }}>: {order.orderNumber || `#${order.id}`}</td>
-          </tr>
-          <tr>
-            <td style={{ ...tdL, fontSize: '9pt' }}>Waktu</td>
-            <td style={{ ...tdL, fontSize: '9pt' }}>: {fmtTime(order.createdAt)} ({fmtDate(order.createdAt)})</td>
+            <td style={{ ...tdL, fontWeight: 700 }}>Waktu</td>
+            <td style={{ ...tdL, fontWeight: 700 }}>: {fmtTime(order.createdAt)} ({fmtDate(order.createdAt)})</td>
           </tr>
           {order.user?.name && (
             <tr>
-              <td style={{ ...tdL, fontSize: '9pt' }}>Pelayan</td>
-              <td style={{ ...tdL, fontSize: '9pt' }}>: {order.user.name}</td>
+              <td style={{ ...tdL, fontWeight: 700 }}>Kasir</td>
+              <td style={{ ...tdL, fontWeight: 700 }}>: {order.user.name}</td>
+            </tr>
+          )}
+          {order.customerName && (
+            <tr>
+              <td style={{ ...tdL, fontWeight: 700 }}>Tamu</td>
+              <td style={{ ...tdL, fontWeight: 700 }}>: {order.customerName}</td>
             </tr>
           )}
         </tbody>
@@ -229,103 +261,127 @@ const ReceiptPrinter: React.FC<ReceiptPrinterProps> = ({
 
       {divider}
 
-      <div style={{ fontSize: '10pt', fontWeight: 900, margin: '1mm 0' }}>
+      <div style={{ fontSize: '10pt', fontWeight: 900, margin: '1.5mm 0' }}>
         DAFTAR PESANAN MAKANAN:
       </div>
 
-      <table style={{ ...tbl, margin: '1mm 0' }}>
-        <tbody>
-          {kitchenItems.map((item: any, idx: number) => (
-            <React.Fragment key={idx}>
-              <tr>
-                <td style={{ ...tdL, fontSize: '13pt', fontWeight: 900, paddingTop: idx > 0 ? '2mm' : '0' }}>
-                  [{item.qty}x] {item.product?.name || 'Item'}
-                </td>
-              </tr>
-              {item.notes && (
-                <tr>
-                  <td style={{ ...tdL, paddingLeft: '4mm', fontSize: '10pt', fontWeight: 900, color: '#000' }}>
-                    &gt;&gt; CATATAN: {item.notes}
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          ))}
-          {kitchenItems.length === 0 && (
-            <tr><td style={{ ...tdL, fontSize: '9pt', color: '#666' }}>(Tidak ada item makanan)</td></tr>
-          )}
-        </tbody>
-      </table>
+      <div style={{ margin: '1mm 0' }}>
+        {kitchenItems.map((item: any, idx: number) => (
+          <div key={idx} style={{ marginBottom: '2.5mm', paddingBottom: '1.5mm', borderBottom: idx < kitchenItems.length - 1 ? '1px dashed #ddd' : 'none' }}>
+            <div style={{ fontSize: '12pt', fontWeight: 900, display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+              <span style={{ fontSize: '13pt', whiteSpace: 'nowrap' }}>[{item.qty}x]</span>
+              <span style={{ wordBreak: 'break-word', flex: 1, textTransform: 'uppercase' }}>{item.product?.name || 'Item'}</span>
+            </div>
+            {item.notes && (
+              <div style={{ marginTop: '1mm', paddingLeft: '5mm', fontSize: '9.5pt', fontWeight: 900, color: '#000' }}>
+                &gt;&gt; CATATAN: {item.notes}
+              </div>
+            )}
+          </div>
+        ))}
+        {kitchenItems.length === 0 && (
+          <div style={{ fontSize: '9pt', color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '2mm 0' }}>
+            (Tidak ada item makanan)
+          </div>
+        )}
+      </div>
+
+      <div style={{ borderBottom: '1px dashed #000', margin: '2mm 0 1mm' }}></div>
+      <div style={{ fontSize: '9pt', fontWeight: 800, margin: '1mm 0', display: 'flex', justifyContent: 'space-between' }}>
+        <span>Total Menu: {kitchenItems.length}</span>
+        <span>Total Porsi: {kitchenItems.reduce((acc: number, cur: any) => acc + (Number(cur.qty) || 1), 0)}</span>
+      </div>
 
       {doubleDivider}
-      <div style={{ textAlign: 'center', fontSize: '8pt', margin: '1mm 0' }}>
-        Mohon segera diproses & disajikan!
+      <div style={{ textAlign: 'center', fontSize: '9pt', fontWeight: 900, margin: '1.5mm 0' }}>
+        MOHON SEGERA DIPROSES!
       </div>
     </div>
   );
 
   // ── Sub-component: Bar Ticket ──
   const renderBarTicket = () => (
-    <div style={{ marginBottom: '6mm' }}>
+    <div style={{ marginBottom: '6mm', padding: '0 1mm' }}>
       <div style={{ textAlign: 'center', padding: '1mm 0' }}>
         <div style={{ fontSize: '15pt', fontWeight: 900, letterSpacing: '1px' }}>
           *** TIKET BAR ***
         </div>
-        <div style={{ fontSize: '10pt', fontWeight: 900 }}>[ MINUMAN / BARISTA ]</div>
+        <div style={{ fontSize: '10pt', fontWeight: 900 }}>[ PESANAN MINUMAN ]</div>
       </div>
 
       {doubleDivider}
 
-      <table style={{ ...tbl, fontSize: '11pt', margin: '1mm 0' }}>
+      {/* PROMINENT TABLE BADGE */}
+      <div style={{ textAlign: 'center', margin: '2mm 0', padding: '2mm 1mm', border: '2px solid #000', borderRadius: '4px' }}>
+        <div style={{ fontSize: '16pt', fontWeight: 900, letterSpacing: '1px' }}>
+          {getTableDisplay()}
+        </div>
+        <div style={{ fontSize: '9pt', fontWeight: 800 }}>
+          {order.orderType === 'Take Away' || order.orderType === 'TAKE AWAY' ? '--- TAKE AWAY ---' : '--- DINE IN ---'}
+        </div>
+      </div>
+
+      <table style={{ ...tbl, fontSize: '9.5pt', margin: '1mm 0' }}>
         <tbody>
           <tr>
-            <td style={{ ...tdL, width: '16mm', fontSize: '13pt', fontWeight: 900 }}>MEJA</td>
-            <td style={{ ...tdL, fontSize: '14pt', fontWeight: 900 }}>: {getTableDisplay()}</td>
+            <td style={{ ...tdL, width: '22mm', fontWeight: 700 }}>No. Order</td>
+            <td style={{ ...tdL, fontWeight: 700 }}>: {order.orderNumber || `#${order.id}`}</td>
           </tr>
           <tr>
-            <td style={{ ...tdL, fontSize: '9pt' }}>No. Ord</td>
-            <td style={{ ...tdL, fontSize: '9pt' }}>: {order.orderNumber || `#${order.id}`}</td>
+            <td style={{ ...tdL, fontWeight: 700 }}>Waktu</td>
+            <td style={{ ...tdL, fontWeight: 700 }}>: {fmtTime(order.createdAt)} ({fmtDate(order.createdAt)})</td>
           </tr>
-          <tr>
-            <td style={{ ...tdL, fontSize: '9pt' }}>Waktu</td>
-            <td style={{ ...tdL, fontSize: '9pt' }}>: {fmtTime(order.createdAt)} ({fmtDate(order.createdAt)})</td>
-          </tr>
+          {order.user?.name && (
+            <tr>
+              <td style={{ ...tdL, fontWeight: 700 }}>Kasir</td>
+              <td style={{ ...tdL, fontWeight: 700 }}>: {order.user.name}</td>
+            </tr>
+          )}
+          {order.customerName && (
+            <tr>
+              <td style={{ ...tdL, fontWeight: 700 }}>Tamu</td>
+              <td style={{ ...tdL, fontWeight: 700 }}>: {order.customerName}</td>
+            </tr>
+          )}
         </tbody>
       </table>
 
       {divider}
 
-      <div style={{ fontSize: '10pt', fontWeight: 900, margin: '1mm 0' }}>
+      <div style={{ fontSize: '10pt', fontWeight: 900, margin: '1.5mm 0' }}>
         DAFTAR PESANAN MINUMAN:
       </div>
 
-      <table style={{ ...tbl, margin: '1mm 0' }}>
-        <tbody>
-          {barItems.map((item: any, idx: number) => (
-            <React.Fragment key={idx}>
-              <tr>
-                <td style={{ ...tdL, fontSize: '13pt', fontWeight: 900, paddingTop: idx > 0 ? '2mm' : '0' }}>
-                  [{item.qty}x] {item.product?.name || 'Item'}
-                </td>
-              </tr>
-              {item.notes && (
-                <tr>
-                  <td style={{ ...tdL, paddingLeft: '4mm', fontSize: '10pt', fontWeight: 900 }}>
-                    &gt;&gt; CATATAN: {item.notes}
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          ))}
-          {barItems.length === 0 && (
-            <tr><td style={{ ...tdL, fontSize: '9pt', color: '#666' }}>(Tidak ada item minuman)</td></tr>
-          )}
-        </tbody>
-      </table>
+      <div style={{ margin: '1mm 0' }}>
+        {barItems.map((item: any, idx: number) => (
+          <div key={idx} style={{ marginBottom: '2.5mm', paddingBottom: '1.5mm', borderBottom: idx < barItems.length - 1 ? '1px dashed #ddd' : 'none' }}>
+            <div style={{ fontSize: '12pt', fontWeight: 900, display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+              <span style={{ fontSize: '13pt', whiteSpace: 'nowrap' }}>[{item.qty}x]</span>
+              <span style={{ wordBreak: 'break-word', flex: 1, textTransform: 'uppercase' }}>{item.product?.name || 'Item'}</span>
+            </div>
+            {item.notes && (
+              <div style={{ marginTop: '1mm', paddingLeft: '5mm', fontSize: '9.5pt', fontWeight: 900, color: '#000' }}>
+                &gt;&gt; CATATAN: {item.notes}
+              </div>
+            )}
+          </div>
+        ))}
+        {barItems.length === 0 && (
+          <div style={{ fontSize: '9pt', color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '2mm 0' }}>
+            (Tidak ada item minuman)
+          </div>
+        )}
+      </div>
+
+      <div style={{ borderBottom: '1px dashed #000', margin: '2mm 0 1mm' }}></div>
+      <div style={{ fontSize: '9pt', fontWeight: 800, margin: '1mm 0', display: 'flex', justifyContent: 'space-between' }}>
+        <span>Total Menu: {barItems.length}</span>
+        <span>Total Porsi: {barItems.reduce((acc: number, cur: any) => acc + (Number(cur.qty) || 1), 0)}</span>
+      </div>
 
       {doubleDivider}
-      <div style={{ textAlign: 'center', fontSize: '8pt', margin: '1mm 0' }}>
-        Sajikan dingin & segar!
+      <div style={{ textAlign: 'center', fontSize: '9pt', fontWeight: 900, margin: '1.5mm 0' }}>
+        SAJIKAN DINGIN & SEGAR!
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ npx prisma generate || true
 echo "=== BUILDING BACKEND ==="
 cd /var/www/poscafe/backend
 npm run build
-pm2 restart all || pm2 restart poscafe-backend
+pm2 restart poscafe-backend
 
 echo "=== BUILDING FRONTEND ==="
 cd /var/www/poscafe/frontend
