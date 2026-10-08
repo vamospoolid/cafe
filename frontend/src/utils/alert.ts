@@ -17,6 +17,11 @@ export const toast = (title: string, icon: 'success' | 'error' | 'info' | 'warni
   });
 };
 
+toast.success = (title: string) => toast(title, 'success');
+toast.error = (title: string) => toast(title, 'error');
+toast.info = (title: string) => toast(title, 'info');
+toast.warning = (title: string) => toast(title, 'warning');
+
 export const confirmAlert = (title: string, text?: string) => {
   return Swal.fire({
     title,

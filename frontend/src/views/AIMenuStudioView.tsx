@@ -1,4 +1,4 @@
-import React, { useState, useContext, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { 
   Sparkles, 
   Upload, 

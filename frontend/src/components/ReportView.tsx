@@ -2047,6 +2047,16 @@ export const ReportView: React.FC = () => {
           TAB: BAGI HASIL (80:20) - RAMEN VS MINUMAN & OWNER
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'profit_sharing' && (() => {
+        const ps = profitSharingData;
+        if (!ps) {
+          return (
+            <div className="bg-white rounded-3xl p-8 text-center text-slate-400">
+              <Percent className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+              <p className="text-sm font-bold">Memuat data bagi hasil...</p>
+            </div>
+          );
+        }
+        const daily = ps.dailyBreakdown || [];
         const div1Label = ps?.div1Title || (
           isBengkel ? 'Divisi Jasa Servis & Mekanik' :
           isRetail ? 'Divisi Retail & Eceran' :
