@@ -29,7 +29,13 @@ export const enrichOrderWithJoinedTables = async (order: any, txPrisma: any = pr
 
 // Helper: Process loyalty points earning
 const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: number, orderNumber: string, tenantId?: string) => {
-  const settings = tenantId ? await tx.settings.findFirst({ where: { tenantId } }) : null;
+  // Fail-Closed: tanpa tenantId, tolak query agar tidak ada cross-tenant loyalty manipulation
+  if (!tenantId) {
+    console.warn('[Loyalty] processLoyaltyEarnings dipanggil tanpa tenantId — dilewati untuk keamanan isolasi.');
+    return;
+  }
+
+  const settings = await tx.settings.findFirst({ where: { tenantId } });
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
   if (!loyaltyEnabled) return;
 
@@ -39,8 +45,9 @@ const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: n
   const silverMultiplier = settings ? settings.loyaltySilverMultiplier : 1.2;
   const goldMultiplier = settings ? settings.loyaltyGoldMultiplier : 1.5;
 
+  // Fail-Closed: customer dicari dengan tenantId — tidak ada fallback global
   const customer = await tx.customer.findFirst({
-    where: tenantId ? { id: customerId, tenantId } : { id: customerId }
+    where: { id: customerId, tenantId }
   });
   if (!customer) return;
 
@@ -84,12 +91,19 @@ const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: n
 
 // Helper: Process loyalty points redemption
 const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRedeem: number, orderNumber: string, tenantId?: string) => {
-  const settings = tenantId ? await tx.settings.findFirst({ where: { tenantId } }) : null;
+  // Fail-Closed: tanpa tenantId, tolak agar tidak ada cross-tenant redemption
+  if (!tenantId) {
+    console.warn('[Loyalty] processLoyaltyRedemption dipanggil tanpa tenantId — dilewati untuk keamanan isolasi.');
+    return;
+  }
+
+  const settings = await tx.settings.findFirst({ where: { tenantId } });
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
   if (!loyaltyEnabled) return;
 
+  // Fail-Closed: customer dicari dengan tenantId — tidak ada fallback global
   const customer = await tx.customer.findFirst({
-    where: tenantId ? { id: customerId, tenantId } : { id: customerId }
+    where: { id: customerId, tenantId }
   });
   if (!customer) return;
 

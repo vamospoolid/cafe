@@ -61,6 +61,9 @@ export async function resolveTenantFromRequest(req: Request): Promise<{ id: stri
   if (hostParts.length >= 3) {
     const subdomain = hostParts[0].toLowerCase();
     if (subdomain === 'cafe') {
+      // LEGACY MAPPING: cafe.codenusa.id → tenant 'vamospool' (Vamos Pool Cafe, tenant pertama).
+      // Aman karena 'cafe' sudah masuk dalam reservedSlugs sehingga tidak bisa didaftarkan tenant baru.
+      // JANGAN HAPUS BARIS INI tanpa memigrasikan DNS custom domain tenant Vamos Pool terlebih dahulu.
       const data = await cacheService.remember(`cache:tenant:slug:cafe_default`, 600, async () => {
         const tenant = await prisma.tenant.findFirst({
           where: { OR: [{ id: 'tenant-vamos-pool' }, { slug: 'vamospool' }, { slug: 'cafe' }] }
