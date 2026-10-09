@@ -369,7 +369,7 @@ export const SettingsWhatsAppGateway: React.FC = () => {
       .split('{orderNumber}').join('ORD-2026-0042')
       .split('{totalAmount}').join('Rp 68.000')
       .split('{paymentMethod}').join('QRIS Mandiri')
-      .split('{invoiceUrl}').join('https://codenusa.id/invoice/order/ORD-2026-0042')
+      .split('{invoiceUrl}').join(`${typeof window !== 'undefined' ? window.location.origin : 'https://codenusa.id'}/invoice/order/ORD-2026-0042`)
       .split('{orderItems}').join('• Ramen Spesial x2 = Rp 50.000\n• Ocha Dingin x2 = Rp 18.000')
       .split('{tableName}').join('Meja 04')
       .split('{reservationDate}').join('30/09/2026')

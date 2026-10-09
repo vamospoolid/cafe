@@ -68,7 +68,14 @@ export class WhatsAppTriggerService {
         .map((it) => `• ${it.product?.name || 'Item'} x${it.qty} = ${this.formatRupiah(it.subtotal)}`)
         .join('\n');
 
-      const appBaseUrl = process.env.PUBLIC_APP_URL || 'https://codenusa.id';
+      const tenantSlug = (order.tenant as any)?.slug;
+      const tenantDomain = (order.tenant as any)?.customDomain;
+      let appBaseUrl = process.env.PUBLIC_APP_URL || 'https://codenusa.id';
+      if (tenantDomain) {
+        appBaseUrl = `https://${tenantDomain}`;
+      } else if (tenantSlug) {
+        appBaseUrl = `https://${tenantSlug}.codenusa.id`;
+      }
       const invoiceUrl = `${appBaseUrl}/invoice/order/${order.orderNumber}`;
 
       // Interpolasi variabel
@@ -245,7 +252,14 @@ export class WhatsAppTriggerService {
 
       if (!template || !template.isActive) return;
 
-      const appBaseUrl = process.env.PUBLIC_APP_URL || 'https://codenusa.id';
+      const tenantSlug = (wo.tenant as any)?.slug;
+      const tenantDomain = (wo.tenant as any)?.customDomain;
+      let appBaseUrl = process.env.PUBLIC_APP_URL || 'https://codenusa.id';
+      if (tenantDomain) {
+        appBaseUrl = `https://${tenantDomain}`;
+      } else if (tenantSlug) {
+        appBaseUrl = `https://${tenantSlug}.codenusa.id`;
+      }
       const invoiceUrl = `${appBaseUrl}/invoice/spk/${wo.spkNumber}`;
 
       const messageBody = whatsAppTemplateService.interpolate(template.templateBody, {

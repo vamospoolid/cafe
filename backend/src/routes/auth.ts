@@ -526,9 +526,9 @@ router.get('/check-slug', async (req: Request, res: Response) => {
       return res.status(400).json({ available: false, error: 'Slug maksimal 40 karakter.' });
     }
 
-    const reserved = ['admin', 'api', 'app', 'www', 'mail', 'blog', 'demo', 'test', 'dev', 'staging', 'platform', 'pos', 'cafe', 'codenusa'];
+    const reserved = ['admin', 'api', 'app', 'www', 'mail', 'blog', 'demo', 'test', 'dev', 'staging', 'platform', 'pos', 'cafe', 'codenusa', 'bengkel', 'bengkel-motor', 'posbengkel', 'bengkel-app'];
     if (reserved.includes(cleanSlug)) {
-      return res.status(200).json({ available: false, error: `Slug '${cleanSlug}' adalah nama reserved dan tidak dapat digunakan.` });
+      return res.status(200).json({ available: false, error: `Slug '${cleanSlug}' adalah nama reserved sistem dan tidak dapat digunakan.` });
     }
 
     const existing = await prisma.tenant.findUnique({ where: { slug: cleanSlug } });
@@ -582,8 +582,12 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       });
     }
 
-    // 1. Validasi keunikan Slug
+    // 1. Validasi keunikan Slug & Reserved Slugs
     const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const reservedSlugs = ['admin', 'api', 'app', 'www', 'mail', 'blog', 'demo', 'test', 'dev', 'staging', 'platform', 'pos', 'cafe', 'codenusa', 'bengkel', 'bengkel-motor', 'posbengkel', 'bengkel-app'];
+    if (reservedSlugs.includes(cleanSlug)) {
+      return res.status(400).json({ error: `Subdomain slug '${cleanSlug}' adalah nama reserved sistem dan tidak dapat didaftarkan.` });
+    }
     const existingTenant = await prisma.tenant.findUnique({ where: { slug: cleanSlug } });
     if (existingTenant) {
       return res.status(400).json({ error: `Subdomain slug '${cleanSlug}' sudah digunakan oleh bisnis lain.` });

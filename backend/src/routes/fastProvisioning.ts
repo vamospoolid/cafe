@@ -728,6 +728,12 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
     const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
     const cleanUsername = username.trim().toLowerCase();
 
+    // Check reserved slugs
+    const reservedSlugs = ['admin', 'api', 'app', 'www', 'mail', 'blog', 'demo', 'test', 'dev', 'staging', 'platform', 'pos', 'cafe', 'codenusa', 'bengkel', 'bengkel-motor', 'posbengkel', 'bengkel-app'];
+    if (reservedSlugs.includes(cleanSlug)) {
+      return res.status(400).json({ error: `Subdomain / Slug '${cleanSlug}' adalah nama reserved sistem dan tidak dapat digunakan.` });
+    }
+
     // Check slug collision
     const existingTenant = await prisma.tenant.findFirst({
       where: {
