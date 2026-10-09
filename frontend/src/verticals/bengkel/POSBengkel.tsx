@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   Car, Wrench, Package, Search, ShoppingCart, User, Plus, Minus, Trash2, 
   CreditCard, Check, AlertCircle, Printer, ArrowRight, Camera, X, RefreshCw,
-  Phone, Tag, Sparkles, ShieldCheck
+  Phone, Tag, Sparkles, ShieldCheck, LayoutGrid, List, ChevronDown, ChevronUp, Edit3
 } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
@@ -56,6 +56,13 @@ export const POSBengkel: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const scannerInputRef = useRef<HTMLInputElement>(null);
+
+  // View Mode: Compact List vs Grid Card (Persisted)
+  const [viewMode, setViewMode] = useState<'LIST' | 'GRID'>(() => {
+    const saved = localStorage.getItem('pos_bengkel_view_mode');
+    return (saved === 'GRID' || saved === 'LIST') ? saved : 'LIST';
+  });
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState<boolean>(false);
 
   // Cart
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -241,6 +248,22 @@ export const POSBengkel: React.FC = () => {
       );
       return { ...item, price: newPrice };
     }));
+  };
+
+  // Toggle View Mode (List vs Grid)
+  const handleToggleViewMode = () => {
+    const next = viewMode === 'LIST' ? 'GRID' : 'LIST';
+    setViewMode(next);
+    localStorage.setItem('pos_bengkel_view_mode', next);
+  };
+
+  // Fast Cycle Tier for Mobile (UMUM -> MITRA -> GROSIR -> UMUM)
+  const handleCycleTier = () => {
+    const tiers: ('UMUM' | 'MITRA' | 'GROSIR')[] = ['UMUM', 'MITRA', 'GROSIR'];
+    const nextIdx = (tiers.indexOf(priceTier) + 1) % tiers.length;
+    const nextTier = tiers[nextIdx];
+    handleSwitchTier(nextTier);
+    toast(`Tier Harga beralih ke: ${nextTier}`, 'info');
   };
 
   // Add Product (Sparepart) to Cart
@@ -545,11 +568,11 @@ export const POSBengkel: React.FC = () => {
   return (
     <div className="pos-layout h-full w-full overflow-hidden" style={{ height: '100%' }}>
       {/* ─── KIRI: KATALOG SPAREPART & JASA SERVIS (FLEX-1) ─────────────────── */}
-      <div className="pos-main flex-1 flex flex-col h-full overflow-hidden p-3 sm:p-4 gap-3 bg-slate-100">
+      <div className="pos-main flex-1 flex flex-col h-full overflow-hidden p-2 sm:p-4 gap-2 sm:gap-3 bg-slate-100">
         
-        {/* Top Quick Bar: Plat Nomor, Konsumen, & 3-Tier Price Selector */}
-        <div className="bg-purple-950 text-white p-2.5 sm:p-3 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-1">
+        {/* DESKTOP HEADER (LARGE SCREENS) */}
+        <div className="hidden lg:flex bg-purple-950 text-white p-2.5 sm:p-3 rounded-2xl shadow-sm items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1">
             {/* Plat Nomor */}
             <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
               <Car size={15} className="text-amber-300 shrink-0" />
@@ -589,8 +612,8 @@ export const POSBengkel: React.FC = () => {
           </div>
 
           {/* 3-Tier Pricing Selector Buttons */}
-          <div className="flex items-center bg-black/30 p-1 rounded-xl gap-0.5 sm:gap-1 shrink-0">
-            <span className="hidden sm:flex text-[10px] uppercase font-bold text-purple-200 px-1.5 items-center gap-1">
+          <div className="flex items-center bg-black/30 p-1 rounded-xl gap-1 shrink-0">
+            <span className="flex text-[10px] uppercase font-bold text-purple-200 px-1.5 items-center gap-1">
               <Tag size={11} /> Tier:
             </span>
             {(['UMUM', 'MITRA', 'GROSIR'] as const).map(tier => {
@@ -599,13 +622,13 @@ export const POSBengkel: React.FC = () => {
                 <button
                   key={tier}
                   onClick={() => handleSwitchTier(tier)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
                     isActive
                       ? 'bg-amber-400 text-purple-950 shadow-md scale-105'
                       : 'text-purple-200 hover:text-white hover:bg-white/10'
                   }`}
                 >
-                  {tier === 'UMUM' && <Sparkles size={11} className="hidden sm:inline" />}
+                  {tier === 'UMUM' && <Sparkles size={11} className="inline" />}
                   {tier}
                 </button>
               );
@@ -613,26 +636,154 @@ export const POSBengkel: React.FC = () => {
           </div>
         </div>
 
+        {/* MOBILE COMPACT SMART HEADER (COLLAPSIBLE / EXPANDABLE) */}
+        <div className="lg:hidden">
+          {!isHeaderExpanded ? (
+            <div className="bg-purple-950 text-white p-2 rounded-xl shadow-xs border border-purple-900/60 flex items-center justify-between gap-2">
+              {/* Tap to expand Customer & Vehicle Details */}
+              <button
+                type="button"
+                onClick={() => setIsHeaderExpanded(true)}
+                className="flex items-center gap-2 bg-white/10 hover:bg-white/15 active:scale-[0.98] transition px-2.5 py-1.5 rounded-lg border border-white/15 text-left flex-1 min-w-0 cursor-pointer"
+              >
+                <Car size={15} className="text-amber-300 shrink-0" />
+                <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                  <span className={`font-black text-xs uppercase tracking-wider truncate ${vehiclePlate ? 'text-amber-300' : 'text-purple-200'}`}>
+                    {vehiclePlate || '+ Nopol'}
+                  </span>
+                  <span className="text-white/30 text-[10px] shrink-0">•</span>
+                  <span className="text-purple-100 text-xs truncate">
+                    {customerName || 'Walk-in'}
+                  </span>
+                </div>
+                <Edit3 size={13} className="text-purple-300/80 shrink-0 ml-1" />
+              </button>
+
+              {/* Fast Cycle Tier Pill */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCycleTier}
+                  title="Ketuk untuk beralih Tier Harga"
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-black bg-amber-400 text-purple-950 shadow-xs flex items-center gap-1 active:scale-95 transition cursor-pointer"
+                >
+                  <Tag size={10} />
+                  <span>{priceTier}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsHeaderExpanded(true)}
+                  className="p-1.5 rounded-lg bg-white/10 text-purple-200 hover:text-white cursor-pointer"
+                  title="Buka form data kendaraan lengkap"
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-purple-950 text-white p-3 rounded-2xl shadow-md border border-purple-800 space-y-2.5 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                  <Car size={14} className="text-amber-400" /> Detail Kendaraan &amp; Konsumen
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsHeaderExpanded(false)}
+                  className="flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-white/10 px-2 py-0.5 rounded-lg hover:bg-white/20 cursor-pointer"
+                >
+                  <span>Selesai</span>
+                  <ChevronUp size={14} />
+                </button>
+              </div>
+
+              {/* Inputs */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl border border-white/20">
+                  <Car size={15} className="text-amber-300 shrink-0" />
+                  <input
+                    type="text"
+                    value={vehiclePlate}
+                    onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
+                    onBlur={handlePlateBlur}
+                    placeholder="NOPOL (B 1234 ABC)"
+                    className="bg-transparent border-none text-white font-black text-xs uppercase tracking-wider placeholder:text-purple-300/70 focus:outline-none w-full"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-2 rounded-xl border border-white/20">
+                    <User size={14} className="text-purple-200 shrink-0" />
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Nama Konsumen..."
+                      className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-full"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-2 rounded-xl border border-white/20">
+                    <Phone size={14} className="text-purple-200 shrink-0" />
+                    <input
+                      type="text"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="WhatsApp (08...)"
+                      className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Tier Selector Buttons in Mobile Form */}
+                <div className="flex items-center justify-between bg-black/30 p-1.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-purple-200 px-1 flex items-center gap-1">
+                    <Tag size={11} /> Tier:
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {(['UMUM', 'MITRA', 'GROSIR'] as const).map(tier => {
+                      const isActive = priceTier === tier;
+                      return (
+                        <button
+                          key={tier}
+                          type="button"
+                          onClick={() => handleSwitchTier(tier)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-amber-400 text-purple-950 shadow-sm font-black'
+                              : 'text-purple-200 hover:bg-white/10'
+                          }`}
+                        >
+                          {tier}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ─── TAB UTAMA: DATA BARANG (DEFAULT) VS JASA SERVIS ─────────────── */}
-        <div className="flex bg-slate-200/90 p-1.5 rounded-2xl gap-1.5 shrink-0 border border-slate-300/80 shadow-sm">
+        <div className="flex bg-slate-200/90 p-1 sm:p-1.5 rounded-2xl gap-1 sm:gap-1.5 shrink-0 border border-slate-300/80 shadow-xs">
           <button
             type="button"
             onClick={() => {
               setActiveCatalogTab('PARTS');
               setSearchQuery('');
             }}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
               activeCatalogTab === 'PARTS'
                 ? 'bg-purple-900 text-white shadow-md scale-[1.01]'
                 : 'text-slate-600 hover:text-purple-950 hover:bg-white/60'
             }`}
           >
-            <Package size={17} className={activeCatalogTab === 'PARTS' ? 'text-amber-400' : 'text-slate-500'} />
-            <span>Data Barang & Sparepart</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+            <Package size={16} className={activeCatalogTab === 'PARTS' ? 'text-amber-400' : 'text-slate-500'} />
+            <span className="hidden sm:inline">Data Barang &amp; Sparepart</span>
+            <span className="sm:hidden">Sparepart</span>
+            <span className={`text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-black ${
               activeCatalogTab === 'PARTS' ? 'bg-amber-400 text-purple-950' : 'bg-slate-300 text-slate-700'
             }`}>
-              {products.length} Item
+              {products.length}
             </span>
           </button>
 
@@ -642,18 +793,19 @@ export const POSBengkel: React.FC = () => {
               setActiveCatalogTab('SERVICES');
               setSearchQuery('');
             }}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
               activeCatalogTab === 'SERVICES'
                 ? 'bg-purple-900 text-white shadow-md scale-[1.01]'
                 : 'text-slate-600 hover:text-purple-950 hover:bg-white/60'
             }`}
           >
-            <Wrench size={17} className={activeCatalogTab === 'SERVICES' ? 'text-amber-400' : 'text-slate-500'} />
-            <span>Jasa Servis Mekanik</span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+            <Wrench size={16} className={activeCatalogTab === 'SERVICES' ? 'text-amber-400' : 'text-slate-500'} />
+            <span className="hidden sm:inline">Jasa Servis Mekanik</span>
+            <span className="sm:hidden">Jasa Servis</span>
+            <span className={`text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-black ${
               activeCatalogTab === 'SERVICES' ? 'bg-amber-400 text-purple-950' : 'bg-slate-300 text-slate-700'
             }`}>
-              {services.length} Jasa
+              {services.length}
             </span>
           </button>
         </div>
@@ -703,11 +855,26 @@ export const POSBengkel: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsScannerOpen(true)}
-                className="px-3.5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm transition active:scale-95 cursor-pointer shrink-0"
+                className="px-3 sm:px-3.5 py-2 sm:py-2.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 sm:gap-2 shadow-xs transition active:scale-95 cursor-pointer shrink-0"
                 title="Scan Barcode via Kamera Ponsel / Webcam"
               >
                 <Camera size={16} />
                 <span className="hidden sm:inline">Kamera Scan</span>
+              </button>
+
+              {/* View Switcher: List vs Grid */}
+              <button
+                type="button"
+                onClick={handleToggleViewMode}
+                className={`p-2 sm:px-2.5 sm:py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer shrink-0 ${
+                  viewMode === 'LIST'
+                    ? 'bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-200'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+                title={`Mode Tampilan: ${viewMode === 'LIST' ? 'Daftar Ramping (List)' : 'Kartu Grid'}. Ketuk untuk beralih.`}
+              >
+                {viewMode === 'LIST' ? <List size={16} className="text-purple-700" /> : <LayoutGrid size={16} className="text-slate-700" />}
+                <span className="hidden md:inline font-black">{viewMode === 'LIST' ? 'List' : 'Grid'}</span>
               </button>
             </div>
 
@@ -769,21 +936,38 @@ export const POSBengkel: React.FC = () => {
         {activeCatalogTab === 'SERVICES' && (
           <div className="space-y-2">
             <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-              {/* Search Jasa */}
-              <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-200 transition">
-                <Search size={18} className="text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari nama layanan servis / perbaikan bengkel..."
-                  className="bg-transparent border-none outline-none text-xs font-medium text-slate-800 w-full placeholder:text-slate-400"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600">
-                    <X size={16} />
-                  </button>
-                )}
+              {/* Search Jasa & View Switcher */}
+              <div className="flex-1 flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-200 transition">
+                  <Search size={18} className="text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari nama layanan servis / perbaikan bengkel..."
+                    className="bg-transparent border-none outline-none text-xs font-medium text-slate-800 w-full placeholder:text-slate-400"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600">
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+
+                {/* View Switcher in Jasa */}
+                <button
+                  type="button"
+                  onClick={handleToggleViewMode}
+                  className={`p-2 sm:px-2.5 sm:py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer shrink-0 ${
+                    viewMode === 'LIST'
+                      ? 'bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-200'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                  title={`Mode Tampilan: ${viewMode === 'LIST' ? 'Daftar Ramping (List)' : 'Kartu Grid'}. Ketuk untuk beralih.`}
+                >
+                  {viewMode === 'LIST' ? <List size={16} className="text-purple-700" /> : <LayoutGrid size={16} className="text-slate-700" />}
+                  <span className="hidden md:inline font-black">{viewMode === 'LIST' ? 'List' : 'Grid'}</span>
+                </button>
               </div>
 
               {/* Selector Mekanik Penanggung Jawab */}
@@ -835,148 +1019,297 @@ export const POSBengkel: React.FC = () => {
           </div>
         )}
 
-        {/* ─── CATALOG GRID CONTAINER (SCROLLABLE) ───────────────────────────── */}
+        {/* ─── CATALOG CONTAINER (SCROLLABLE DUAL VIEW: LIST VS GRID) ───────── */}
         <div className="flex-1 overflow-y-auto pr-1">
-          <div className={`grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 ${cartItems.length > 0 ? 'pb-24' : 'pb-3'}`}>
-            
-            {/* Services Cards */}
-            {filteredServices.map(s => {
-              const currentPrice = resolveItemPrice(
-                priceTier,
-                Number(s.priceRetail || 0),
-                s.priceMitra,
-                s.priceGrosir
-              );
+          {viewMode === 'LIST' ? (
+            /* ─── MODE 1: HIGH-DENSITY COMPACT LIST (ULTRA PROPORTIONAL FOR MOBILE) ─── */
+            <div className={`flex flex-col gap-1.5 sm:gap-2 ${cartItems.length > 0 ? 'pb-24' : 'pb-3'}`}>
+              {/* Services in High-Density List */}
+              {filteredServices.map(s => {
+                const currentPrice = resolveItemPrice(
+                  priceTier,
+                  Number(s.priceRetail || 0),
+                  s.priceMitra,
+                  s.priceGrosir
+                );
 
-              return (
-                <div
-                  key={`srv-${s.id}`}
-                  onClick={() => handleAddService(s)}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.98]"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800">
-                        {s.vehicleType === 'MOBIL' ? '🚗 MOBIL' : '🛵 MOTOR'}
-                      </span>
-                      <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                        JASA
-                      </span>
+                return (
+                  <div
+                    key={`srv-list-${s.id}`}
+                    onClick={() => handleAddService(s)}
+                    className="bg-white hover:bg-purple-50/40 p-2 sm:p-2.5 rounded-xl border border-slate-200 hover:border-purple-400 shadow-2xs transition-all cursor-pointer flex items-center justify-between gap-2.5 group active:scale-[0.99]"
+                  >
+                    {/* Sisi Kiri: Badge + Detail Nama Jasa */}
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 group-hover:bg-purple-200 transition">
+                        <Wrench size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 shrink-0">
+                            {s.vehicleType === 'MOBIL' ? '🚗 MOBIL' : '🛵 MOTOR'}
+                          </span>
+                          <span className="font-extrabold text-slate-800 text-xs sm:text-sm truncate group-hover:text-purple-700 transition">
+                            {s.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2 truncate">
+                          <span className="text-amber-600 font-bold">Jasa Servis</span>
+                          <span>• Tarif ({priceTier})</span>
+                          <span className="hidden sm:inline">• Rtl: {(s.priceRetail || 0) / 1000}k</span>
+                          <span className="hidden sm:inline">• Mtr: {(s.priceMitra || s.priceRetail || 0) / 1000}k</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="font-extrabold text-slate-800 text-xs sm:text-sm group-hover:text-purple-700 transition line-clamp-2">
-                      {s.name}
+
+                    {/* Sisi Kanan: Harga & Tombol Tambah */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <div className="text-xs sm:text-sm font-black text-purple-900 font-mono">
+                          Rp {currentPrice.toLocaleString('id-ID')}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center group-hover:bg-purple-700 group-hover:text-white transition shadow-2xs shrink-0 cursor-pointer"
+                      >
+                        <Plus size={15} />
+                      </button>
                     </div>
                   </div>
+                );
+              })}
 
-                  <div className="mt-3 pt-2 border-t border-slate-100">
-                    <div className="text-[10px] text-slate-400">
-                      Tarif ({priceTier}):
+              {/* Products in High-Density List */}
+              {filteredProducts.map(p => {
+                const retail = Number(p.sellPriceRetail ?? p.sellPrice ?? p.price ?? 0);
+                const mitra = p.sellPriceMitra != null ? Number(p.sellPriceMitra) : retail;
+                const grosir = p.sellPriceGrosir != null ? Number(p.sellPriceGrosir) : retail;
+                const currentPrice = resolveItemPrice(priceTier, retail, mitra, grosir, 1, p.minQtyGrosir || 1);
+                const isLowStock = p.stock <= (p.minStock ?? 5);
+
+                return (
+                  <div
+                    key={`part-list-${p.id}`}
+                    onClick={() => handleAddProduct(p)}
+                    className="bg-white hover:bg-amber-50/40 p-2 sm:p-2.5 rounded-xl border border-slate-200 hover:border-amber-400 shadow-2xs transition-all cursor-pointer flex items-center justify-between gap-2.5 group active:scale-[0.99]"
+                  >
+                    {/* Sisi Kiri: Badge + Detail Nama Sparepart */}
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 group-hover:bg-amber-200 transition">
+                        <Package size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                            p.stock === 0
+                              ? 'bg-rose-100 text-rose-800'
+                              : isLowStock
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            Stok {p.stock}
+                          </span>
+                          <span className="font-extrabold text-slate-800 text-xs sm:text-sm truncate group-hover:text-amber-800 transition">
+                            {p.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5 truncate">
+                          <span className="text-slate-500 font-medium">{p.category?.name || 'Sparepart'}</span>
+                          {p.barcode && <span className="font-mono text-slate-400">[{p.barcode}]</span>}
+                          <span className="hidden sm:inline">• Rtl: {retail / 1000}k</span>
+                          <span className="hidden sm:inline">• Gsr: {grosir / 1000}k</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-sm font-black text-purple-900">
-                        Rp {currentPrice.toLocaleString('id-ID')}
-                      </span>
-                      <span className="p-1 rounded-lg bg-purple-100 text-purple-700 group-hover:bg-purple-700 group-hover:text-white transition">
-                        <Plus size={14} />
-                      </span>
-                    </div>
-                    {/* Price Breakdown Details */}
-                    <div className="text-[9px] text-slate-400 mt-1 flex gap-1.5 truncate">
-                      <span>Rtl: {(s.priceRetail || 0) / 1000}k</span>
-                      <span>• Mtr: {(s.priceMitra || s.priceRetail || 0) / 1000}k</span>
-                      <span>• Gsr: {(s.priceGrosir || s.priceRetail || 0) / 1000}k</span>
+
+                    {/* Sisi Kanan: Harga & Tombol Tambah */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <div className="text-xs sm:text-sm font-black text-purple-900 font-mono">
+                          Rp {currentPrice.toLocaleString('id-ID')}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition shadow-2xs shrink-0 cursor-pointer"
+                      >
+                        <Plus size={15} />
+                      </button>
                     </div>
                   </div>
+                );
+              })}
+
+              {/* Empty State for List Mode */}
+              {filteredServices.length === 0 && filteredProducts.length === 0 && (
+                <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed border-slate-300 p-6">
+                  <Package size={40} className="text-slate-300 mb-2" />
+                  <span className="font-bold text-slate-700 text-sm">
+                    {searchQuery ? `Barang "${searchQuery}" tidak ditemukan` : 'Tidak ada data barang yang cocok'}
+                  </span>
+                  <p className="text-slate-400 mt-1 max-w-sm">
+                    Apakah konsumen mencari suku cadang yang saat ini belum ada atau kosong?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPartRequestInitialName(searchQuery);
+                      setPartRequestInitialProductId(null);
+                      setShowPartRequestModal(true);
+                    }}
+                    className="mt-4 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                  >
+                    <ClipboardList size={16} />
+                    <span>Catat Permintaan Suku Cadang</span>
+                  </button>
                 </div>
-              );
-            })}
+              )}
+            </div>
+          ) : (
+            /* ─── MODE 2: GRID CARDS (CLASSIC CARD LAYOUT) ─── */
+            <div className={`grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 ${cartItems.length > 0 ? 'pb-24' : 'pb-3'}`}>
+              
+              {/* Services Cards */}
+              {filteredServices.map(s => {
+                const currentPrice = resolveItemPrice(
+                  priceTier,
+                  Number(s.priceRetail || 0),
+                  s.priceMitra,
+                  s.priceGrosir
+                );
 
-            {/* Products (Spareparts & Oli) Cards */}
-            {filteredProducts.map(p => {
-              const retail = Number(p.sellPriceRetail ?? p.sellPrice ?? p.price ?? 0);
-              const mitra = p.sellPriceMitra != null ? Number(p.sellPriceMitra) : retail;
-              const grosir = p.sellPriceGrosir != null ? Number(p.sellPriceGrosir) : retail;
-              const currentPrice = resolveItemPrice(priceTier, retail, mitra, grosir, 1, p.minQtyGrosir || 1);
-              const isLowStock = p.stock <= (p.minStock ?? 5);
-
-              return (
-                <div
-                  key={`part-${p.id}`}
-                  onClick={() => handleAddProduct(p)}
-                  className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.98]"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                        p.stock === 0
-                          ? 'bg-rose-100 text-rose-800'
-                          : isLowStock
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        Stok: {p.stock}
-                      </span>
-                      {p.barcode && (
-                        <span className="text-[10px] font-mono text-slate-400 truncate max-w-[80px]">
-                          {p.barcode}
+                return (
+                  <div
+                    key={`srv-grid-${s.id}`}
+                    onClick={() => handleAddService(s)}
+                    className="bg-white p-2.5 sm:p-3.5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.98]"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800">
+                          {s.vehicleType === 'MOBIL' ? '🚗 MOBIL' : '🛵 MOTOR'}
                         </span>
-                      )}
+                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                          JASA
+                        </span>
+                      </div>
+                      <div className="font-extrabold text-slate-800 text-xs sm:text-sm group-hover:text-purple-700 transition line-clamp-2">
+                        {s.name}
+                      </div>
                     </div>
-                    <div className="font-extrabold text-slate-800 text-xs sm:text-sm group-hover:text-purple-700 transition line-clamp-2">
-                      {p.name}
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-                      {p.category?.name || 'Sparepart'}
-                    </div>
-                  </div>
 
-                  <div className="mt-3 pt-2 border-t border-slate-100">
-                    <div className="text-[10px] text-slate-400">
-                      Harga ({priceTier}):
-                    </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-sm font-black text-purple-900">
-                        Rp {currentPrice.toLocaleString('id-ID')}
-                      </span>
-                      <span className="p-1 rounded-lg bg-amber-100 text-amber-800 group-hover:bg-amber-500 group-hover:text-white transition">
-                        <Plus size={14} />
-                      </span>
-                    </div>
-                    {/* 3-Tier Price Comparison Breakdown */}
-                    <div className="text-[9px] text-slate-400 mt-1 flex gap-1.5 truncate">
-                      <span>Rtl: {retail / 1000}k</span>
-                      <span>• Mtr: {mitra / 1000}k</span>
-                      <span>• Gsr: {grosir / 1000}k (min {p.minQtyGrosir || 1})</span>
+                    <div className="mt-2.5 pt-2 border-t border-slate-100">
+                      <div className="text-[10px] text-slate-400">
+                        Tarif ({priceTier}):
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-xs sm:text-sm font-black text-purple-900 font-mono">
+                          Rp {currentPrice.toLocaleString('id-ID')}
+                        </span>
+                        <span className="p-1 rounded-lg bg-purple-100 text-purple-700 group-hover:bg-purple-700 group-hover:text-white transition">
+                          <Plus size={14} />
+                        </span>
+                      </div>
+                      {/* Price Breakdown Details */}
+                      <div className="text-[9px] text-slate-400 mt-1 flex gap-1.5 truncate">
+                        <span>Rtl: {(s.priceRetail || 0) / 1000}k</span>
+                        <span>• Mtr: {(s.priceMitra || s.priceRetail || 0) / 1000}k</span>
+                        <span>• Gsr: {(s.priceGrosir || s.priceRetail || 0) / 1000}k</span>
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+
+              {/* Products (Spareparts & Oli) Cards */}
+              {filteredProducts.map(p => {
+                const retail = Number(p.sellPriceRetail ?? p.sellPrice ?? p.price ?? 0);
+                const mitra = p.sellPriceMitra != null ? Number(p.sellPriceMitra) : retail;
+                const grosir = p.sellPriceGrosir != null ? Number(p.sellPriceGrosir) : retail;
+                const currentPrice = resolveItemPrice(priceTier, retail, mitra, grosir, 1, p.minQtyGrosir || 1);
+                const isLowStock = p.stock <= (p.minStock ?? 5);
+
+                return (
+                  <div
+                    key={`part-grid-${p.id}`}
+                    onClick={() => handleAddProduct(p)}
+                    className="bg-white p-2.5 sm:p-3.5 rounded-2xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.98]"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                          p.stock === 0
+                            ? 'bg-rose-100 text-rose-800'
+                            : isLowStock
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          Stok: {p.stock}
+                        </span>
+                        {p.barcode && (
+                          <span className="text-[10px] font-mono text-slate-400 truncate max-w-[80px]">
+                            {p.barcode}
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-extrabold text-slate-800 text-xs sm:text-sm group-hover:text-purple-700 transition line-clamp-2">
+                        {p.name}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                        {p.category?.name || 'Sparepart'}
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-slate-100">
+                      <div className="text-[10px] text-slate-400">
+                        Harga ({priceTier}):
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-xs sm:text-sm font-black text-purple-900 font-mono">
+                          Rp {currentPrice.toLocaleString('id-ID')}
+                        </span>
+                        <span className="p-1 rounded-lg bg-amber-100 text-amber-800 group-hover:bg-amber-500 group-hover:text-white transition">
+                          <Plus size={14} />
+                        </span>
+                      </div>
+                      {/* 3-Tier Price Comparison Breakdown */}
+                      <div className="text-[9px] text-slate-400 mt-1 flex gap-1.5 truncate">
+                        <span>Rtl: {retail / 1000}k</span>
+                        <span>• Mtr: {mitra / 1000}k</span>
+                        <span>• Gsr: {grosir / 1000}k (min {p.minQtyGrosir || 1})</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Empty State for Grid Mode */}
+              {filteredServices.length === 0 && filteredProducts.length === 0 && (
+                <div className="col-span-full py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed border-slate-300 p-6">
+                  <Package size={40} className="text-slate-300 mb-2" />
+                  <span className="font-bold text-slate-700 text-sm">
+                    {searchQuery ? `Barang "${searchQuery}" tidak ditemukan` : 'Tidak ada data barang yang cocok'}
+                  </span>
+                  <p className="text-slate-400 mt-1 max-w-sm">
+                    Apakah konsumen mencari suku cadang yang saat ini belum ada atau kosong?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPartRequestInitialName(searchQuery);
+                      setPartRequestInitialProductId(null);
+                      setShowPartRequestModal(true);
+                    }}
+                    className="mt-4 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                  >
+                    <ClipboardList size={16} />
+                    <span>Catat Permintaan Suku Cadang</span>
+                  </button>
                 </div>
-              );
-            })}
-
-            {filteredServices.length === 0 && filteredProducts.length === 0 && (
-              <div className="col-span-full py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center bg-white rounded-2xl border border-dashed border-slate-300 p-6">
-                <Package size={40} className="text-slate-300 mb-2" />
-                <span className="font-bold text-slate-700 text-sm">
-                  {searchQuery ? `Barang "${searchQuery}" tidak ditemukan` : 'Tidak ada data barang yang cocok'}
-                </span>
-                <p className="text-slate-400 mt-1 max-w-sm">
-                  Apakah konsumen mencari suku cadang yang saat ini belum ada atau kosong?
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPartRequestInitialName(searchQuery);
-                    setPartRequestInitialProductId(null);
-                    setShowPartRequestModal(true);
-                  }}
-                  className="mt-4 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
-                >
-                  <ClipboardList size={16} />
-                  <span>Catat Permintaan Suku Cadang</span>
-                </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
