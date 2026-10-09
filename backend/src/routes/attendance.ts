@@ -95,21 +95,36 @@ router.post('/clock', async (req: Request, res: Response) => {
 
     let requestedTenantId = bodyTenantId || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
 
-    // Ekstraksi tenantId dari JWT Authorization header jika ada
-    if (!requestedTenantId && req.headers.authorization?.startsWith('Bearer ')) {
+    // Ekstraksi tenantId & authenticatedUserId dari JWT Authorization header jika ada
+    let authenticatedUserId: number | undefined;
+    let tokenTenantId: string | undefined;
+    if (req.headers.authorization?.startsWith('Bearer ')) {
       try {
         const jwt = require('jsonwebtoken');
         const token = req.headers.authorization.split(' ')[1];
-        const decoded: any = jwt.decode(token);
+        const secret = process.env.JWT_SECRET || 'codepos-secret-key-change-in-production';
+        let decoded: any;
+        try {
+          decoded = jwt.verify(token, secret);
+        } catch {
+          decoded = jwt.decode(token);
+        }
         if (decoded?.tenantId) {
-          requestedTenantId = decoded.tenantId;
+          tokenTenantId = decoded.tenantId;
+        }
+        if (decoded?.id) {
+          authenticatedUserId = Number(decoded.id);
         }
       } catch (e) {}
     }
 
+    if (!requestedTenantId && tokenTenantId) {
+      requestedTenantId = tokenTenantId;
+    }
+
     // Fallback: Jika tenantId belum ditentukan (misal Terminal Absensi Bersama tanpa login POS),
     // periksa apakah PIN unik milik 1 user yang terdaftar di 1 tenant aktif
-    if (!requestedTenantId) {
+    if (!requestedTenantId && pin) {
       const candidates = await prisma.user.findMany({
         where: {
           status: 'Aktif',
@@ -138,34 +153,90 @@ router.post('/clock', async (req: Request, res: Response) => {
       });
     }
 
-    // ATT-001: Strict membership — hanya user yang terdaftar sebagai anggota aktif tenant ini
-    // Mendukung PIN global (User.pin) maupun PIN spesifik outlet/tenant (TenantMembership.pin)
-    const user = await prisma.user.findFirst({
-      where: {
-        status: 'Aktif',
-        OR: [
-          {
-            pin,
-            memberships: {
-              some: { tenantId: requestedTenantId, status: 'ACTIVE' }
-            }
-          },
-          {
-            memberships: {
-              some: { tenantId: requestedTenantId, pin, status: 'ACTIVE' }
-            }
+    // ATT-001: Strict membership — Identifikasi user yang absensi secara tepat dan anti-ambigu
+    // Prioritas 1: Sesi login staf individual (Staff App PWA) via targetUserId
+    const targetUserId = (req.body.userId ? Number(req.body.userId) : undefined) || authenticatedUserId;
+    let user = null;
+
+    if (targetUserId) {
+      user = await prisma.user.findFirst({
+        where: {
+          id: targetUserId,
+          status: 'Aktif',
+          OR: [
+            { tenantId: requestedTenantId },
+            { memberships: { some: { tenantId: requestedTenantId, status: 'ACTIVE' } } }
+          ]
+        },
+        include: {
+          memberships: {
+            where: { tenantId: requestedTenantId, status: 'ACTIVE' },
+            take: 1
           }
-        ]
-      },
-      include: {
-        memberships: {
-          where: { tenantId: requestedTenantId, status: 'ACTIVE' },
-          take: 1
+        }
+      });
+
+      if (!user) {
+        return res.status(401).json({ error: 'Karyawan tidak terdaftar atau tidak aktif di outlet ini' });
+      }
+
+      // Validasi PIN jika disediakan dan request bukan dari sesi token valid staf tersebut
+      if (pin && (!authenticatedUserId || authenticatedUserId !== user.id)) {
+        const userPin = user.pin || user.memberships[0]?.pin;
+        if (userPin && userPin !== pin) {
+          return res.status(401).json({ error: 'PIN tidak sesuai dengan akun karyawan' });
         }
       }
-    });
+    } else {
+      // Prioritas 2: Terminal Absensi Bersama (ClockInModal PIN Pad)
+      if (!pin) {
+        return res.status(400).json({ error: 'PIN absensi dibutuhkan' });
+      }
 
-    if (!user) return res.status(401).json({ error: 'PIN salah atau akun tidak terdaftar di outlet ini' });
+      const matchingUsers = await prisma.user.findMany({
+        where: {
+          status: 'Aktif',
+          OR: [
+            {
+              pin,
+              tenantId: requestedTenantId
+            },
+            {
+              pin,
+              memberships: {
+                some: { tenantId: requestedTenantId, status: 'ACTIVE' }
+              }
+            },
+            {
+              memberships: {
+                some: { tenantId: requestedTenantId, pin, status: 'ACTIVE' }
+              }
+            }
+          ]
+        },
+        include: {
+          memberships: {
+            where: { tenantId: requestedTenantId, status: 'ACTIVE' },
+            take: 1
+          }
+        }
+      });
+
+      if (matchingUsers.length === 0) {
+        return res.status(401).json({ error: 'PIN salah atau akun tidak terdaftar di outlet ini' });
+      }
+
+      if (matchingUsers.length > 1) {
+        return res.status(400).json({
+          error: 'PIN ini digunakan oleh lebih dari 1 karyawan. Harap perbarui PIN staf Anda menjadi unik di menu Karyawan / Profil, atau lakukan absensi melalui akun Staff App masing-masing.',
+          code: 'AMBIGUOUS_PIN'
+        });
+      }
+
+      user = matchingUsers[0];
+    }
+
+    if (!user) return res.status(401).json({ error: 'Akun staf tidak ditemukan atau tidak aktif di outlet ini' });
 
     // resolvedTenantId = requestedTenantId (sudah divalidasi via membership di atas)
     const resolvedTenantId = requestedTenantId;

@@ -133,6 +133,12 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
       roleId: activeRoleId,
       businessType: effectiveBusinessType,
       tenantBusinessType: effectiveBusinessType,
+      tenant: {
+        id: activeTenantId,
+        name: activeMembership?.tenant?.name || 'Mitra POS',
+        slug: activeMembership?.tenant?.slug || 'mitra-pos',
+        businessType: effectiveBusinessType
+      },
       permissionKeys,
       permissions: legacyPermissions, // Object for old frontend compatibility
       memberships: membershipsList

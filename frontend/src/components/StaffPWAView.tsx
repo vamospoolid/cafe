@@ -221,7 +221,14 @@ export const StaffPWAView: React.FC = () => {
   const [selectedShiftId, setSelectedShiftId] = useState<string>('pagi');
 
   // Business Type & Role Identification
-  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' | 'RENTAL' = (settings?.businessType || user?.tenant?.businessType || 'CAFE').toUpperCase() as any;
+  const effectiveBusinessType = (
+    user?.businessType || 
+    user?.tenantBusinessType || 
+    user?.tenant?.businessType || 
+    settings?.businessType || 
+    'CAFE'
+  ).toUpperCase();
+  const businessType: 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' | 'RENTAL' = effectiveBusinessType as any;
   const isCafe = businessType === 'CAFE';
   const isBengkel = businessType === 'BENGKEL';
   const isRetail = businessType === 'RETAIL';
@@ -450,10 +457,10 @@ export const StaffPWAView: React.FC = () => {
 
   // Synchronize SOP checklist to vertical preset dynamically
   useEffect(() => {
-    const bType = (settings?.businessType || user?.tenant?.businessType || 'CAFE').toUpperCase();
+    const bType = (user?.businessType || user?.tenantBusinessType || user?.tenant?.businessType || settings?.businessType || 'CAFE').toUpperCase();
     const preset = VERTICAL_SOP_PRESETS[bType] || VERTICAL_SOP_PRESETS.CAFE;
     setSopList(sopType === 'OPENING' ? preset.opening : preset.closing);
-  }, [settings?.businessType, sopType]);
+  }, [settings?.businessType, user?.businessType, user?.tenantBusinessType, sopType]);
 
   // Request GPS Location
   const requestGpsLocation = () => {
@@ -608,7 +615,7 @@ export const StaffPWAView: React.FC = () => {
     if (!token) return;
     setStockLoading(true);
     try {
-      const isCafeCurrent = (settings?.businessType || user?.tenant?.businessType || 'CAFE') === 'CAFE';
+      const isCafeCurrent = businessType === 'CAFE';
       const endpoint = isCafeCurrent ? '/api/ingredients' : '/api/products';
       const res = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
@@ -1008,6 +1015,7 @@ export const StaffPWAView: React.FC = () => {
     try {
       const activeTenantId = user?.tenantId || user?.tenant?.id || localStorage.getItem('tenantId') || localStorage.getItem('staff_tenant_id');
       const payload = {
+        userId: user?.id,
         pin: user?.pin || '',
         type,
         shiftId: selectedShiftId,
@@ -1252,7 +1260,7 @@ export const StaffPWAView: React.FC = () => {
 
     setSubmittingAdjust(true);
     try {
-      const isCafeCurrent = (settings?.businessType || 'CAFE') === 'CAFE';
+      const isCafeCurrent = businessType === 'CAFE';
       let res: Response;
       if (isCafeCurrent) {
         res = await fetch(`/api/ingredients/${adjustModal.ingredient.id}/adjust`, {
