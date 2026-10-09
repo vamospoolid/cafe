@@ -170,7 +170,7 @@ export const BengkelCheckoutModal: React.FC<BengkelCheckoutModalProps> = ({
             Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
-            vehiclePlate: vehiclePlate.trim() || 'UMUM',
+            vehiclePlate: vehiclePlate.trim().toUpperCase() || 'UMUM',
             customerName: customerName.trim() || 'Konsumen Walk-In',
             customerPhone: customerPhone.trim() || undefined,
             priceTier,

@@ -164,13 +164,18 @@ export const WorkOrderReceiptPrinter: React.FC<WorkOrderReceiptPrinterProps> = (
               <div className="flex justify-between border-t border-dashed border-slate-300 pt-1 mt-1">
                 <span className="font-bold">No. Polisi:</span>
                 <span className="font-bold bg-slate-100 px-1 py-0.5 rounded text-[11px]">
-                  {workOrder.vehiclePlate || 'WALK-IN'}
+                  {workOrder.vehiclePlate || workOrder.vehicle?.plateNumber || 'WALK-IN'}
                 </span>
               </div>
-              {(workOrder.vehicleBrand || workOrder.vehicleModel) && (
+              {(workOrder.vehicleBrand || workOrder.vehicle?.brand || workOrder.vehicleModel || workOrder.vehicle?.model) && (
                 <div className="flex justify-between text-[10px] text-slate-600">
                   <span>Kendaraan:</span>
-                  <span>{workOrder.vehicleBrand} {workOrder.vehicleModel}</span>
+                  <span>
+                    {[
+                      workOrder.vehicleBrand || workOrder.vehicle?.brand,
+                      workOrder.vehicleModel || workOrder.vehicle?.model
+                    ].filter(Boolean).join(' ')}
+                  </span>
                 </div>
               )}
               {workOrder.odometer && (
@@ -179,10 +184,16 @@ export const WorkOrderReceiptPrinter: React.FC<WorkOrderReceiptPrinterProps> = (
                   <span>{workOrder.odometer.toLocaleString('id-ID')} km</span>
                 </div>
               )}
-              {workOrder.customerName && (
+              {(workOrder.customerName || workOrder.customer?.name) && (
                 <div className="flex justify-between text-[10px]">
                   <span>Konsumen:</span>
-                  <span className="truncate max-w-[150px]">{workOrder.customerName}</span>
+                  <span className="truncate max-w-[150px]">{workOrder.customerName || workOrder.customer?.name}</span>
+                </div>
+              )}
+              {((workOrder.customerPhone || workOrder.customer?.phone) && !String(workOrder.customerPhone || workOrder.customer?.phone).startsWith('WALKIN-')) && (
+                <div className="flex justify-between text-[10px]">
+                  <span>WhatsApp:</span>
+                  <span className="truncate max-w-[150px]">{workOrder.customerPhone || workOrder.customer?.phone}</span>
                 </div>
               )}
               {workOrder.mechanicName && (

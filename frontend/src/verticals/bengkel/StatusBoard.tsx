@@ -146,10 +146,12 @@ export const StatusBoard: React.FC = () => {
   const filteredOrders = workOrders.filter(wo => {
     if (!search) return true;
     const q = search.toLowerCase();
+    const custName = (wo.customerName || (wo as any).customer?.name || '').toLowerCase();
+    const plate = (wo.vehiclePlate || (wo as any).vehicle?.plateNumber || '').toLowerCase();
     return (
       wo.spkNumber.toLowerCase().includes(q) ||
-      (wo.vehiclePlate && wo.vehiclePlate.toLowerCase().includes(q)) ||
-      (wo.customerName && wo.customerName.toLowerCase().includes(q))
+      plate.includes(q) ||
+      custName.includes(q)
     );
   });
 
@@ -293,12 +295,12 @@ export const StatusBoard: React.FC = () => {
                       <div className="flex items-center gap-2 mb-1.5">
                         <Car size={16} className="text-purple-600 shrink-0" />
                         <span className="font-black text-slate-900 text-sm tracking-wide">
-                          {wo.vehiclePlate || 'UMUM'}
+                          {wo.vehiclePlate || (wo as any).vehicle?.plateNumber || 'UMUM'}
                         </span>
                       </div>
 
                       <div className="text-xs text-slate-600 mb-2 truncate">
-                        Pelanggan: <span className="font-semibold text-slate-800">{wo.customerName || 'Walk-In'}</span>
+                        Pelanggan: <span className="font-semibold text-slate-800">{wo.customerName || (wo as any).customer?.name || 'Walk-In'}</span>
                       </div>
 
                       {/* Complaint Preview */}

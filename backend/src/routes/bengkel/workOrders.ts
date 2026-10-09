@@ -67,6 +67,22 @@ async function recalculateWorkOrderTotals(workOrderId: string, tx: any = prisma)
 
 import { getLocalDateRange, getCustomDateRange } from '../../utils/dateHelper';
 
+// Helper Serializer for WorkOrder response to ensure flattened customer & vehicle fields
+export function formatWorkOrderResponse(wo: any) {
+  if (!wo) return wo;
+  const isWalkInPhone = typeof wo.customer?.phone === 'string' && wo.customer.phone.startsWith('WALKIN-');
+  return {
+    ...wo,
+    customerName: wo.customer?.name || null,
+    customerPhone: isWalkInPhone ? null : (wo.customer?.phone || null),
+    vehiclePlate: wo.vehiclePlate || wo.vehicle?.plateNumber || null,
+    vehicleBrand: wo.vehicleBrand || wo.vehicle?.brand || null,
+    vehicleModel: wo.vehicleModel || wo.vehicle?.model || null,
+    vehicleType: wo.vehicleType || wo.vehicle?.vehicleType || 'MOTOR',
+    currentKm: wo.odometer ?? null
+  };
+}
+
 // GET /api/bengkel/work-orders
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -132,7 +148,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       take: 100
     });
 
-    res.json(workOrders);
+    res.json(workOrders.map(formatWorkOrderResponse));
   } catch (error) {
     console.error('Error fetching work orders:', error);
     res.status(500).json({ error: 'Gagal memuat daftar SPK' });
@@ -172,7 +188,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'SPK tidak ditemukan' });
     }
 
-    res.json(workOrder);
+    res.json(formatWorkOrderResponse(workOrder));
   } catch (error) {
     console.error('Error fetching work order detail:', error);
     res.status(500).json({ error: 'Gagal memuat rincian SPK' });
@@ -221,16 +237,43 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         });
         if (cust) {
           finalCustomerId = cust.id;
-          finalCustomerName = cust.name;
+          if (finalCustomerName && finalCustomerName !== 'Pelanggan Umum' && finalCustomerName !== 'Konsumen Walk-In') {
+            await tx.customer.update({
+              where: { id: cust.id },
+              data: { name: finalCustomerName }
+            });
+          } else {
+            finalCustomerName = cust.name;
+          }
           finalCustomerPhone = cust.phone;
         }
       } else if (finalCustomerPhone) {
+        const cleanDigits = finalCustomerPhone.replace(/\D/g, '');
+        const phoneVariants = [finalCustomerPhone];
+        if (cleanDigits.startsWith('62')) {
+          phoneVariants.push('0' + cleanDigits.slice(2));
+          phoneVariants.push('+' + cleanDigits);
+        } else if (cleanDigits.startsWith('0')) {
+          phoneVariants.push('+62' + cleanDigits.slice(1));
+          phoneVariants.push('62' + cleanDigits.slice(1));
+        }
+
         const existingCust = await tx.customer.findFirst({
-          where: { tenantId, phone: finalCustomerPhone }
+          where: {
+            tenantId,
+            phone: { in: phoneVariants }
+          }
         });
         if (existingCust) {
           finalCustomerId = existingCust.id;
-          finalCustomerName = existingCust.name;
+          if (finalCustomerName && finalCustomerName !== 'Pelanggan Umum' && finalCustomerName !== 'Konsumen Walk-In') {
+            await tx.customer.update({
+              where: { id: existingCust.id },
+              data: { name: finalCustomerName }
+            });
+          } else {
+            finalCustomerName = existingCust.name;
+          }
         } else {
           const newCust = await tx.customer.create({
             data: {
@@ -258,6 +301,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
               phone: walkInPhone,
               priceTier: effectivePriceTier
             }
+          });
+        } else if (finalCustomerName && finalCustomerName !== 'Pelanggan Umum' && finalCustomerName !== 'Konsumen Walk-In') {
+          await tx.customer.update({
+            where: { id: walkInCust.id },
+            data: { name: finalCustomerName }
           });
         }
         finalCustomerId = walkInCust.id;
@@ -441,7 +489,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       }).catch(console.error);
     }
 
-    res.status(201).json(createdWorkOrder);
+    res.status(201).json(formatWorkOrderResponse(createdWorkOrder));
   } catch (error: any) {
     console.error('Error creating work order:', error);
     res.status(400).json({ error: error.message || 'Gagal membuat SPK' });
@@ -597,7 +645,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response) => {
       }).catch(console.error);
     }
 
-    res.json(updated);
+    res.json(formatWorkOrderResponse(updated));
   } catch (error: any) {
     console.error('Error updating SPK status:', error);
     res.status(500).json({ error: error.message || 'Gagal mengubah status SPK' });
@@ -954,7 +1002,7 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
     res.json({
       success: true,
       message: 'Pembayaran SPK berhasil diproses',
-      workOrder: result
+      workOrder: formatWorkOrderResponse(result)
     });
   } catch (error: any) {
     console.error('Error processing SPK payment:', error);

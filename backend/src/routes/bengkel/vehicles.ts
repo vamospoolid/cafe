@@ -198,6 +198,9 @@ router.get('/history/:plate', async (req: AuthRequest, res: Response) => {
         vehiclePlate: cleanPlate
       },
       include: {
+        customer: {
+          select: { id: true, name: true, phone: true, priceTier: true }
+        },
         services: {
           include: {
             serviceType: true
@@ -212,8 +215,36 @@ router.get('/history/:plate', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    let resolvedVehicle: any = vehicle ? { ...vehicle } : null;
+    const latestWO = workOrders.length > 0 ? workOrders[0] : null;
+
+    if (!resolvedVehicle) {
+      resolvedVehicle = {
+        id: null,
+        plateNumber: cleanPlate,
+        brand: latestWO?.vehicleBrand || '',
+        model: latestWO?.vehicleModel || '',
+        vehicleType: latestWO?.vehicleType || 'MOTOR',
+        customer: latestWO?.customer || null
+      };
+    } else {
+      if (!resolvedVehicle.brand && latestWO?.vehicleBrand) {
+        resolvedVehicle.brand = latestWO.vehicleBrand;
+      }
+      if (!resolvedVehicle.model && latestWO?.vehicleModel) {
+        resolvedVehicle.model = latestWO.vehicleModel;
+      }
+      if (!resolvedVehicle.customer && latestWO?.customer) {
+        resolvedVehicle.customer = latestWO.customer;
+      }
+    }
+
+    if (resolvedVehicle?.customer?.phone && resolvedVehicle.customer.phone.startsWith('WALKIN-')) {
+      resolvedVehicle.customer.phone = '';
+    }
+
     res.json({
-      vehicle: vehicle || { plateNumber: cleanPlate },
+      vehicle: resolvedVehicle,
       totalVisits: workOrders.length,
       history: workOrders
     });

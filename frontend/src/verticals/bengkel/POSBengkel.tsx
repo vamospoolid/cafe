@@ -177,21 +177,30 @@ export const POSBengkel: React.FC = () => {
     if (!vehiclePlate.trim() || !token) return;
     const clean = vehiclePlate.trim().toUpperCase();
     try {
-      const res = await fetch(`/api/bengkel/vehicles/history/${clean}`, {
+      const res = await fetch(`/api/bengkel/vehicles/history/${encodeURIComponent(clean)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.vehicle && data.vehicle.brand) {
-          setVehicleType(data.vehicle.vehicleType || 'MOTOR');
+        if (data.vehicle && (data.vehicle.id || data.vehicle.brand || data.vehicle.customer || data.vehicle.plateNumber)) {
+          if (data.vehicle.vehicleType) {
+            setVehicleType(data.vehicle.vehicleType);
+          }
           if (data.vehicle.customer) {
-            setCustomerName(data.vehicle.customer.name);
-            setCustomerPhone(data.vehicle.customer.phone || '');
+            if (data.vehicle.customer.name) {
+              setCustomerName(prev => prev || data.vehicle.customer.name);
+            }
+            const rawPhone = data.vehicle.customer.phone || '';
+            const cleanPhone = rawPhone.startsWith('WALKIN-') ? '' : rawPhone;
+            if (cleanPhone) {
+              setCustomerPhone(prev => prev || cleanPhone);
+            }
             if (data.vehicle.customer.priceTier) {
-              setPriceTier(data.vehicle.customer.priceTier);
+              setPriceTier(prev => prev === 'UMUM' ? data.vehicle.customer.priceTier : prev);
             }
           }
-          toast(`Data ${clean} ditemukan: ${data.vehicle.brand} ${data.vehicle.model || ''}`, 'info');
+          const infoText = data.vehicle.brand ? `${data.vehicle.brand} ${data.vehicle.model || ''}` : clean;
+          toast(`Data ${clean} ditemukan: ${infoText}`, 'info');
         }
       }
     } catch (e) {
@@ -445,12 +454,16 @@ export const POSBengkel: React.FC = () => {
       toast('Keranjang masih kosong!', 'warning');
       return;
     }
+    const cleanPlate = vehiclePlate.trim().toUpperCase() || 'UMUM';
+    const cleanName = customerName.trim() || 'Konsumen Walk-In';
+    const cleanPhone = customerPhone.trim() || undefined;
+
     setLoading(true);
     try {
       const payload = {
-        vehiclePlate: vehiclePlate.trim().toUpperCase() || 'UMUM',
-        customerName: customerName.trim() || 'Konsumen Walk-In',
-        customerPhone: customerPhone.trim() || undefined,
+        vehiclePlate: cleanPlate,
+        customerName: cleanName,
+        customerPhone: cleanPhone,
         priceTier,
         vehicleType,
         services: cartItems.filter(i => i.type === 'SERVICE').map(s => ({
@@ -480,8 +493,11 @@ export const POSBengkel: React.FC = () => {
 
       if (res.ok) {
         const created = await res.json();
-        toast(`✅ SPK ${created.spkNumber} berhasil masuk ke Papan Status Antrean!`, 'success');
+        toast(`✅ SPK ${created.spkNumber} (${cleanPlate} - ${cleanName}) berhasil masuk ke Papan Status Antrean!`, 'success');
         setCartItems([]);
+        setVehiclePlate('');
+        setCustomerName('');
+        setCustomerPhone('');
         navigate('/bengkel/board');
       } else {
         const err = await res.json();
@@ -492,6 +508,20 @@ export const POSBengkel: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Open current cart & customer data directly in full WorkOrderForm
+  const handleOpenInSPKForm = () => {
+    navigate('/bengkel/spk/new', {
+      state: {
+        vehiclePlate: vehiclePlate.trim().toUpperCase(),
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        priceTier,
+        vehicleType,
+        cartItems
+      }
+    });
   };
 
   // Filter Catalog Items (Strictly Separated between Sparepart & Jasa)
@@ -519,9 +549,9 @@ export const POSBengkel: React.FC = () => {
         
         {/* Top Quick Bar: Plat Nomor, Konsumen, & 3-Tier Price Selector */}
         <div className="bg-purple-950 text-white p-2.5 sm:p-3 rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 flex-1">
             {/* Plat Nomor */}
-            <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20 flex-1 sm:flex-initial">
+            <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
               <Car size={15} className="text-amber-300 shrink-0" />
               <input
                 type="text"
@@ -533,27 +563,27 @@ export const POSBengkel: React.FC = () => {
               />
             </div>
 
-            {/* Nama Pelanggan (Hidden on extra small mobile to save space) */}
-            <div className="hidden sm:flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-xl border border-white/20">
+            {/* Nama Pelanggan */}
+            <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
               <User size={15} className="text-purple-200 shrink-0" />
               <input
                 type="text"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Nama Konsumen..."
-                className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-28 sm:w-32"
+                className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-24 sm:w-32"
               />
             </div>
 
             {/* No HP */}
-            <div className="hidden md:flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-xl border border-white/20">
-              <Phone size={14} className="text-purple-200" />
+            <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
+              <Phone size={14} className="text-purple-200 shrink-0" />
               <input
                 type="text"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 placeholder="WhatsApp (08...)"
-                className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-28"
+                className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-24 sm:w-28"
               />
             </div>
           </div>
@@ -1066,7 +1096,7 @@ export const POSBengkel: React.FC = () => {
             <button
               onClick={handleQueueSPK}
               disabled={loading || cartItems.length === 0}
-              className="py-2.5 px-3 rounded-xl border border-purple-300 bg-white hover:bg-purple-50 text-purple-900 font-bold text-xs transition active:scale-95 disabled:opacity-50"
+              className="py-2.5 px-3 rounded-xl border border-purple-300 bg-white hover:bg-purple-50 text-purple-900 font-bold text-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
             >
               Masuk Antrean SPK
             </button>
@@ -1079,6 +1109,15 @@ export const POSBengkel: React.FC = () => {
               Bayar Kasir
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={handleOpenInSPKForm}
+            className="w-full py-2 px-3 rounded-xl border border-slate-200 hover:border-purple-300 bg-white hover:bg-purple-50/50 text-slate-700 hover:text-purple-900 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <ClipboardList size={14} className="text-purple-600" />
+            <span>Buka / Edit di Form SPK Lengkap</span>
+          </button>
         </div>
       </div>
 
@@ -1147,6 +1186,43 @@ export const POSBengkel: React.FC = () => {
                 >
                   <X size={16} />
                 </button>
+              </div>
+            </div>
+
+            {/* Mobile Customer & Vehicle Inputs Bar */}
+            <div className="p-3 bg-purple-950 text-white flex flex-col gap-2 border-b border-purple-900">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
+                  <Car size={14} className="text-amber-300 shrink-0" />
+                  <input
+                    type="text"
+                    value={vehiclePlate}
+                    onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
+                    onBlur={handlePlateBlur}
+                    placeholder="NOPOL (B 1234 ABC)"
+                    className="bg-transparent border-none text-white font-black text-xs uppercase tracking-wider placeholder:text-purple-300/70 focus:outline-none w-full"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
+                  <User size={14} className="text-purple-200 shrink-0" />
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Nama Konsumen..."
+                    className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-full"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
+                <Phone size={14} className="text-purple-200 shrink-0" />
+                <input
+                  type="text"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="WhatsApp Konsumen (08...)"
+                  className="bg-transparent border-none text-white text-xs placeholder:text-purple-300/70 focus:outline-none w-full"
+                />
               </div>
             </div>
 
@@ -1235,6 +1311,18 @@ export const POSBengkel: React.FC = () => {
                   <span>Bayar Kasir</span>
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileCartOpen(false);
+                  handleOpenInSPKForm();
+                }}
+                className="w-full py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <ClipboardList size={14} className="text-purple-600" />
+                <span>Buka / Edit di Form SPK Lengkap</span>
+              </button>
             </div>
           </div>
         </div>

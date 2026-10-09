@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Car,
   User,
@@ -28,8 +28,19 @@ import { BengkelCheckoutModal } from './BengkelCheckoutModal';
 export const WorkOrderForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryPlate = searchParams.get('plate');
+  const navState = location.state as {
+    vehiclePlate?: string;
+    customerName?: string;
+    customerPhone?: string;
+    priceTier?: string;
+    vehicleType?: string;
+    services?: any[];
+    parts?: any[];
+    cartItems?: any[];
+  } | undefined;
   const { token } = usePOS();
   const isEditing = Boolean(id);
 
@@ -108,14 +119,15 @@ export const WorkOrderForm: React.FC = () => {
         setCurrentWorkOrder(data);
         setSpkNumber(data.spkNumber);
         setStatus(data.status);
-        setVehiclePlate(data.vehiclePlate);
-        setVehicleBrand(data.vehicleBrand || '');
-        setVehicleModel(data.vehicleModel || '');
-        setVehicleType(data.vehicleType || 'MOTOR');
-        setCurrentKm(data.currentKm ? String(data.currentKm) : '');
-        setCustomerName(data.customerName || '');
-        setCustomerPhone(data.customerPhone || '');
-        setPriceTier(data.priceTier || 'UMUM');
+        setVehiclePlate(data.vehiclePlate || data.vehicle?.plateNumber || '');
+        setVehicleBrand(data.vehicleBrand || data.vehicle?.brand || '');
+        setVehicleModel(data.vehicleModel || data.vehicle?.model || '');
+        setVehicleType(data.vehicleType || data.vehicle?.vehicleType || 'MOTOR');
+        setCurrentKm(data.currentKm ? String(data.currentKm) : (data.odometer ? String(data.odometer) : ''));
+        setCustomerName(data.customerName || data.customer?.name || '');
+        const rawPhone = data.customerPhone || data.customer?.phone || '';
+        setCustomerPhone(rawPhone.startsWith('WALKIN-') ? '' : rawPhone);
+        setPriceTier(data.priceTier || data.customer?.priceTier || 'UMUM');
         setComplaint(data.complaint || '');
         setNotes(data.notes || '');
         setServices(data.services || []);
@@ -135,50 +147,121 @@ export const WorkOrderForm: React.FC = () => {
     if (isEditing) loadExisting();
   }, [isEditing, loadExisting]);
 
-  // Pre-fill from URL query param (?plate=...)
+  // Pre-fill from navigation state or URL query param (?plate=...&name=...&phone=...&tier=...)
   useEffect(() => {
-    if (!isEditing && queryPlate && token) {
-      const clean = queryPlate.trim().toUpperCase();
-      setVehiclePlate(clean);
-      fetch(`/api/bengkel/vehicles/history/${encodeURIComponent(clean)}`, {
+    if (isEditing) return;
+
+    // 1. Pre-fill directly from navigation state (transfer from POS Bengkel)
+    if (navState) {
+      if (navState.vehiclePlate) {
+        setVehiclePlate(navState.vehiclePlate.trim().toUpperCase());
+      }
+      if (navState.customerName) {
+        setCustomerName(navState.customerName.trim());
+      }
+      if (navState.customerPhone) {
+        const rawPhone = navState.customerPhone.trim();
+        setCustomerPhone(rawPhone.startsWith('WALKIN-') ? '' : rawPhone);
+      }
+      if (navState.priceTier) {
+        setPriceTier(navState.priceTier);
+      }
+      if (navState.vehicleType) {
+        setVehicleType(navState.vehicleType);
+      }
+
+      // Pre-fill items from POS Cart if available
+      if (Array.isArray(navState.cartItems) && navState.cartItems.length > 0) {
+        const srvItems = navState.cartItems
+          .filter(i => i.type === 'SERVICE')
+          .map(s => ({
+            serviceTypeId: s.serviceTypeId,
+            serviceName: s.name,
+            price: s.price,
+            subtotal: s.price * (s.qty || 1),
+            mechanicId: s.mechanicId || null
+          }));
+        const prtItems = navState.cartItems
+          .filter(i => i.type === 'PART')
+          .map(p => ({
+            productId: p.productId || null,
+            partName: p.name,
+            qty: p.qty || 1,
+            price: p.price,
+            subtotal: p.price * (p.qty || 1)
+          }));
+        if (srvItems.length > 0) setServices(srvItems);
+        if (prtItems.length > 0) setParts(prtItems);
+      } else {
+        if (Array.isArray(navState.services) && navState.services.length > 0) setServices(navState.services);
+        if (Array.isArray(navState.parts) && navState.parts.length > 0) setParts(navState.parts);
+      }
+    }
+
+    // 2. Pre-fill from query params if passed
+    const qPlate = searchParams.get('plate');
+    const qName = searchParams.get('name');
+    const qPhone = searchParams.get('phone');
+    const qTier = searchParams.get('tier');
+
+    if (qPlate) setVehiclePlate(qPlate.trim().toUpperCase());
+    if (qName) setCustomerName(qName.trim());
+    if (qPhone) {
+      const raw = qPhone.trim();
+      setCustomerPhone(raw.startsWith('WALKIN-') ? '' : raw);
+    }
+    if (qTier) setPriceTier(qTier);
+
+    // 3. Lookup vehicle history if plate provided (to autofill brand, model, customer if missing)
+    const effectivePlate = (qPlate || navState?.vehiclePlate || '').trim().toUpperCase();
+    if (effectivePlate && token) {
+      fetch(`/api/bengkel/vehicles/history/${encodeURIComponent(effectivePlate)}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then(r => r.json())
         .then(data => {
           if (data?.vehicle) {
-            if (data.vehicle.brand) setVehicleBrand(data.vehicle.brand);
-            if (data.vehicle.model) setVehicleModel(data.vehicle.model);
-            if (data.vehicle.vehicleType) setVehicleType(data.vehicle.vehicleType);
+            if (data.vehicle.brand) setVehicleBrand(prev => prev || data.vehicle.brand);
+            if (data.vehicle.model) setVehicleModel(prev => prev || data.vehicle.model);
+            if (data.vehicle.vehicleType) setVehicleType(prev => prev || data.vehicle.vehicleType);
             if (data.vehicle.customer) {
-              if (data.vehicle.customer.name) setCustomerName(data.vehicle.customer.name);
-              if (data.vehicle.customer.phone) setCustomerPhone(data.vehicle.customer.phone);
-              if (data.vehicle.customer.priceTier) setPriceTier(data.vehicle.customer.priceTier);
+              if (data.vehicle.customer.name) setCustomerName(prev => prev || data.vehicle.customer.name);
+              const rawCustPhone = data.vehicle.customer.phone || '';
+              const cleanCustPhone = rawCustPhone.startsWith('WALKIN-') ? '' : rawCustPhone;
+              if (cleanCustPhone) setCustomerPhone(prev => prev || cleanCustPhone);
+              if (data.vehicle.customer.priceTier) setPriceTier(prev => prev === 'UMUM' ? data.vehicle.customer.priceTier : prev);
             }
           }
         })
         .catch(console.warn);
     }
-  }, [isEditing, queryPlate, token]);
+  }, [isEditing, navState, searchParams, token]);
 
   // Lookup vehicle if typing plate number
   const handlePlateBlur = async () => {
     if (isEditing || !vehiclePlate.trim() || !token) return;
     try {
       const clean = vehiclePlate.trim().toUpperCase();
-      const res = await fetch(`/api/bengkel/vehicles/history/${clean}`, {
+      const res = await fetch(`/api/bengkel/vehicles/history/${encodeURIComponent(clean)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.vehicle && data.vehicle.brand) {
-          setVehicleBrand(data.vehicle.brand);
-          setVehicleModel(data.vehicle.model || '');
-          setVehicleType(data.vehicle.vehicleType || 'MOTOR');
+        if (data.vehicle && (data.vehicle.id || data.vehicle.brand || data.vehicle.customer || data.vehicle.plateNumber)) {
+          if (data.vehicle.brand) setVehicleBrand(data.vehicle.brand);
+          if (data.vehicle.model) setVehicleModel(data.vehicle.model || '');
+          if (data.vehicle.vehicleType) setVehicleType(data.vehicle.vehicleType || 'MOTOR');
           if (data.vehicle.customer) {
-            setCustomerName(data.vehicle.customer.name);
-            setCustomerPhone(data.vehicle.customer.phone || '');
+            if (data.vehicle.customer.name) {
+              setCustomerName(prev => prev || data.vehicle.customer.name);
+            }
+            const raw = data.vehicle.customer.phone || '';
+            const cleanPhone = raw.startsWith('WALKIN-') ? '' : raw;
+            if (cleanPhone) {
+              setCustomerPhone(prev => prev || cleanPhone);
+            }
             if (data.vehicle.customer.priceTier) {
-              setPriceTier(data.vehicle.customer.priceTier);
+              setPriceTier(prev => prev === 'UMUM' ? data.vehicle.customer.priceTier : prev);
             }
           }
           toast(`Data kendaraan ${clean} ditemukan dari kunjungan sebelumnya`, 'info');
