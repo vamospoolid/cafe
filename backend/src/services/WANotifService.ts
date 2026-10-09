@@ -434,6 +434,62 @@ export class WANotifService {
       payload.orderNumber
     );
   }
+
+  /**
+   * Kirim WA Pengingat Ganti Oli & Servis Berkala (Bengkel Vertical)
+   */
+  public static async sendOilReminder(payload: {
+    tenantId: string;
+    customerName: string;
+    customerPhone: string;
+    vehiclePlate: string;
+    vehicleBrand?: string;
+    vehicleModel?: string;
+    lastServiceDate: string;
+    intervalMonths?: number;
+    customMessage?: string;
+  }): Promise<{ success: boolean; message: string }> {
+    if (!payload.customerPhone) {
+      return { success: false, message: 'Nomor WhatsApp tidak tersedia' };
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: payload.tenantId },
+      select: { name: true }
+    });
+    const bengkelName = tenant?.name || 'Bengkel Kami';
+    const vehicleDesc = [payload.vehicleBrand, payload.vehicleModel].filter(Boolean).join(' ');
+    const intervalMonths = payload.intervalMonths || 2;
+
+    const formattedLastDate = new Date(payload.lastServiceDate).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const defaultMessage = `Halo Kak *${payload.customerName}*, salam dari *${bengkelName}*! 🙏\n\n` +
+      `Kami ingin menginfokan bahwa kendaraan Anda dengan Plat Nomor *${payload.vehiclePlate}*${vehicleDesc ? ` (${vehicleDesc})` : ''} sudah waktunya untuk *Ganti Oli & Servis Berkala* nih. 🛵💨\n\n` +
+      `📋 *Catatan Servis Sebelumnya*:\n` +
+      `• Servis Terakhir: *${formattedLastDate}*\n` +
+      `• Rekomendasi Siklus: Rutin setiap *${intervalMonths} Bulan*\n\n` +
+      `Ganti oli tepat waktu menjaga performa mesin tetap prima, tarikan enteng, dan konsumsi bensin lebih hemat.\n\n` +
+      `Yuk mampir ke *${bengkelName}* untuk servis dan ganti oli berkualitas! Kakak bisa balas pesan ini untuk reservasi antrean ya. Terima kasih! 🙏`;
+
+    const finalMessage = payload.customMessage || defaultMessage;
+
+    const sent = await this.sendTenantOrFonnte(
+      payload.tenantId,
+      payload.customerPhone,
+      finalMessage,
+      'BENGKEL_OIL_REMINDER',
+      payload.vehiclePlate
+    );
+
+    return {
+      success: sent,
+      message: finalMessage
+    };
+  }
 }
 
 export default WANotifService;

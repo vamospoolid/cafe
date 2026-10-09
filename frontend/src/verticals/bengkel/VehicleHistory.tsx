@@ -1,23 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Search, Car, Bike, Calendar, Wrench, Package, Phone, User, Clock, 
   ArrowLeft, ChevronRight, Gauge, Plus, ShieldCheck, Sparkles, FileText,
-  X, Star
+  X, Star, Droplets, AlertTriangle, AlertCircle, MessageCircle, ExternalLink
 } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
+import { OilReminderModal } from './OilReminderModal';
 
 export const VehicleHistory: React.FC = () => {
   const navigate = useNavigate();
-  const { token } = usePOS();
+  const [searchParams] = useSearchParams();
+  const { token, settings } = usePOS();
+
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [search, setSearch] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'ALL' | 'MOTOR' | 'MOBIL' | 'LOYAL'>('ALL');
-  const [selectedPlate, setSelectedPlate] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'ALL' | 'MOTOR' | 'MOBIL' | 'LOYAL' | 'OIL_DUE'>(() => {
+    const qTab = searchParams.get('tab');
+    return qTab === 'OIL_DUE' ? 'OIL_DUE' : 'ALL';
+  });
+  const [selectedPlate, setSelectedPlate] = useState<string | null>(() => {
+    return searchParams.get('plate') || null;
+  });
   const [historyData, setHistoryData] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+
+  // Oil Reminder State (2 Bulan vs 3 Bulan)
+  const [oilInterval, setOilInterval] = useState<2 | 3>(2);
+  const [isOilModalOpen, setIsOilModalOpen] = useState<boolean>(false);
+  const [selectedOilModalVehicle, setSelectedOilModalVehicle] = useState<any | null>(null);
 
   // Load all vehicles
   useEffect(() => {
@@ -50,13 +63,19 @@ export const VehicleHistory: React.FC = () => {
   // Derived metrics for selected vehicle
   const historyList = historyData?.history || [];
   const totalSpending = historyList.reduce((acc: number, wo: any) => acc + (wo.totalAmount || 0), 0);
-  const latestKm = historyList[0]?.currentKm || historyData?.vehicle?.currentKm || null;
+  const latestKm = historyList[0]?.currentKm || historyData?.vehicle?.currentKm || historyData?.vehicle?.odometer || null;
   const isSelectedMotor = historyData?.vehicle?.vehicleType?.toUpperCase() === 'MOTOR';
 
   // Category counts and filtering
   const motorCount = vehicles.filter(v => (v.vehicleType || 'MOTOR').toUpperCase() === 'MOTOR').length;
   const mobilCount = vehicles.filter(v => (v.vehicleType || '').toUpperCase() === 'MOBIL').length;
   const loyalCount = vehicles.filter(v => (v._count?.workOrders || 0) >= 3).length;
+  const oilDueCount = vehicles.filter(v => {
+    if (!v.oilReminder) return false;
+    return oilInterval === 2
+      ? (v.oilReminder.isDue2Months || v.oilReminder.isDueSoon2Months)
+      : (v.oilReminder.isDue3Months || v.oilReminder.isDueSoon3Months);
+  }).length;
 
   const filteredVehicles = vehicles.filter(v => {
     const isMotor = (v.vehicleType || 'MOTOR').toUpperCase() === 'MOTOR';
@@ -64,6 +83,12 @@ export const VehicleHistory: React.FC = () => {
     if (activeTab === 'MOTOR') return isMotor;
     if (activeTab === 'MOBIL') return !isMotor;
     if (activeTab === 'LOYAL') return serviceCount >= 3;
+    if (activeTab === 'OIL_DUE') {
+      if (!v.oilReminder) return false;
+      return oilInterval === 2
+        ? (v.oilReminder.isDue2Months || v.oilReminder.isDueSoon2Months)
+        : (v.oilReminder.isDue3Months || v.oilReminder.isDueSoon3Months);
+    }
     return true;
   });
 
@@ -130,15 +155,17 @@ export const VehicleHistory: React.FC = () => {
           </div>
 
           {/* Quick Segment Filter Pills */}
-          <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 scrollbar-none">
             {[
               { id: 'ALL', label: 'Semua', count: vehicles.length, icon: null },
+              { id: 'OIL_DUE', label: 'Ganti Oli', count: oilDueCount, icon: Droplets, isWarning: true },
               { id: 'MOTOR', label: 'Motor', count: motorCount, icon: Bike },
               { id: 'MOBIL', label: 'Mobil', count: mobilCount, icon: Car },
               { id: 'LOYAL', label: 'Loyal (≥3x)', count: loyalCount, icon: Star },
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
+              const isOilTab = tab.id === 'OIL_DUE';
               return (
                 <button
                   key={tab.id}
@@ -146,20 +173,60 @@ export const VehicleHistory: React.FC = () => {
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-purple-700 text-white shadow-xs'
+                      ? isOilTab
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-purple-700 text-white shadow-xs'
+                      : isOilTab && tab.count > 0
+                      ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
                   }`}
                 >
-                  {Icon && <Icon size={12} className={isActive ? 'text-white' : 'text-slate-500'} />}
+                  {Icon && <Icon size={12} className={isActive ? 'text-white' : isOilTab ? 'text-rose-600' : 'text-slate-500'} />}
                   <span>{tab.label}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-white/20 text-white font-black' : 'bg-slate-200/80 text-slate-600 font-semibold'
+                    isActive 
+                      ? 'bg-white/20 text-white font-black' 
+                      : isOilTab && tab.count > 0
+                      ? 'bg-rose-200 text-rose-800 font-black'
+                      : 'bg-slate-200/80 text-slate-600 font-semibold'
                   }`}>
                     {tab.count}
                   </span>
                 </button>
               );
             })}
+          </div>
+
+          {/* Oil Interval Switcher */}
+          <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-2.5 py-1.5 mb-2.5 text-[11px]">
+            <span className="text-slate-500 font-semibold flex items-center gap-1">
+              <Droplets size={12} className="text-purple-600" />
+              <span>Siklus Oli:</span>
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setOilInterval(2)}
+                className={`px-2 py-0.5 rounded-lg font-bold text-[10px] transition cursor-pointer ${
+                  oilInterval === 2 
+                    ? 'bg-purple-700 text-white shadow-2xs' 
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                2 Bulan (Motor)
+              </button>
+              <button
+                type="button"
+                onClick={() => setOilInterval(3)}
+                className={`px-2 py-0.5 rounded-lg font-bold text-[10px] transition cursor-pointer ${
+                  oilInterval === 3 
+                    ? 'bg-purple-700 text-white shadow-2xs' 
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                3 Bulan (Mobil)
+              </button>
+            </div>
           </div>
 
           {/* List of Vehicles */}
@@ -229,7 +296,7 @@ export const VehicleHistory: React.FC = () => {
                     </div>
 
                     {/* Middle: Brand & Model */}
-                    <div className="mb-2">
+                    <div className="mb-1.5">
                       <div className="font-black text-slate-900 text-xs sm:text-sm tracking-tight truncate flex items-center gap-1.5">
                         {v.brand || v.model ? (
                           <span>{vehicleModelDisplay}</span>
@@ -240,6 +307,48 @@ export const VehicleHistory: React.FC = () => {
                         )}
                       </div>
                     </div>
+
+                    {/* Oil Reminder Badge & Quick WA Action */}
+                    {(() => {
+                      const rem = v.oilReminder;
+                      if (!rem || rem.daysSinceLastService === null) return null;
+                      const isOverdue = oilInterval === 2 ? rem.isDue2Months : rem.isDue3Months;
+                      const isDueSoon = oilInterval === 2 ? rem.isDueSoon2Months : rem.isDueSoon3Months;
+
+                      if (!isOverdue && !isDueSoon) return null;
+
+                      return (
+                        <div className={`mb-2 px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center justify-between gap-1.5 transition-all ${
+                          isOverdue
+                            ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                            : 'bg-amber-50 text-amber-900 border border-amber-200'
+                        }`}>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Droplets size={12} className={isOverdue ? 'text-rose-600 shrink-0' : 'text-amber-600 shrink-0'} />
+                            <span className="truncate">
+                              {isOverdue ? 'Waktunya Ganti Oli!' : 'Segera Ganti Oli'}
+                            </span>
+                            <span className="text-[10px] font-normal opacity-75 shrink-0">
+                              ({rem.daysSinceLastService} hr lalu)
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedOilModalVehicle(v);
+                              setIsOilModalOpen(true);
+                            }}
+                            className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[10px] flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs"
+                            title="Kirim pengingat WhatsApp ke pelanggan"
+                          >
+                            <MessageCircle size={10} />
+                            <span>Ingatkan</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                     {/* Bottom Row: Customer Name, Phone, and Direct Action Button */}
                     <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs gap-2">
@@ -384,6 +493,179 @@ export const VehicleHistory: React.FC = () => {
                 </div>
               </div>
 
+              {/* OIL MAINTENANCE CYCLE & REMINDER CARD */}
+              {(() => {
+                const rem = historyData?.oilReminder;
+                const cycleDays = oilInterval === 2 ? 60 : 90;
+                const daysSince = rem?.daysSinceLastService ?? null;
+                const nextDueDate = rem ? (oilInterval === 2 ? rem.nextDue2Months : rem.nextDue3Months) : null;
+                const isOverdue = rem ? (oilInterval === 2 ? rem.isDue2Months : rem.isDue3Months) : false;
+                const isDueSoon = rem ? (oilInterval === 2 ? rem.isDueSoon2Months : rem.isDueSoon3Months) : false;
+                const lastOil = rem?.lastOilPartName || null;
+                const progress = daysSince !== null ? Math.min(100, Math.round((daysSince / cycleDays) * 100)) : 0;
+                const daysDiff = daysSince !== null ? daysSince - cycleDays : 0;
+
+                return (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+                    {/* Header Widget */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          isOverdue 
+                            ? 'bg-rose-100 text-rose-700' 
+                            : isDueSoon 
+                            ? 'bg-amber-100 text-amber-800' 
+                            : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          <Droplets size={16} />
+                        </div>
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>Siklus & Pengingat Ganti Oli</span>
+                            {isOverdue && (
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-600 text-white animate-pulse">
+                                Telat Ganti Oli
+                              </span>
+                            )}
+                            {isDueSoon && (
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white">
+                                Waktunya Servis
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            Rekomendasi interval: 2 bulan (~60 hari) untuk motor harian, 3 bulan (~90 hari) untuk mobil.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Interval Switcher inside Detail */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setOilInterval(2)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                            oilInterval === 2
+                              ? 'bg-purple-700 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          2 Bulan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOilInterval(3)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition cursor-pointer ${
+                            oilInterval === 3
+                              ? 'bg-purple-700 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          3 Bulan
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar & Status Details */}
+                    {daysSince === null ? (
+                      <div className="py-4 text-center text-xs text-slate-400">
+                        Belum ada catatan servis sebelumnya untuk menghitung siklus oli kendaraan ini.
+                      </div>
+                    ) : (
+                      <div className="pt-3 space-y-3">
+                        {/* Progress Bar */}
+                        <div>
+                          <div className="flex items-center justify-between text-[11px] font-bold mb-1">
+                            <span className="text-slate-600">
+                              Estimasi Masa Pakai Oli ({daysSince} / {cycleDays} hari)
+                            </span>
+                            <span className={
+                              isOverdue ? 'text-rose-600' : isDueSoon ? 'text-amber-700' : 'text-emerald-600'
+                            }>
+                              {progress}% {isOverdue ? `(Lewat ${daysDiff} hr)` : `(Sisa ${cycleDays - daysSince} hr)`}
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden p-0.5">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isOverdue 
+                                  ? 'bg-rose-600' 
+                                  : isDueSoon 
+                                  ? 'bg-amber-500' 
+                                  : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Info Tiles */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                            <div className="text-[10px] font-semibold text-slate-400 uppercase">Servis Terakhir</div>
+                            <div className="font-bold text-slate-800 mt-0.5">
+                              {rem?.lastServiceDate ? new Date(rem.lastServiceDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-medium">({daysSince} hari yang lalu)</div>
+                          </div>
+
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                            <div className="text-[10px] font-semibold text-slate-400 uppercase">Part Oli Terakhir</div>
+                            <div className="font-bold text-purple-700 truncate mt-0.5" title={lastOil || 'Servis Rutin'}>
+                              {lastOil || 'Servis Rutin / Oli Standar'}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-medium">Penggantian sebelumnya</div>
+                          </div>
+
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                            <div className="text-[10px] font-semibold text-slate-400 uppercase">Jatuh Tempo ({oilInterval} Bulan)</div>
+                            <div className={`font-bold mt-0.5 ${isOverdue ? 'text-rose-600' : 'text-slate-800'}`}>
+                              {nextDueDate ? new Date(nextDueDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                            </div>
+                            <div className={`text-[10px] font-bold ${isOverdue ? 'text-rose-600' : isDueSoon ? 'text-amber-700' : 'text-emerald-600'}`}>
+                              {isOverdue ? `⚠️ Terlewat ${daysDiff} hari` : `✅ Sisa ${cycleDays - daysSince} hari`}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* WhatsApp Reminder Action Banner */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 bg-emerald-50/50 -mx-4 -mb-4 p-3 sm:px-4 rounded-b-2xl">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                              <MessageCircle size={14} />
+                            </div>
+                            <div className="text-xs">
+                              <div className="font-bold text-slate-800">
+                                Kirim Pengingat WhatsApp ke Konsumen
+                              </div>
+                              <div className="text-[11px] text-slate-500">
+                                {historyData?.vehicle?.customer?.phone 
+                                  ? `Nomor terdaftar: ${historyData.vehicle.customer.phone} (${historyData.vehicle.customer.name})`
+                                  : 'Nomor WhatsApp belum tercatat untuk pelanggan ini'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedOilModalVehicle({
+                                ...historyData?.vehicle,
+                                oilReminder: historyData?.oilReminder
+                              });
+                              setIsOilModalOpen(true);
+                            }}
+                            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                          >
+                            <MessageCircle size={13} />
+                            <span>Kirim Pengingat WhatsApp</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* METRIC STRIP: 3 STAT CARDS */}
               <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
@@ -528,6 +810,22 @@ export const VehicleHistory: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* MODAL PENGINGAT GANTI OLI WHATSAPP */}
+      <OilReminderModal
+        isOpen={isOilModalOpen}
+        onClose={() => {
+          setIsOilModalOpen(false);
+          setSelectedOilModalVehicle(null);
+        }}
+        vehicle={selectedOilModalVehicle || (historyData?.vehicle ? {
+          ...historyData.vehicle,
+          oilReminder: historyData.oilReminder
+        } : null)}
+        token={token}
+        storeName={settings?.storeName || 'Bengkel Kami'}
+        defaultIntervalMonths={oilInterval}
+      />
     </div>
   );
 };
