@@ -4,6 +4,70 @@ import { AuthRequest } from '../../middlewares/authMiddleware';
 
 const router = Router();
 
+export interface BengkelConfig {
+  enableCommission: boolean;
+  defaultCommissionRate: number; // e.g. 0.20 (20%)
+  requireMechanicOnService: boolean;
+  commissionBase: 'SERVICE_ONLY' | 'SERVICE_AND_PARTS';
+}
+
+export async function getBengkelConfig(tenantId: string): Promise<BengkelConfig> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { notes: true }
+  });
+
+  const defaults: BengkelConfig = {
+    enableCommission: true,
+    defaultCommissionRate: 0.20,
+    requireMechanicOnService: false,
+    commissionBase: 'SERVICE_ONLY'
+  };
+
+  if (!tenant?.notes) return defaults;
+
+  try {
+    const parsed = JSON.parse(tenant.notes);
+    if (parsed && typeof parsed.bengkel === 'object') {
+      return { ...defaults, ...parsed.bengkel };
+    }
+  } catch {
+    // If notes is plain text, keep defaults
+  }
+  return defaults;
+}
+
+export async function saveBengkelConfig(tenantId: string, config: Partial<BengkelConfig>): Promise<BengkelConfig> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { notes: true }
+  });
+
+  let existingJson: any = {};
+  if (tenant?.notes) {
+    try {
+      existingJson = JSON.parse(tenant.notes);
+    } catch {
+      existingJson = { rawNotes: tenant.notes };
+    }
+  }
+
+  const currentConfig = await getBengkelConfig(tenantId);
+  const updatedConfig: BengkelConfig = {
+    ...currentConfig,
+    ...config
+  };
+
+  existingJson.bengkel = updatedConfig;
+
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { notes: JSON.stringify(existingJson) }
+  });
+
+  return updatedConfig;
+}
+
 // GET /api/bengkel/mechanics (List semua mekanik di tenant)
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
@@ -203,6 +267,157 @@ router.post('/payout', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error processing commission payout:', error);
     res.status(500).json({ error: 'Gagal memproses pembayaran komisi' });
+  }
+});
+
+// GET /api/bengkel/mechanics/settings (Ambil opsi konfigurasi bengkel)
+router.get('/settings', async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = (req as any).tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context tidak tersedia' });
+    const config = await getBengkelConfig(tenantId);
+    res.json(config);
+  } catch (error) {
+    console.error('Error fetching bengkel settings:', error);
+    res.status(500).json({ error: 'Gagal memuat pengaturan bengkel' });
+  }
+});
+
+// POST /api/bengkel/mechanics/settings (Simpan opsi konfigurasi bengkel)
+router.post('/settings', async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = (req as any).tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context tidak tersedia' });
+    const updated = await saveBengkelConfig(tenantId, req.body);
+    res.json({ success: true, message: 'Pengaturan bengkel berhasil disimpan', config: updated });
+  } catch (error) {
+    console.error('Error updating bengkel settings:', error);
+    res.status(500).json({ error: 'Gagal menyimpan pengaturan bengkel' });
+  }
+});
+
+// POST /api/bengkel/mechanics/register (Tambah staf mekanik baru langsung secara atomik)
+router.post('/register', async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = (req as any).tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context tidak tersedia' });
+
+    const { name, username, password, pin, commissionRate, commissionType } = req.body;
+
+    if (!name || !username) {
+      return res.status(400).json({ error: 'Nama dan username mekanik wajib diisi' });
+    }
+
+    const cleanUsername = String(username).trim().toLowerCase();
+
+    // Cek username sudah ada di tenant
+    const existing = await prisma.user.findFirst({
+      where: {
+        username: cleanUsername,
+        OR: [
+          { tenantId },
+          { memberships: { some: { tenantId } } }
+        ]
+      }
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: `Username "${cleanUsername}" sudah digunakan oleh staf lain.` });
+    }
+
+    // Pastikan role MEKANIK ada di database
+    let mekanikRole = await prisma.role.findFirst({
+      where: {
+        OR: [
+          { name: 'MEKANIK' },
+          { id: 'role-system-mekanik' }
+        ],
+        AND: [
+          { OR: [{ isSystem: true }, { tenantId }] }
+        ]
+      }
+    });
+
+    if (!mekanikRole) {
+      mekanikRole = await prisma.role.upsert({
+        where: { id: 'role-system-mekanik' },
+        update: { name: 'MEKANIK', description: 'Mekanik / Teknisi Servis', isSystem: true },
+        create: {
+          id: 'role-system-mekanik',
+          name: 'MEKANIK',
+          description: 'Mekanik / Teknisi Servis',
+          isSystem: true
+        }
+      });
+    }
+
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(password || '123456', 10);
+    const staffPin = pin || '123456';
+
+    const bConfig = await getBengkelConfig(tenantId);
+    const resolvedRate = commissionRate != null ? parseFloat(commissionRate) / (parseFloat(commissionRate) > 1 ? 100 : 1) : bConfig.defaultCommissionRate;
+    const resolvedType = commissionType || (bConfig.enableCommission ? 'PERCENT' : 'NONE');
+
+    // Buat User, Membership, dan MechanicProfile dalam 1 transaksi
+    const result = await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          name: String(name).trim(),
+          username: cleanUsername,
+          passwordHash,
+          pin: staffPin,
+          role: 'MEKANIK',
+          tenantId,
+          employmentType: 'FULL_TIME',
+          permissions: JSON.stringify({}),
+          status: 'Aktif'
+        }
+      });
+
+      await tx.tenantMembership.create({
+        data: {
+          userId: newUser.id,
+          tenantId,
+          roleId: mekanikRole.id,
+          pin: staffPin,
+          employmentType: 'FULL_TIME',
+          status: 'ACTIVE'
+        }
+      });
+
+      const profile = await tx.mechanicProfile.create({
+        data: {
+          tenantId,
+          userId: newUser.id,
+          commissionType: resolvedType,
+          commissionRate: resolvedRate,
+          pendingCommission: 0,
+          paidCommission: 0
+        }
+      });
+
+      return { user: newUser, profile };
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Mekanik ${result.user.name} berhasil didaftarkan`,
+      mechanic: {
+        id: result.user.id,
+        name: result.user.name,
+        username: result.user.username,
+        role: 'MEKANIK',
+        commissionType: result.profile.commissionType,
+        commissionRate: result.profile.commissionRate,
+        pendingCommission: 0,
+        paidCommission: 0,
+        profileId: result.profile.id
+      }
+    });
+  } catch (error) {
+    console.error('Error registering mechanic:', error);
+    res.status(500).json({ error: 'Gagal mendaftarkan mekanik baru' });
   }
 });
 

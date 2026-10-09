@@ -238,9 +238,14 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role &amp; Jabatan (RBAC)</label>
                 <select name="role" className="form-control font-semibold" value={formData.role} onChange={handleChange}>
                   {availableRoles.length > 0 ? (
-                    availableRoles.map(r => (
-                      <option key={r.id} value={r.name}>{r.name} — {r.description}</option>
-                    ))
+                    <>
+                      {availableRoles.map(r => (
+                        <option key={r.id} value={r.name}>{r.name} — {r.description}</option>
+                      ))}
+                      {!availableRoles.some(r => r.name.toUpperCase() === 'MEKANIK') && (
+                        <option value="MEKANIK">MEKANIK — Mekanik / Teknisi Servis</option>
+                      )}
+                    </>
                   ) : (
                     <>
                       <option value="CASHIER">CASHIER (Kasir)</option>

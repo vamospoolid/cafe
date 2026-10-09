@@ -43,6 +43,37 @@ router.get('/roles-permissions', authenticateToken, requirePermission('employees
 
     const businessType = tenant?.businessType || 'CAFE';
 
+    // Pastikan role MEKANIK tersedia di database jika profil bisnis adalah BENGKEL
+    if (businessType === 'BENGKEL') {
+      const hasMekanik = rawRoles.some(r => r.name.toUpperCase() === 'MEKANIK');
+      if (!hasMekanik) {
+        try {
+          const seededMekanik = await prisma.role.upsert({
+            where: { id: 'role-system-mekanik' },
+            update: {
+              name: 'MEKANIK',
+              description: 'Mekanik / Teknisi Servis',
+              isSystem: true
+            },
+            create: {
+              id: 'role-system-mekanik',
+              name: 'MEKANIK',
+              description: 'Mekanik / Teknisi Servis',
+              isSystem: true
+            },
+            include: {
+              permissions: {
+                include: { permission: true }
+              }
+            }
+          });
+          rawRoles.push(seededMekanik);
+        } catch (e) {
+          console.error('Failed to auto-upsert role MEKANIK:', e);
+        }
+      }
+    }
+
     // Filter role sesuai profil vertikal bisnis
     const filteredRoles = rawRoles.filter(r => {
       const roleName = r.name.toUpperCase();
@@ -391,6 +422,28 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
       }
     });
 
+    // Otomatis inisialisasi MechanicProfile jika role adalah MEKANIK
+    const isMechanicRole = (role && role.toUpperCase().includes('MEKANIK')) || 
+                           (membership.role?.name && membership.role.name.toUpperCase().includes('MEKANIK'));
+    if (isMechanicRole) {
+      try {
+        await prisma.mechanicProfile.upsert({
+          where: { userId: newUser.id },
+          update: { tenantId },
+          create: {
+            tenantId,
+            userId: newUser.id,
+            commissionType: 'PERCENT',
+            commissionRate: 0.20,
+            pendingCommission: 0,
+            paidCommission: 0
+          }
+        });
+      } catch (e) {
+        console.error('Failed to auto-create MechanicProfile for user:', e);
+      }
+    }
+
     // Audit Log: User Create
     await AuditLogger.log({
       tenantId,
@@ -539,6 +592,28 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
         status: status === 'Nonaktif' ? 'SUSPENDED' : 'ACTIVE'
       }
     });
+
+    // Otomatis pastikan MechanicProfile jika user diubah ke role MEKANIK
+    const isNowMechanic = (role && role.toUpperCase().includes('MEKANIK')) || 
+                          (updatedUser.role && updatedUser.role.toUpperCase().includes('MEKANIK'));
+    if (isNowMechanic) {
+      try {
+        await prisma.mechanicProfile.upsert({
+          where: { userId: Number(id) },
+          update: { tenantId },
+          create: {
+            tenantId,
+            userId: Number(id),
+            commissionType: 'PERCENT',
+            commissionRate: 0.20,
+            pendingCommission: 0,
+            paidCommission: 0
+          }
+        });
+      } catch (e) {
+        console.error('Failed to sync MechanicProfile on user update:', e);
+      }
+    }
 
     // Audit Log: User Update
     await AuditLogger.log({
