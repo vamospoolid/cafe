@@ -224,7 +224,7 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
     const orders = await prisma.order.findMany({
       where: {
         tenantId,
-        status: 'PAID',
+        status: { in: ['PAID', 'Paid', 'COMPLETED', 'completed'] },
         ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
       },
       select: {
@@ -266,19 +266,50 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
         workOrders = await (prisma as any).workOrder.findMany({
           where: {
             tenantId,
-            paymentStatus: 'PAID',
+            OR: [
+              { status: { in: ['PAID', 'DELIVERED', 'Paid', 'delivered'] } },
+              { paidAmount: { gt: 0 } }
+            ],
             ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
           },
           select: {
             id: true,
             outletId: true,
             totalAmount: true,
+            paidAmount: true,
+            status: true,
             createdAt: true
           }
         });
       }
     } catch (e) {
       console.warn('[Outlets API] WorkOrder query omitted:', (e as any)?.message);
+    }
+
+    // 4b. Ambil data RentalOrder Butik / Persewaan (aman jika model tidak ada)
+    let rentalOrders: any[] = [];
+    try {
+      if ((prisma as any).rentalOrder) {
+        rentalOrders = await (prisma as any).rentalOrder.findMany({
+          where: {
+            tenantId,
+            OR: [
+              { paymentStatus: { in: ['PAID', 'PARTIAL'] } },
+              { status: { in: ['PAID', 'ACTIVE', 'RETURNED', 'COMPLETED'] } }
+            ],
+            ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
+          },
+          select: {
+            id: true,
+            outletId: true,
+            paidAmount: true,
+            totalAmount: true,
+            createdAt: true
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[Outlets API] RentalOrder query omitted:', (e as any)?.message);
     }
 
     // 5. Ambil data CashFlow (Pengeluaran Operasional per outlet)
@@ -288,7 +319,7 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
         where: {
           tenantId,
           type: 'Pengeluaran',
-          status: 'APPROVED',
+          status: { notIn: ['REJECTED', 'Rejected', 'VOID'] },
           ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {})
         },
         select: {
@@ -303,27 +334,34 @@ router.get('/consolidated-summary', async (req: AuthRequest, res: Response) => {
 
     // 6. Hitung statistik agregasi per outlet
     const outletStats = outlets.map((out) => {
+      const isMain = out.id === outlets[0]?.id || (out.code && out.code.endsWith('-01'));
+
       // Order umum (F&B / Retail)
-      const matchingOrders = orders.filter(o => o.outletId === out.id || (!o.outletId && out.code.endsWith('-01')));
+      const matchingOrders = orders.filter(o => o.outletId === out.id || (!o.outletId && isMain));
       const revenueGeneral = matchingOrders.reduce((sum, o) => sum + ((o as any).total || 0), 0);
       const countGeneral = matchingOrders.length;
 
       // Laundry
-      const matchingLaundry = laundryOrders.filter(l => l.outletId === out.id || (!l.outletId && out.code.endsWith('-01')));
-      const revenueLaundry = matchingLaundry.reduce((sum, l) => sum + (l.paidAmount || 0), 0);
+      const matchingLaundry = laundryOrders.filter(l => l.outletId === out.id || (!l.outletId && isMain));
+      const revenueLaundry = matchingLaundry.reduce((sum, l) => sum + (l.paidAmount || l.totalAmount || 0), 0);
       const countLaundry = matchingLaundry.length;
 
       // Bengkel
-      const matchingBengkel = workOrders.filter(w => w.outletId === out.id || (!w.outletId && out.code.endsWith('-01')));
-      const revenueBengkel = matchingBengkel.reduce((sum, w) => sum + (w.totalAmount || 0), 0);
+      const matchingBengkel = workOrders.filter(w => w.outletId === out.id || (!w.outletId && isMain));
+      const revenueBengkel = matchingBengkel.reduce((sum, w) => sum + (w.paidAmount > 0 ? w.paidAmount : (w.totalAmount || 0)), 0);
       const countBengkel = matchingBengkel.length;
 
+      // Rental
+      const matchingRental = rentalOrders.filter(r => r.outletId === out.id || (!r.outletId && isMain));
+      const revenueRental = matchingRental.reduce((sum, r) => sum + (r.paidAmount || r.totalAmount || 0), 0);
+      const countRental = matchingRental.length;
+
       // Total revenue & orders gabungan vertikal
-      const totalRevenue = revenueGeneral + revenueLaundry + revenueBengkel;
-      const totalOrders = countGeneral + countLaundry + countBengkel;
+      const totalRevenue = revenueGeneral + revenueLaundry + revenueBengkel + revenueRental;
+      const totalOrders = countGeneral + countLaundry + countBengkel + countRental;
 
       // Total pengeluaran
-      const matchingExpenses = cashFlows.filter(cf => cf.outletId === out.id || (!cf.outletId && out.code.endsWith('-01')));
+      const matchingExpenses = cashFlows.filter(cf => cf.outletId === out.id || (!cf.outletId && isMain));
       const totalExpense = matchingExpenses.reduce((sum, cf) => sum + (cf.amount || 0), 0);
 
       const netProfit = totalRevenue - totalExpense;

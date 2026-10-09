@@ -257,7 +257,7 @@ export const ConsolidatedOutletDashboard: React.FC = () => {
             <div className="text-base sm:text-2xl font-black text-indigo-700 mt-0.5 truncate">
               {formatRupiah(data?.summary.consolidatedRevenue || 0)}
             </div>
-            <span className="text-[10px] text-slate-500 font-medium">Semua cabang & drop-point</span>
+            <span className="text-[10px] text-slate-500 font-medium">Semua cabang operasional</span>
           </div>
           <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
             <Wallet size={18} />
@@ -271,7 +271,7 @@ export const ConsolidatedOutletDashboard: React.FC = () => {
             <div className="text-base sm:text-2xl font-black text-emerald-600 mt-0.5">
               {(data?.summary.consolidatedOrders || 0).toLocaleString('id-ID')}
             </div>
-            <span className="text-[10px] text-slate-500 font-medium">Nota lunas seluruh cabang</span>
+            <span className="text-[10px] text-slate-500 font-medium">Nota &amp; SPK lunas seluruh cabang</span>
           </div>
           <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <ShoppingBag size={18} />
@@ -285,7 +285,7 @@ export const ConsolidatedOutletDashboard: React.FC = () => {
             <div className="text-base sm:text-2xl font-black text-rose-600 mt-0.5 truncate">
               {formatRupiah(data?.summary.consolidatedExpense || 0)}
             </div>
-            <span className="text-[10px] text-slate-500 font-medium">Petty cash & kulakan darurat</span>
+            <span className="text-[10px] text-slate-500 font-medium">Petty cash &amp; beban operasional</span>
           </div>
           <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
             <Receipt size={18} />
