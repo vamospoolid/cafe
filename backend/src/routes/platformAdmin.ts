@@ -8,6 +8,7 @@ import { BackupService } from '../services/BackupService';
 import { backupCronService } from '../services/BackupCronService';
 import { emitToTenant } from '../index';
 import { featureService } from '../services/FeatureService';
+import { DemoSeederService } from '../services/DemoSeederService';
 import fs from 'fs';
 import path from 'path';
 
@@ -1979,8 +1980,6 @@ router.get('/local-dev/status', async (_req: Request, res: Response) => {
 router.post('/local-dev/seed-resto', async (req: Request, res: Response) => {
   try {
     let { tenantId } = req.body;
-
-    // Jika tenantId tidak dikirim, cari tenant CAFE yang ada atau buat baru
     let targetTenant: any = null;
     if (tenantId) {
       targetTenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -1999,264 +1998,196 @@ router.post('/local-dev/seed-resto', async (req: Request, res: Response) => {
       });
     }
 
-    const tId = targetTenant.id;
-
-    // 1. Setup / Update Settings Toko
-    const existingSettings = await prisma.settings.findFirst({ where: { tenantId: tId } });
-    const settingsData = {
-      storeName: 'MUKI Ramen & Cafe Bar',
-      phone: '081298765432',
-      address: 'Jl. Kesadaran No. 3, Sidorejo',
-      taxRate: 10,
-      serviceCharge: 5,
-      receiptHeader: 'MUKI RAMEN & CAFE BAR\nAuthentic Japanese Broth & Artisanal Coffee',
-      receiptFooter: 'Arigatou Gozaimasu!\nTerima Kasih Atas Kunjungan Anda',
-      enableKDS: true,
-      ingredientTrackingEnabled: true,
-      enableDrinkCustomization: true
-    };
-
-    if (existingSettings) {
-      await prisma.settings.update({ where: { id: existingSettings.id }, data: settingsData });
-    } else {
-      await prisma.settings.create({ data: { tenantId: tId, ...settingsData } });
-    }
-
-    // 2. Setup Meja Resto (Layout 2D visual)
-    const tablesData = [
-      { tableNo: '1', name: 'Meja Depan Kaca 1', capacity: 2, posX: 15, posY: 20, shape: 'square' },
-      { tableNo: '2', name: 'Meja Depan Kaca 2', capacity: 2, posX: 35, posY: 20, shape: 'square' },
-      { tableNo: '3', name: 'Meja Tengah Family 3', capacity: 4, posX: 60, posY: 20, shape: 'square' },
-      { tableNo: '4', name: 'Meja Tengah Family 4', capacity: 4, posX: 80, posY: 20, shape: 'square' },
-      { tableNo: '5', name: 'Booth VIP Ramen 5', capacity: 6, posX: 15, posY: 65, shape: 'square' },
-      { tableNo: '6', name: 'Booth VIP Ramen 6', capacity: 6, posX: 40, posY: 65, shape: 'square' },
-      { tableNo: 'BAR-1', name: 'Bar Counter Seat 1', capacity: 1, posX: 68, posY: 70, shape: 'circle' },
-      { tableNo: 'BAR-2', name: 'Bar Counter Seat 2', capacity: 1, posX: 82, posY: 70, shape: 'circle' }
-    ];
-
-    for (const tb of tablesData) {
-      const exist = await prisma.table.findFirst({ where: { tenantId: tId, tableNo: tb.tableNo } });
-      if (!exist) {
-        await prisma.table.create({
-          data: {
-            tenantId: tId,
-            tableNo: tb.tableNo,
-            name: tb.name,
-            capacity: tb.capacity,
-            status: 'Kosong',
-            posX: tb.posX,
-            posY: tb.posY,
-            shape: tb.shape
-          }
-        });
-      }
-    }
-
-    // 3. Setup Kategori Menu dengan KDS Station Routing
-    const categoriesData = [
-      { name: 'Signature Ramen', icon: '🍜', color: '#ef4444', stationTarget: 'KITCHEN', printerTarget: 'KITCHEN', sortOrder: 1 },
-      { name: 'Side Dishes & Gyoza', icon: '🥟', color: '#f59e0b', stationTarget: 'KITCHEN', printerTarget: 'KITCHEN', sortOrder: 2 },
-      { name: 'Artisan Beverages', icon: '🍵', color: '#10b981', stationTarget: 'BAR', printerTarget: 'BAR', sortOrder: 3 },
-      { name: 'Japanese Dessert', icon: '🍮', color: '#8b5cf6', stationTarget: 'DESSERT', printerTarget: 'PASTRY', sortOrder: 4 }
-    ];
-
-    const categoryMap = new Map<string, number>();
-    for (const cat of categoriesData) {
-      let c = await prisma.category.findFirst({ where: { tenantId: tId, name: cat.name } });
-      if (!c) {
-        c = await prisma.category.create({
-          data: {
-            tenantId: tId,
-            name: cat.name,
-            icon: cat.icon,
-            color: cat.color,
-            stationTarget: cat.stationTarget,
-            printerTarget: cat.printerTarget,
-            sortOrder: cat.sortOrder
-          }
-        });
-      }
-      categoryMap.set(cat.name, c.id);
-    }
-
-    // 4. Setup Bahan Baku (Ingredients)
-    const ingredientsData = [
-      { name: 'Mie Ramen Fresh', unit: 'gram', stock: 15000, minStock: 2000, buyPrice: 15 },
-      { name: 'Kaldu Tori Paitan', unit: 'ml', stock: 35000, minStock: 5000, buyPrice: 20 },
-      { name: 'Shoyu Tare Saus', unit: 'ml', stock: 8000, minStock: 1000, buyPrice: 40 },
-      { name: 'Miso Paste Spesial', unit: 'gram', stock: 5000, minStock: 500, buyPrice: 35 },
-      { name: 'Chashu Ayam Slice', unit: 'pcs', stock: 400, minStock: 50, buyPrice: 3500 },
-      { name: 'Ajitsuke Tamago (Telur)', unit: 'pcs', stock: 250, minStock: 30, buyPrice: 2500 },
-      { name: 'Nori Seaweed Crispy', unit: 'pcs', stock: 600, minStock: 100, buyPrice: 800 },
-      { name: 'Bawang Daun Negi', unit: 'gram', stock: 3000, minStock: 300, buyPrice: 10 },
-      { name: 'Kulit & Isian Gyoza', unit: 'pcs', stock: 300, minStock: 50, buyPrice: 1500 },
-      { name: 'Matcha Uji Premium', unit: 'gram', stock: 2000, minStock: 300, buyPrice: 150 },
-      { name: 'Fresh Milk Susu', unit: 'ml', stock: 20000, minStock: 3000, buyPrice: 18 },
-      { name: 'Sirup Gula Aren', unit: 'ml', stock: 8000, minStock: 1000, buyPrice: 25 },
-      { name: 'Es Batu Kristal', unit: 'gram', stock: 50000, minStock: 5000, buyPrice: 3 }
-    ];
-
-    const ingredientMap = new Map<string, number>();
-    for (const ing of ingredientsData) {
-      let item = await prisma.ingredient.findFirst({ where: { tenantId: tId, name: ing.name } });
-      if (!item) {
-        item = await prisma.ingredient.create({
-          data: {
-            tenantId: tId,
-            name: ing.name,
-            unit: ing.unit,
-            stock: ing.stock,
-            minStock: ing.minStock,
-            buyPrice: ing.buyPrice
-          }
-        });
-      }
-      ingredientMap.set(ing.name, item.id);
-    }
-
-    // 5. Setup Produk Menu & Resep (BOM)
-    const productsData = [
-      {
-        name: 'Tori Paitan Ramen',
-        category: 'Signature Ramen',
-        sellPrice: 38000,
-        imageUrl: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=500&auto=format&fit=crop&q=60',
-        recipes: [
-          { ing: 'Mie Ramen Fresh', qty: 150 },
-          { ing: 'Kaldu Tori Paitan', qty: 300 },
-          { ing: 'Shoyu Tare Saus', qty: 30 },
-          { ing: 'Chashu Ayam Slice', qty: 2 },
-          { ing: 'Ajitsuke Tamago (Telur)', qty: 1 },
-          { ing: 'Nori Seaweed Crispy', qty: 2 }
-        ]
-      },
-      {
-        name: 'Spicy Miso Ramen',
-        category: 'Signature Ramen',
-        sellPrice: 42000,
-        imageUrl: 'https://images.unsplash.com/photo-1552611052-33e04de081de?w=500&auto=format&fit=crop&q=60',
-        recipes: [
-          { ing: 'Mie Ramen Fresh', qty: 150 },
-          { ing: 'Kaldu Tori Paitan', qty: 300 },
-          { ing: 'Miso Paste Spesial', qty: 40 },
-          { ing: 'Chashu Ayam Slice', qty: 2 },
-          { ing: 'Ajitsuke Tamago (Telur)', qty: 1 }
-        ]
-      },
-      {
-        name: 'Shoyu Chashu Ramen',
-        category: 'Signature Ramen',
-        sellPrice: 36000,
-        imageUrl: 'https://images.unsplash.com/photo-1617093727343-374698b1b08d?w=500&auto=format&fit=crop&q=60',
-        recipes: [
-          { ing: 'Mie Ramen Fresh', qty: 150 },
-          { ing: 'Kaldu Tori Paitan', qty: 280 },
-          { ing: 'Shoyu Tare Saus', qty: 35 },
-          { ing: 'Chashu Ayam Slice', qty: 3 }
-        ]
-      },
-      {
-        name: 'Gyoza Panggang (5 pcs)',
-        category: 'Side Dishes & Gyoza',
-        sellPrice: 22000,
-        imageUrl: 'https://images.unsplash.com/photo-1496116218417-1a781b1c416c?w=500&auto=format&fit=crop&q=60',
-        recipes: [
-          { ing: 'Kulit & Isian Gyoza', qty: 5 }
-        ]
-      },
-      {
-        name: 'Matcha Latte Uji Ice',
-        category: 'Artisan Beverages',
-        sellPrice: 22000,
-        imageUrl: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=500&auto=format&fit=crop&q=60',
-        recipes: [
-          { ing: 'Matcha Uji Premium', qty: 15 },
-          { ing: 'Fresh Milk Susu', qty: 180 },
-          { ing: 'Sirup Gula Aren', qty: 25 },
-          { ing: 'Es Batu Kristal', qty: 120 }
-        ]
-      },
-      {
-        name: 'Es Kopi Gula Aren Special',
-        category: 'Artisan Beverages',
-        sellPrice: 18000,
-        imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=500&auto=format&fit=crop&q=60',
-        recipes: [
-          { ing: 'Fresh Milk Susu', qty: 150 },
-          { ing: 'Sirup Gula Aren', qty: 30 },
-          { ing: 'Es Batu Kristal', qty: 120 }
-        ]
-      },
-      {
-        name: 'Japanese Caramel Purin',
-        category: 'Japanese Dessert',
-        sellPrice: 18000,
-        imageUrl: 'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=500&auto=format&fit=crop&q=60',
-        recipes: [
-          { ing: 'Ajitsuke Tamago (Telur)', qty: 1 },
-          { ing: 'Fresh Milk Susu', qty: 100 }
-        ]
-      }
-    ];
-
-    for (const prod of productsData) {
-      const catId = categoryMap.get(prod.category) || 1;
-      let p = await prisma.product.findFirst({ where: { tenantId: tId, name: prod.name } });
-      if (!p) {
-        p = await prisma.product.create({
-          data: {
-            tenantId: tId,
-            name: prod.name,
-            categoryId: catId,
-            sellPrice: prod.sellPrice,
-            buyPrice: Math.round(prod.sellPrice * 0.35),
-            stock: 50,
-            imageUrl: prod.imageUrl,
-            status: 'Aktif'
-          }
-        });
-      }
-
-      // Link recipes
-      for (const r of prod.recipes) {
-        const ingId = ingredientMap.get(r.ing);
-        if (ingId) {
-          const recExist = await prisma.recipeItem.findFirst({
-            where: { productId: p.id, ingredientId: ingId }
-          });
-          if (!recExist) {
-            await prisma.recipeItem.create({
-              data: {
-                tenantId: tId,
-                productId: p.id,
-                ingredientId: ingId,
-                qtyPerServing: r.qty
-              }
-            });
-          }
-        }
-      }
-    }
-
+    const result = await DemoSeederService.seedCafeDemo(targetTenant.id);
     return res.json({
       success: true,
-      message: `Berhasil melakukan seeding data demo Resto (MUKI Ramen) untuk tenant ${targetTenant.name}!`,
-      tenant: {
-        id: targetTenant.id,
-        name: targetTenant.name,
-        slug: targetTenant.slug,
-        businessType: targetTenant.businessType
-      },
-      stats: {
-        tablesCount: tablesData.length,
-        categoriesCount: categoriesData.length,
-        ingredientsCount: ingredientsData.length,
-        productsCount: productsData.length
-      }
+      message: `Berhasil melakukan seeding data demo Resto & Cafe untuk tenant ${targetTenant.name}!`,
+      tenant: targetTenant,
+      stats: result
     });
   } catch (error: any) {
     console.error('Seed Resto Error:', error);
     return res.status(500).json({ error: error.message || 'Gagal melakukan seeding data resto' });
+  }
+});
+
+/**
+ * POST /api/platform-admin/local-dev/seed-retail
+ * 1-Click Seeder: Mengisi tenant dengan produk Sembako Grosir, Multi-UOM, dan 3-tier pricing
+ */
+router.post('/local-dev/seed-retail', async (req: Request, res: Response) => {
+  try {
+    let { tenantId } = req.body;
+    let targetTenant: any = null;
+    if (tenantId) {
+      targetTenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.findFirst({ where: { businessType: 'RETAIL' } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.create({
+        data: {
+          name: 'Sabar Jaya Grosir & Sembako',
+          slug: 'sabar-jaya-' + Date.now().toString().slice(-4),
+          businessType: 'RETAIL',
+          status: 'ACTIVE'
+        }
+      });
+    }
+
+    const result = await DemoSeederService.seedRetailDemo(targetTenant.id);
+    return res.json({
+      success: true,
+      message: `Berhasil melakukan seeding data demo Retail & Grosir untuk tenant ${targetTenant.name}!`,
+      tenant: targetTenant,
+      stats: result
+    });
+  } catch (error: any) {
+    console.error('Seed Retail Error:', error);
+    return res.status(500).json({ error: error.message || 'Gagal melakukan seeding data retail' });
+  }
+});
+
+/**
+ * POST /api/platform-admin/local-dev/seed-rental
+ * 1-Click Seeder: Mengisi tenant dengan busana adat, kebaya, gaun, jas lengkap dengan foto HD & deposit
+ */
+router.post('/local-dev/seed-rental', async (req: Request, res: Response) => {
+  try {
+    let { tenantId } = req.body;
+    let targetTenant: any = null;
+    if (tenantId) {
+      targetTenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.findFirst({ where: { businessType: 'RENTAL' } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.create({
+        data: {
+          name: 'Ratu Gallery - Butik Sewa Busana',
+          slug: 'ratu-gallery-' + Date.now().toString().slice(-4),
+          businessType: 'RENTAL',
+          status: 'ACTIVE'
+        }
+      });
+    }
+
+    const result = await DemoSeederService.seedRentalDemo(targetTenant.id);
+    return res.json({
+      success: true,
+      message: `Berhasil melakukan seeding data demo Sewa Busana untuk tenant ${targetTenant.name}!`,
+      tenant: targetTenant,
+      stats: result
+    });
+  } catch (error: any) {
+    console.error('Seed Rental Error:', error);
+    return res.status(500).json({ error: error.message || 'Gagal melakukan seeding data sewa busana' });
+  }
+});
+
+/**
+ * POST /api/platform-admin/local-dev/seed-laundry
+ * 1-Click Seeder: Mengisi tenant dengan paket kiloan, satuan, pewangi parfum & chemical inventory
+ */
+router.post('/local-dev/seed-laundry', async (req: Request, res: Response) => {
+  try {
+    let { tenantId } = req.body;
+    let targetTenant: any = null;
+    if (tenantId) {
+      targetTenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.findFirst({ where: { businessType: 'LAUNDRY' } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.create({
+        data: {
+          name: 'FreshClean Laundry & Care',
+          slug: 'freshclean-' + Date.now().toString().slice(-4),
+          businessType: 'LAUNDRY',
+          status: 'ACTIVE'
+        }
+      });
+    }
+
+    const result = await DemoSeederService.seedLaundryDemo(targetTenant.id);
+    return res.json({
+      success: true,
+      message: `Berhasil melakukan seeding data demo Laundry untuk tenant ${targetTenant.name}!`,
+      tenant: targetTenant,
+      stats: result
+    });
+  } catch (error: any) {
+    console.error('Seed Laundry Error:', error);
+    return res.status(500).json({ error: error.message || 'Gagal melakukan seeding data laundry' });
+  }
+});
+
+/**
+ * POST /api/platform-admin/local-dev/seed-bengkel
+ * 1-Click Seeder: Mengisi tenant dengan jasa servis motor, oli, sparepart, dan pit stall
+ */
+router.post('/local-dev/seed-bengkel', async (req: Request, res: Response) => {
+  try {
+    let { tenantId } = req.body;
+    let targetTenant: any = null;
+    if (tenantId) {
+      targetTenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.findFirst({ where: { businessType: 'BENGKEL' } });
+    }
+    if (!targetTenant) {
+      targetTenant = await prisma.tenant.create({
+        data: {
+          name: 'Jaya Motor Workshop',
+          slug: 'jayamotor-' + Date.now().toString().slice(-4),
+          businessType: 'BENGKEL',
+          status: 'ACTIVE'
+        }
+      });
+    }
+
+    const result = await DemoSeederService.seedBengkelDemo(targetTenant.id);
+    return res.json({
+      success: true,
+      message: `Berhasil melakukan seeding data demo Bengkel untuk tenant ${targetTenant.name}!`,
+      tenant: targetTenant,
+      stats: result
+    });
+  } catch (error: any) {
+    console.error('Seed Bengkel Error:', error);
+    return res.status(500).json({ error: error.message || 'Gagal melakukan seeding data bengkel' });
+  }
+});
+
+/**
+ * POST /api/platform-admin/local-dev/seed-vertical
+ * Universal Seeder: Mengisi tenant dengan data demo sesuai vertikal tenant (atau pilihan vertikal)
+ */
+router.post('/local-dev/seed-vertical', async (req: Request, res: Response) => {
+  try {
+    const { tenantId, vertical } = req.body;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenantId wajib diisi' });
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant tidak ditemukan' });
+    }
+
+    const result = await DemoSeederService.seedVerticalDemo(tenantId, vertical);
+    return res.json({
+      success: true,
+      message: `Berhasil melakukan seeding data demo ${result.vertical} untuk tenant ${tenant.name}!`,
+      stats: result
+    });
+  } catch (error: any) {
+    console.error('Seed Vertical Error:', error);
+    return res.status(500).json({ error: error.message || 'Gagal melakukan seeding vertikal' });
   }
 });
 

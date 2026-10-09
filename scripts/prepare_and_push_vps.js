@@ -290,6 +290,7 @@ async function runRemoteVpsDeploy() {
         npx ts-node prisma/seed_foundation.ts || true
         npx ts-node prisma/seed_features.ts || true
         npx ts-node prisma/fix_retail_tenant.ts || true
+        npx tsx prisma/seed_all_demo.ts || true
 
         echo "   -> Mengompilasi TypeScript backend..."
         npm run build

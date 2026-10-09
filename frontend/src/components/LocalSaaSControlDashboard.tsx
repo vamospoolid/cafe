@@ -111,10 +111,44 @@ export const LocalSaaSControlDashboard: React.FC = () => {
     }
   };
 
-  // 1-Click Seed Resto Demo
+  // 1-Click Seed Vertical Demo
+  const handleSeedVertical = async (tenantId: string, vertical?: string, tenantName?: string) => {
+    const vertLabel = vertical === 'RETAIL' ? 'Retail & Grosir' :
+                      vertical === 'RENTAL' ? 'Sewa Busana' :
+                      vertical === 'LAUNDRY' ? 'Laundry' :
+                      vertical === 'BENGKEL' ? 'Bengkel' : 'Resto & Kafe';
+
+    const confirm = await confirmAlert(
+      `Suntik Data Demo ${vertLabel}?`,
+      `Sistem akan mengisi tenant ${tenantName ? `"${tenantName}"` : ''} dengan katalog ${vertLabel} lengkap (katalog produk, HPP, bahan baku, foto HD, paket/satuan, dan master data terkait).`
+    );
+    if (!confirm.isConfirmed) return;
+
+    setActionLoading(`seed_${tenantId}`);
+    try {
+      const res = await fetch('/api/platform-admin/local-dev/seed-vertical', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, vertical })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`✅ ${data.message}`, 'success');
+        fetchLocalStatus();
+      } else {
+        toast(data.error || 'Gagal seeding vertikal', 'error');
+      }
+    } catch (err: any) {
+      toast(err.message || 'Terjadi kesalahan', 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // 1-Click Seed Resto Demo (Fallback & Global)
   const handleSeedResto = async (tenantId?: string) => {
     const confirm = await confirmAlert(
-      '🍜 Setup Lengkap Demo Resto (MUKI Ramen & Cafe)?',
+      '🍜 Setup Lengkap Demo Resto & Kafe?',
       'Sistem akan menyuntikkan menu Signature Ramen, Minuman Artisan, Meja interaktif, Bahan Baku, dan Resep BOM otomatis ke tenant ini.'
     );
     if (!confirm.isConfirmed) return;
@@ -431,17 +465,67 @@ export const LocalSaaSControlDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
             <span className="text-[11px] font-black uppercase text-indigo-600 tracking-wider">Langkah 1</span>
-            <h3 className="text-sm font-bold text-slate-900 mt-1">Suntik Data Demo MUKI Ramen</h3>
+            <h3 className="text-sm font-bold text-slate-900 mt-1">Suntik Data Demo Multi-Vertikal</h3>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Membuat kategori station target (Kitchen/Bar), 8 meja, 13 bahan baku, dan 7 menu ber-resep BOM.
+              Injeksi otomatis katalog lengkap ber-HPP, resep BOM, multi-satuan grosir, foto busana HD, dan paket laundry.
             </p>
-            <button
-              onClick={() => handleSeedResto()}
-              disabled={actionLoading === 'seed_resto'}
-              className="mt-3 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
-            >
-              <Zap size={14} /> Jalankan Seeder Resto
-            </button>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <button
+                onClick={() => {
+                  const cafeT = tenants.find(t => t.businessType === 'CAFE') || tenants[0];
+                  if (cafeT) handleSeedVertical(cafeT.id, 'CAFE', cafeT.name);
+                }}
+                disabled={Boolean(actionLoading)}
+                className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                title="Suntik menu Ramen & Kopi ber-resep BOM"
+              >
+                <Coffee size={12} /> Resto/Kafe
+              </button>
+              <button
+                onClick={() => {
+                  const retailT = tenants.find(t => t.businessType === 'RETAIL') || tenants[0];
+                  if (retailT) handleSeedVertical(retailT.id, 'RETAIL', retailT.name);
+                }}
+                disabled={Boolean(actionLoading)}
+                className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                title="Suntik sembako grosir multi-UOM"
+              >
+                <ShoppingBag size={12} /> Grosir/Retail
+              </button>
+              <button
+                onClick={() => {
+                  const rentalT = tenants.find(t => t.businessType === 'RENTAL') || tenants[0];
+                  if (rentalT) handleSeedVertical(rentalT.id, 'RENTAL', rentalT.name);
+                }}
+                disabled={Boolean(actionLoading)}
+                className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                title="Suntik busana adat & gaun foto HD"
+              >
+                <Sparkles size={12} /> Sewa Busana
+              </button>
+              <button
+                onClick={() => {
+                  const laundryT = tenants.find(t => t.businessType === 'LAUNDRY') || tenants[0];
+                  if (laundryT) handleSeedVertical(laundryT.id, 'LAUNDRY', laundryT.name);
+                }}
+                disabled={Boolean(actionLoading)}
+                className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                title="Suntik paket kiloan, satuan & chemical"
+              >
+                <Shirt size={12} /> Laundry
+              </button>
+              <button
+                onClick={() => {
+                  const bengkelT = tenants.find(t => t.businessType === 'BENGKEL') || tenants[0];
+                  if (bengkelT) handleSeedVertical(bengkelT.id, 'BENGKEL', bengkelT.name);
+                }}
+                disabled={Boolean(actionLoading)}
+                className="px-2.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                title="Suntik servis & sparepart bengkel"
+              >
+                <Wrench size={12} /> Bengkel
+              </button>
+            </div>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
@@ -583,14 +667,28 @@ export const LocalSaaSControlDashboard: React.FC = () => {
                           <option value="LAUNDRY">Laundry</option>
                         </select>
 
-                        {/* Seed Resto Data button */}
+                        {/* 1-Click Seed Vertical Data button */}
                         <button
-                          onClick={() => handleSeedResto(t.id)}
-                          disabled={actionLoading === 'seed_resto'}
-                          className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-colors cursor-pointer"
-                          title="Suntikkan katalog menu Resto & resep ke tenant ini"
+                          onClick={() => handleSeedVertical(t.id, t.businessType, t.name)}
+                          disabled={actionLoading === `seed_${t.id}`}
+                          className={`p-1.5 rounded-xl border transition-all cursor-pointer ${
+                            t.businessType === 'RETAIL'
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+                              : t.businessType === 'RENTAL'
+                              ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'
+                              : t.businessType === 'LAUNDRY'
+                              ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200'
+                              : t.businessType === 'BENGKEL'
+                              ? 'bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200'
+                              : 'bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-200'
+                          }`}
+                          title={`Suntikkan katalog data demo lengkap (${t.businessType}) ke tenant ini`}
                         >
-                          <Coffee size={14} />
+                          {t.businessType === 'RETAIL' && <ShoppingBag size={14} />}
+                          {t.businessType === 'RENTAL' && <Sparkles size={14} />}
+                          {t.businessType === 'LAUNDRY' && <Shirt size={14} />}
+                          {t.businessType === 'BENGKEL' && <Wrench size={14} />}
+                          {(!t.businessType || t.businessType === 'CAFE') && <Coffee size={14} />}
                         </button>
 
                         {/* Purge Test Data */}
