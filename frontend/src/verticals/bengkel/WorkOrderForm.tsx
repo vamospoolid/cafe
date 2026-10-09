@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Car,
@@ -81,6 +81,94 @@ export const WorkOrderForm: React.FC = () => {
   const [customPartPrice, setCustomPartPrice] = useState<string>('');
 
   const [loading, setLoading] = useState<boolean>(false);
+
+  // Focus Refs for Keyboard Navigation (Tab / Enter Friendly)
+  const plateInputRef = useRef<HTMLInputElement>(null);
+  const brandInputRef = useRef<HTMLInputElement>(null);
+  const modelInputRef = useRef<HTMLInputElement>(null);
+  const kmInputRef = useRef<HTMLInputElement>(null);
+  const customerNameInputRef = useRef<HTMLInputElement>(null);
+  const customerPhoneInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus logic:
+  // Ketika form dibuka dan Nopol sudah ada (misal dari POS / SPK existing saat masuk pembayaran),
+  // cursor LANGSUNG otomatis fokus ke Merk Kendaraan!
+  const hasFocusedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (loading) return;
+    const timer = setTimeout(() => {
+      if (vehiclePlate.trim()) {
+        brandInputRef.current?.focus();
+        brandInputRef.current?.select();
+        hasFocusedRef.current = true;
+      } else if (!hasFocusedRef.current) {
+        plateInputRef.current?.focus();
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [id, loading, Boolean(vehiclePlate.trim())]);
+
+  // Keyboard navigation on Enter
+  const handlePlateKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handlePlateBlur();
+      brandInputRef.current?.focus();
+      brandInputRef.current?.select();
+    }
+  };
+
+  const handleBrandKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      modelInputRef.current?.focus();
+      modelInputRef.current?.select();
+    }
+  };
+
+  const handleSelectQuickBrand = (brand: string) => {
+    setVehicleBrand(brand);
+    setTimeout(() => {
+      modelInputRef.current?.focus();
+      modelInputRef.current?.select();
+    }, 50);
+  };
+
+  const handleModelKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      kmInputRef.current?.focus();
+      kmInputRef.current?.select();
+    }
+  };
+
+  const handleKmKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      customerNameInputRef.current?.focus();
+      customerNameInputRef.current?.select();
+    }
+  };
+
+  const handleCustomerNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      customerPhoneInputRef.current?.focus();
+      customerPhoneInputRef.current?.select();
+    }
+  };
+
+  const handleCustomerPhoneKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (isEditing && status !== 'PAID' && status !== 'CANCELLED') {
+        setShowPayModal(true);
+      } else if (!isEditing) {
+        handleSave();
+      }
+    }
+  };
 
   // Load Catalogs
   useEffect(() => {
@@ -529,6 +617,7 @@ export const WorkOrderForm: React.FC = () => {
                 <span>Batalkan SPK</span>
               </button>
               <button
+                tabIndex={7}
                 onClick={() => setShowPayModal(true)}
                 className="flex-2 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition active:scale-95 cursor-pointer"
               >
@@ -585,16 +674,20 @@ export const WorkOrderForm: React.FC = () => {
                     </span>
                   </div>
                   <input
+                    ref={plateInputRef}
+                    tabIndex={1}
                     type="text"
                     value={vehiclePlate}
                     onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
                     onBlur={handlePlateBlur}
+                    onKeyDown={handlePlateKeyDown}
                     placeholder="Contoh: B 1234 ABC"
                     className="w-full pl-14 pr-10 py-2.5 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-base sm:text-lg font-black tracking-widest text-slate-900 uppercase placeholder:text-slate-400 placeholder:font-normal placeholder:tracking-normal outline-none transition-all shadow-2xs"
                   />
                   {vehiclePlate.trim() && (
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={handlePlateBlur}
                       title="Cek Riwayat Kendaraan"
                       className="absolute right-2.5 p-1 rounded-lg hover:bg-slate-200/60 text-purple-600 transition-colors cursor-pointer"
@@ -605,115 +698,137 @@ export const WorkOrderForm: React.FC = () => {
                 </div>
               </div>
 
-              {/* Jenis Kendaraan & Odometer */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Jenis Kendaraan (Segmented Pill Toggle) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Jenis Kendaraan
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/70">
-                    <button
-                      type="button"
-                      onClick={() => setVehicleType('MOTOR')}
-                      className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        vehicleType === 'MOTOR'
-                          ? 'bg-purple-700 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                      }`}
-                    >
-                      <Bike size={15} />
-                      <span>Motor</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVehicleType('MOBIL')}
-                      className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        vehicleType === 'MOBIL'
-                          ? 'bg-purple-700 text-white shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                      }`}
-                    >
-                      <Car size={15} />
-                      <span>Mobil</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Odometer (KM) */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Odometer (KM)
-                  </label>
-                  <div className="relative flex items-center">
-                    <div className="absolute left-3 pointer-events-none text-slate-400">
-                      <Gauge size={16} />
-                    </div>
-                    <input
-                      type="number"
-                      value={currentKm}
-                      onChange={(e) => setCurrentKm(e.target.value)}
-                      placeholder="15400"
-                      className="w-full pl-9 pr-12 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
-                    />
-                    <span className="absolute right-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      KM
-                    </span>
-                  </div>
+              {/* Jenis Kendaraan (Segmented Pill Toggle) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Jenis Kendaraan
+                </label>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/70">
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setVehicleType('MOTOR')}
+                    className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      vehicleType === 'MOTOR'
+                        ? 'bg-purple-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Bike size={15} />
+                    <span>Motor</span>
+                  </button>
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setVehicleType('MOBIL')}
+                    className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      vehicleType === 'MOBIL'
+                        ? 'bg-purple-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Car size={15} />
+                    <span>Mobil</span>
+                  </button>
                 </div>
               </div>
 
-              {/* Merk & Model / Tipe */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Merk */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Merk Kendaraan
+              {/* Merk Kendaraan (Cursor Auto-Focus ke sini) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                    <span>Merk Kendaraan</span>
                   </label>
-                  <div className="relative flex items-center">
-                    <div className="absolute left-3 pointer-events-none text-slate-400">
-                      <Tag size={15} />
-                    </div>
-                    <input
-                      type="text"
-                      value={vehicleBrand}
-                      onChange={(e) => setVehicleBrand(e.target.value)}
-                      placeholder="Honda / Yamaha"
-                      className="w-full pl-9 pr-3 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
-                    />
-                  </div>
-                  {/* Quick Brand Suggestions */}
-                  <div className="flex items-center gap-1 mt-1.5 overflow-x-auto pb-0.5">
-                    {['Honda', 'Yamaha', 'Toyota', 'Suzuki'].map(brand => (
-                      <button
-                        key={brand}
-                        type="button"
-                        onClick={() => setVehicleBrand(brand)}
-                        className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-700 border border-slate-200 transition-colors whitespace-nowrap cursor-pointer"
-                      >
-                        {brand}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="text-[10px] text-slate-400">Tekan enter / tab ke Model</span>
                 </div>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 pointer-events-none text-slate-400">
+                    <Tag size={15} />
+                  </div>
+                  <input
+                    ref={brandInputRef}
+                    tabIndex={2}
+                    type="text"
+                    value={vehicleBrand}
+                    onChange={(e) => setVehicleBrand(e.target.value)}
+                    onKeyDown={handleBrandKeyDown}
+                    placeholder="Honda / Yamaha"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
+                  />
+                </div>
+                {/* Quick Brand Suggestions */}
+                <div className="flex items-center gap-1 mt-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                  {(vehicleType === 'MOBIL'
+                    ? ['Toyota', 'Daihatsu', 'Honda', 'Suzuki', 'Mitsubishi', 'Hyundai']
+                    : ['Honda', 'Yamaha', 'Suzuki', 'Kawasaki', 'Vespa']
+                  ).map(brand => (
+                    <button
+                      key={brand}
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => handleSelectQuickBrand(brand)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
+                        vehicleBrand.toLowerCase() === brand.toLowerCase()
+                          ? 'bg-purple-100 text-purple-900 border-purple-300 font-bold shadow-xs'
+                          : 'bg-slate-100 hover:bg-purple-50 text-slate-600 hover:text-purple-700 border-slate-200'
+                      }`}
+                    >
+                      {brand}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                {/* Model / Tipe */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              {/* Model / Seri (DI BAWAHNYA MERK KENDARAAN) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
                     Model / Seri
                   </label>
-                  <div className="relative flex items-center">
-                    <div className="absolute left-3 pointer-events-none text-slate-400">
-                      <Wrench size={15} />
-                    </div>
-                    <input
-                      type="text"
-                      value={vehicleModel}
-                      onChange={(e) => setVehicleModel(e.target.value)}
-                      placeholder="Vario 150 / Avanza"
-                      className="w-full pl-9 pr-3 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
-                    />
+                  <span className="text-[10px] text-slate-400">Tekan enter / tab ke Odometer</span>
+                </div>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 pointer-events-none text-slate-400">
+                    <Wrench size={15} />
                   </div>
+                  <input
+                    ref={modelInputRef}
+                    tabIndex={3}
+                    type="text"
+                    value={vehicleModel}
+                    onChange={(e) => setVehicleModel(e.target.value)}
+                    onKeyDown={handleModelKeyDown}
+                    placeholder={vehicleType === 'MOBIL' ? 'Avanza / Innova / Brio' : 'Vario 150 / Beat / NMAX'}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              {/* Odometer (KM) (SELANJUTNYA DI BAWAH MODEL / SERI) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Odometer (KM)
+                  </label>
+                  <span className="text-[10px] text-slate-400">Tekan enter / tab ke Pelanggan</span>
+                </div>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 pointer-events-none text-slate-400">
+                    <Gauge size={16} />
+                  </div>
+                  <input
+                    ref={kmInputRef}
+                    tabIndex={4}
+                    type="number"
+                    value={currentKm}
+                    onChange={(e) => setCurrentKm(e.target.value)}
+                    onKeyDown={handleKmKeyDown}
+                    placeholder="15400"
+                    className="w-full pl-9 pr-12 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
+                  />
+                  <span className="absolute right-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    KM
+                  </span>
                 </div>
               </div>
             </div>
@@ -740,7 +855,12 @@ export const WorkOrderForm: React.FC = () => {
                   <label className="text-xs font-bold text-slate-700">Nama Pelanggan</label>
                   <button
                     type="button"
-                    onClick={() => setCustomerName('Pelanggan Walk-In')}
+                    tabIndex={-1}
+                    onClick={() => {
+                      setCustomerName('Pelanggan Walk-In');
+                      customerPhoneInputRef.current?.focus();
+                      customerPhoneInputRef.current?.select();
+                    }}
                     className="text-[10px] font-bold text-purple-700 hover:text-purple-900 hover:underline cursor-pointer"
                   >
                     + Konsumen Umum
@@ -751,9 +871,12 @@ export const WorkOrderForm: React.FC = () => {
                     <User size={16} />
                   </div>
                   <input
+                    ref={customerNameInputRef}
+                    tabIndex={5}
                     type="text"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
+                    onKeyDown={handleCustomerNameKeyDown}
                     placeholder="Nama konsumen walk-in atau member"
                     className="w-full pl-9 pr-3 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
                   />
@@ -771,6 +894,8 @@ export const WorkOrderForm: React.FC = () => {
                     <span>+62</span>
                   </div>
                   <input
+                    ref={customerPhoneInputRef}
+                    tabIndex={6}
                     type="text"
                     value={customerPhone}
                     onChange={(e) => {
@@ -778,6 +903,7 @@ export const WorkOrderForm: React.FC = () => {
                       if (val.startsWith('62')) val = '0' + val.slice(2);
                       setCustomerPhone(val);
                     }}
+                    onKeyDown={handleCustomerPhoneKeyDown}
                     placeholder="81234567890"
                     className="w-full pl-16 pr-3 py-2 bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
                   />
@@ -1194,6 +1320,9 @@ export const WorkOrderForm: React.FC = () => {
             }))
           ]}
           vehiclePlate={vehiclePlate || 'UMUM'}
+          vehicleBrand={vehicleBrand}
+          vehicleModel={vehicleModel}
+          currentKm={currentKm}
           customerName={customerName || 'Konsumen Walk-In'}
           customerPhone={customerPhone || ''}
           priceTier={(priceTier as any) || 'UMUM'}

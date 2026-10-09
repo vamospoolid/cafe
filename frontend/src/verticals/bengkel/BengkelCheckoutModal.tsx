@@ -13,6 +13,9 @@ interface BengkelCheckoutModalProps {
   subtotal: number;
   cartItems: any[];
   vehiclePlate: string;
+  vehicleBrand?: string;
+  vehicleModel?: string;
+  currentKm?: string | number;
   customerName: string;
   customerPhone: string;
   priceTier: 'UMUM' | 'MITRA' | 'GROSIR';
@@ -29,6 +32,9 @@ export const BengkelCheckoutModal: React.FC<BengkelCheckoutModalProps> = ({
   subtotal,
   cartItems,
   vehiclePlate,
+  vehicleBrand,
+  vehicleModel,
+  currentKm,
   customerName,
   customerPhone,
   priceTier,
@@ -171,6 +177,9 @@ export const BengkelCheckoutModal: React.FC<BengkelCheckoutModalProps> = ({
           },
           body: JSON.stringify({
             vehiclePlate: vehiclePlate.trim().toUpperCase() || 'UMUM',
+            vehicleBrand: vehicleBrand?.trim() || undefined,
+            vehicleModel: vehicleModel?.trim() || undefined,
+            currentKm: currentKm ? Number(currentKm) : undefined,
             customerName: customerName.trim() || 'Konsumen Walk-In',
             customerPhone: customerPhone.trim() || undefined,
             priceTier,
@@ -218,7 +227,11 @@ export const BengkelCheckoutModal: React.FC<BengkelCheckoutModalProps> = ({
           splitNonCash: paymentMethod === 'split' ? nonCash : undefined,
           splitNonCashMethod: 'QRIS/Transfer',
           cashGiven: paymentMethod === 'tunai' ? cashGiven : undefined,
-          notes: paymentMethod === 'piutang' ? (debtNotes || `Jatuh tempo: ${dueDate}`) : undefined
+          notes: paymentMethod === 'piutang' ? (debtNotes || `Jatuh tempo: ${dueDate}`) : undefined,
+          vehicleBrand: vehicleBrand?.trim() || undefined,
+          vehicleModel: vehicleModel?.trim() || undefined,
+          currentKm: currentKm ? Number(currentKm) : undefined,
+          vehicleType
         })
       });
 

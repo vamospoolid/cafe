@@ -848,7 +848,11 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
       isDirectSale,
       splitCash,
       splitNonCash,
-      splitNonCashMethod
+      splitNonCashMethod,
+      vehicleBrand,
+      vehicleModel,
+      currentKm,
+      vehicleType
     } = req.body;
 
     const wo = await prisma.workOrder.findFirst({
@@ -985,9 +989,26 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
           totalAmount: effectiveTotal,
           paidAmount: Math.min(actualTotalPaid, effectiveTotal),
           status: targetStatus,
+          ...(vehicleBrand ? { vehicleBrand: String(vehicleBrand).trim() } : {}),
+          ...(vehicleModel ? { vehicleModel: String(vehicleModel).trim() } : {}),
+          ...(vehicleType ? { vehicleType } : {}),
+          ...(currentKm != null && currentKm !== '' ? { odometer: parseInt(String(currentKm), 10) || null } : {}),
           ...(isDirectSale ? { deliveredAt: new Date() } : {})
         }
       });
+
+      // Update Vehicle Master Record if exists
+      const effectivePlate = wo.vehiclePlate?.trim().toUpperCase();
+      if (effectivePlate && (vehicleBrand || vehicleModel || vehicleType)) {
+        await tx.vehicle.updateMany({
+          where: { plateNumber: effectivePlate, tenantId },
+          data: {
+            ...(vehicleBrand ? { brand: String(vehicleBrand).trim() } : {}),
+            ...(vehicleModel ? { model: String(vehicleModel).trim() } : {}),
+            ...(vehicleType ? { vehicleType } : {})
+          }
+        });
+      }
 
       return updated;
     });
