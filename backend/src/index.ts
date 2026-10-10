@@ -416,8 +416,17 @@ import { runBengkelInvoiceOverdueCheck } from './routes/bengkel/invoices';
 import { subscriptionCronService } from './services/SubscriptionCronService';
 import { backupCronService } from './services/BackupCronService';
 import { rentalReminderCronService } from './services/RentalReminderCronService';
+import { StandaloneConfig } from './utils/standaloneConfig';
+import { LocalMigrationService } from './services/LocalMigrationService';
 
 if (require.main === module) {
+  // Jika berjalan dalam Mode Standalone Offline, periksa dan migrasikan database SQLite lokal secara senyap
+  if (StandaloneConfig.isStandalone()) {
+    LocalMigrationService.ensureLocalDatabaseReady().catch(e => {
+      console.error('[Standalone Boot] Error during local migration initialization:', e);
+    });
+  }
+
   httpServer.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`[Socket.IO] Ready for real-time multi-tenant connections`);

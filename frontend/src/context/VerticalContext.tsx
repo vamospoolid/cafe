@@ -136,11 +136,17 @@ export const VerticalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const pos = usePOS();
 
   // Resolve businessType with strict precedence:
+  // 0. Build-time Standalone Vertical (e.g. VITE_STANDALONE_VERTICAL=BENGKEL)
   // 1. User/Tenant active membership businessType
   // 2. Settings businessType
   // 3. Cached pos_business_type
   // 4. Default: 'CAFE'
   const businessType: BusinessType = useMemo(() => {
+    const envVertical = (import.meta.env.VITE_STANDALONE_VERTICAL as string || '').toUpperCase().trim();
+    if (envVertical && (envVertical === 'BENGKEL' || envVertical === 'CAFE' || envVertical === 'RETAIL' || envVertical === 'LAUNDRY' || envVertical === 'RENTAL')) {
+      return envVertical as BusinessType;
+    }
+
     let raw = pos.user?.businessType;
     if (!raw) {
       try {

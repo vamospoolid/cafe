@@ -10,6 +10,8 @@ export interface TenantContextData {
   isPlatformAdmin?: boolean;
 }
 
+import { StandaloneConfig } from './standaloneConfig';
+
 const asyncLocalStorage = new AsyncLocalStorage<TenantContextData>();
 
 export const TenantContext = {
@@ -32,7 +34,9 @@ export const TenantContext = {
    */
   getTenantId(): string | undefined {
     const store = asyncLocalStorage.getStore();
-    return store?.tenantId || undefined;
+    if (store?.tenantId) return store.tenantId;
+    if (StandaloneConfig.isStandalone()) return StandaloneConfig.getTenantId();
+    return undefined;
   },
 
   /**
@@ -40,7 +44,9 @@ export const TenantContext = {
    */
   getOutletId(): string | undefined {
     const store = asyncLocalStorage.getStore();
-    return store?.outletId;
+    if (store?.outletId) return store.outletId;
+    if (StandaloneConfig.isStandalone()) return StandaloneConfig.getOutletId();
+    return undefined;
   },
 
   /**

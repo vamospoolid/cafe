@@ -2,6 +2,7 @@ import prisma from '../db';
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { TenantContext } from '../utils/tenantContext';
+import { StandaloneConfig } from '../utils/standaloneConfig';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
 
@@ -124,6 +125,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
         orderBy: { createdAt: 'asc' }
       });
       if (firstTenant) activeTenantId = firstTenant.id;
+    }
+
+    // Standalone Mode fallback ke local standalone tenant
+    if (!activeTenantId && StandaloneConfig.isStandalone()) {
+      activeTenantId = StandaloneConfig.getTenantId();
     }
 
     // Fallback untuk legacy legacy boolean object permissions jika belum terisi

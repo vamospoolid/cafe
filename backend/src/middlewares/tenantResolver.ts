@@ -6,6 +6,7 @@ import { AuthRequest } from './authMiddleware';
 
 
 import { cacheService } from '../services/CacheService';
+import { StandaloneConfig } from '../utils/standaloneConfig';
 
 /**
  * Invalidate all cache entries that reference a specific tenantId.
@@ -23,6 +24,15 @@ export async function clearAllTenantCache(): Promise<void> {
 }
 
 export async function resolveTenantFromRequest(req: Request): Promise<{ id: string; slug: string; status: string } | null> {
+  // 0. Standalone Offline Mode: bypass seluruh pencarian subdomain/domain
+  if (StandaloneConfig.isStandalone()) {
+    return {
+      id: StandaloneConfig.getTenantId(),
+      slug: 'standalone-store',
+      status: 'ACTIVE'
+    };
+  }
+
   const host = req.headers['x-forwarded-host'] || req.headers.host || '';
   const hostString = Array.isArray(host) ? host[0] : host;
 

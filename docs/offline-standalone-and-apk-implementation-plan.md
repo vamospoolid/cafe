@@ -322,12 +322,12 @@ Sistem tetap menggunakan prinsip **Single Codebase, Dual-Target Build**:
 ## 📋 6. Master Actionable TODO List (Trackable Checkboxes)
 
 ### 📌 FASE 1: Core Database & Standalone Routing Engine
-- [ ] Buat file skema Prisma SQLite: `backend/prisma/schema.sqlite.prisma`.
-- [ ] Buat helper lokasi database aman: `backend/src/utils/localDatabasePaths.ts` (`%APPDATA%` di Windows & Sandbox di Android).
-- [ ] Buat switcher environment variable: `STANDALONE_VERTICAL` (`BENGKEL` | `KAFE` | `RETAIL` | `LAUNDRY` | `RENTAL`).
-- [ ] Kunci mode `tenantId = 'standalone'` dan bypass subdomain resolver di mode standalone.
-- [ ] Bypass paywall langganan di `FeatureService.ts` untuk seluruh modul pada tier vertikal aktif.
-- [ ] Buat runner migrasi senyap `runLocalDatabaseMigration()` di Electron main process saat aplikasi booting.
+- [x] Buat file skema Prisma SQLite: `backend/prisma/schema.sqlite.prisma`.
+- [x] Buat helper lokasi database aman: `backend/src/utils/localDatabasePaths.ts` (`%APPDATA%` di Windows & Sandbox di Android).
+- [x] Buat switcher environment variable: `STANDALONE_VERTICAL` (`BENGKEL` | `KAFE` | `RETAIL` | `LAUNDRY` | `RENTAL`).
+- [x] Kunci mode `tenantId = 'standalone'` dan bypass subdomain resolver di mode standalone.
+- [x] Bypass paywall langganan di `FeatureService.ts` untuk seluruh modul pada tier vertikal aktif.
+- [x] Buat runner migrasi senyap `runLocalDatabaseMigration()` di Electron main process saat aplikasi booting.
 
 ### 📌 FASE 2: Adaptive Offline Attendance & Shift Drawer Integration
 - [ ] Modifikasi `backend/src/routes/attendance.ts`:

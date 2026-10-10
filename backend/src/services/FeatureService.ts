@@ -1,5 +1,6 @@
 import prisma from '../db';
 import { cacheService } from './CacheService';
+import { StandaloneConfig } from '../utils/standaloneConfig';
 
 export class FeatureService {
   private static instance: FeatureService;
@@ -28,6 +29,19 @@ export class FeatureService {
    * Mengambil semua feature key yang aktif untuk tenant tertentu
    */
   public async getTenantFeatures(tenantId: string): Promise<string[]> {
+    if (StandaloneConfig.isStandalone()) {
+      // 100% Unlocked untuk mode Standalone Beli-Putus
+      return [
+        'pos.cashier', 'pos.kds', 'pos.tables', 'pos.reservations',
+        'inventory.basic', 'inventory.advanced', 'warehouse.management',
+        'bengkel.workorders', 'bengkel.mechanics', 'bengkel.pricing',
+        'retail.barcode', 'retail.uom', 'retail.delivery',
+        'laundry.scale', 'laundry.perfume', 'rental.booking',
+        'crm.loyalty', 'crm.whatsapp', 'reports.financial', 'reports.export',
+        'employees.attendance', 'employees.payroll'
+      ];
+    }
+
     if (!tenantId) return [];
 
     const now = Date.now();
@@ -128,6 +142,7 @@ export class FeatureService {
    * Mengecek apakah fitur tertentu aktif untuk tenant
    */
   public async isEnabled(tenantId: string, featureKey: string): Promise<boolean> {
+    if (StandaloneConfig.isStandalone()) return true;
     if (!tenantId || !featureKey) return false;
 
     const enabledFeatures = await this.getTenantFeatures(tenantId);
@@ -138,6 +153,34 @@ export class FeatureService {
    * Mendapatkan detail plan dan kuota tenant
    */
   public async getTenantPlanAndLimits(tenantId: string) {
+    if (StandaloneConfig.isStandalone()) {
+      return {
+        tenantId: StandaloneConfig.getTenantId(),
+        tenantName: `CodePOS Standalone (${StandaloneConfig.getVertical()})`,
+        status: 'ACTIVE',
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        subscriptionStatus: 'LIFETIME_ONE_TIME',
+        plan: {
+          code: 'STANDALONE_PRO',
+          name: 'Lisensi Permanen Beli-Putus',
+          maxOutlets: 999,
+          maxUsers: 999,
+          maxProducts: 999999
+        },
+        usage: {
+          outlets: 1,
+          users: 1,
+          products: 0
+        },
+        limits: {
+          maxOutlets: 999,
+          maxUsers: 999,
+          maxProducts: 999999
+        }
+      };
+    }
+
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       include: {
