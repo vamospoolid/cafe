@@ -1,6 +1,6 @@
 ---
 name: standalone-offline-and-apk-synthesis
-description: Standar arsitektur, prosedur kompilasi, dan tata kelola sistem Offline Standalone (Windows .EXE Electron) & Mobile Standalone (Android APK Capacitor) untuk seluruh tier vertikal MVP (Bengkel, Kafe, Retail, Laundry, Rental), mencakup database lokal SQLite, proteksi lisensi Hardware ID, auto-migration, dan periodic heartbeat cloud sync.
+description: Standar arsitektur, prosedur kompilasi, tata kelola sistem Offline Standalone (Windows .EXE Electron) & Mobile Standalone (Android APK Capacitor), serta siklus hidup upgrade & migrasi database zero-data-loss untuk seluruh tier vertikal MVP (Bengkel, Kafe, Retail, Laundry, Rental) dengan proteksi lisensi Hardware ID dan periodic heartbeat cloud sync.
 ---
 
 # Skill: Standalone Offline & Android APK Synthesis Engine (Multi-Vertical MVP)
@@ -211,9 +211,74 @@ Di dashboard SaaS Admin (`/platform-admin`), developer memiliki kontrol penuh:
 
 ---
 
-## 📋 9. Checklist Task & SOP Pengerjaan (Confirmable TODO)
+## 🔄 9. Tata Kelola Upgrade Sistem Offline & Siklus Rilis (Product Lifecycle & Database Safety)
 
-Gunakan checklist ini saat mempersiapkan paket rilis offline:
+Ketika developer melakukan upgrade fitur pada MVP (misalnya menambah modul baru di Bengkel, Kafe, atau Retail), sistem harus mampu:
+1. **Langsung menyediakan versi terbaru untuk calon pembeli baru** tanpa kompilasi ulang kode dari nol.
+2. **Meng-upgrade laptop klien lama tanpa pernah menghapus database atau riwayat transaksi mereka**.
+
+```
+                           [ DEVELOPER UPGRADE KODE DI REPO ]
+                                (React Vite + Node Prisma)
+                                            │
+                     ┌──────────────────────┴──────────────────────┐
+                     ▼                                             ▼
+          UNTUK PENJUALAN KLIEN BARU                     UNTUK KLIEN LAMA (EKSISTING)
+      • Sekali klik: `npm run build:exe`             • File aplikasi di-update (v1.0 ➔ v1.1)
+      • Installer baru langsung memuat fitur baru    • Database `%APPDATA%/bengkel.db` AMAN UTUH
+      • Siap dijual beli-putus hari itu juga         • Auto-migration: `prisma migrate deploy`
+```
+
+### 9.1. Aturan Pemisahan File Aplikasi vs File Database
+- **Folder Instalasi (Volatile / Boleh Ditimpa)**:
+  `C:\Program Files\CodePOS_[Vertical]\`
+  Berisi binary Electron, asset HTML/CSS, Node runtime. Folder ini bebas ditimpa/di-uninstall saat update.
+- **Folder Database (Persistent / Dilarang Keras Ditimpa)**:
+  `%APPDATA%\CodePOS_[Vertical]\data\app.db`
+  File ini **tidak pernah disentuh atau dihapus oleh installer update**.
+
+### 9.2. Prosedur Auto-Migrasi Skema (Zero-Data-Loss Migration)
+Saat aplikasi versi baru pertama kali dijalankan di laptop klien:
+1. Engine Electron mendeteksi versi skema database SQLite lokal.
+2. Menjalankan migrasi Prisma secara otomatis di background:
+   ```typescript
+   // Di main process Electron saat app.whenReady()
+   import { execSync } from 'child_process';
+   export async function ensureDatabaseMigration() {
+     try {
+       // Menambahkan kolom/tabel baru tanpa merusak data lama
+       execSync('npx prisma migrate deploy', { env: { ...process.env, DATABASE_URL: localSqliteUrl } });
+       console.log('✅ Auto-migration SQLite berhasil.');
+     } catch (err) {
+       console.error('❌ Gagal menjalankan auto-migration:', err);
+     }
+   }
+   ```
+3. Seluruh riwayat SPK, nopol, pelanggan, dan stok lama tetap 100% utuh, dan kolom fitur baru langsung aktif!
+
+### 9.3. Dua Pilihan Jalur Distribusi Pembaruan ke Klien
+1. **Jalur A: Over-The-Air (OTA Auto-Updater via Tethering Internet)**
+   - Menggunakan library `electron-updater`.
+   - Di server SaaS VPS (`codenusa.id`), upload file rilis: `latest.yml` dan `Setup-v1.1.exe`.
+   - Saat laptop klien terhubung WiFi/tethering HP sebentar, aplikasi mendeteksi versi baru:
+     > *"Tersedia pembaruan Versi 1.1 (Perbaikan Cetak Struk). Perbarui sekarang?"*
+   - Klien klik **Ya** ➔ download patch senyap di background ➔ restart dalam 5 detik.
+2. **Jalur B: Manual Patch Installer (Untuk Bengkel 100% Nol Internet)**
+   - Developer mengirim file installer update `Update-BengkelPOS-v1.1.exe` via WhatsApp / Flashdisk.
+   - Klien cukup double-click installer tersebut. NSIS installer otomatis menimpa file program di `Program Files` dan mempertahankan `%APPDATA%\...\app.db`.
+
+### 9.4. Strategi Bisnis: Pembaruan Gratis vs Upgrade Berbayar
+- **Minor Patch (v1.0.1 ➔ v1.0.2)**: Gratis sebagai bagian dari garansi purna jual & stabilitas.
+- **Major Upgrade (BengkelPOS 2026 ➔ BengkelPOS 2027)**:
+  - Dijual sebagai paket upgrade lisensi (misal Rp 250.000 – Rp 500.000).
+  - Installer v2.0 meminta Serial Activation Key baru dari developer sebelum mengizinkan pembaruan struktur database.
+  - Menjadi sumber **pendapatan berulang (*recurring revenue*)** tahunan bagi developer SaaS dari klien beli-putus.
+
+---
+
+## 📋 10. Checklist Task & SOP Pengerjaan (Confirmable TODO)
+
+Gunakan checklist ini saat mempersiapkan paket rilis offline dan siklus upgrade:
 
 - [ ] **Fase 1: Database & Standalone Routing**
   - [ ] Konfigurasi skema Prisma SQLite (`file:./data/app.db`).
@@ -230,7 +295,9 @@ Gunakan checklist ini saat mempersiapkan paket rilis offline:
 - [ ] **Fase 4: Heartbeat & Cloud Backup**
   - [ ] Endpoint `POST /api/sync/heartbeat` di server SaaS.
   - [ ] Background uploader saat laptop mendeteksi internet aktif.
-- [ ] **Fase 5: Kompilasi & Installer Builder**
+- [ ] **Fase 5: Kompilasi, Auto-Updater & Prosedur Upgrade**
   - [ ] Script builder Electron NSIS Windows `.exe`.
   - [ ] Script builder Capacitor Android `.apk` dengan branded mipmaps.
-  - [ ] UI terpadu di Dashboard Platform Admin untuk build 1-klik.
+  - [ ] Auto-migration SQLite (`prisma migrate deploy`) saat booting versi baru.
+  - [ ] Konfigurasi `electron-updater` (OTA patch delivery) di server SaaS.
+  - [ ] UI terpadu di Dashboard Platform Admin untuk build 1-klik & manajemen lisensi.
