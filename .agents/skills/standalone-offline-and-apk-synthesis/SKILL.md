@@ -46,15 +46,113 @@ Setiap vertikal memiliki profil terisolasi saat di-build menjadi `.exe` atau `.a
 
 ---
 
-## 💾 3. Arsitektur Database Lokal (SQLite Engine & Lokasi Aman)
+## 🔍 3. Analisis Fungsional Sistem (Functional Requirements & Operational Use Cases)
 
-### 3.1. Isolasi File Database & Proteksi Windows UAC
+Analisis fungsional merinci bagaimana sistem beroperasi dari sudut pandang peran pengguna (*User Personas*), alur operasional toko harian (*Operational Workflows*), dan batasan fungsionalitas ketika berjalan 100% tanpa internet.
+
+### 3.1. Analisis Kebutuhan Fungsional Berdasarkan Aktor (User Personas)
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        AKTOR & PERAN SISTEM STANDALONE OFFLINE                         │
+├───────────────────┬───────────────────┬──────────────────────┬─────────────────────────┤
+│ 👑 OWNER BISNIS   │ 💻 KASIR / FRONT  │ 🔧 MEKANIK / STAF    │ 🛡️ SAAS DEVELOPER       │
+│ • Aktivasi Lisensi│ • Buka Shift Kas  │ • Absensi PIN Pad    │ • Issue License Key RSA │
+│ • Atur Harga/Katalog • Kasir Kilat POS│ • Ambil SPK / Servis │ • Compile .EXE / .APK   │
+│ • Rekap Laba/Komisi • Cetak Struk USB │ • Ambil Sparepart    │ • Pantau Heartbeat Tele │
+│ • Ekspor Lap. XLS │ • Blind Z-Report  │ • Pantau Komisi Harian│ • Disaster Recovery DB  │
+└───────────────────┴───────────────────┴──────────────────────┴─────────────────────────┘
+```
+
+1. **Owner / Pemilik Usaha Beli-Putus**:
+   - **FR-OWN-01 (Aktivasi Mandiri)**: Membaca Hardware ID komputer saat booting pertama dan memasukkan Serial Activation Key dari developer.
+   - **FR-OWN-02 (Manajemen Katalog & Harga)**: Mengubah harga jual sparepart/menu/layanan (termasuk 3-tier harga bengkel: Umum, Mitra, Grosir) langsung di database lokal.
+   - **FR-OWN-03 (Manajemen Staf & Otorisasi)**: Mendaftarkan akun kasir & staf, mengatur 4–6 digit PIN absensi, serta menentukan besaran komisi mekanik (% atau nominal flat).
+   - **FR-OWN-04 (Pengaturan Fleksibilitas Toko)**: Memiliki toggle kontrol untuk mematikan modul absensi (`Attendance Mode: ON/OFF`) jika toko dikelola sendiri tanpa karyawan.
+   - **FR-OWN-05 (Pelaporan Finansial Komprehensif)**: Menampilkan laporan laba-rugi kotor, rekonsiliasi kas shift, arus kas kas kecil (*Petty Cash*), dan mengekspor ke Excel/PDF lokal.
+
+2. **Kasir / Frontdesk Operator**:
+   - **FR-CSR-01 (Buka Shift & Modal Kasir)**: Wajib memasukkan modal awal laci kas (*Cash Float*) sebelum transaksi pertama diizinkan.
+   - **FR-CSR-02 (Pencarian Kilat & Barcode HID)**: Menemukan produk via barcode gun scanner otomatis tanpa perlu mengklik kolom pencarian, atau via plat nopol kendaraan (bengkel).
+   - **FR-CSR-03 (Multi-Metode Pembayaran)**: Mendukung Tunai (otomatis kalkulasi kembalian), QRIS Statis (foto QR dicetak di struk), dan Bon Tempo / Piutang Pelanggan.
+   - **FR-CSR-04 (Direct Hardware Dispatch)**: Mengirim sinyal cetak nota ke printer thermal ESC/POS USB (58mm/80mm) dan memicu tendang laci kas RJ11 secara instan tanpa dialog browser print.
+   - **FR-CSR-05 (Tutup Shift & Blind Cash Drop)**: Menginput total fisik uang tunai di laci tanpa melihat angka sistem (*blind reconciliation*), lalu mencetak Z-Report selisih kas.
+
+3. **Mekanik / Operator Cuci / Staf Produksi**:
+   - **FR-STF-01 (Adaptive Offline Attendance)**: Mencatatkan jam masuk & pulang via Numpad PIN 4–6 digit atau tap kartu barcode ID pada terminal kasir.
+   - **FR-STF-02 (Status Kehadiran Aktif)**: Nama staf otomatis muncul di daftar teknisi aktif hari itu untuk penugasan SPK/servis.
+   - **FR-STF-03 (Transparansi Komisi Servis)**: Staf dapat melihat rekap riwayat pengerjaan unit dan akumulasi komisi yang berhak diterima pada hari/minggu berjalan.
+
+4. **Developer SaaS / Platform Admin**:
+   - **FR-DEV-01 (Generator Lisensi Kriptografis)**: Menginput Hardware ID klien ke dashboard SaaS `/platform-admin` untuk menghasilkan Serial Activation Key berlisensi RSA.
+   - **FR-DEV-02 (On-Demand App Compiler)**: Mengompilasi paket installer `.exe` (NSIS) dan file `.apk` (Capacitor) yang terisolasi khusus per vertikal dalam 1-klik.
+   - **FR-DEV-03 (Heartbeat Telemetry & Backup Receiver)**: Menerima metrik kesehatan transaksi dan snapshot database darurat saat perangkat klien mendeteksi jaringan internet.
+
+---
+
+### 3.2. Alur Fungsional Operasional Utama (Core Operational Use Cases)
+
+#### 🔄 UC-01: Alur Booting Pertama & Aktivasi Lisensi Hardware
+1. Klien mendownload installer `BengkelPOS-Setup.exe` dan menginstal di laptop toko.
+2. Aplikasi dijalankan pertama kali:
+   - Engine mengecek `%APPDATA%\CodePOS_BENGKEL\license.key`.
+   - Jika belum ada, sistem membaca Serial Motherboard + Processor ID dan menampilkan layar aktivasi:
+     *"Hardware ID Anda: `BK-8821-F904-77A1`. Kirim kode ini ke WhatsApp Admin untuk mendapatkan Serial Key."*
+3. Developer memasukkan kode tersebut ke generator di dashboard SaaS, menerbitkan serial key (misal `LIC-BENGKEL-9901-XYZ`), dan mengirimkan kembali ke klien.
+4. Klien menempelkan serial key ke aplikasi ➔ Lisensi divalidasi secara kriptografis ➔ Aplikasi terbuka permanen selamanya.
+
+#### 🔄 UC-02: Alur Operasional Harian Toko (Absensi ➔ Shift ➔ Transaksi ➔ Tutup Buku)
+```
+[ 08:00 PAGI: BUKA TOKO ]
+Staf / Mekanik Ketik PIN 4 Digit di Kasir ──► Hadir Tercatat di SQLite Lokal (Anti-Tamper Clock)
+                 │
+                 ▼
+Kasir Buka Shift & Masukkan Modal Awal Laci (Misal: Rp 200.000)
+                 │
+                 ▼
+[ 08:30 - 17:00: TRANSAKSI HARIAN 100% TANPA INTERNET ]
+Pelanggan Datang ──► Buat SPK / Scan Barcode ──► Pilih Mekanik Aktif ──► Cetak Struk USB Thermal
+                 │
+                 ▼
+[ 17:00 SORE: TUTUP TOKO & REKONSILIASI ]
+Kasir Tutup Shift ──► Hitung Uang Fisik di Laci (Blind Cash Drop) ──► Cetak Z-Report Selisih Kas
+                 │
+                 ▼
+Staf / Mekanik Ketik PIN 4 Digit Pulang ──► Komisi Hari Ini Terkunci Otomatis
+```
+
+#### 🔄 UC-03: Alur Silent Heartbeat & Penyelamat Data Klien
+1. Klien menggunakan aplikasi offline selama berhari-hari tanpa internet.
+2. Suatu hari, kasir mengaktifkan hotspot/tethering HP ke laptop kasir selama 1–2 menit.
+3. Listener `navigator.onLine` di Electron mendeteksi internet aktif secara senyap:
+   - Membaca ringkasan total omset dan jumlah transaksi yang belum dilaporkan.
+   - Membuat snapshot database lokal terenkripsi.
+   - Mengirim payload ke endpoint SaaS VPS: `POST /api/sync/heartbeat`.
+   - Proses berlangsung di latar belakang dalam 3–5 detik tanpa mengganggu kasir yang sedang mengetik.
+4. Jika laptop kasir suatu saat rusak total atau tersiram air, developer memiliki snapshot database terakhir di server SaaS untuk dipulihkan ke laptop baru klien.
+
+---
+
+### 3.3. Matriks Batasan Fungsional (Capabilities Boundary: Offline vs Deferred vs Eliminated)
+
+| Kategori Fitur | Mode 100% Mandiri Offline | Mode Sinkronisasi Tertunda (*Deferred*) | Modul yang Dieliminasi dari Cloud |
+| :--- | :--- | :--- | :--- |
+| **Katalog & Stok** | Tambah/edit produk, potong stok otomatis, opname stok lokal. | Sinkronisasi master katalog pusat (jika cabang multi-outlet). | Sinkronisasi real-time multi-tenant via Socket.IO cloud. |
+| **Transaksi & Nota** | Input SPK/penjualan, kalkulasi diskon/pajak, cetak thermal ESC/POS, tendang laci. | Pengiriman e-receipt nota via WhatsApp gateway (antre di outbox sampai ada internet). | Pemrosesan payment gateway online (Midtrans/Xendit kartu kredit). |
+| **Absensi & SDM** | Absensi PIN 4-digit, tap barcode ID, rekap komisi mekanik, buka/tutup shift kasir. | Pengiriman rekap kehadiran ke HP Owner via SaaS cloud dashboard. | Validasi GPS Geofencing radius Google Maps dan upload foto selfie CDN. |
+| **Finansial** | Pencatatan arus kas operasional (Petty Cash), piutang bon tempo, laporan laba rugi lokal. | Backup snapshot database otomatis saat tethering HP (*Heartbeat*). | Tagihan subscription bulanan SaaS dan paywall pengunci fitur. |
+
+---
+
+## 💾 4. Arsitektur Database Lokal (SQLite Engine & Lokasi Aman)
+
+### 4.1. Isolasi File Database & Proteksi Windows UAC
 - **ATURAN MUTLAK**: Dilarang keras menaruh database SQLite di `C:\Program Files\` karena proteksi Windows UAC (*User Account Control*) akan memblokir transaksi tulis kasir.
 - **Lokasi Wajib**:
   - Windows: `%APPDATA%\CodePOS_[Vertical]\data\app.db` (misal: `C:\Users\[User]\AppData\Roaming\BengkelPOS\data\bengkel.db`)
   - Android: Internal Storage App Sandbox (`/data/user/0/[package_name]/databases/bengkel.db`)
 
-### 3.2. Skema Prisma SQLite Engine
+### 4.2. Skema Prisma SQLite Engine
 Saat kompilasi standalone, backend mengalihkan file `schema.prisma`:
 ```prisma
 datasource db {
@@ -63,7 +161,7 @@ datasource db {
 }
 ```
 
-### 3.3. Auto-Migration Saat Booting Pertama
+### 4.3. Auto-Migration Saat Booting Pertama
 Saat aplikasi Electron pertama kali dibuka oleh klien, sistem menjalankan auto-migrasi senyap tanpa membuka terminal:
 ```typescript
 import { execSync } from 'child_process';
@@ -78,7 +176,7 @@ export function runLocalDatabaseMigration() {
 
 ---
 
-## 🛡️ 4. Proteksi Lisensi Beli-Putus & Anti-Pirasi (Hardware Fingerprint)
+## 🛡️ 5. Proteksi Lisensi Beli-Putus & Anti-Pirasi (Hardware Fingerprint)
 
 Agar file installer `.exe` tidak dicopy-paste gratis ke komputer bengkel lain:
 
@@ -92,14 +190,14 @@ Kode Aktivasi: `BK-8821-F904-77A1` ────────(Kirim WA)───�
 Aplikasi Terbuka & Aktif Permanen ◄───────(Kirim Serial Key)────── Serial Lisensi Terenkripsi RSA
 ```
 
-### 4.1. Komponen Machine Fingerprint:
+### 5.1. Komponen Machine Fingerprint:
 1. `systeminformation` / WMI Windows membaca:
    - Serial Number Motherboard (`wmic baseboard get serialnumber`)
    - CPU Processor ID (`wmic cpu get processorid`)
 2. Menggabungkan string dan membuat SHA-256 Hash.
 3. Lisensi tersimpan di `%APPDATA%\CodePOS_[Vertical]\license.key` dalam bentuk terenkripsi.
 
-### 4.2. Deteksi Manipulasi Jam Windows (Clock Tampering Guard)
+### 5.2. Deteksi Manipulasi Jam Windows (Clock Tampering Guard)
 Kasir nakal dilarang memundurkan jam laptop untuk memanipulasi buku kas atau masa garansi:
 ```typescript
 // Validasi transaksi terhadap timestamp terakhir
@@ -111,11 +209,11 @@ if (lastTx && new Date() < new Date(lastTx.createdAt)) {
 
 ---
 
-## 💓 5. Metode "Periodic Heartbeat & Silent Cloud Backup"
+## 💓 6. Metode "Periodic Heartbeat & Silent Cloud Backup"
 
 Klien bertransaksi 100% offline sepuasnya tanpa kuota internet. Namun sistem dilengkapi fitur **penyelamat data otomatis**:
 
-### 5.1. Alur Sinkronisasi Latar Belakang:
+### 6.1. Alur Sinkronisasi Latar Belakang:
 1. **Pendeteksi Jaringan**: Listener memeriksa koneksi internet (`navigator.onLine`).
 2. **Saat Klien Tethering HP (1–2 Menit)**:
    - Sistem membaca data transaksi yang belum di-backup.
@@ -143,9 +241,9 @@ Klien bertransaksi 100% offline sepuasnya tanpa kuota internet. Namun sistem dil
 
 ---
 
-## 💻 6. Prosedur Build Windows Standalone (.EXE via Electron)
+## 💻 7. Prosedur Build Windows Standalone (.EXE via Electron)
 
-### 6.1. Struktur Folder Standalone Electron:
+### 7.1. Struktur Folder Standalone Electron:
 ```
 desktop-standalone/
 ├── package.json
@@ -159,7 +257,7 @@ desktop-standalone/
     └── installer-banner.bmp
 ```
 
-### 6.2. Skrip Kompilasi Windows Installer:
+### 7.2. Skrip Kompilasi Windows Installer:
 ```bash
 # Kompilasi installer khusus Bengkel
 npm run build:bengkel-exe
@@ -171,20 +269,20 @@ Konfigurasi `electron-builder.json` menghasilkan installer NSIS modern:
 
 ---
 
-## 📱 7. Prosedur Build APK Android Standalone & Hybrid
+## 📱 8. Prosedur Build APK Android Standalone & Hybrid
 
-### 7.1. Model A: Full Offline Standalone Tablet Android
+### 8.1. Model A: Full Offline Standalone Tablet Android
 - Menggunakan `@capacitor-community/sqlite` atau **Dexie (IndexedDB)**.
 - Seluruh katalog produk, transaksi SPK, dan riwayat pelanggan tersimpan di storage internal tablet Android.
 - Bluetooth printing langsung terhubung via `@capacitor/core` plugin hardware bridge.
 
-### 7.2. Model B: Local LAN Hybrid (Rekomendasi untuk Bengkel Banyak Mekanik)
+### 8.2. Model B: Local LAN Hybrid (Rekomendasi untuk Bengkel Banyak Mekanik)
 - **Laptop Kasir**: Bertindak sebagai Local Server di meja depan (menjalankan Electron + SQLite lokal).
 - **HP/Tablet Mekanik**: Menginstal APK Android.
 - Di halaman koneksi APK, mekanik cukup mengetik IP lokal laptop kasir (misal: `http://192.168.1.15:3000`).
 - Mekanik input sparepart di pit servis ➔ Kasir langsung melihat total tagihan di laptop tanpa kuota internet!
 
-### 7.3. Perintah Build APK Branded Otomatis:
+### 8.3. Perintah Build APK Branded Otomatis:
 ```bash
 node scripts/generate_branded_apk.js --tenant=usahabersama --target=cashier --env=prod
 ```
@@ -194,7 +292,7 @@ Output:
 
 ---
 
-## 📊 8. Dashboard SaaS: "App Builder & Licensing Control Plane"
+## 📊 9. Dashboard SaaS: "App Builder & Licensing Control Plane"
 
 Di dashboard SaaS Admin (`/platform-admin`), developer memiliki kontrol penuh:
 
@@ -211,7 +309,7 @@ Di dashboard SaaS Admin (`/platform-admin`), developer memiliki kontrol penuh:
 
 ---
 
-## 🔄 9. Tata Kelola Upgrade Sistem Offline & Siklus Rilis (Product Lifecycle & Database Safety)
+## 🔄 10. Tata Kelola Upgrade Sistem Offline & Siklus Rilis (Product Lifecycle & Database Safety)
 
 Ketika developer melakukan upgrade fitur pada MVP (misalnya menambah modul baru di Bengkel, Kafe, atau Retail), sistem harus mampu:
 1. **Langsung menyediakan versi terbaru untuk calon pembeli baru** tanpa kompilasi ulang kode dari nol.
@@ -229,7 +327,7 @@ Ketika developer melakukan upgrade fitur pada MVP (misalnya menambah modul baru 
       • Siap dijual beli-putus hari itu juga         • Auto-migration: `prisma migrate deploy`
 ```
 
-### 9.1. Aturan Pemisahan File Aplikasi vs File Database
+### 10.1. Aturan Pemisahan File Aplikasi vs File Database
 - **Folder Instalasi (Volatile / Boleh Ditimpa)**:
   `C:\Program Files\CodePOS_[Vertical]\`
   Berisi binary Electron, asset HTML/CSS, Node runtime. Folder ini bebas ditimpa/di-uninstall saat update.
@@ -237,7 +335,7 @@ Ketika developer melakukan upgrade fitur pada MVP (misalnya menambah modul baru 
   `%APPDATA%\CodePOS_[Vertical]\data\app.db`
   File ini **tidak pernah disentuh atau dihapus oleh installer update**.
 
-### 9.2. Prosedur Auto-Migrasi Skema (Zero-Data-Loss Migration)
+### 10.2. Prosedur Auto-Migrasi Skema (Zero-Data-Loss Migration)
 Saat aplikasi versi baru pertama kali dijalankan di laptop klien:
 1. Engine Electron mendeteksi versi skema database SQLite lokal.
 2. Menjalankan migrasi Prisma secara otomatis di background:
@@ -256,7 +354,7 @@ Saat aplikasi versi baru pertama kali dijalankan di laptop klien:
    ```
 3. Seluruh riwayat SPK, nopol, pelanggan, dan stok lama tetap 100% utuh, dan kolom fitur baru langsung aktif!
 
-### 9.3. Dua Pilihan Jalur Distribusi Pembaruan ke Klien
+### 10.3. Dua Pilihan Jalur Distribusi Pembaruan ke Klien
 1. **Jalur A: Over-The-Air (OTA Auto-Updater via Tethering Internet)**
    - Menggunakan library `electron-updater`.
    - Di server SaaS VPS (`codenusa.id`), upload file rilis: `latest.yml` dan `Setup-v1.1.exe`.
@@ -267,7 +365,7 @@ Saat aplikasi versi baru pertama kali dijalankan di laptop klien:
    - Developer mengirim file installer update `Update-BengkelPOS-v1.1.exe` via WhatsApp / Flashdisk.
    - Klien cukup double-click installer tersebut. NSIS installer otomatis menimpa file program di `Program Files` dan mempertahankan `%APPDATA%\...\app.db`.
 
-### 9.4. Strategi Bisnis: Pembaruan Gratis vs Upgrade Berbayar
+### 10.4. Strategi Bisnis: Pembaruan Gratis vs Upgrade Berbayar
 - **Minor Patch (v1.0.1 ➔ v1.0.2)**: Gratis sebagai bagian dari garansi purna jual & stabilitas.
 - **Major Upgrade (BengkelPOS 2026 ➔ BengkelPOS 2027)**:
   - Dijual sebagai paket upgrade lisensi (misal Rp 250.000 – Rp 500.000).
@@ -276,7 +374,7 @@ Saat aplikasi versi baru pertama kali dijalankan di laptop klien:
 
 ---
 
-## 📋 10. Checklist Task & SOP Pengerjaan (Confirmable TODO)
+## 📋 11. Checklist Task & SOP Pengerjaan (Confirmable TODO)
 
 Gunakan checklist ini saat mempersiapkan paket rilis offline dan siklus upgrade:
 
