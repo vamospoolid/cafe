@@ -137,9 +137,9 @@ export const VerticalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Resolve businessType with strict precedence:
   // 0. Build-time Standalone Vertical (e.g. VITE_STANDALONE_VERTICAL=BENGKEL)
-  // 1. User/Tenant active membership businessType
-  // 2. Settings businessType
-  // 3. Cached pos_business_type
+  // 1. Live Server Settings (authoritative untuk active tenant)
+  // 2. User active profile & memberships
+  // 3. LocalStorage cache pos_user / pos_business_type
   // 4. Default: 'CAFE'
   const businessType: BusinessType = useMemo(() => {
     const envVertical = (import.meta.env.VITE_STANDALONE_VERTICAL as string || '').toUpperCase().trim();
@@ -147,25 +147,35 @@ export const VerticalProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return envVertical as BusinessType;
     }
 
-    let raw = pos.user?.businessType;
+    // 1. Live settings dari tenant aktif
+    let raw = pos.settings?.businessType;
+
+    // 2. User object aktif
+    if (!raw) {
+      raw = pos.user?.businessType || (pos.user as any)?.tenant?.businessType || (pos.user as any)?.tenantBusinessType;
+    }
+
+    // 3. Saved pos_user
     if (!raw) {
       try {
         const saved = localStorage.getItem('pos_user') || localStorage.getItem('user');
         if (saved) {
           const parsed = JSON.parse(saved);
-          raw = parsed?.businessType;
+          raw = parsed?.businessType || parsed?.tenant?.businessType || parsed?.tenantBusinessType;
         }
       } catch (e) {}
     }
+
+    // 4. Fallback ke cached pos_business_type
     if (!raw) {
-      raw = pos.settings?.businessType || localStorage.getItem('pos_business_type');
+      raw = localStorage.getItem('pos_business_type');
     }
 
     if (raw && (raw === 'BENGKEL' || raw === 'CAFE' || raw === 'RETAIL' || raw === 'LAUNDRY' || raw === 'RENTAL')) {
       return raw as BusinessType;
     }
     return 'CAFE';
-  }, [pos.user?.businessType, pos.settings?.businessType]);
+  }, [pos.settings?.businessType, pos.user?.businessType]);
 
   useEffect(() => {
     if (businessType) {

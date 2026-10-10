@@ -419,7 +419,8 @@ router.post('/switch-tenant', authenticateToken, async (req: AuthRequest, res: R
           tenantId: authData.user.tenantId,
           outletId: outletId,
           permissions: authData.user.permissionKeys,
-          isPlatformAdmin: authData.user.isPlatformAdmin
+          isPlatformAdmin: authData.user.isPlatformAdmin,
+          businessType: authData.user.businessType || 'CAFE'
         },
         JWT_SECRET,
         { expiresIn: '30d' }

@@ -982,6 +982,7 @@ router.post('/tenants/:id/impersonate', authenticateToken, requirePlatformAdmin,
       outletId: outlet?.id || 'outlet-default',
       role: 'OWNER',
       permissions,
+      businessType: tenant.businessType || 'CAFE',
       isImpersonated: true,
       impersonatorId: req.user?.id,
       impersonatorUsername: req.user?.username
@@ -1006,12 +1007,15 @@ router.post('/tenants/:id/impersonate', authenticateToken, requirePlatformAdmin,
         role: 'OWNER',
         tenantId: tenant.id,
         outletId: outlet?.id,
-        permissions
+        permissions,
+        businessType: tenant.businessType || 'CAFE',
+        tenantBusinessType: tenant.businessType || 'CAFE'
       },
       tenant: {
         id: tenant.id,
         name: tenant.name,
-        slug: tenant.slug
+        slug: tenant.slug,
+        businessType: tenant.businessType || 'CAFE'
       }
     });
   } catch (error: any) {

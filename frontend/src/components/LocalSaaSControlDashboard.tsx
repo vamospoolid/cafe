@@ -95,12 +95,17 @@ export const LocalSaaSControlDashboard: React.FC = () => {
       const data = await res.json();
       if (res.ok && data.token && data.user) {
         toast(`🚀 Masuk ke workspace ${tenantName}`, 'success');
+        const bType = data.user.businessType || data.tenant?.businessType || 'CAFE';
+        localStorage.setItem('pos_business_type', bType);
         if (posContext?.login) {
-          posContext.login(data.user, data.token);
+          posContext.login({
+            ...data.user,
+            businessType: bType
+          }, data.token);
         }
         setTimeout(() => {
           window.location.href = '/dashboard';
-        }, 600);
+        }, 300);
       } else {
         toast(data.error || 'Gagal impersonasi tenant', 'error');
       }
