@@ -61,6 +61,18 @@ export class LocalMigrationService {
       });
       console.log(`[LocalMigrationService] ✅ Skema SQLite berhasil disinkronkan.`);
 
+      // Optimasi Performa & Anti-Locking (WAL Mode & Busy Timeout) KHUSUS SQLite Lokal
+      try {
+        console.log('[LocalMigrationService] Mengaktifkan mode performa tinggi SQLite (WAL Mode & Anti-Locking)...');
+        await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL;');
+        await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000;');
+        await prisma.$queryRawUnsafe('PRAGMA synchronous = NORMAL;');
+        await prisma.$queryRawUnsafe('PRAGMA foreign_keys = ON;');
+        console.log('[LocalMigrationService] ✅ Mode WAL & Concurrency Protection SQLite aktif.');
+      } catch (pragmaErr: any) {
+        console.warn('[LocalMigrationService] Peringatan PRAGMA SQLite (dilewati):', pragmaErr.message);
+      }
+
       // Jika database baru dibuat, inisialisasi data fondasi default
       if (isNewDb) {
         await LocalMigrationService.seedInitialStandaloneData();

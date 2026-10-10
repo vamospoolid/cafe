@@ -10,6 +10,7 @@ export interface StandaloneStoragePaths {
   databaseUrl: string;
   licenseFilePath: string;
   backupDir: string;
+  uploadsDir: string;
 }
 
 /**
@@ -48,16 +49,20 @@ export function getLocalDatabasePaths(
 
   const dataDir = path.join(baseDir, 'data');
   const backupDir = path.join(baseDir, 'backups');
+  const uploadsDir = path.join(baseDir, 'uploads');
   const dbFilePath = path.join(dataDir, 'app.db');
   const licenseFilePath = path.join(baseDir, 'license.key');
 
-  // Pastikan folder data dan backup selalu tersedia (Anti-ENOENT crash)
+  // Pastikan folder data, backup, dan uploads selalu tersedia (Anti-ENOENT crash)
   try {
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
+    }
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
     }
   } catch (err) {
     console.error(`[LocalDatabasePaths] Gagal membuat direktori penyimpanan: ${dataDir}`, err);
@@ -73,7 +78,8 @@ export function getLocalDatabasePaths(
     dbFilePath,
     databaseUrl,
     licenseFilePath,
-    backupDir
+    backupDir,
+    uploadsDir
   };
 }
 
