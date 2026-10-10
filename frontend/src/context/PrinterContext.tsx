@@ -254,8 +254,26 @@ export const PrinterProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  // Auto-reconnect saat provider mount (hanya jika ada printer tersimpan)
+  // Auto-connect saat provider mount (Electron Direct USB atau Web Bluetooth)
   useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.isElectron) {
+      setStatus('connected');
+      (window as any).electronAPI.listPrinters().then((printers: any[]) => {
+        if (Array.isArray(printers) && printers.length > 0) {
+          const def = printers.find(p => p.isDefault) || printers[0];
+          setPrinterInfo({
+            name: def.name,
+            brand: 'Windows Direct USB',
+            model: def.name,
+            serviceUUID: 'direct-usb',
+            writeCharUUID: 'direct-usb',
+            paperWidth: 58
+          });
+        }
+      }).catch(console.warn);
+      return;
+    }
+
     const saved = getSavedBluetoothPrinter();
     if (saved && isWebBluetoothSupported()) {
       // Delay kecil agar browser siap

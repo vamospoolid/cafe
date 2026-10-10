@@ -531,6 +531,20 @@ export const disconnectBluetoothPrinter = (): Promise<void> => {
 let currentConnectedMac: string | null = null;
 
 export const printRawBytes = async (bytes: Uint8Array, role: PrinterRole = 'cashier'): Promise<void> => {
+  // 0. Electron Desktop Standalone (Direct Raw USB Spooler / IPC)
+  if (typeof window !== 'undefined' && (window as any).electronAPI?.printRaw) {
+    try {
+      const savedPrinter = getSavedBluetoothPrinter(role) || (role === 'kitchen' ? getSavedBluetoothPrinter('cashier') : null);
+      const targetPrinterName = savedPrinter?.name;
+      const res = await (window as any).electronAPI.printRaw(bytes, targetPrinterName);
+      if (res && res.success !== false) {
+        return;
+      }
+    } catch (electronErr: any) {
+      console.warn('[Printer] Electron direct raw printing fallback to bluetooth:', electronErr);
+    }
+  }
+
   // 1. Web Bluetooth (Chrome Desktop / Android HTTPS)
   const savedPrinter = getSavedBluetoothPrinter(role) || (role === 'kitchen' ? getSavedBluetoothPrinter('cashier') : null);
   const effectiveRole: PrinterRole = getSavedBluetoothPrinter(role) ? role : 'cashier';
@@ -727,6 +741,16 @@ export const testPrintBluetooth = async (role: PrinterRole = 'cashier', business
  * Sinyal pembuka laci kasir otomatis RJ11 via printer thermal (ESC p 0 25 250)
  */
 export const kickCashDrawer = async (): Promise<void> => {
+  // 0. Electron Desktop Standalone (Direct Spooler / IPC)
+  if (typeof window !== 'undefined' && (window as any).electronAPI?.kickCashDrawer) {
+    try {
+      const res = await (window as any).electronAPI.kickCashDrawer();
+      if (res && res.success !== false) return;
+    } catch (e) {
+      console.warn('[Printer] Electron kick cash drawer fallback:', e);
+    }
+  }
+
   try {
     const drawerBytes = new Uint8Array([0x1b, 0x70, 0x00, 0x19, 0xfa]);
     await printRawBytes(drawerBytes);

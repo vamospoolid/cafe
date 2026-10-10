@@ -348,12 +348,12 @@ Sistem tetap menggunakan prinsip **Single Codebase, Dual-Target Build**:
   - [x] `Aktifkan Absensi Karyawan (ON/OFF)` untuk toko milik solo operator.
 
 ### 📌 FASE 3: Hardware Peripheral Drivers (Printer, Drawer, Scanner)
-- [ ] Buat modul print Electron `desktop-standalone/main/printerService.ts`:
-  - [ ] Direct USB printing ESC/POS untuk ukuran kertas 58mm & 80mm.
-  - [ ] Cetak nota tanpa popup jendela browser print.
-  - [ ] Kirim pulsa tendang laci kasir RJ11 (`\x1b\x70\x00\x19\xfa`).
-- [ ] Perkuat driver Bluetooth Android di `frontend/src/utils/printerBluetooth.ts` untuk tablet kasir.
-- [ ] Integrasikan Global HID Keystroke Buffer di `frontend/src/utils/hardwareBarcodeListener.ts` agar pemindaian barcode langsung terbaca tanpa klik mouse.
+- [x] Buat modul print Electron `desktop-standalone/main/printerService.ts`:
+  - [x] Direct USB printing ESC/POS untuk ukuran kertas 58mm & 80mm via Windows raw spooler.
+  - [x] Cetak nota tanpa popup jendela browser print via Electron IPC bridge.
+  - [x] Kirim pulsa tendang laci kasir RJ11 (`\x1b\x70\x00\x19\xfa` pin 2 & 5) otomatis setiap transaksi tunai.
+- [x] Perkuat driver Bluetooth Android & Electron bridge di `frontend/src/utils/printerBluetooth.ts` & `PrinterContext.tsx`.
+- [x] Integrasikan Global HID Keystroke Buffer di `frontend/src/utils/hardwareBarcodeListener.ts` untuk seluruh modul kasir (Retail, Bengkel, Rental) agar pemindaian barcode langsung masuk keranjang tanpa klik mouse.
 
 ### 📌 FASE 4: Proteksi Lisensi Anti-Pirasi & Heartbeat Telemetry
 - [ ] Buat modul pembaca Hardware ID di `desktop-standalone/main/licenseManager.ts`:

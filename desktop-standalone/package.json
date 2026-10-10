@@ -1,0 +1,15 @@
+{
+  "name": "codepos-standalone",
+  "version": "1.0.0",
+  "description": "CodePOS Standalone Offline POS & Multi-Vertical Suite",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build:main": "tsc -p tsconfig.json",
+    "start": "electron dist/main/index.js"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.3"
+  }
+}

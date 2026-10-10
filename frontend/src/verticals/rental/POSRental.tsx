@@ -42,6 +42,7 @@ import { toast } from '../../utils/alert';
 import { RentalReceiptPrinter } from './RentalReceiptPrinter';
 import { RentalCheckoutModal } from './RentalCheckoutModal';
 import { AddAttireModal } from './AddAttireModal';
+import { initHardwareBarcodeListener, playScannerBeep } from '../../utils/hardwareBarcodeListener';
 
 // ─── MASTER PRESET BUSANA & AKSESORIS ─────────────────────────────────────────
 interface AttirePreset {
@@ -455,6 +456,31 @@ export const POSRental: React.FC = () => {
     ]);
     toast(`${attire.name} (${attire.color}) ditambahkan ke keranjang.`, 'success');
   };
+
+  // Global Hardware Barcode / QR Tag Scanner Listener for Rental Attires
+  useEffect(() => {
+    const unbind = initHardwareBarcodeListener({
+      onScan: (scannedCode) => {
+        const clean = scannedCode.trim().toLowerCase();
+        const matched = attires.find(
+          a => (a.code && a.code.toLowerCase() === clean) ||
+               (a.rackHangerCode && a.rackHangerCode.toLowerCase() === clean) ||
+               String(a.id).toLowerCase() === clean
+        );
+
+        if (matched) {
+          handleAddItem(matched);
+          playScannerBeep(true);
+          toast(`⚡ [Barcode Scan] ${matched.name} (${matched.rackHangerCode}) dimasukkan ke order!`, 'success');
+        } else {
+          playScannerBeep(false);
+          toast(`❌ Label Barcode '${scannedCode}' tidak terdaftar di katalog busana`, 'warning');
+        }
+      }
+    });
+
+    return () => unbind();
+  }, [attires, handleAddItem]);
 
   // Toggle item in cart
   const handleToggleItem = (attire: AttirePreset) => {
