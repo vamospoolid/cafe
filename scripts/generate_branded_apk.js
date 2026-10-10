@@ -26,16 +26,25 @@ function parseArgs() {
 }
 
 const args = parseArgs();
+const isStandalone = !!args.standalone;
+const verticalArg = (args.vertical || 'BENGKEL').toUpperCase();
+const dryRun = !!args['dry-run'];
 const targetArg = (args.target || 'all').toLowerCase();
 const tenantSlug = args.tenant || 'mukiramen';
 const envMode = args.env || 'prod';
 
 console.log('================================================================');
-console.log('🚀 GENERATOR APK ANDROID MULTI-TENANT DENGAN LOGO KUSTOM 🚀');
+console.log(isStandalone ? '📱 GENERATOR APK ANDROID STANDALONE MULTI-VERTICAL 📱' : '🚀 GENERATOR APK ANDROID MULTI-TENANT DENGAN LOGO KUSTOM 🚀');
 console.log('================================================================');
-console.log(`[KONFIGURASI] Tenant Slug : ${tenantSlug}`);
+if (isStandalone) {
+  console.log(`[KONFIGURASI] Mode        : STANDALONE OFFLINE`);
+  console.log(`[KONFIGURASI] Vertikal    : ${verticalArg}`);
+} else {
+  console.log(`[KONFIGURASI] Tenant Slug : ${tenantSlug}`);
+}
 console.log(`[KONFIGURASI] Target Build: ${targetArg.toUpperCase()}`);
 console.log(`[KONFIGURASI] Environment : ${envMode.toUpperCase()}`);
+console.log(`[KONFIGURASI] Dry Run     : ${dryRun ? 'YES' : 'NO'}`);
 console.log('================================================================\n');
 
 // 2. Setup Environment Variables (JAVA_HOME & ANDROID_HOME)
@@ -151,30 +160,56 @@ async function main() {
   // A. Generate Seluruh Resolusi Icon Android Mipmap
   await generateAndroidIcons(info.logoFile, androidResDir);
 
-  // B. Definisikan 2 Target Aplikasi
-  const buildTargets = [
-    {
-      type: 'cashier',
-      name: `${info.storeName} - Kasir & Tablet POS`,
-      appId: `id.codenusa.${info.cleanSlug}.pos`,
-      appName: `${info.storeName} POS`,
-      url: `${info.baseUrl}/pos`,
-      outputFileName: `${info.cleanSlug}-pos-cashier.apk`
-    },
-    {
-      type: 'staff',
-      name: `${info.storeName} - Portal Staf & Absensi`,
-      appId: `id.codenusa.${info.cleanSlug}.staff`,
-      appName: `${info.storeName} Staf`,
-      url: `${info.baseUrl}/staff`,
-      outputFileName: `${info.cleanSlug}-staff.apk`
-    }
-  ];
+  // B. Definisikan Target Aplikasi (Standalone vs Multi-Tenant)
+  let buildTargets = [];
+
+  if (isStandalone) {
+    const verticalTitles = {
+      BENGKEL: 'CodePOS Bengkel Motor & Mobil',
+      KAFE: 'CodePOS Resto & Kafe',
+      RETAIL: 'CodePOS Toko Retail & Bangunan',
+      LAUNDRY: 'CodePOS Laundry Kiloan & Satuan',
+      RENTAL: 'CodePOS Rental & Sewa Kendaraan'
+    };
+
+    const vertKey = verticalArg.toLowerCase();
+    const vertTitle = verticalTitles[verticalArg] || `CodePOS ${verticalArg}`;
+
+    buildTargets = [
+      {
+        type: 'cashier',
+        name: `${vertTitle} - Tablet Kasir Standalone`,
+        appId: `id.codenusa.standalone.${vertKey}.pos`,
+        appName: `CodePOS ${vertKey.charAt(0).toUpperCase() + vertKey.slice(1)}`,
+        url: `${info.baseUrl}/pos?mode=standalone&vertical=${verticalArg}`,
+        outputFileName: `codepos-${vertKey}-standalone.apk`
+      }
+    ];
+  } else {
+    buildTargets = [
+      {
+        type: 'cashier',
+        name: `${info.storeName} - Kasir & Tablet POS`,
+        appId: `id.codenusa.${info.cleanSlug}.pos`,
+        appName: `${info.storeName} POS`,
+        url: `${info.baseUrl}/pos`,
+        outputFileName: `${info.cleanSlug}-pos-cashier.apk`
+      },
+      {
+        type: 'staff',
+        name: `${info.storeName} - Portal Staf & Absensi`,
+        appId: `id.codenusa.${info.cleanSlug}.staff`,
+        appName: `${info.storeName} Staf`,
+        url: `${info.baseUrl}/staff`,
+        outputFileName: `${info.cleanSlug}-staff.apk`
+      }
+    ];
+  }
 
   const targetsToBuild = targetArg === 'cashier'
     ? [buildTargets[0]]
     : targetArg === 'staff'
-    ? [buildTargets[1]]
+    ? (buildTargets.length > 1 ? [buildTargets[1]] : [buildTargets[0]])
     : buildTargets;
 
   if (!fs.existsSync(releaseDir)) {
@@ -211,6 +246,12 @@ async function main() {
       }
     };
     fs.writeFileSync(capacitorConfigPath, JSON.stringify(configData, null, 2), 'utf-8');
+
+    if (dryRun) {
+      console.log(`[DRY RUN] ✅ Konfigurasi strings.xml & capacitor.config.json berhasil disinkronkan untuk ${target.appName}.`);
+      console.log(`[DRY RUN] 📁 Target Output: release/${target.outputFileName}`);
+      continue;
+    }
 
     // 3. Capacitor Sync
     console.log(`[1/3] 🔄 Menyinkronkan konfigurasi Capacitor Android...`);

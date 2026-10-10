@@ -5,7 +5,14 @@
   "main": "dist/main/index.js",
   "scripts": {
     "build:main": "tsc -p tsconfig.json",
-    "start": "electron dist/main/index.js"
+    "start": "electron dist/main/index.js",
+    "build:bengkel-exe": "node scripts/build_installer.js --vertical=BENGKEL",
+    "build:kafe-exe": "node scripts/build_installer.js --vertical=KAFE",
+    "build:retail-exe": "node scripts/build_installer.js --vertical=RETAIL",
+    "build:laundry-exe": "node scripts/build_installer.js --vertical=LAUNDRY",
+    "build:rental-exe": "node scripts/build_installer.js --vertical=RENTAL",
+    "build:all-exe": "node scripts/build_installer.js --all",
+    "validate:packaging": "node scripts/build_installer.js --all --dry-run"
   },
   "devDependencies": {
     "electron": "^33.2.0",

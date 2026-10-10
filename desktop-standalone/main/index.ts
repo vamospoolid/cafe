@@ -2,16 +2,28 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
 import { ElectronPrinterService } from './printerService';
 import { LicenseManager } from './licenseManager';
+import { ServerManager } from './serverManager';
 
 let mainWindow: BrowserWindow | null = null;
 
-function createWindow() {
+async function createWindow() {
+  const vertical = process.env.STANDALONE_VERTICAL || 'BENGKEL';
+  const verticalTitles: Record<string, string> = {
+    BENGKEL: 'CodePOS Bengkel Motor & Mobil',
+    KAFE: 'CodePOS Resto & Kafe',
+    RETAIL: 'CodePOS Toko Retail & Bangunan',
+    LAUNDRY: 'CodePOS Laundry Kiloan & Satuan',
+    RENTAL: 'CodePOS Rental & Sewa Kendaraan'
+  };
+
+  const appTitle = verticalTitles[vertical] || `CodePOS ${vertical} Standalone`;
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 700,
-    title: 'CodePOS Standalone',
+    title: appTitle,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -21,12 +33,56 @@ function createWindow() {
     }
   });
 
-  // URL target: local Express server port 3001 or static dist folder
   const isDev = process.env.NODE_ENV === 'development';
+  const port = parseInt(process.env.PORT || '3001', 10);
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadURL('http://localhost:3001');
+    // Mode Produksi Standalone: Pastikan server lokal Express aktif
+    const rootDir = path.resolve(__dirname, '../../..');
+    const appData = process.env.APPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Roaming');
+    const storageDir = path.join(appData, `CodePOS_${vertical}`);
+
+    // Tampilkan layar memuat ringan sebelum server siap
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>${appTitle} - Memuat...</title>
+          <style>
+            body { margin: 0; background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; }
+            .spinner { width: 44px; height: 44px; border: 4px solid #334155; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 8px 0; color: #e2e8f0; }
+            p { font-size: 0.85rem; color: #94a3b8; margin: 0; }
+          </style>
+        </head>
+        <body>
+          <div class="spinner"></div>
+          <h2>Memulai ${appTitle}</h2>
+          <p>Mempersiapkan database lokal & sistem kasir...</p>
+        </body>
+      </html>
+    `)}`);
+
+    try {
+      await ServerManager.ensureBackendRunning({
+        port,
+        vertical,
+        appDataDir: storageDir,
+        rootDir
+      });
+      // Muat halaman utama kasir setelah server siap
+      if (mainWindow) {
+        mainWindow.loadURL(`http://localhost:${port}`);
+      }
+    } catch (e) {
+      if (mainWindow) {
+        mainWindow.loadURL(`http://localhost:${port}`);
+      }
+    }
   }
 
   mainWindow.on('closed', () => {
@@ -117,7 +173,12 @@ app.whenReady().then(() => {
   });
 });
 
+app.on('before-quit', () => {
+  ServerManager.stopBackend();
+});
+
 app.on('window-all-closed', () => {
+  ServerManager.stopBackend();
   if (process.platform !== 'darwin') {
     app.quit();
   }

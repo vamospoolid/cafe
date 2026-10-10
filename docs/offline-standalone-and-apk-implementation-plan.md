@@ -371,19 +371,19 @@ Sistem tetap menggunakan prinsip **Single Codebase, Dual-Target Build**:
   - [x] Tampilkan pengingat ramah jika masa offline melebihi batas 30 hari.
 
 ### 📌 FASE 5: Packaging & Build Automation Pipeline
-- [ ] Setup folder `desktop-standalone/`:
-  - [ ] `package.json` dan `electron-builder.json`.
-  - [ ] Skrip build installer NSIS untuk 5 vertikal:
-    - [ ] Bengkel: `build:bengkel-exe`
-    - [ ] Kafe: `build:kafe-exe`
-    - [ ] Retail: `build:retail-exe`
-    - [ ] Laundry: `build:laundry-exe`
-    - [ ] Rental: `build:rental-exe`
-- [ ] Pastikan konfigurasi NSIS memisahkan:
-  - [ ] Folder binary: `C:\Program Files\CodePOS_[Vertical]\`
-  - [ ] Folder persistent database: `%APPDATA%\CodePOS_[Vertical]\data\`
-- [ ] Perbarui `scripts/generate_branded_apk.js` untuk build APK Android standalone per vertikal.
-- [ ] Uji kompilasi installer Windows `.exe` dan instalasi pada PC bersih (*clean environment*).
+- [x] Setup folder `desktop-standalone/`:
+  - [x] `package.json` dan `electron-builder.json`.
+  - [x] Skrip build installer NSIS untuk 5 vertikal:
+    - [x] Bengkel: `build:bengkel-exe`
+    - [x] Kafe: `build:kafe-exe`
+    - [x] Retail: `build:retail-exe`
+    - [x] Laundry: `build:laundry-exe`
+    - [x] Rental: `build:rental-exe`
+- [x] Pastikan konfigurasi NSIS memisahkan:
+  - [x] Folder binary: `C:\Program Files\CodePOS_[Vertical]\`
+  - [x] Folder persistent database: `%APPDATA%\CodePOS_[Vertical]\data\`
+- [x] Perbarui `scripts/generate_branded_apk.js` untuk build APK Android standalone per vertikal.
+- [x] Uji kompilasi installer Windows `.exe` dan instalasi pada PC bersih (*clean environment*).
 
 ### 📌 FASE 6: Zero-Data-Loss Upgrade Lifecycle & Control Plane UI
 - [ ] Uji coba skenario upgrade aplikasi:

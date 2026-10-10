@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "id.codenusa.codepos.bengkel",
+  "productName": "CodePOS Bengkel Motor & Mobil",
+  "copyright": "Copyright © 2026 CodePOS (PT Code Nusa Teknologi)",
+  "directories": {
+    "output": "../release/desktop/bengkel",
+    "buildResources": "assets"
+  },
+  "files": [
+    "dist/**/*",
+    "package.json",
+    {
+      "from": "../frontend/dist",
+      "to": "frontend-dist",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "../backend/dist",
+      "to": "backend-dist",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "../backend/prisma",
+      "to": "backend-prisma",
+      "filter": ["schema.sqlite.prisma"]
+    }
+  ],
+  "extraMetadata": {
+    "main": "dist/main/index.js"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "assets/icon.ico",
+    "requestedExecutionLevel": "asInvoker"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "CodePOS Bengkel",
+    "installerLanguages": ["id", "en"],
+    "language": "1057"
+  }
+}
