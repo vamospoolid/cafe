@@ -330,22 +330,22 @@ Sistem tetap menggunakan prinsip **Single Codebase, Dual-Target Build**:
 - [x] Buat runner migrasi senyap `runLocalDatabaseMigration()` di Electron main process saat aplikasi booting.
 
 ### 📌 FASE 2: Adaptive Offline Attendance & Shift Drawer Integration
-- [ ] Modifikasi `backend/src/routes/attendance.ts`:
-  - [ ] Auto-bypass `enableGpsValidation` dan `enableCameraPhoto` jika mode standalone aktif.
-  - [ ] Validasi PIN staf berbasis tabel `User` lokal di SQLite.
-- [ ] Perkuat `frontend/src/components/ClockInModal.tsx`:
-  - [ ] Numpad PIN 4–6 digit layar sentuh yang responsif.
-  - [ ] Listener barcode scanner kasir untuk auto-clockin via kartu ID barcode staf.
-- [ ] Hubungkan log absensi dengan modul SPK Bengkel (`WorkOrderView.tsx`):
-  - [ ] Dropdown mekanik hanya memuat teknisi yang hadir hari ini.
-  - [ ] Perhitungan komisi mekanik otomatis terhubung ke mekanik yang clock-in.
-- [ ] Hubungkan log absensi dengan Kasir & Petty Cash Drawer:
-  - [ ] Prompt modal awal laci kas (Cash Float) saat kasir clock-in.
-  - [ ] Prompt hitung fisik kas dan cetak Blind Z-Report saat kasir clock-out shift.
-- [ ] Terapkan Clock Tampering Guard pada backend:
-  - [ ] Blokir aksi jika jam sistem komputer lebih lampau daripada timestamp transaksi terakhir.
-- [ ] Sediakan toggle konfigurasi di `SettingsView.tsx`:
-  - [ ] `Aktifkan Absensi Karyawan (ON/OFF)` untuk toko milik solo operator.
+- [x] Modifikasi `backend/src/routes/attendance.ts`:
+  - [x] Auto-bypass `enableGpsValidation` dan `enableCameraPhoto` jika mode standalone aktif.
+  - [x] Validasi PIN / Barcode staf berbasis tabel `User` lokal di SQLite.
+- [x] Perkuat `frontend/src/components/ClockInModal.tsx`:
+  - [x] Numpad PIN 4–6 digit layar sentuh yang responsif.
+  - [x] Listener barcode scanner kasir untuk auto-clockin via kartu ID barcode staf.
+- [x] Hubungkan log absensi dengan modul SPK Bengkel (`WorkOrderForm.tsx` & `POSBengkel.tsx`):
+  - [x] Dropdown mekanik memprioritaskan dan menandai teknisi yang hadir hari ini (`🟢 [Nama] (Hadir)`).
+  - [x] Perhitungan komisi mekanik otomatis terhubung ke mekanik yang clock-in.
+- [x] Hubungkan log absensi dengan Kasir & Petty Cash Drawer:
+  - [x] Prompt modal awal laci kas (Cash Float) saat kasir clock-in dan buka shift kasir.
+  - [x] Prompt hitung fisik kas dan cetak Blind Z-Report saat kasir clock-out shift di POS Bengkel & Kafe.
+- [x] Terapkan Clock Tampering Guard pada backend:
+  - [x] Blokir aksi jika jam sistem komputer lebih lampau daripada timestamp transaksi terakhir.
+- [x] Sediakan toggle konfigurasi di `SettingsView.tsx`:
+  - [x] `Aktifkan Absensi Karyawan (ON/OFF)` untuk toko milik solo operator.
 
 ### 📌 FASE 3: Hardware Peripheral Drivers (Printer, Drawer, Scanner)
 - [ ] Buat modul print Electron `desktop-standalone/main/printerService.ts`:

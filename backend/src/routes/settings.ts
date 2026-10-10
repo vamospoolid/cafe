@@ -226,6 +226,7 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.storeLatitude !== undefined) updateData.storeLatitude = Number(updateData.storeLatitude);
     if (updateData.storeLongitude !== undefined) updateData.storeLongitude = Number(updateData.storeLongitude);
     if (updateData.gpsRadiusMeters !== undefined) updateData.gpsRadiusMeters = Number(updateData.gpsRadiusMeters);
+    if (updateData.enableAttendance !== undefined) updateData.enableAttendance = Boolean(updateData.enableAttendance);
     if (updateData.enableGpsValidation !== undefined) updateData.enableGpsValidation = Boolean(updateData.enableGpsValidation);
     if (updateData.enableCameraPhoto !== undefined) updateData.enableCameraPhoto = Boolean(updateData.enableCameraPhoto);
     if (updateData.workShifts !== undefined && typeof updateData.workShifts !== 'string') {

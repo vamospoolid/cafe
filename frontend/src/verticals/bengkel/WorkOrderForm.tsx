@@ -190,7 +190,12 @@ export const WorkOrderForm: React.FC = () => {
 
     fetch('/api/bengkel/mechanics', { headers })
       .then(r => r.json())
-      .then(data => Array.isArray(data) && setAvailableMechanics(data))
+      .then(data => {
+        if (Array.isArray(data)) {
+          const sorted = [...data].sort((a, b) => (b.isPresentToday ? 1 : 0) - (a.isPresentToday ? 1 : 0));
+          setAvailableMechanics(sorted);
+        }
+      })
       .catch(console.error);
   }, [token]);
 
@@ -1073,7 +1078,7 @@ export const WorkOrderForm: React.FC = () => {
                             <option value="">Pilih Mekanik...</option>
                             {availableMechanics.map(m => (
                               <option key={m.id} value={m.id}>
-                                {m.name} {m.commissionRate != null ? `(${Math.round(m.commissionRate <= 1 ? m.commissionRate * 100 : m.commissionRate)}% komisi)` : ''}
+                                {m.isPresentToday ? '🟢 ' : ''}{m.name} {m.commissionRate != null ? `(${Math.round(m.commissionRate <= 1 ? m.commissionRate * 100 : m.commissionRate)}% komisi)` : ''} {m.isPresentToday ? '• Hadir' : ''}
                               </option>
                             ))}
                           </select>

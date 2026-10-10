@@ -68,12 +68,29 @@ export async function saveBengkelConfig(tenantId: string, config: Partial<Bengke
   return updatedConfig;
 }
 
-// GET /api/bengkel/mechanics (List semua mekanik di tenant)
+// GET /api/bengkel/mechanics (List semua mekanik di tenant + status kehadiran hari ini)
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = (req as any).tenantId;
 
-    // Ambil semua user yang terasosiasi dengan tenant ini dan memiliki role/profile mekanik
+    // 1. Ambil log absensi aktif hari ini (Clock In tanpa Clock Out)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const activeAttendances = await prisma.attendance.findMany({
+      where: {
+        tenantId,
+        clockIn: { gte: todayStart },
+        clockOut: null
+      },
+      select: { userId: true, clockIn: true }
+    });
+    const presentUserMap = new Map<number, Date>();
+    for (const a of activeAttendances) {
+      presentUserMap.set(a.userId, a.clockIn);
+    }
+
+    // 2. Ambil user via memberships
     const memberships = await prisma.tenantMembership.findMany({
       where: {
         tenantId,
@@ -89,23 +106,77 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    const mechanics = memberships
-      .map(m => {
-        const u = m.user;
-        const profile = u.mechanicProfile && u.mechanicProfile.tenantId === tenantId ? u.mechanicProfile : null;
-        return {
+    // 3. Ambil direct users (khususnya untuk mode standalone / direct tenant)
+    const directUsers = await prisma.user.findMany({
+      where: {
+        tenantId,
+        status: 'Aktif'
+      },
+      include: {
+        mechanicProfile: true
+      }
+    });
+
+    const mechanicMap = new Map<number, any>();
+
+    // Masukkan dari memberships
+    for (const m of memberships) {
+      const u = m.user;
+      const profile = u.mechanicProfile && u.mechanicProfile.tenantId === tenantId ? u.mechanicProfile : null;
+      const roleName = m.role?.name || u.role;
+      const isMechanic = profile !== null || roleName?.toLowerCase().includes('mekanik') || roleName?.toLowerCase().includes('mechanic');
+
+      if (isMechanic) {
+        mechanicMap.set(u.id, {
           id: u.id,
           name: u.name,
           username: u.username,
-          role: m.role?.name || u.role,
+          role: roleName,
           commissionType: profile?.commissionType || 'PERCENT',
           commissionRate: profile?.commissionRate ?? 0.20,
           pendingCommission: profile?.pendingCommission || 0,
           paidCommission: profile?.paidCommission || 0,
-          profileId: profile?.id || null
-        };
-      })
-      .filter(m => m.profileId !== null || m.role?.toLowerCase().includes('mekanik') || m.role?.toLowerCase().includes('mechanic'));
+          profileId: profile?.id || null,
+          isPresentToday: presentUserMap.has(u.id),
+          clockInAt: presentUserMap.get(u.id) || null
+        });
+      }
+    }
+
+    // Masukkan dari direct users jika belum ada
+    for (const u of directUsers) {
+      if (!mechanicMap.has(u.id)) {
+        const profile = u.mechanicProfile && u.mechanicProfile.tenantId === tenantId ? u.mechanicProfile : null;
+        const roleName = u.role;
+        const isMechanic = profile !== null || roleName?.toLowerCase().includes('mekanik') || roleName?.toLowerCase().includes('mechanic');
+
+        if (isMechanic) {
+          mechanicMap.set(u.id, {
+            id: u.id,
+            name: u.name,
+            username: u.username,
+            role: roleName,
+            commissionType: profile?.commissionType || 'PERCENT',
+            commissionRate: profile?.commissionRate ?? 0.20,
+            pendingCommission: profile?.pendingCommission || 0,
+            paidCommission: profile?.paidCommission || 0,
+            profileId: profile?.id || null,
+            isPresentToday: presentUserMap.has(u.id),
+            clockInAt: presentUserMap.get(u.id) || null
+          });
+        }
+      }
+    }
+
+    let mechanics = Array.from(mechanicMap.values());
+
+    // Filter opsional jika klien hanya meminta mekanik yang hadir hari ini
+    if (req.query.presentOnly === 'true') {
+      const presentOnly = mechanics.filter(m => m.isPresentToday);
+      if (presentOnly.length > 0) {
+        mechanics = presentOnly;
+      }
+    }
 
     res.json(mechanics);
   } catch (error) {

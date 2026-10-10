@@ -10,6 +10,7 @@ import { toast } from '../../utils/alert';
 import { WorkOrderReceiptPrinter } from './WorkOrderReceiptPrinter';
 import { BengkelCheckoutModal } from './BengkelCheckoutModal';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
+import OpenShiftModal from '../../components/OpenShiftModal';
 import { initHardwareBarcodeListener, playScannerBeep } from '../../utils/hardwareBarcodeListener';
 import { PartRequestModal } from './PartRequestModal';
 import { ClipboardList } from 'lucide-react';
@@ -32,8 +33,12 @@ interface CartItem {
 }
 
 export const POSBengkel: React.FC = () => {
-  const { token, user } = usePOS();
+  const { token, user, activeShift, fetchActiveShift, settings } = usePOS();
   const navigate = useNavigate();
+
+  // Shift Modal States
+  const [isOpenShiftOpen, setIsOpenShiftOpen] = useState(false);
+  const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
 
   // Active Transaction Details
   const [vehiclePlate, setVehiclePlate] = useState<string>('');
@@ -114,8 +119,14 @@ export const POSBengkel: React.FC = () => {
       if (mechRes.ok) {
         const mData = await mechRes.json();
         if (Array.isArray(mData)) {
-          setMechanics(mData);
-          if (mData.length > 0) setSelectedMechanicId(mData[0].id);
+          const sorted = [...mData].sort((a, b) => (b.isPresentToday ? 1 : 0) - (a.isPresentToday ? 1 : 0));
+          setMechanics(sorted);
+          const firstPresent = sorted.find(m => m.isPresentToday);
+          if (firstPresent) {
+            setSelectedMechanicId(firstPresent.id);
+          } else if (sorted.length > 0) {
+            setSelectedMechanicId(sorted[0].id);
+          }
         }
       }
     } catch (err) {
@@ -982,12 +993,43 @@ export const POSBengkel: React.FC = () => {
                   >
                     {mechanics.map(m => (
                       <option key={m.id} value={m.id}>
-                        {m.name} ({Math.round(m.commissionRate <= 1 ? m.commissionRate * 100 : m.commissionRate)}% komisi)
+                        {m.isPresentToday ? '🟢 ' : ''}{m.name} ({Math.round(m.commissionRate <= 1 ? m.commissionRate * 100 : m.commissionRate)}% komisi){m.isPresentToday ? ' • Hadir' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
               )}
+
+              {/* Status & Kontrol Shift Kasir Bengkel */}
+              <div className="flex items-center gap-2 shrink-0">
+                {activeShift ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsCloseShiftOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/90 rounded-xl transition-all cursor-pointer shadow-2xs"
+                    title="Shift Kasir Aktif - Klik untuk Tutup Shift & Rekonsiliasi Z-Report"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="hidden sm:inline">Kasir:</span>
+                    <strong className="font-extrabold text-emerald-950 max-w-[100px] truncate">
+                      {activeShift.user?.name || activeShift.user?.username || 'Aktif'}
+                    </strong>
+                    <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-black">
+                      Tutup Shift
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsOpenShiftOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+                    title="Kasir Belum Buka - Klik untuk Buka Shift (Input Modal Awal)"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>+ Buka Shift Kasir</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Filter Jenis Kendaraan untuk Jasa */}
@@ -1434,7 +1476,14 @@ export const POSBengkel: React.FC = () => {
               Masuk Antrean SPK
             </button>
             <button
-              onClick={() => setIsCheckoutModalOpen(true)}
+              onClick={() => {
+                if (!activeShift && settings?.enableAttendance !== false) {
+                  setIsOpenShiftOpen(true);
+                  toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
+                  return;
+                }
+                setIsCheckoutModalOpen(true);
+              }}
               disabled={loading || cartItems.length === 0}
               className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 text-white font-black text-xs shadow-md transition active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
             >
@@ -1636,6 +1685,11 @@ export const POSBengkel: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setIsMobileCartOpen(false);
+                    if (!activeShift && settings?.enableAttendance !== false) {
+                      setIsOpenShiftOpen(true);
+                      toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
+                      return;
+                    }
                     setIsCheckoutModalOpen(true);
                   }}
                   className="py-3 px-3 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
@@ -1713,6 +1767,30 @@ export const POSBengkel: React.FC = () => {
         onClose={() => setShowPartRequestModal(false)}
         initialPartName={partRequestInitialName}
         initialProductId={partRequestInitialProductId}
+      />
+
+      {/* ─── MODAL: BUKA SHIFT KASIR (MODAL AWAL / CASH FLOAT) ─────────────── */}
+      <OpenShiftModal
+        isOpen={isOpenShiftOpen}
+        onClose={() => setIsOpenShiftOpen(false)}
+        onSuccess={() => {
+          fetchActiveShift?.();
+          setIsOpenShiftOpen(false);
+          toast('✅ Shift kasir bengkel berhasil dibuka! Selamat bertugas.', 'success');
+        }}
+        mode="open"
+      />
+
+      {/* ─── MODAL: TUTUP SHIFT KASIR (REKONSILIASI / BLIND Z-REPORT) ───────── */}
+      <OpenShiftModal
+        isOpen={isCloseShiftOpen}
+        onClose={() => setIsCloseShiftOpen(false)}
+        onSuccess={() => {
+          fetchActiveShift?.();
+          setIsCloseShiftOpen(false);
+          toast('✅ Shift kasir bengkel berhasil ditutup & direkonsiliasi.', 'success');
+        }}
+        mode="close"
       />
     </div>
   );

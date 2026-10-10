@@ -889,6 +889,7 @@ model Settings {
   autoCompleteKDSOnPay Boolean @default(true)
 
   // Konfigurasi Absensi & GPS Geofencing Toko
+  enableAttendance    Boolean @default(true)
   storeLatitude       Float   @default(-6.200000)
   storeLongitude      Float   @default(106.816666)
   gpsRadiusMeters     Float   @default(100)

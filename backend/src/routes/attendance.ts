@@ -2,13 +2,14 @@ import prisma from '../db';
 import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { TenantContext } from '../utils/tenantContext';
+import { StandaloneConfig } from '../utils/standaloneConfig';
 
 const router = Router();
 
 // Helper untuk multi-tenant scoping
 function getTenantId(req: Request): string | undefined {
   const user = (req as AuthRequest).user;
-  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || (req.body?.tenantId as string);
+  return user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || (req.body?.tenantId as string) || (StandaloneConfig.isStandalone() ? StandaloneConfig.getTenantId() : undefined);
 }
 
 function tenantWhere(tenantId: string | undefined): { tenantId: string } {
@@ -79,6 +80,8 @@ router.post('/clock', async (req: Request, res: Response) => {
   try {
     const { 
       pin, 
+      code,
+      barcode,
       type, 
       shiftId, 
       shiftName, 
@@ -90,10 +93,14 @@ router.post('/clock', async (req: Request, res: Response) => {
       outletId: bodyOutletId
     } = req.body;
     
-    if (!pin) return res.status(400).json({ error: 'PIN absensi dibutuhkan' });
+    const inputPin = String(pin || code || barcode || '').trim();
+    if (!inputPin) return res.status(400).json({ error: 'PIN atau Barcode absensi dibutuhkan' });
     if (!['IN', 'OUT'].includes(type)) return res.status(400).json({ error: 'Tipe absensi tidak valid' });
 
     let requestedTenantId = bodyTenantId || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+    if (!requestedTenantId && StandaloneConfig.isStandalone()) {
+      requestedTenantId = StandaloneConfig.getTenantId();
+    }
 
     // Ekstraksi tenantId & authenticatedUserId dari JWT Authorization header jika ada
     let authenticatedUserId: number | undefined;
@@ -188,28 +195,28 @@ router.post('/clock', async (req: Request, res: Response) => {
         }
       }
     } else {
-      // Prioritas 2: Terminal Absensi Bersama (ClockInModal PIN Pad)
-      if (!pin) {
-        return res.status(400).json({ error: 'PIN absensi dibutuhkan' });
-      }
-
+      // Prioritas 2: Terminal Absensi Bersama (ClockInModal PIN Pad & Barcode Tap)
       const matchingUsers = await prisma.user.findMany({
         where: {
           status: 'Aktif',
           OR: [
             {
-              pin,
+              pin: inputPin,
               tenantId: requestedTenantId
             },
             {
-              pin,
+              username: inputPin,
+              tenantId: requestedTenantId
+            },
+            {
+              pin: inputPin,
               memberships: {
                 some: { tenantId: requestedTenantId, status: 'ACTIVE' }
               }
             },
             {
               memberships: {
-                some: { tenantId: requestedTenantId, pin, status: 'ACTIVE' }
+                some: { tenantId: requestedTenantId, pin: inputPin, status: 'ACTIVE' }
               }
             }
           ]
@@ -223,12 +230,12 @@ router.post('/clock', async (req: Request, res: Response) => {
       });
 
       if (matchingUsers.length === 0) {
-        return res.status(401).json({ error: 'PIN salah atau akun tidak terdaftar di outlet ini' });
+        return res.status(401).json({ error: 'PIN atau Barcode salah / akun tidak terdaftar di outlet ini' });
       }
 
       if (matchingUsers.length > 1) {
         return res.status(400).json({
-          error: 'PIN ini digunakan oleh lebih dari 1 karyawan. Harap perbarui PIN staf Anda menjadi unik di menu Karyawan / Profil, atau lakukan absensi melalui akun Staff App masing-masing.',
+          error: 'PIN / Barcode ini digunakan oleh lebih dari 1 karyawan. Harap perbarui PIN staf Anda menjadi unik di menu Karyawan / Profil.',
           code: 'AMBIGUOUS_PIN'
         });
       }
@@ -245,11 +252,36 @@ router.post('/clock', async (req: Request, res: Response) => {
     const settings = await prisma.settings.findFirst({
       where: tenantWhere(resolvedTenantId)
     });
+
+    // Validasi toggle absensi dari Pengaturan Toko
+    if ((settings as any)?.enableAttendance === false) {
+      return res.status(400).json({
+        error: 'Fitur absensi karyawan dinonaktifkan di Pengaturan Toko.',
+        code: 'ATTENDANCE_DISABLED'
+      });
+    }
+
+    // CLOCK TAMPERING GUARD: Mencegah staf memundurkan tanggal/jam sistem Windows
+    const lastAttendanceLog = await prisma.attendance.findFirst({
+      where: tenantWhere(resolvedTenantId),
+      orderBy: { id: 'desc' }
+    });
+    const now = new Date();
+    const lastLogTime = lastAttendanceLog ? (lastAttendanceLog.clockOut || lastAttendanceLog.clockIn) : null;
+    if (lastLogTime && now < new Date(lastLogTime)) {
+      return res.status(400).json({
+        error: `Jam sistem komputer Anda tidak valid (terdeteksi dimundurkan). Waktu komputer saat ini: ${now.toLocaleTimeString('id-ID')}, aktivitas terakhir: ${new Date(lastLogTime).toLocaleTimeString('id-ID')}. Harap sesuaikan tanggal & waktu Windows Anda.`,
+        code: 'CLOCK_TAMPERING_DETECTED'
+      });
+    }
+
     let storeLat = settings?.storeLatitude ?? -6.200000;
     let storeLon = settings?.storeLongitude ?? 106.816666;
     let maxRadius = settings?.gpsRadiusMeters ?? 100;
-    const enableGps = settings?.enableGpsValidation ?? true;
-    const enableCamera = settings?.enableCameraPhoto ?? true;
+
+    const isStandalone = StandaloneConfig.isStandalone();
+    const enableGps = isStandalone ? false : (settings?.enableGpsValidation ?? true);
+    const enableCamera = isStandalone ? false : (settings?.enableCameraPhoto ?? true);
 
     // Jika ada spesifikasi outlet spesifik, prioritaskan koordinat GPS & radius geofencing outlet tersebut
     const targetOutletId = bodyOutletId;

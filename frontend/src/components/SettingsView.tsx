@@ -204,6 +204,7 @@ const SettingsView = () => {
     enableKDS: true,
     autoCompleteKDSOnPay: true,
     // Absensi & GPS Geofencing
+    enableAttendance: true,
     storeLatitude: -3.4026521,
     storeLongitude: 119.2137757,
     gpsRadiusMeters: 300,
@@ -3444,6 +3445,22 @@ const SettingsView = () => {
                   </h4>
 
                   <div className="space-y-3">
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl border border-indigo-100 bg-indigo-50/60 cursor-pointer hover:bg-indigo-50 transition-colors shadow-xs">
+                      <input
+                        type="checkbox"
+                        name="enableAttendance"
+                        checked={formData.enableAttendance !== false}
+                        onChange={handleChange}
+                        className="w-4 h-4 text-indigo-600 rounded mt-0.5 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-black text-slate-800 block">Aktifkan Absensi Karyawan (Terminal Kasir & Staf)</span>
+                        <span className="text-[11px] text-slate-500 block mt-0.5 leading-relaxed">
+                          Jika dinonaktifkan (khusus toko yang dioperasikan sendiri tanpa karyawan / solo operator), sistem mematikan kewajiban absensi staf pada SPK dan kasir.
+                        </span>
+                      </div>
+                    </label>
+
                     <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 cursor-pointer hover:bg-slate-50 transition-colors">
                       <input
                         type="checkbox"
