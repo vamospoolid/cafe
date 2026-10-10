@@ -124,11 +124,14 @@ function buildSingleVertical(key) {
   const builderConfig = {
     appId: conf.appId,
     productName: conf.productName,
+    electronVersion: '33.2.0',
     copyright: 'Copyright © 2026 CodePOS (PT Code Nusa Teknologi)',
     directories: {
       output: path.join(rootDir, 'release', 'desktop', conf.folder),
       buildResources: path.join(desktopDir, 'assets')
     },
+    npmRebuild: false,
+    nodeGypRebuild: false,
     files: [
       'dist/**/*',
       'package.json',
@@ -154,7 +157,7 @@ function buildSingleVertical(key) {
     win: {
       target: [
         {
-          target: 'nsis',
+          target: 'dir',
           arch: ['x64']
         }
       ],

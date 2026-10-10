@@ -36,5 +36,8 @@ backend/uploads/
 backend/storage/whatsapp_sessions/
 backend/storage/whatsapp_sessions/*
 
+# Generated standalone sqlite client
+backend/src/generated/
+
 
 

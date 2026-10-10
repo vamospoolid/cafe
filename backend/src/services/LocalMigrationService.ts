@@ -17,23 +17,42 @@ export class LocalMigrationService {
 
     const vertical = StandaloneConfig.getVertical();
     const paths = getLocalDatabasePaths(vertical);
-    const schemaPath = path.resolve(__dirname, '../../prisma/schema.sqlite.prisma');
+    const candidateSchemaPaths = [
+      path.resolve(__dirname, '../../prisma/schema.sqlite.prisma'),
+      path.resolve(__dirname, '../../../prisma/schema.sqlite.prisma'),
+      path.resolve(process.cwd(), 'backend/prisma/schema.sqlite.prisma'),
+      path.resolve(process.cwd(), 'prisma/schema.sqlite.prisma'),
+      path.resolve(__dirname, '../backend-prisma/schema.sqlite.prisma')
+    ];
+
+    const schemaPath = candidateSchemaPaths.find(p => fs.existsSync(p)) || candidateSchemaPaths[0];
 
     console.log(`[LocalMigrationService] Memeriksa database lokal untuk vertikal: ${vertical}`);
     console.log(`[LocalMigrationService] Lokasi Database: ${paths.dbFilePath}`);
+    console.log(`[LocalMigrationService] Lokasi Skema: ${schemaPath}`);
 
     // Pastikan skema sqlite ada
     if (!fs.existsSync(schemaPath)) {
-      console.error(`[LocalMigrationService] File skema SQLite tidak ditemukan: ${schemaPath}`);
+      console.error(`[LocalMigrationService] File skema SQLite tidak ditemukan di jalur kandidat: ${schemaPath}`);
       return false;
     }
 
     const isNewDb = !fs.existsSync(paths.dbFilePath);
+    process.env.DATABASE_URL = paths.databaseUrl;
 
     try {
-      // Jalankan prisma db push secara senyap
+      // Jalankan prisma db push secara senyap menggunakan binary lokal
       console.log(`[LocalMigrationService] Menjalankan sinkronisasi skema Prisma SQLite...`);
-      execSync(`npx prisma db push --schema="${schemaPath}" --skip-generate`, {
+      const candidateBins = [
+        path.resolve(__dirname, '../../node_modules/.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma'),
+        path.resolve(__dirname, '../../../node_modules/.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma'),
+        path.resolve(process.cwd(), 'backend/node_modules/.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma'),
+        path.resolve(process.cwd(), 'node_modules/.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma')
+      ];
+      const prismaBin = candidateBins.find(p => fs.existsSync(p));
+      const prismaCmd = prismaBin ? `"${prismaBin}"` : 'npx prisma';
+
+      execSync(`${prismaCmd} db push --schema="${schemaPath}" --skip-generate`, {
         env: {
           ...process.env,
           DATABASE_URL: paths.databaseUrl

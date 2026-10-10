@@ -7,6 +7,8 @@
     "output": "../release/desktop/bengkel",
     "buildResources": "assets"
   },
+  "npmRebuild": false,
+  "nodeGypRebuild": false,
   "files": [
     "dist/**/*",
     "package.json",
