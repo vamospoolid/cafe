@@ -39,12 +39,14 @@ import {
   Coffee,
   Wrench,
   Shirt,
-  ShoppingBag
+  ShoppingBag,
+  HardDrive
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
 import SaaSPlanManager from './SaaSPlanManager';
 import LocalSaaSControlDashboard from './LocalSaaSControlDashboard';
+import OfflineClientsAdminView from './OfflineClientsAdminView';
 
 interface TenantItem {
   id: string;
@@ -82,7 +84,7 @@ interface TenantItem {
 
 export const SaaSPlatformAdminView: React.FC = () => {
   const posContext = useContext(POSContext);
-  const [activeTab, setActiveTab] = useState<'overview' | 'renewal' | 'upsell' | 'tenants' | 'invoices' | 'plans' | 'local_dev'>('local_dev');
+  const [activeTab, setActiveTab] = useState<'overview' | 'renewal' | 'upsell' | 'tenants' | 'invoices' | 'plans' | 'local_dev' | 'offline_clients'>('local_dev');
   const [loading, setLoading] = useState<boolean>(true);
   const [overviewData, setOverviewData] = useState<any>(null);
   const [tenants, setTenants] = useState<TenantItem[]>([]);
@@ -519,7 +521,8 @@ export const SaaSPlatformAdminView: React.FC = () => {
           { id: 'upsell', label: `Radar Peluang Upsell (${upsellRadar.length})`, icon: Flame, badge: upsellRadar.length > 0 ? 'bg-orange-500' : undefined },
           { id: 'tenants', label: `Direktori CRM (${tenants.length})`, icon: Store },
           { id: 'invoices', label: `Verifikasi Tagihan (${invoices.filter(i => i.status === 'UNPAID').length})`, icon: CreditCard },
-          { id: 'plans', label: 'Master Paket & Harga', icon: Sliders }
+          { id: 'plans', label: 'Master Paket & Harga', icon: Sliders },
+          { id: 'offline_clients', label: '💻 Klien Offline & Beli-Putus', icon: HardDrive, badge: 'bg-violet-500' }
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1330,6 +1333,13 @@ export const SaaSPlatformAdminView: React.FC = () => {
       {/* ─── TAB 7: LOCAL SAAS DEVELOPER CONTROLLER & SANDBOX ───────────────── */}
       {activeTab === 'local_dev' && (
         <LocalSaaSControlDashboard />
+      )}
+
+      {/* ─── TAB 8: OFFLINE STANDALONE CLIENTS & DISASTER RECOVERY ──────────── */}
+      {activeTab === 'offline_clients' && (
+        <div className="animate-fade-in">
+          <OfflineClientsAdminView />
+        </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}

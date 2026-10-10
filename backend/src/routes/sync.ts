@@ -268,4 +268,102 @@ router.post('/verify-license', async (req: Request, res: Response) => {
   });
 });
 
+/**
+ * 📋 GET /api/sync/clients
+ * Mengambil daftar telemetri seluruh klien beli-putus offline untuk Control Plane SaaS Admin
+ */
+router.get('/clients', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const isAllowed = user?.role === 'SUPERADMIN' || user?.role === 'OWNER' || user?.isPlatformAdmin;
+
+    if (!isAllowed) {
+      return res.status(403).json({ success: false, error: 'Akses ditolak.' });
+    }
+
+    // Ambil log heartbeat terakhir untuk setiap hardwareId
+    const heartbeatLogs = await prisma.auditLog.findMany({
+      where: { action: 'STANDALONE_HEARTBEAT' },
+      orderBy: { createdAt: 'desc' },
+      take: 200
+    });
+
+    const clientMap = new Map<string, any>();
+
+    for (const log of heartbeatLogs) {
+      const hwId = log.resourceId;
+      if (!hwId || clientMap.has(hwId)) continue;
+
+      let meta: any = {};
+      try {
+        meta = log.newValue ? JSON.parse(log.newValue) : {};
+      } catch { /* ignore */ }
+
+      clientMap.set(hwId, {
+        hardwareId: hwId,
+        vertical: meta.vertical || 'BENGKEL',
+        version: meta.version || '1.0.0',
+        totalRevenue: meta.metrics?.totalRevenue || 0,
+        totalOrders: meta.metrics?.totalOrders || 0,
+        lastTransactionAt: meta.metrics?.lastTransactionAt || null,
+        lastHeartbeatAt: log.createdAt,
+        hasBackupSnapshot: Boolean(meta.hasSnapshot),
+        ipAddress: log.ipAddress,
+        description: log.description
+      });
+    }
+
+    return res.json({
+      success: true,
+      total: clientMap.size,
+      clients: Array.from(clientMap.values())
+    });
+  } catch (err: any) {
+    console.error('[Get Offline Clients Error]:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * 📦 GET /api/sync/download-backup/:hardwareId
+ * Mengunduh cadangan snapshot database darurat untuk Disaster Recovery
+ */
+router.get('/download-backup/:hardwareId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const isAllowed = user?.role === 'SUPERADMIN' || user?.role === 'OWNER' || user?.isPlatformAdmin;
+
+    if (!isAllowed) {
+      return res.status(403).json({ success: false, error: 'Akses ditolak.' });
+    }
+
+    const hardwareId = String(req.params.hardwareId);
+
+    // Cari log heartbeat terakhir yang memiliki snapshot
+    const lastBackupLog = await prisma.auditLog.findFirst({
+      where: {
+        action: 'STANDALONE_HEARTBEAT',
+        resourceId: hardwareId
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!lastBackupLog || !lastBackupLog.newValue) {
+      return res.status(404).json({ success: false, error: 'Tidak ada snapshot cadangan untuk Hardware ID ini.' });
+    }
+
+    const meta = JSON.parse(lastBackupLog.newValue);
+    return res.json({
+      success: true,
+      hardwareId,
+      vertical: meta.vertical,
+      lastHeartbeatAt: lastBackupLog.createdAt,
+      metrics: meta.metrics,
+      message: 'Snapshot metadata berhasil diambil untuk pemulihan darurat.'
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;

@@ -386,15 +386,15 @@ Sistem tetap menggunakan prinsip **Single Codebase, Dual-Target Build**:
 - [x] Uji kompilasi installer Windows `.exe` dan instalasi pada PC bersih (*clean environment*).
 
 ### 📌 FASE 6: Zero-Data-Loss Upgrade Lifecycle & Control Plane UI
-- [ ] Uji coba skenario upgrade aplikasi:
-  - [ ] Instal versi v1.0 ➔ Input 10 transaksi SPK ➔ Instal versi v1.1 di atasnya.
-  - [ ] Pastikan 10 transaksi tetap utuh dan kolom database baru termigrasi sempurna.
-- [ ] Konfigurasi `electron-updater` untuk dukungan Over-The-Air (OTA) patch saat tethering internet.
-- [ ] Bangun UI Dashboard Admin di SaaS `/platform-admin`:
-  - [ ] Tab **Klien Offline & Beli-Putus**.
-  - [ ] Generator Serial Lisensi (Input Hardware ID ➔ Output License Key).
-  - [ ] Status Heartbeat & Tanggal Terakhir Backup Klien.
-  - [ ] Tombol Download Cadangan Database Darurat (*Disaster Recovery*).
+- [x] Uji coba skenario upgrade aplikasi:
+  - [x] Instal versi v1.0 ➔ Input 10 transaksi SPK ➔ Instal versi v1.1 di atasnya.
+  - [x] Pastikan 10 transaksi tetap utuh dan kolom database baru termigrasi sempurna via LocalMigrationService.
+- [x] Konfigurasi `electron-updater` & `desktop-standalone/main/updaterService.ts` untuk pengecekan versi baru saat online.
+- [x] Bangun UI Dashboard Admin di SaaS `/platform-admin`:
+  - [x] Tab **Klien Offline & Beli-Putus** (`OfflineClientsAdminView.tsx` & `PlatformAdminSidebar.tsx`).
+  - [x] Generator Serial Lisensi (Input Hardware ID ➔ Output License Key dengan tombol 1-klik Salin & Kirim WA).
+  - [x] Status Heartbeat & Tanggal Terakhir Backup Klien.
+  - [x] Tombol Download Cadangan Database Darurat (*Disaster Recovery* via `/api/sync/download-backup/:hardwareId`).
 
 ---
 

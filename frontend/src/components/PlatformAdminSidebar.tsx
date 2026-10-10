@@ -11,7 +11,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RotateCcw,
-  Trash2
+  Trash2,
+  HardDrive
 } from 'lucide-react';
 
 export type PlatformAdminTab = 
@@ -21,7 +22,8 @@ export type PlatformAdminTab =
   | 'invoices' 
   | 'database' 
   | 'warnings' 
-  | 'logs';
+  | 'logs'
+  | 'offline_clients';
 
 interface PlatformAdminSidebarProps {
   activeTab: PlatformAdminTab;
@@ -121,6 +123,16 @@ export const PlatformAdminSidebar: React.FC<PlatformAdminSidebarProps> = ({
       activeBg: 'bg-teal-600 text-white border-2 border-teal-700 shadow-sm',
       iconActiveBg: 'bg-teal-700 text-white',
       iconInactiveBg: 'bg-teal-100 text-teal-800'
+    },
+    {
+      id: 'offline_clients' as PlatformAdminTab,
+      label: 'Klien Offline & Beli-Putus',
+      description: 'Lisensi HW-ID, heartbeat & backup',
+      icon: HardDrive,
+      shortcut: 'Alt+8',
+      activeBg: 'bg-violet-600 text-white border-2 border-violet-700 shadow-sm',
+      iconActiveBg: 'bg-violet-700 text-white',
+      iconInactiveBg: 'bg-violet-100 text-violet-800'
     }
   ];
 
