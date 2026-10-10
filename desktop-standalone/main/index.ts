@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
 import { ElectronPrinterService } from './printerService';
+import { LicenseManager } from './licenseManager';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -64,6 +65,28 @@ ipcMain.handle('printer:listPrinters', async () => {
     return await ElectronPrinterService.listInstalledPrinters();
   } catch (err) {
     return [];
+  }
+});
+
+// ─── Register IPC Handlers for License & Anti-Piracy ──────────────────────────
+ipcMain.handle('license:getHardwareId', async () => {
+  const vertical = process.env.STANDALONE_VERTICAL || 'BENGKEL';
+  return await LicenseManager.getHardwareId(vertical);
+});
+
+ipcMain.handle('license:getStatus', async () => {
+  const vertical = process.env.STANDALONE_VERTICAL || 'BENGKEL';
+  return await LicenseManager.checkActivationStatus(vertical);
+});
+
+ipcMain.handle('license:verify', async (_event, { licenseKey }) => {
+  const vertical = process.env.STANDALONE_VERTICAL || 'BENGKEL';
+  const verification = await LicenseManager.verifyLicenseKey(licenseKey, vertical);
+  if (verification.valid) {
+    await LicenseManager.saveLicenseKey(licenseKey, vertical);
+    return { success: true, payload: verification.payload };
+  } else {
+    return { success: false, error: verification.error };
   }
 });
 

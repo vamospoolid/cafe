@@ -46,8 +46,10 @@ import {
   Car,
   Wrench,
   Lock,
-  LogOut
+  LogOut,
+  Key
 } from 'lucide-react';
+import ActivationModal from './ActivationModal';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -58,6 +60,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isGlobalShiftModalOpen, setIsGlobalShiftModalOpen] = useState(false);
   const [globalShiftModalMode, setGlobalShiftModalMode] = useState<'open' | 'close'>('open');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
+
+  // Periksa status aktivasi lisensi hardware saat booting (Electron Standalone)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.getLicenseStatus) {
+      (window as any).electronAPI.getLicenseStatus().then((status: any) => {
+        if (status && status.isActivated === false) {
+          setIsActivationModalOpen(true);
+        }
+      }).catch(console.warn);
+    }
+  }, []);
 
   const toggleSidebar = () => {
     setIsCollapsed(prev => {
@@ -695,6 +709,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </button>
                 <button 
                   type="button"
+                  onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); setIsActivationModalOpen(true); }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-purple-700 hover:bg-purple-50 font-bold transition-colors border-b border-slate-100 flex items-center gap-2.5 cursor-pointer"
+                >
+                  <Key size={16} className="text-purple-600" /> Aktivasi Lisensi Beli-Putus
+                </button>
+                <button 
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); posContext?.logout(); }}
                   className="w-full text-left px-4 py-2.5 text-xs text-rose-600 hover:bg-rose-50 font-bold transition-colors flex items-center gap-2.5 cursor-pointer"
                 >
@@ -1228,6 +1249,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           setIsGlobalShiftModalOpen(false);
           posContext?.fetchActiveShift();
         }}
+      />
+
+      {/* Hardware Anti-Piracy Activation Modal */}
+      <ActivationModal
+        isOpen={isActivationModalOpen}
+        onClose={() => setIsActivationModalOpen(false)}
+        onSuccess={() => setIsActivationModalOpen(false)}
       />
     </div>
   );

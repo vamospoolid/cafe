@@ -232,8 +232,10 @@ import platformAdminRoutes from './routes/platformAdmin';
 import fastProvisioningRoutes from './routes/fastProvisioning';
 import publicInvoiceRoutes from './routes/publicInvoice';
 import aiMenuRoutes from './routes/aiMenu';
+import syncRoutes from './routes/sync';
 import { whatsAppManager } from './services/WhatsAppManager';
 
+app.use('/api/sync', syncRoutes);
 app.use('/api/public/invoice', publicInvoiceRoutes);
 app.use('/api/invoice', publicInvoiceRoutes);
 app.use('/api/health', healthRoutes);

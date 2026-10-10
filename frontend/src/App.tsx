@@ -21,6 +21,7 @@ import { PrinterProvider } from './context/PrinterContext';
 import VerticalGuard from './components/VerticalGuard';
 import ChunkErrorBoundary from './components/ChunkErrorBoundary';
 import { updatePwaManifestForRoute } from './utils/pwaManager';
+import { HeartbeatService } from './services/heartbeatService';
 import './utils/pdfDownloadHelper';
 
 // ─── Code Splitting & Dynamic Imports for Large Modules (Bundle Optimization) ─────
@@ -116,6 +117,12 @@ const AppRoutes = () => {
       seedLocalCatalogCache(context.token).catch(console.warn);
     }
   }, [context?.token]);
+
+  // Inisialisasi Silent Periodic Heartbeat Telemetry & 30-Day Offline Grace Checker
+  useEffect(() => {
+    const cleanup = HeartbeatService.init();
+    return () => cleanup?.();
+  }, []);
 
   // Deteksi Domain:
   // Root domain codenusa.id & www.codenusa.id menampilkan Landing Page Marketing SaaS.

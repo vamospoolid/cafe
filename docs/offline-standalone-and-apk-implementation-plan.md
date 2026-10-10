@@ -356,19 +356,19 @@ Sistem tetap menggunakan prinsip **Single Codebase, Dual-Target Build**:
 - [x] Integrasikan Global HID Keystroke Buffer di `frontend/src/utils/hardwareBarcodeListener.ts` untuk seluruh modul kasir (Retail, Bengkel, Rental) agar pemindaian barcode langsung masuk keranjang tanpa klik mouse.
 
 ### 📌 FASE 4: Proteksi Lisensi Anti-Pirasi & Heartbeat Telemetry
-- [ ] Buat modul pembaca Hardware ID di `desktop-standalone/main/licenseManager.ts`:
-  - [ ] Ekstrak serial number Motherboard & CPU via WMI command.
-  - [ ] Generate string Hardware ID unik klien (misal `BK-8821-F904-77A1`).
-- [ ] Buat modul verifikasi lisensi kriptografis RSA/HMAC:
-  - [ ] Validasi file lisensi `%APPDATA%\CodePOS_[Vertical]\license.key`.
-  - [ ] Buat UI aktivasi `ActivationModal.tsx` jika aplikasi belum teraktivasi.
-- [ ] Bangun endpoint backend di SaaS VPS:
-  - [ ] `POST /api/sync/heartbeat` di `backend/src/routes/sync.ts`.
-  - [ ] Terima metrik omset ringkas dan snapshot database terenkripsi.
-- [ ] Buat background worker uploader di frontend/electron:
-  - [ ] Deteksi koneksi internet (`navigator.onLine`).
-  - [ ] Kirim payload heartbeat saat terhubung internet (tethering HP 1–2 menit).
-  - [ ] Tampilkan pengingat ramah jika masa offline melebihi batas 30 hari.
+- [x] Buat modul pembaca Hardware ID di `desktop-standalone/main/licenseManager.ts`:
+  - [x] Ekstrak serial number Motherboard & CPU via WMI command.
+  - [x] Generate string Hardware ID unik klien (misal `BK-8821-F904-77A1`).
+- [x] Buat modul verifikasi lisensi kriptografis RSA/HMAC:
+  - [x] Validasi file lisensi `%APPDATA%\CodePOS_[Vertical]\license.key`.
+  - [x] Buat UI aktivasi `ActivationModal.tsx` jika aplikasi belum teraktivasi.
+- [x] Bangun endpoint backend di SaaS VPS:
+  - [x] `POST /api/sync/heartbeat` di `backend/src/routes/sync.ts`.
+  - [x] Terima metrik omset ringkas dan snapshot database terenkripsi.
+- [x] Buat background worker uploader di frontend/electron:
+  - [x] Deteksi koneksi internet (`navigator.onLine`).
+  - [x] Kirim payload heartbeat saat terhubung internet (tethering HP 1–2 menit).
+  - [x] Tampilkan pengingat ramah jika masa offline melebihi batas 30 hari.
 
 ### 📌 FASE 5: Packaging & Build Automation Pipeline
 - [ ] Setup folder `desktop-standalone/`:
