@@ -493,7 +493,7 @@ export const POSRetail: React.FC = () => {
               <div className="flex items-center gap-1.5 truncate">
                 <User size={14} className="shrink-0" />
                 <span className="font-extrabold max-w-[120px] sm:max-w-[150px] truncate">
-                  {selectedCustomer ? selectedCustomer.name : 'Pilih Warung (F1)'}
+                  {selectedCustomer ? selectedCustomer.name : 'Pilih Warung (F2)'}
                 </span>
               </div>
               {selectedCustomer?.creditLimit ? (
@@ -562,8 +562,8 @@ export const POSRetail: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
               SCANNER SIAP
             </span>
-            <span className="hidden md:inline-block text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0" title="Tekan F2 untuk fokus scanner">
-              F2
+            <span className="hidden md:inline-block text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0" title="Tekan F1 untuk fokus scanner">
+              F1
             </span>
             {searchQuery && (
               <button 

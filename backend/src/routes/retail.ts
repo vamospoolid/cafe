@@ -57,12 +57,32 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
       return res.status(400).json({ error: 'Keranjang belanja tidak boleh kosong.' });
     }
 
-    // Ambil Outlet Aktif
-    const outlet = await prisma.outlet.findFirst({
-      where: { tenantId, status: 'ACTIVE' }
-    });
+    if (total === undefined || isNaN(Number(total)) || Number(total) < 0) {
+      return res.status(400).json({ error: 'Total transaksi tidak valid atau tidak boleh negatif.' });
+    }
+
+    // Ambil Outlet Aktif secara resilient (prioritas user.outletId -> ACTIVE -> outlet pertama)
+    let outlet = null;
+    if (user?.outletId) {
+      outlet = await prisma.outlet.findFirst({
+        where: { id: user.outletId, tenantId }
+      });
+    }
     if (!outlet) {
-      return res.status(400).json({ error: 'Outlet aktif tidak ditemukan.' });
+      outlet = await prisma.outlet.findFirst({
+        where: {
+          tenantId,
+          status: { in: ['ACTIVE', 'Active', 'aktif', 'AKTIF'] }
+        }
+      });
+    }
+    if (!outlet) {
+      outlet = await prisma.outlet.findFirst({
+        where: { tenantId }
+      });
+    }
+    if (!outlet) {
+      return res.status(400).json({ error: 'Outlet untuk tenant ini tidak ditemukan. Harap pastikan outlet telah dibuat.' });
     }
 
     // 1. Validasi & Kalkulasi Stok Fisik (Konversi ke Base Unit)
@@ -73,6 +93,16 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
     const productMap = new Map<number, any>(products.map(p => [p.id, p]));
 
     for (const item of items) {
+      const qtyNum = Number(item.qty);
+      const priceNum = Number(item.price);
+
+      if (isNaN(qtyNum) || qtyNum <= 0) {
+        return res.status(400).json({ error: `Kuantitas untuk produk ID #${item.productId} harus lebih besar dari 0.` });
+      }
+      if (isNaN(priceNum) || priceNum < 0) {
+        return res.status(400).json({ error: `Harga untuk produk ID #${item.productId} tidak boleh negatif.` });
+      }
+
       const p = productMap.get(Number(item.productId));
       if (!p) {
         return res.status(400).json({ error: `Produk ID #${item.productId} tidak ditemukan atau bukan milik outlet ini.` });
@@ -80,7 +110,7 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
 
       // Hitung pengali kuantitas ke base unit
       const ratio = Number(item.uomRatio) > 0 ? Number(item.uomRatio) : 1;
-      const baseQtyToDeduct = Math.round(Number(item.qty) * ratio);
+      const baseQtyToDeduct = Math.round(qtyNum * ratio);
 
       // Warning bila stok minus (toko grosir tetap boleh menjual barang yang baru datang belum sempat diinput)
       // Logika dipertahankan transparan
@@ -131,24 +161,44 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
           });
         }
 
-        // Verifikasi PIN Owner / Admin / Manager (Scoped to current tenant)
+        // Verifikasi PIN Owner / Admin / Manager (Scoped to current tenant: direct user + memberships)
+        const cleanPin = String(overridePin).trim();
+        const allowedRoles = ['OWNER', 'ADMIN', 'MANAGER', 'SUPERVISOR', 'Owner', 'Admin', 'Manager', 'Supervisor'];
+
         const ownerUser = await prisma.user.findFirst({
           where: {
             status: 'Aktif',
             OR: [
-              { pin: String(overridePin).trim() },
-              { memberships: { some: { tenantId, pin: String(overridePin).trim(), status: 'ACTIVE' } } }
-            ],
-            memberships: {
-              some: {
+              // Kasus 1: Direct user (tenantId di record User)
+              {
                 tenantId,
-                status: 'ACTIVE',
-                OR: [
-                  { role: { name: { in: ['OWNER', 'ADMIN', 'MANAGER', 'SUPERVISOR', 'Owner', 'Admin', 'Manager', 'Supervisor'] } } },
-                  { user: { role: { in: ['OWNER', 'ADMIN', 'MANAGER', 'SUPERVISOR', 'Owner', 'Admin', 'Manager', 'Supervisor'] } } }
-                ]
+                pin: cleanPin,
+                role: { in: allowedRoles }
+              },
+              // Kasus 2: Tenant Membership (multi-tenant mapping)
+              {
+                memberships: {
+                  some: {
+                    tenantId,
+                    status: 'ACTIVE',
+                    AND: [
+                      {
+                        OR: [
+                          { pin: cleanPin },
+                          { user: { pin: cleanPin } }
+                        ]
+                      },
+                      {
+                        OR: [
+                          { role: { name: { in: allowedRoles } } },
+                          { user: { role: { in: allowedRoles } } }
+                        ]
+                      }
+                    ]
+                  }
+                }
               }
-            }
+            ]
           }
         });
 

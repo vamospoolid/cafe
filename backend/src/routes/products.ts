@@ -321,8 +321,9 @@ router.post('/', authenticateToken, requirePermission('products.manage'), requir
       brand, vehicleType, storageLocation
     } = req.body;
 
-    // Harmonize recipe payload (accept both recipeItems and recipes from client)
+    // Harmonize recipe & UOM payloads
     const rawRecipeItems = req.body.recipeItems !== undefined ? req.body.recipeItems : req.body.recipes;
+    const rawUoms = req.body.productUoms !== undefined ? req.body.productUoms : req.body.uoms;
 
     // Normalize empty barcode to null (prevent unique constraint violation when multiple products have no barcode)
     const normalizedBarcode = barcode && String(barcode).trim() !== '' ? String(barcode).trim() : null;
@@ -391,6 +392,16 @@ router.post('/', authenticateToken, requirePermission('products.manage'), requir
             ingredientId: Number(r.ingredientId),
             qtyPerServing: Number(r.qtyPerServing)
           }))
+        } : undefined,
+        productUoms: rawUoms && Array.isArray(rawUoms) && rawUoms.length > 0 ? {
+          create: rawUoms.map((u: any) => ({
+            tenantId,
+            unitName: String(u.unitName).trim().toUpperCase(),
+            conversionRatio: Math.max(1, Number(u.conversionRatio)),
+            barcode: u.barcode && String(u.barcode).trim() !== '' ? String(u.barcode).trim() : null,
+            priceSell: Math.max(0, Number(u.priceSell)),
+            isDefaultSale: Boolean(u.isDefaultSale)
+          }))
         } : undefined
       },
       include: { 
@@ -446,8 +457,9 @@ router.put('/:id', authenticateToken, requirePermission('products.manage'), asyn
       brand, vehicleType, storageLocation
     } = req.body;
 
-    // Harmonize recipe payload (accept both recipeItems and recipes from client)
+    // Harmonize recipe & UOM payloads (accept both recipeItems and recipes from client)
     const rawRecipeItems = req.body.recipeItems !== undefined ? req.body.recipeItems : req.body.recipes;
+    const rawUoms = req.body.productUoms !== undefined ? req.body.productUoms : req.body.uoms;
 
     // Normalize empty barcode to null (prevent unique constraint violation when multiple products have no barcode)
     const normalizedBarcode = barcode && String(barcode).trim() !== '' ? String(barcode).trim() : null;
@@ -534,6 +546,24 @@ router.put('/:id', authenticateToken, requirePermission('products.manage'), asyn
               productId,
               ingredientId: Number(r.ingredientId),
               qtyPerServing: Number(r.qtyPerServing)
+            }))
+          });
+        }
+      }
+
+      // Update product UOMs if provided
+      if (rawUoms !== undefined && Array.isArray(rawUoms)) {
+        await tx.productUOM.deleteMany({ where: { productId, tenantId: targetTenantId } });
+        if (rawUoms.length > 0) {
+          await tx.productUOM.createMany({
+            data: rawUoms.map((u: any) => ({
+              tenantId: targetTenantId,
+              productId,
+              unitName: String(u.unitName).trim().toUpperCase(),
+              conversionRatio: Math.max(1, Number(u.conversionRatio)),
+              barcode: u.barcode && String(u.barcode).trim() !== '' ? String(u.barcode).trim() : null,
+              priceSell: Math.max(0, Number(u.priceSell)),
+              isDefaultSale: Boolean(u.isDefaultSale)
             }))
           });
         }

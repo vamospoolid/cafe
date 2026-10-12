@@ -48,11 +48,20 @@ const ProductModal: React.FC<ProductModalProps> = ({
     storageLocation: ''
   });
 
-  const [activeTab, setActiveTab] = useState<'info' | 'pricing' | 'recipe'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'pricing' | 'uom' | 'recipe'>('info');
   const [recipeItems, setRecipeItems] = useState<any[]>([]);
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [newRecipe, setNewRecipe] = useState({ ingredientId: '', qty: '' });
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+
+  // Multi-Satuan (ProductUOM) State
+  const [uomItems, setUomItems] = useState<any[]>([]);
+  const [newUom, setNewUom] = useState({
+    unitName: '',
+    conversionRatio: '',
+    barcode: '',
+    priceSell: ''
+  });
 
   const posContext = useContext(POSContext);
   const { isBengkel, isRetail, isCafe, profile } = useVertical();
@@ -160,6 +169,18 @@ const ProductModal: React.FC<ProductModalProps> = ({
         } else {
           setRecipeItems([]);
         }
+        if (initialData.productUoms?.length > 0) {
+          setUomItems(initialData.productUoms.map((u: any) => ({
+            id: u.id,
+            unitName: u.unitName,
+            conversionRatio: u.conversionRatio,
+            barcode: u.barcode || '',
+            priceSell: u.priceSell,
+            isDefaultSale: Boolean(u.isDefaultSale)
+          })));
+        } else {
+          setUomItems([]);
+        }
       } else {
         setFormData({
           name: '', categoryId: categories.length > 0 ? String(categories[0].id) : '',
@@ -169,10 +190,34 @@ const ProductModal: React.FC<ProductModalProps> = ({
           brand: '', vehicleType: 'MOTOR', storageLocation: ''
         });
         setRecipeItems([]);
+        setUomItems([]);
       }
       setActiveTab('info');
     }
   }, [isOpen, initialData, categories]);
+
+  // ─── Fetch existing UOMs for product (Retail Mode) ─────────────────────────
+  useEffect(() => {
+    if (isOpen && initialData?.id && (isRetail || profile?.enableMultiUom) && posContext?.token) {
+      const h: Record<string, string> = { Authorization: `Bearer ${posContext.token}` };
+      if (posContext?.user?.tenantId) h['x-tenant-id'] = String(posContext.user.tenantId);
+      fetch(`/api/products/${initialData.id}/uoms`, { headers: h })
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setUomItems(data.map((u: any) => ({
+              id: u.id,
+              unitName: u.unitName,
+              conversionRatio: u.conversionRatio,
+              barcode: u.barcode || '',
+              priceSell: u.priceSell,
+              isDefaultSale: Boolean(u.isDefaultSale)
+            })));
+          }
+        })
+        .catch(e => console.error('Fetch UOMs error:', e));
+    }
+  }, [isOpen, initialData?.id, isRetail, profile?.enableMultiUom, posContext?.token, posContext?.user?.tenantId]);
 
   // ─── Auto-HPP dari resep ──────────────────────────────────────────────────
   useEffect(() => {
@@ -249,7 +294,61 @@ const ProductModal: React.FC<ProductModalProps> = ({
       payload.recipes = recipeItems.map(r => ({ ingredientId: r.ingredientId, qtyPerServing: r.qtyPerServing }));
     }
 
+    if (isRetail || profile?.enableMultiUom) {
+      payload.productUoms = uomItems.map(u => ({
+        unitName: u.unitName,
+        conversionRatio: Number(u.conversionRatio),
+        barcode: u.barcode ? String(u.barcode).trim() : null,
+        priceSell: Number(u.priceSell),
+        isDefaultSale: Boolean(u.isDefaultSale)
+      }));
+    }
+
     if (onSave) onSave(payload);
+  };
+
+  const handleAddUom = () => {
+    if (!newUom.unitName.trim()) {
+      toast('Nama satuan (misal: DUS, SAK, KARTON) wajib diisi', 'error');
+      return;
+    }
+    const ratio = Number(newUom.conversionRatio);
+    if (isNaN(ratio) || ratio <= 1) {
+      toast('Rasio konversi harus lebih besar dari 1 (contoh: 1 DUS = 24 PCS)', 'error');
+      return;
+    }
+    const price = Number(newUom.priceSell);
+    if (isNaN(price) || price <= 0) {
+      toast('Harga jual satuan harus lebih besar dari 0', 'error');
+      return;
+    }
+    const cleanName = newUom.unitName.trim().toUpperCase();
+    if (uomItems.some(u => u.unitName.toUpperCase() === cleanName)) {
+      toast(`Satuan "${cleanName}" sudah terdaftar`, 'warning');
+      return;
+    }
+
+    setUomItems(prev => [
+      ...prev,
+      {
+        unitName: cleanName,
+        conversionRatio: ratio,
+        barcode: newUom.barcode.trim() || '',
+        priceSell: price,
+        isDefaultSale: false
+      }
+    ]);
+    setNewUom({
+      unitName: '',
+      conversionRatio: '',
+      barcode: '',
+      priceSell: ''
+    });
+    toast(`✅ Satuan ${cleanName} berhasil ditambahkan`, 'success');
+  };
+
+  const handleRemoveUom = (unitName: string) => {
+    setUomItems(prev => prev.filter(u => u.unitName !== unitName));
   };
 
   const handleAddRecipeItem = () => {
@@ -345,6 +444,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
   const tabs = [
     { id: 'info', label: isBengkel ? 'Info Sparepart' : 'Info Produk', icon: Package },
     ...(hasPriceTiers ? [{ id: 'pricing', label: isBengkel ? 'Tier Harga Bengkel' : 'Harga Jual (3-Tier)', icon: TrendingUp }] : []),
+    ...((isRetail || profile?.enableMultiUom) ? [{ id: 'uom', label: 'Multi-Satuan (UOM)', icon: Layers }] : []),
     ...(isAdvancedMode && isCafe ? [{ id: 'recipe', label: 'Resep & HPP', icon: Beaker }] : [])
   ] as { id: string; label: string; icon: any }[];
 
@@ -425,6 +525,11 @@ const ProductModal: React.FC<ProductModalProps> = ({
                   >
                     <Icon size={14} />
                     {tab.label}
+                    {tab.id === 'uom' && uomItems.length > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-purple-100 text-purple-700 text-[10px] font-black flex items-center justify-center">
+                        {uomItems.length}
+                      </span>
+                    )}
                     {tab.id === 'recipe' && recipeItems.length > 0 && (
                       <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-black flex items-center justify-center">
                         {recipeItems.length}
@@ -1168,6 +1273,199 @@ const ProductModal: React.FC<ProductModalProps> = ({
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ══ TAB: MULTI-SATUAN (UOM) ══ */}
+              {activeTab === 'uom' && (isRetail || profile?.enableMultiUom) && (
+                <div className="space-y-5 animate-in fade-in duration-200">
+                  <div className="bg-gradient-to-r from-purple-50 to-indigo-50/50 border border-purple-200/80 rounded-2xl p-4 flex gap-3 items-start shadow-sm">
+                    <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                      <Layers size={16} />
+                    </div>
+                    <div>
+                      <p className="font-black text-purple-900 mb-0.5 text-xs sm:text-sm">
+                        Multi-Satuan Jual (UOM Conversion) Grosir & Toko Bangunan
+                      </p>
+                      <p className="font-medium text-purple-800/90 text-[11px] sm:text-xs">
+                        Stok fisik barang tetap dipotong otomatis pada satuan terkecil (<span className="font-bold underline">Base Unit / PCS</span>). Daftarkan kemasan seperti Dus, Sak, atau Karton dengan harga dan barcode masing-masing agar kasir dapat menjual kemasan besar secara instan.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Form Tambah Satuan */}
+                  <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="font-black text-xs text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Plus size={14} className="text-purple-600" /> Tambah Kemasan / Satuan Jual
+                      </span>
+
+                      {/* Preset Satuan Cepat */}
+                      <div className="flex items-center gap-1 overflow-x-auto">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Preset:</span>
+                        {['DUS', 'SAK', 'KARTON', 'BAL', 'RENCENG', 'SLOP', 'LUSIN'].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setNewUom(p => ({ ...p, unitName: preset }))}
+                            className="px-2 py-0.5 rounded-lg bg-white hover:bg-purple-100 text-slate-600 hover:text-purple-700 text-[10px] font-bold border border-slate-200 transition-colors"
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                      {/* Nama Satuan */}
+                      <div className="sm:col-span-3">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                          Nama Satuan <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Misal: DUS, SAK"
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 uppercase outline-none focus:border-purple-500"
+                          value={newUom.unitName}
+                          onChange={e => setNewUom(p => ({ ...p, unitName: e.target.value.toUpperCase() }))}
+                        />
+                      </div>
+
+                      {/* Rasio Konversi */}
+                      <div className="sm:col-span-3">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                          Isi ke Satuan Dasar <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            min="2"
+                            placeholder="Contoh: 24"
+                            className="w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-purple-500"
+                            value={newUom.conversionRatio}
+                            onChange={e => setNewUom(p => ({ ...p, conversionRatio: e.target.value }))}
+                          />
+                          <span className="absolute right-2 top-2 text-[10px] font-bold uppercase text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                            PCS
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Barcode Kemasan */}
+                      <div className="sm:col-span-3">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                          Barcode Kemasan <span className="text-[10px] font-normal text-slate-400">(Opsional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Scan barcode dus..."
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-purple-500"
+                          value={newUom.barcode}
+                          onChange={e => setNewUom(p => ({ ...p, barcode: e.target.value }))}
+                        />
+                      </div>
+
+                      {/* Harga Jual Satuan */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                          Harga Jual <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="0"
+                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-800 outline-none focus:border-purple-500"
+                          value={newUom.priceSell}
+                          onChange={e => setNewUom(p => ({ ...p, priceSell: e.target.value }))}
+                        />
+                      </div>
+
+                      {/* Tombol Tambah */}
+                      <div className="sm:col-span-1">
+                        <button
+                          type="button"
+                          onClick={handleAddUom}
+                          disabled={!newUom.unitName || !newUom.conversionRatio || !newUom.priceSell}
+                          className="w-full py-2.5 px-3 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-black shadow-md shadow-purple-500/20 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center transition-all cursor-pointer"
+                          title="Tambah Satuan"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabel Daftar Multi-Satuan */}
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                            <th className="p-3.5 pl-4">Kemasan / Satuan</th>
+                            <th className="p-3.5 text-center">Rasio Konversi</th>
+                            <th className="p-3.5 text-center">Barcode Kemasan</th>
+                            <th className="p-3.5 text-right">Harga Jual Satuan</th>
+                            <th className="p-3.5 text-center pr-4 w-16">Hapus</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {uomItems.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="p-10 text-center text-slate-400">
+                                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-500 flex items-center justify-center mx-auto mb-2">
+                                  <Layers size={24} />
+                                </div>
+                                <p className="font-bold text-slate-600 text-xs">Belum ada kemasan bertingkat yang didaftarkan</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">Produk ini hanya dijual dalam satuan dasar (PCS / Eceran)</p>
+                              </td>
+                            </tr>
+                          ) : (
+                            uomItems.map((u, idx) => (
+                              <tr key={u.unitName} className="hover:bg-purple-50/30 transition-colors">
+                                <td className="p-3.5 pl-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-md bg-purple-100 text-purple-700 text-[10px] font-black flex items-center justify-center shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <span className="font-black text-slate-800 text-xs uppercase px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-200">
+                                      {u.unitName}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="p-3.5 text-center">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-black text-xs border border-indigo-100">
+                                    1 {u.unitName} = {u.conversionRatio} PCS
+                                  </span>
+                                </td>
+                                <td className="p-3.5 text-center font-mono text-[11px] text-slate-600">
+                                  {u.barcode ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold">
+                                      <Barcode size={12} /> {u.barcode}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300 italic">-</span>
+                                  )}
+                                </td>
+                                <td className="p-3.5 text-right font-black text-purple-700 text-xs sm:text-sm">
+                                  Rp {Number(u.priceSell || 0).toLocaleString('id-ID')}
+                                </td>
+                                <td className="p-3.5 text-center pr-4">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveUom(u.unitName)}
+                                    className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200/80 flex items-center justify-center transition-all mx-auto active:scale-95 cursor-pointer"
+                                    title="Hapus Satuan"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               )}
 
