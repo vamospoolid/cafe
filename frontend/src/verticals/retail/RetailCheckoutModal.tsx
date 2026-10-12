@@ -20,7 +20,7 @@ import {
   Phone,
   Ticket
 } from 'lucide-react';
-import type { CustomerData } from './RetailCustomerPicker';
+import { RetailCustomerPicker, type CustomerData } from './RetailCustomerPicker';
 import { toast } from '../../utils/alert';
 
 interface CartItem {
@@ -45,6 +45,7 @@ interface RetailCheckoutModalProps {
   tax: number;
   total: number;
   customer: CustomerData | null;
+  onSelectCustomer?: (customer: CustomerData | null) => void;
   onSuccessCheckout: (orderResult: any) => void;
 }
 
@@ -57,6 +58,7 @@ export const RetailCheckoutModal: React.FC<RetailCheckoutModalProps> = ({
   tax,
   total: initialTotal,
   customer,
+  onSelectCustomer,
   onSuccessCheckout
 }) => {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'BON' | 'TRANSFER' | 'QRIS'>('CASH');
@@ -64,6 +66,7 @@ export const RetailCheckoutModal: React.FC<RetailCheckoutModalProps> = ({
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [overridePin, setOverridePin] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState<boolean>(false);
 
   // Delivery Order Option
   const [isDelivery, setIsDelivery] = useState<boolean>(false);
@@ -240,10 +243,18 @@ export const RetailCheckoutModal: React.FC<RetailCheckoutModalProps> = ({
             {/* Header Badge Pelanggan */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-purple-100 text-purple-900 border border-purple-200">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerPickerOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-purple-100 hover:bg-purple-200 active:scale-95 text-purple-900 border border-purple-200 transition-all cursor-pointer shadow-xs"
+                  title="Klik untuk memilih atau mendaftarkan pelanggan/warung"
+                >
                   <User size={13} className="text-purple-700" />
-                  <span className="truncate max-w-[130px]">{customer?.name || 'Pelanggan Umum'}</span>
-                </span>
+                  <span className="truncate max-w-[120px]">{customer?.name || 'Pelanggan Umum'}</span>
+                  <span className="text-[10px] text-purple-600 font-bold underline ml-0.5">
+                    {customer ? '(Ganti)' : '(+ Pilih)'}
+                  </span>
+                </button>
                 <span className="text-xs font-bold text-slate-400">
                   {items.length} Item
                 </span>
@@ -488,9 +499,24 @@ export const RetailCheckoutModal: React.FC<RetailCheckoutModalProps> = ({
                     )}
                   </div>
                 ) : (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-800 text-xs">
-                    <AlertTriangle size={16} className="shrink-0 text-rose-600" />
-                    <span>Silakan pilih Warung / Pelanggan terlebih dahulu di kasir sebelum memilih opsi Bon Tempo!</span>
+                  <div className="p-3.5 bg-rose-50 border-2 border-rose-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-900 text-xs animate-fade-in">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle size={18} className="shrink-0 text-rose-600 mt-0.5" />
+                      <div>
+                        <div className="font-extrabold text-xs text-rose-950">Pelanggan Belum Dipilih</div>
+                        <div className="text-[11px] text-rose-700 mt-0.5">
+                          Opsi Bon Tempo membutuhkan data Pelanggan / Warung untuk pencatatan buku piutang.
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomerPickerOpen(true)}
+                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm shrink-0 cursor-pointer"
+                    >
+                      <User size={14} />
+                      <span>Pilih / Daftar Pelanggan</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -591,6 +617,19 @@ export const RetailCheckoutModal: React.FC<RetailCheckoutModalProps> = ({
         </div>
 
       </div>
+
+      {/* Modal Pemilih / Pendaftaran Pelanggan Langsung dari Checkout */}
+      <RetailCustomerPicker
+        isOpen={isCustomerPickerOpen}
+        onClose={() => setIsCustomerPickerOpen(false)}
+        selectedCustomer={customer}
+        onSelectCustomer={(c) => {
+          if (onSelectCustomer) {
+            onSelectCustomer(c);
+          }
+          setIsCustomerPickerOpen(false);
+        }}
+      />
     </div>
   );
 };
