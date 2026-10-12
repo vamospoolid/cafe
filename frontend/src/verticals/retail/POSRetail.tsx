@@ -21,13 +21,17 @@ import {
   AlertCircle,
   HelpCircle,
   ClipboardList,
-  ArrowRight
+  ArrowRight,
+  Wallet
 } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
 import { RetailCustomerPicker, type CustomerData } from './RetailCustomerPicker';
 import { RetailCheckoutModal } from './RetailCheckoutModal';
 import { RetailReceiptPrinter } from './RetailReceiptPrinter';
+import { HeldCartsModal, type HeldCartItem } from './HeldCartsModal';
+import { RetailDebtPaymentModal } from './RetailDebtPaymentModal';
+import { ShelfTagPrinterModal } from './ShelfTagPrinterModal';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import { initHardwareBarcodeListener, playScannerBeep } from '../../utils/hardwareBarcodeListener';
 
@@ -106,6 +110,25 @@ export const POSRetail: React.FC = () => {
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
 
+  // Parkir Transaksi (Held Carts) State
+  const heldStorageKey = `pos_retail_held_carts_${user?.tenantId || 'default'}`;
+  const [heldCarts, setHeldCarts] = useState<HeldCartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(heldStorageKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(heldStorageKey, JSON.stringify(heldCarts));
+    } catch (e) {
+      console.error('Failed to save held carts:', e);
+    }
+  }, [heldCarts, heldStorageKey]);
+
   // Modals
   const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState<boolean>(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
@@ -114,6 +137,10 @@ export const POSRetail: React.FC = () => {
   const [showShortcutHelp, setShowShortcutHelp] = useState<boolean>(false);
   const [lastOrderResult, setLastOrderResult] = useState<any | null>(null);
   const [showReceipt, setShowReceipt] = useState<boolean>(false);
+  const [isHeldCartsOpen, setIsHeldCartsOpen] = useState<boolean>(false);
+  const [isDebtPaymentOpen, setIsDebtPaymentOpen] = useState<boolean>(false);
+  const [debtPaymentCustomer, setDebtPaymentCustomer] = useState<any | null>(null);
+  const [isShelfTagPrinterOpen, setIsShelfTagPrinterOpen] = useState<boolean>(false);
 
   const scannerInputRef = useRef<HTMLInputElement>(null);
 
@@ -228,6 +255,13 @@ export const POSRetail: React.FC = () => {
             toast('Keranjang belanja berhasil dikosongkan.', 'info');
           }
         }
+      } else if (e.key === 'F6') {
+        e.preventDefault();
+        if (cart.length > 0) {
+          handleHoldCart();
+        } else {
+          setIsHeldCartsOpen(prev => !prev);
+        }
       } else if (e.key === 'F9') {
         e.preventDefault();
         if (cart.length > 0) handleQuickCash();
@@ -239,7 +273,48 @@ export const POSRetail: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cart, isCustomerPickerOpen, isCheckoutOpen, isScannerOpen]);
+  }, [cart, isCustomerPickerOpen, isCheckoutOpen, isScannerOpen, heldCarts]);
+
+  // Handler Parkir & Pulihkan Keranjang
+  const handleHoldCart = () => {
+    if (cart.length === 0) {
+      toast('Keranjang masih kosong, tidak ada transaksi untuk diparkir.', 'info');
+      return;
+    }
+
+    const newHeld: HeldCartItem = {
+      id: `HELD-${Date.now()}`,
+      note: selectedCustomer ? selectedCustomer.name : `Pelanggan #${heldCarts.length + 1}`,
+      customer: selectedCustomer,
+      customerPhone: customerPhone || selectedCustomer?.phone || '',
+      priceTier,
+      cart: [...cart],
+      total: cart.reduce((sum, i) => sum + i.subtotal, 0),
+      totalQty: cart.reduce((sum, i) => sum + i.qty, 0),
+      createdAt: Date.now()
+    };
+
+    setHeldCarts(prev => [newHeld, ...prev]);
+    setCart([]);
+    setSelectedCustomer(null);
+    setCustomerPhone('');
+    setPriceTier('UMUM');
+    toast('Transaksi berhasil diparkir! Tekan F6 untuk membuka kembali.', 'success');
+  };
+
+  const handleRecallCart = (heldItem: HeldCartItem) => {
+    setCart(heldItem.cart);
+    setSelectedCustomer(heldItem.customer);
+    setCustomerPhone(heldItem.customerPhone || '');
+    setPriceTier(heldItem.priceTier);
+    setHeldCarts(prev => prev.filter(h => h.id !== heldItem.id));
+    toast(`Keranjang "${heldItem.note || 'Transaksi'}" berhasil dipulihkan.`, 'success');
+  };
+
+  const handleDeleteHeldCart = (heldId: string) => {
+    setHeldCarts(prev => prev.filter(h => h.id !== heldId));
+    toast('Transaksi parkir berhasil dihapus.', 'info');
+  };
 
   // Resolve item price based on active tier and UOM
   const resolvePrice = (
@@ -516,29 +591,57 @@ export const POSRetail: React.FC = () => {
             </div>
           </div>
 
-          {/* 3-Tier Pricing Selector Buttons */}
-          <div className="flex items-center bg-black/30 p-1 rounded-xl gap-0.5 sm:gap-1 shrink-0">
-            <span className="hidden sm:flex text-[10px] uppercase font-bold text-purple-200 px-1.5 items-center gap-1">
-              <Tag size={11} /> Harga:
-            </span>
-            {(['UMUM', 'MITRA', 'GROSIR'] as const).map(tier => {
-              const isActive = priceTier === tier;
-              return (
-                <button
-                  key={tier}
-                  type="button"
-                  onClick={() => handleSwitchTier(tier)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
-                    isActive
-                      ? 'bg-amber-400 text-purple-950 shadow-md scale-105'
-                      : 'text-purple-200 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  {tier === 'UMUM' && <Sparkles size={11} className="hidden sm:inline" />}
-                  {tier === 'UMUM' ? 'Eceran' : tier === 'MITRA' ? 'Warung' : 'Partai'}
-                </button>
-              );
-            })}
+          {/* 3-Tier Pricing Selector Buttons & Utility Header */}
+          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+            <div className="flex items-center bg-black/30 p-1 rounded-xl gap-0.5 sm:gap-1">
+              <span className="hidden sm:flex text-[10px] uppercase font-bold text-purple-200 px-1.5 items-center gap-1">
+                <Tag size={11} /> Harga:
+              </span>
+              {(['UMUM', 'MITRA', 'GROSIR'] as const).map(tier => {
+                const isActive = priceTier === tier;
+                return (
+                  <button
+                    key={tier}
+                    type="button"
+                    onClick={() => handleSwitchTier(tier)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-black transition-all flex items-center gap-1 cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-400 text-purple-950 shadow-md scale-105'
+                        : 'text-purple-200 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {tier === 'UMUM' && <Sparkles size={11} className="hidden sm:inline" />}
+                    {tier === 'UMUM' ? 'Eceran' : tier === 'MITRA' ? 'Warung' : 'Partai'}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tombol Parkir Transaksi (F6) */}
+            <button
+              type="button"
+              onClick={() => setIsHeldCartsOpen(true)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                heldCarts.length > 0
+                  ? 'bg-amber-400 text-purple-950 border-amber-300 shadow-md animate-pulse'
+                  : 'bg-white/10 hover:bg-white/20 border-white/20 text-purple-200'
+              }`}
+              title="Buka daftar transaksi terparkir (F6)"
+            >
+              <Boxes size={14} />
+              <span>Parkir: {heldCarts.length}</span>
+            </button>
+
+            {/* Tombol Cetak Label Rak */}
+            <button
+              type="button"
+              onClick={() => setIsShelfTagPrinterOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-purple-200 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Cetak label harga rak etalase & barcode"
+            >
+              <Tag size={13} />
+              <span className="hidden sm:inline">Label Rak</span>
+            </button>
           </div>
         </div>
 
@@ -603,6 +706,9 @@ export const POSRetail: React.FC = () => {
           </span>
           <span className="flex items-center gap-1 font-mono text-[10px] bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shrink-0">
             <b className="text-amber-300">F4</b> Reset Keranjang
+          </span>
+          <span className="flex items-center gap-1 font-mono text-[10px] bg-amber-950 text-amber-200 px-2 py-0.5 rounded border border-amber-800 font-bold shrink-0">
+            <b className="text-amber-300">F6</b> Parkir / Recall
           </span>
           <span className="flex items-center gap-1 font-mono text-[10px] bg-slate-800 px-2 py-0.5 rounded border border-slate-700 shrink-0">
             <b className="text-amber-300">F9</b> Bayar Pas
@@ -782,13 +888,24 @@ export const POSRetail: React.FC = () => {
               {totalQty} Item
             </span>
             {cart.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setCart([])}
-                className="text-[11px] text-rose-500 hover:text-rose-700 font-bold hover:underline cursor-pointer"
-              >
-                Hapus
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleHoldCart}
+                  className="text-[11px] text-amber-700 hover:text-amber-800 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                  title="Parkir keranjang transaksi saat ini (F6)"
+                >
+                  <Boxes size={12} />
+                  <span>Parkir</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCart([])}
+                  className="text-[11px] text-rose-500 hover:text-rose-700 font-bold hover:underline cursor-pointer"
+                >
+                  Hapus
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -801,9 +918,31 @@ export const POSRetail: React.FC = () => {
               <span>{selectedCustomer.name}</span>
               {selectedCustomer.phone && <span className="text-slate-500 font-medium">({selectedCustomer.phone})</span>}
             </div>
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-purple-950 uppercase">
-              {priceTier}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {((selectedCustomer as any).activeDebtTotal || (selectedCustomer as any).totalDebt || 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDebtPaymentCustomer({
+                      id: selectedCustomer.id,
+                      name: selectedCustomer.name,
+                      phone: selectedCustomer.phone,
+                      totalDebt: (selectedCustomer as any).activeDebtTotal || (selectedCustomer as any).totalDebt || 0,
+                      creditLimit: selectedCustomer.creditLimit
+                    });
+                    setIsDebtPaymentOpen(true);
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black flex items-center gap-1 shadow-xs cursor-pointer"
+                  title="Terima Setoran / Bayar Cicilan Bon Pelanggan Ini"
+                >
+                  <Wallet size={11} />
+                  <span>Bayar Bon</span>
+                </button>
+              )}
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-purple-950 uppercase">
+                {priceTier}
+              </span>
+            </div>
           </div>
         )}
 
@@ -1143,6 +1282,16 @@ export const POSRetail: React.FC = () => {
             }
           }
         }}
+        onPayDebt={(cust: CustomerData) => {
+          setDebtPaymentCustomer({
+            id: cust.id,
+            name: cust.name,
+            phone: cust.phone,
+            totalDebt: cust.activeDebtTotal || (cust as any).totalDebt || 0,
+            creditLimit: cust.creditLimit
+          });
+          setIsDebtPaymentOpen(true);
+        }}
       />
 
       {/* 2. Modal Checkout & Bon Tempo / Delivery Order */}
@@ -1207,6 +1356,37 @@ export const POSRetail: React.FC = () => {
           }}
         />
       )}
+
+      {/* 5. Modal Parkir Transaksi (Hold & Recall Cart) */}
+      <HeldCartsModal
+        isOpen={isHeldCartsOpen}
+        onClose={() => setIsHeldCartsOpen(false)}
+        heldCarts={heldCarts}
+        onRecallCart={handleRecallCart}
+        onDeleteHeldCart={handleDeleteHeldCart}
+        currentCartLength={cart.length}
+      />
+
+      {/* 6. Modal Penerimaan Pembayaran Bon Cepat */}
+      <RetailDebtPaymentModal
+        isOpen={isDebtPaymentOpen}
+        onClose={() => {
+          setIsDebtPaymentOpen(false);
+          setDebtPaymentCustomer(null);
+        }}
+        customer={debtPaymentCustomer}
+        onPaymentSuccess={() => {
+          loadCatalogs();
+        }}
+      />
+
+      {/* 7. Modal Cetak Label Harga Rak & Barcode (Shelf Tag) */}
+      <ShelfTagPrinterModal
+        isOpen={isShelfTagPrinterOpen}
+        onClose={() => setIsShelfTagPrinterOpen(false)}
+        products={products}
+        categories={categories}
+      />
     </div>
   );
 };

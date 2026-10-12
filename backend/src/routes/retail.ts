@@ -1074,5 +1074,143 @@ router.get('/inventory/opname-sheet', authenticateToken, async (req: Request, re
   }
 });
 
+// ─── 9. POST /api/retail/customers/:id/pay-debt ─────────────────────────────
+// Pelunasan Cicilan Bon Cepat di Meja Kasir (FIFO Debt Allocation)
+router.post('/customers/:id/pay-debt', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const tenantId = user?.tenantId;
+    const customerId = Number(req.params.id);
+    const { amountPaid, paymentMethod = 'TUNAI', notes } = req.body;
+    const userId = user?.id || 1;
+    const outletId = user?.outletId;
+
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context wajib disertakan.' });
+    if (!amountPaid || Number(amountPaid) <= 0) {
+      return res.status(400).json({ error: 'Jumlah pembayaran harus lebih besar dari 0.' });
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, tenantId, deletedAt: null }
+    });
+    if (!customer) return res.status(404).json({ error: 'Data pelanggan tidak ditemukan.' });
+
+    const totalPayNum = Number(amountPaid);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Ambil seluruh piutang belum lunas milik pelanggan, urutkan dari yang paling lama (FIFO)
+      const unpaidDebts = await tx.debt.findMany({
+        where: {
+          tenantId,
+          customerId,
+          status: { not: 'Lunas' }
+        },
+        include: {
+          order: { select: { id: true, orderNumber: true, total: true, createdAt: true } }
+        },
+        orderBy: { createdAt: 'asc' }
+      });
+
+      if (unpaidDebts.length === 0) {
+        throw new Error(`Pelanggan "${customer.name}" tidak memiliki piutang bon aktif.`);
+      }
+
+      const totalActiveDebt = unpaidDebts.reduce((sum, d) => sum + (d.remaining ?? d.amount), 0);
+      if (totalPayNum > totalActiveDebt) {
+        throw new Error(`Nominal bayar (Rp ${totalPayNum.toLocaleString('id-ID')}) melebihi total seluruh piutang aktif pelanggan (Rp ${totalActiveDebt.toLocaleString('id-ID')}).`);
+      }
+
+      let remainingMoneyToAllocate = totalPayNum;
+      const settledInvoices: any[] = [];
+
+      for (const debt of unpaidDebts) {
+        if (remainingMoneyToAllocate <= 0) break;
+
+        const currentRemaining = debt.remaining ?? debt.amount;
+        const deduction = Math.min(remainingMoneyToAllocate, currentRemaining);
+        const newDebtRemaining = Math.max(0, currentRemaining - deduction);
+        const newStatus = newDebtRemaining === 0 ? 'Lunas' : 'Belum Lunas';
+
+        // 1. Buat record debtPayment
+        await tx.debtPayment.create({
+          data: {
+            tenantId,
+            debtId: debt.id,
+            amountPaid: deduction,
+            paymentMethod,
+            userId
+          }
+        });
+
+        // 2. Update status debt
+        await tx.debt.update({
+          where: { id: debt.id },
+          data: {
+            remaining: newDebtRemaining,
+            status: newStatus
+          }
+        });
+
+        settledInvoices.push({
+          debtId: debt.id,
+          orderNumber: debt.order?.orderNumber || `BON-#${debt.id}`,
+          allocatedAmount: deduction,
+          priorRemaining: currentRemaining,
+          newRemaining: newDebtRemaining,
+          isFullySettled: newDebtRemaining === 0
+        });
+
+        remainingMoneyToAllocate -= deduction;
+      }
+
+      // 3. Catat pemasukan ke Arus Kas (Cash Flow)
+      const isCash = paymentMethod.toUpperCase() === 'TUNAI' || paymentMethod.toUpperCase() === 'CASH';
+      const cashFlowEntry = await tx.cashFlow.create({
+        data: {
+          tenantId,
+          outletId,
+          type: 'Pemasukan',
+          category: isCash ? 'Pembayaran Piutang - Tunai' : 'Pembayaran Piutang - Non-Tunai',
+          amount: totalPayNum,
+          description: `Pelunasan piutang bon via ${paymentMethod} oleh ${customer.name}${notes ? ` (${notes})` : ''}`,
+          userId
+        }
+      });
+
+      // Hitung sisa piutang akhir
+      const finalRemainingDebt = Math.max(0, totalActiveDebt - totalPayNum);
+
+      // Jika sisa utang sudah di bawah limit, buka blokir kredit jika sebelumnya terblokir
+      if (customer.isCreditBlocked && finalRemainingDebt < (customer.creditLimit || 0)) {
+        await tx.customer.update({
+          where: { id: customer.id },
+          data: { isCreditBlocked: false }
+        });
+      }
+
+      return {
+        receiptNumber: `PAY-AR-${Date.now().toString().slice(-6)}`,
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone
+        },
+        paymentAmount: totalPayNum,
+        paymentMethod,
+        paidAt: new Date(),
+        previousTotalDebt: totalActiveDebt,
+        remainingTotalDebt: finalRemainingDebt,
+        settledInvoices,
+        cashFlowId: cashFlowEntry.id
+      };
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    console.error('Retail Pay Debt Error:', err);
+    res.status(400).json({ error: err.message || 'Gagal memproses pembayaran piutang bon.' });
+  }
+});
+
 export default router;
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Search, AlertTriangle, ShieldCheck, Check, Phone, DollarSign, X } from 'lucide-react';
+import { User, Search, AlertTriangle, ShieldCheck, Check, Phone, DollarSign, X, Wallet } from 'lucide-react';
 
 export interface CustomerData {
   id: number;
@@ -19,13 +19,15 @@ interface RetailCustomerPickerProps {
   onClose: () => void;
   onSelectCustomer: (customer: CustomerData | null) => void;
   selectedCustomer: CustomerData | null;
+  onPayDebt?: (customer: CustomerData) => void;
 }
 
 export const RetailCustomerPicker: React.FC<RetailCustomerPickerProps> = ({
   isOpen,
   onClose,
   onSelectCustomer,
-  selectedCustomer
+  selectedCustomer,
+  onPayDebt
 }) => {
   const [search, setSearch] = useState('');
   const [customers, setCustomers] = useState<CustomerData[]>([]);
@@ -173,7 +175,24 @@ export const RetailCustomerPicker: React.FC<RetailCustomerPickerProps> = ({
                       </div>
                     )}
                   </div>
-                  {isSelected && <Check size={18} className="text-emerald-600 shrink-0" />}
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {hasDebt && onPayDebt && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPayDebt(c);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                        title="Terima Setoran / Bayar Cicilan Bon Pelanggan Ini"
+                      >
+                        <Wallet size={12} />
+                        <span>Bayar Bon</span>
+                      </button>
+                    )}
+                    {isSelected && <Check size={18} className="text-emerald-600 shrink-0" />}
+                  </div>
                 </div>
               );
             })
