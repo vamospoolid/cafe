@@ -1034,14 +1034,17 @@ router.get('/inventory/opname-sheet', authenticateToken, async (req: Request, re
     let totalValuation = 0;
     let totalPieces = 0;
     let lowStockCount = 0;
+    let negativeStockCount = 0;
 
     const items = products.map(p => {
       const buyP = p.buyPrice || 0;
       const stock = p.stock || 0;
-      const val = stock * buyP;
+      const positiveStock = Math.max(0, stock);
+      const val = positiveStock * buyP;
 
       totalValuation += val;
-      totalPieces += stock;
+      totalPieces += positiveStock;
+      if (stock < 0) negativeStockCount++;
       if (p.minStock > 0 && stock <= p.minStock) lowStockCount++;
 
       return {
@@ -1056,6 +1059,7 @@ router.get('/inventory/opname-sheet', authenticateToken, async (req: Request, re
         buyPrice: buyP,
         sellPrice: p.sellPrice || 0,
         valuation: val,
+        isNegative: stock < 0,
         uoms: (p.productUoms || []).map(u => `${u.unitName} (${u.conversionRatio}x)`)
       };
     });
@@ -1065,7 +1069,8 @@ router.get('/inventory/opname-sheet', authenticateToken, async (req: Request, re
         totalSKU: products.length,
         totalPieces,
         totalValuation,
-        lowStockCount
+        lowStockCount,
+        negativeStockCount
       },
       items
     });
