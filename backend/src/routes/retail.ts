@@ -682,6 +682,51 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
     const fastMoving = productList.slice(0, 10);
     const slowMoving = [...productList].reverse().slice(0, 10);
 
+    // 2b. Dead Stock (Barang Tidak Bergerak / Stok Mati / Mengendap)
+    // Ambil produk aktif yang memiliki stok fisik > 0 di tenant ini
+    const allStockedProducts = await prisma.product.findMany({
+      where: {
+        tenantId,
+        deletedAt: null,
+        stock: { gt: 0 }
+      },
+      select: {
+        id: true,
+        name: true,
+        stock: true,
+        buyPrice: true,
+        sellPrice: true,
+        storageLocation: true,
+        baseUom: true,
+        barcode: true,
+        category: { select: { id: true, name: true } }
+      }
+    });
+
+    const soldProductIds = new Set(Object.keys(productMap).map(Number));
+
+    const deadStockProducts = allStockedProducts
+      .filter(p => !soldProductIds.has(p.id))
+      .map(p => {
+        const buyP = Number(p.buyPrice || 0);
+        return {
+          id: p.id,
+          name: p.name,
+          category: p.category?.name || 'Retail',
+          stock: p.stock,
+          baseUom: p.baseUom || 'PCS',
+          barcode: p.barcode || '-',
+          buyPrice: buyP,
+          sellPrice: Number(p.sellPrice || 0),
+          storageLocation: p.storageLocation || 'Rak Etalase',
+          tiedUpCapital: p.stock * buyP
+        };
+      })
+      .sort((a, b) => b.tiedUpCapital - a.tiedUpCapital);
+
+    const totalTiedUpCapital = deadStockProducts.reduce((sum, p) => sum + p.tiedUpCapital, 0);
+    const deadStock = deadStockProducts.slice(0, 20);
+
     // 3. AR Ageing (Customer Debts)
     const activeDebts = await prisma.debt.findMany({
       where: {
@@ -831,7 +876,9 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       grossProfit,
       marginPercentage,
       totalOrders,
-      averageOrderValue: totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0
+      averageOrderValue: totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0,
+      tiedUpCapitalInDeadStock: totalTiedUpCapital,
+      deadStockCount: deadStockProducts.length
     };
 
     const tierBreakdown = Object.entries(tierSales).map(([tier, data]) => {
@@ -851,7 +898,10 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       tierSales: tierBreakdown,
       stockVelocity: {
         fastMoving,
-        slowMoving
+        slowMoving,
+        deadStock,
+        totalTiedUpCapital,
+        deadStockCount: deadStockProducts.length
       },
       arAgeing: {
         totalAR,

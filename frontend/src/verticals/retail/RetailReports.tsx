@@ -24,7 +24,10 @@ import {
   MessageSquare,
   User,
   ArrowDownRight,
-  ArrowUpRight
+  ArrowUpRight,
+  ArrowRight,
+  AlertTriangle,
+  PackageX
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -215,7 +218,10 @@ export const RetailReports: React.FC = () => {
   // ── Data Extraction ──────────────────────────────────────────────────────────
   const summary = reportData?.summary || {};
   const tierSales = reportData?.tierSales || [];
-  const velocity = reportData?.stockVelocity || { fastMoving: [], slowMoving: [] };
+  const velocity = reportData?.stockVelocity || { fastMoving: [], slowMoving: [], deadStock: [] };
+  const deadStockList: any[] = velocity.deadStock || [];
+  const totalTiedUpCapital: number = velocity.totalTiedUpCapital || summary.tiedUpCapitalInDeadStock || 0;
+  const deadStockCount: number = velocity.deadStockCount ?? summary.deadStockCount ?? deadStockList.length;
   const arAgeing = reportData?.arAgeing || { totalAR: 0, currentAR: 0, ageing30to60: 0, ageingOver60: 0, debts: [] };
   const deliverySummary = reportData?.deliverySummary || { total: 0, pending: 0, inTransit: 0, delivered: 0 };
   const dailyTrend = reportData?.dailyTrend || [];
@@ -247,14 +253,14 @@ export const RetailReports: React.FC = () => {
       title: 'Ringkasan & 3-Tier', 
       subtitle: 'Grafik & Level Harga', 
       icon: TrendingUp,
-      badge: null
+      badge: deadStockList.length > 0 ? `${deadStockList.length} Dead Stock` : null
     },
     { 
       id: 'VELOCITY', 
-      title: 'Fast & Slow Moving', 
-      subtitle: 'Perputaran Stok Barang', 
+      title: 'Perputaran & Dead Stock', 
+      subtitle: 'Fast, Slow & Stok Mati', 
       icon: Layers,
-      badge: velocity.fastMoving?.length > 0 ? `${velocity.fastMoving.length} Produk` : null
+      badge: deadStockList.length > 0 ? `${deadStockList.length} Kritis` : (velocity.fastMoving?.length > 0 ? `${velocity.fastMoving.length} Produk` : null)
     },
     { 
       id: 'AR', 
@@ -582,6 +588,44 @@ export const RetailReports: React.FC = () => {
 
           </div>
 
+          {/* Dead Stock Alert Banner di Tab Ringkasan */}
+          {deadStockList.length > 0 && (
+            <div 
+              onClick={() => setActiveTab('VELOCITY')}
+              className="bg-gradient-to-r from-amber-50 via-rose-50/50 to-amber-50 border-2 border-amber-300 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3 cursor-pointer hover:border-amber-400 transition-all shadow-xs group"
+              title="Klik untuk membuka rincian barang tidak bergerak"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                  <AlertTriangle size={20} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase text-amber-950 bg-amber-200 px-2 py-0.5 rounded-full">
+                      Peringatan Modal Tertahan
+                    </span>
+                    <span className="text-xs font-bold text-rose-700">
+                      {deadStockCount} Komoditas Tidak Bergerak (0 Penjualan)
+                    </span>
+                  </div>
+                  <div className="text-xs sm:text-sm font-extrabold text-slate-900 mt-0.5 truncate">
+                    Modal Toko Mengendap:{' '}
+                    <span className="text-rose-600 font-black font-mono">
+                      {formatCurrency(totalTiedUpCapital)}
+                    </span>
+                    <span className="hidden md:inline text-slate-500 font-normal text-xs ml-2">
+                      (Stok ada di rak etalase tapi tidak ada transaksi keluar)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 group-hover:translate-x-1 transition-transform shrink-0 bg-white/80 px-3 py-1.5 rounded-xl border border-amber-200">
+                <span className="hidden sm:inline">Audit Dead Stock</span>
+                <ArrowRight size={14} />
+              </div>
+            </div>
+          )}
+
           {/* ─────────────────────────────────────────────────────────────
               SECTION RATIO: ANALISIS OMZET & MARGIN 3-TIER PRICE
           ────────────────────────────────────────────────────────────── */}
@@ -861,72 +905,190 @@ export const RetailReports: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           TAB 2: FAST & SLOW MOVING STOCK
       ────────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 2: FAST, SLOW MOVING & DEAD STOCK (STOK MATI)
+      ────────────────────────────────────────────────────────────── */}
       {activeTab === 'VELOCITY' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
-          {/* Fast Moving */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-5 shadow-xs">
-            <div className="flex items-center gap-2 mb-3.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                <TrendingUp size={18} />
+        <div className="flex flex-col gap-5 animate-fade-in">
+
+          {/* Warning Banner Dead Stock (Modal Tertahan) */}
+          {deadStockList.length > 0 && (
+            <div className="bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/10 border-2 border-amber-300 rounded-2xl sm:rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md">
+                  <AlertTriangle size={22} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                      Peringatan Stok Mengendap (Dead Stock)
+                    </span>
+                    <span className="text-xs text-rose-700 font-extrabold">
+                      {deadStockCount} Komoditas Kritis
+                    </span>
+                  </div>
+                  <h4 className="text-sm sm:text-base font-extrabold text-slate-900 mt-1">
+                    Modal Toko Tertahan di Stok Mati:{' '}
+                    <span className="text-rose-600 font-black font-mono">
+                      {formatCurrency(totalTiedUpCapital)}
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Terdapat komoditas aktif dengan sisa stok di etalase/gudang namun <b>sama sekali tidak ada transaksi penjualan</b> pada rentang tanggal ini. Kas toko membeku di sini.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-black text-sm text-slate-900">Produk Terlaris (Fast Moving Stock)</h3>
-                <p className="text-[11px] text-slate-500">10 Barang dengan perputaran penjualan tertinggi</p>
+              <div className="shrink-0 flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-900 bg-white/90 border border-amber-300 px-3 py-2 rounded-xl shadow-2xs">
+                  💡 Rekomendasi: Promo Bundling / Obral Clearance
+                </span>
               </div>
             </div>
-            <div className="divide-y divide-slate-100">
-              {(velocity.fastMoving || []).map((p: any, idx: number) => (
-                <div key={p.id || idx} className="py-2.5 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-[11px] flex items-center justify-center">{idx + 1}</span>
-                    <div>
-                      <span className="font-bold text-slate-800 block">{p.name}</span>
-                      <span className="text-[10px] text-slate-400">Terjual: {p.qtySold} unit</span>
+          )}
+
+          {/* 2-Column Grid: Fast Moving & Slow Moving */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Fast Moving */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-5 shadow-xs">
+              <div className="flex items-center gap-2 mb-3.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <TrendingUp size={18} />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-slate-900">Produk Terlaris (Fast Moving Stock)</h3>
+                  <p className="text-[11px] text-slate-500">10 Barang dengan perputaran penjualan tertinggi</p>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {(velocity.fastMoving || []).map((p: any, idx: number) => (
+                  <div key={p.id || idx} className="py-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 font-extrabold text-[11px] flex items-center justify-center">{idx + 1}</span>
+                      <div>
+                        <span className="font-bold text-slate-800 block">{p.name}</span>
+                        <span className="text-[10px] text-slate-400">Terjual: {p.qtySold} unit</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-slate-900 block">{formatCurrency(p.totalSales)}</span>
+                      <span className="text-[10px] text-emerald-600 font-bold">+{formatCurrency(p.totalSales - p.totalCost)} profit</span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="font-black text-slate-900 block">{formatCurrency(p.totalSales)}</span>
-                    <span className="text-[10px] text-emerald-600 font-bold">+{formatCurrency(p.totalSales - p.totalCost)} profit</span>
-                  </div>
+                ))}
+                {velocity.fastMoving?.length === 0 && (
+                  <div className="p-8 text-center text-slate-400 text-xs font-semibold">Belum ada data penjualan stok pada periode ini.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Slow Moving */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-5 shadow-xs">
+              <div className="flex items-center gap-2 mb-3.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <AlertCircle size={18} />
                 </div>
-              ))}
-              {velocity.fastMoving?.length === 0 && (
-                <div className="p-8 text-center text-slate-400 text-xs font-semibold">Belum ada data penjualan stok pada periode ini.</div>
-              )}
+                <div>
+                  <h3 className="font-black text-sm text-slate-900">Perputaran Lambat (Slow Moving)</h3>
+                  <p className="text-[11px] text-slate-500">Produk dengan perputaran penjualan terendah</p>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {(velocity.slowMoving || []).map((p: any, idx: number) => (
+                  <div key={p.id || idx} className="py-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-amber-50 text-amber-600 font-bold text-[11px] flex items-center justify-center">{idx + 1}</span>
+                      <div>
+                        <span className="font-bold text-slate-800 block">{p.name}</span>
+                        <span className="text-[10px] text-slate-400">Penjualan: {p.qtySold} unit</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-slate-700 block">{formatCurrency(p.totalSales)}</span>
+                      <span className="text-[10px] text-amber-600 font-bold">Perlu clearance promo</span>
+                    </div>
+                  </div>
+                ))}
+                {velocity.slowMoving?.length === 0 && (
+                  <div className="p-8 text-center text-slate-400 text-xs font-semibold">Belum ada data slow moving pada periode ini.</div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Slow Moving */}
+          {/* Full-Width Table: Audit Stok Mati / Tidak Bergerak (0 Penjualan) */}
           <div className="bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl p-5 shadow-xs">
-            <div className="flex items-center gap-2 mb-3.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                <AlertCircle size={18} />
-              </div>
-              <div>
-                <h3 className="font-black text-sm text-slate-900">Stok Lambat (Slow Moving / Dead Stock)</h3>
-                <p className="text-[11px] text-slate-500">Produk dengan perputaran lambat di etalase/rak</p>
-              </div>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {(velocity.slowMoving || []).map((p: any, idx: number) => (
-                <div key={p.id || idx} className="py-2.5 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-amber-50 text-amber-600 font-bold text-[11px] flex items-center justify-center">{idx + 1}</span>
-                    <div>
-                      <span className="font-bold text-slate-800 block">{p.name}</span>
-                      <span className="text-[10px] text-slate-400">Penjualan: {p.qtySold} unit</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold text-slate-700 block">{formatCurrency(p.totalSales)}</span>
-                    <span className="text-[10px] text-amber-600 font-bold">Perlu clearance promo</span>
-                  </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                  <PackageX size={20} />
                 </div>
-              ))}
-              {velocity.slowMoving?.length === 0 && (
-                <div className="p-8 text-center text-slate-400 text-xs font-semibold">Belum ada data slow moving pada periode ini.</div>
-              )}
+                <div>
+                  <h3 className="font-black text-sm sm:text-base text-slate-900">
+                    Audit Stok Mati / Tidak Bergerak (0 Penjualan)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Komoditas dengan sisa stok fisik aktif namun tidak pernah terjual dalam periode berjalan
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-3 py-1 rounded-xl bg-rose-100 text-rose-800 border border-rose-200">
+                  Total Modal Tertahan: <b className="font-mono">{formatCurrency(totalTiedUpCapital)}</b>
+                </span>
+              </div>
             </div>
+
+            {deadStockList.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-xs font-semibold">
+                🎉 Luar biasa! Tidak terdeteksi stok mati atau mengendap pada periode ini. Semua stok berputar dengan baik.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-bold text-slate-600">
+                      <th className="py-2.5 px-3">#</th>
+                      <th className="py-2.5 px-3">Nama Komoditas</th>
+                      <th className="py-2.5 px-3">Lokasi Rak</th>
+                      <th className="py-2.5 px-3 text-right">Stok Fisik</th>
+                      <th className="py-2.5 px-3 text-right">HPP Modal</th>
+                      <th className="py-2.5 px-3 text-right">Modal Tertahan</th>
+                      <th className="py-2.5 px-3 text-center">Status / Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {deadStockList.map((p: any, idx: number) => (
+                      <tr key={p.id || idx} className="hover:bg-rose-50/30 transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-slate-400">{idx + 1}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-extrabold text-slate-900 block">{p.name}</span>
+                          <span className="text-[10px] text-slate-400">{p.category} • Barcode: {p.barcode}</span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-bold">
+                            📍 {p.storageLocation || 'Rak Etalase'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-black text-slate-800">
+                          {p.stock} <span className="text-[10px] font-normal text-slate-500">{p.baseUom}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                          {formatCurrency(p.buyPrice)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-black font-mono text-rose-600">
+                          {formatCurrency(p.tiedUpCapital)}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                            💤 Obral / Bundling
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

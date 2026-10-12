@@ -134,12 +134,21 @@ export function exportRetailReportExcel(
       formatNumber(p.revenue),
       p.stock || 0,
       'PERPUTARAN LAMBAT'
+    ])),
+    ...((velocity.deadStock || []).map((p: any) => [
+      'DEAD STOCK (0 JUAL)',
+      p.name,
+      p.baseUom || 'PCS',
+      0,
+      0,
+      p.stock || 0,
+      `MODAL TERTAHAN: Rp ${(p.tiedUpCapital || 0).toLocaleString('id-ID')}`
     ]))
   ];
 
   const wsVelocity = XLSX.utils.aoa_to_sheet(velocityRows);
   autoFitColumns(wsVelocity, velocityRows);
-  XLSX.utils.book_append_sheet(wb, wsVelocity, 'Stok Fast & Slow');
+  XLSX.utils.book_append_sheet(wb, wsVelocity, 'Stok Fast, Slow & Dead');
 
   // ── SHEET 4: BUKU PIUTANG BON TEMPO (AR AGEING) ──
   const arRows: any[][] = [

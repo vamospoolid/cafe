@@ -353,7 +353,36 @@ export const exportRetailReportPDF = async (
     margin: { left: M + colW + 5, right: M },
   });
   const slowFinalY = (doc as any).lastAutoTable.finalY;
-  curY = Math.max(fastFinalY, slowFinalY) + 10;
+  curY = Math.max(fastFinalY, slowFinalY) + 8;
+
+  // ── IIIb. DEAD STOCK / BARANG TIDAK BERGERAK ─────────────────────────────
+  const deadStock: any[] = velocity.deadStock || [];
+  if (deadStock.length > 0) {
+    curY = ensureSpace(doc, curY, 65, pageH, settings, logoBase64, TITLE, startDate, endDate, userName, pageW, M);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(220, 38, 38);
+    doc.text(`⚠ BARANG TIDAK BERGERAK / STOK MATI (0 Penjualan — Modal Tertahan: ${fmt(velocity.totalTiedUpCapital || 0)})`, M, curY + 4);
+
+    autoTable(doc, {
+      startY: curY + 7,
+      head: [['#', 'Nama Komoditas', 'Lokasi Rak', 'Stok Gudang', 'HPP Beli', 'Modal Mengendap']],
+      body: deadStock.slice(0, 10).map((p, i) => [
+        `${i + 1}`,
+        p.name,
+        p.storageLocation || 'Rak Etalase',
+        `${p.stock} ${p.baseUom || 'PCS'}`,
+        fmt(p.buyPrice),
+        fmt(p.tiedUpCapital)
+      ]),
+      headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
+      columnStyles: { 0: { cellWidth: 8 }, 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] } },
+      alternateRowStyles: { fillColor: [254, 242, 242] },
+      margin: { left: M, right: M },
+    });
+    curY = (doc as any).lastAutoTable.finalY + 10;
+  }
 
   // ── IV. AR AGEING ─────────────────────────────────────────────────────────
   curY = ensureSpace(doc, curY, 70, pageH, settings, logoBase64, TITLE, startDate, endDate, userName, pageW, M);
