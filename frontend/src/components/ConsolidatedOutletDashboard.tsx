@@ -5,6 +5,7 @@ import {
   AlertCircle, X
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
+import { useVertical } from '../context/VerticalContext';
 import { toast } from '../utils/alert';
 
 interface OutletStat {
@@ -43,6 +44,7 @@ interface ConsolidatedData {
 
 export const ConsolidatedOutletDashboard: React.FC = () => {
   const posContext = useContext(POSContext);
+  const { isBengkel, isRetail, isLaundry } = useVertical();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ConsolidatedData | null>(null);
   const [period, setPeriod] = useState<'today' | '7days' | '30days' | 'thisMonth'>('thisMonth');
@@ -271,7 +273,9 @@ export const ConsolidatedOutletDashboard: React.FC = () => {
             <div className="text-base sm:text-2xl font-black text-emerald-600 mt-0.5">
               {(data?.summary.consolidatedOrders || 0).toLocaleString('id-ID')}
             </div>
-            <span className="text-[10px] text-slate-500 font-medium">Nota &amp; SPK lunas seluruh cabang</span>
+            <span className="text-[10px] text-slate-500 font-medium">
+              {isBengkel ? 'Nota & SPK lunas seluruh cabang' : isRetail ? 'Faktur & Nota lunas seluruh cabang' : isLaundry ? 'Order cucian lunas seluruh cabang' : 'Nota penjualan lunas seluruh cabang'}
+            </span>
           </div>
           <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <ShoppingBag size={18} />

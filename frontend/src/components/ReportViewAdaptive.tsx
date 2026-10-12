@@ -45,7 +45,7 @@ export const ReportViewAdaptive: React.FC = () => {
             onClick={() => setActiveTab('vertical')}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'vertical'
-                ? 'bg-white text-indigo-700 shadow-xs'
+                ? 'bg-purple-700 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -56,7 +56,7 @@ export const ReportViewAdaptive: React.FC = () => {
             onClick={() => setActiveTab('consolidated')}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'consolidated'
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
+                ? 'bg-purple-700 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
