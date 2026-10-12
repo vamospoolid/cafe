@@ -712,6 +712,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
 
       return {
         id: d.id,
+        customerId: d.customerId,
         customerName: d.customer?.name || 'Pelanggan',
         customerPhone: d.customer?.phone || '-',
         amount: d.amount,
@@ -824,23 +825,30 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       percentage: totalSales > 0 ? Number(((val.total / totalSales) * 100).toFixed(1)) : 0
     }));
 
-    res.json({
-      summary: {
-        totalSales,
-        totalCost,
-        grossProfit,
-        marginPercentage,
-        totalOrders,
-        totalAR
-      },
-      tierSales: Object.entries(tierSales).map(([tier, val]) => ({
+    const summary = {
+      totalSales,
+      totalCost,
+      grossProfit,
+      marginPercentage,
+      totalOrders,
+      averageOrderValue: totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0
+    };
+
+    const tierBreakdown = Object.entries(tierSales).map(([tier, data]) => {
+      const profit = data.sales - data.cost;
+      return {
         tier,
-        count: val.count,
-        sales: val.sales,
-        cost: val.cost,
-        profit: val.sales - val.cost,
-        margin: val.sales > 0 ? Number((((val.sales - val.cost) / val.sales) * 100).toFixed(1)) : 0
-      })),
+        count: data.count,
+        sales: data.sales,
+        cost: data.cost,
+        profit,
+        margin: data.sales > 0 ? Number(((profit / data.sales) * 100).toFixed(1)) : 0
+      };
+    });
+
+    res.json({
+      summary,
+      tierSales: tierBreakdown,
       stockVelocity: {
         fastMoving,
         slowMoving
@@ -858,8 +866,213 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       paymentMethods
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Gagal mengambil laporan retail.' });
+    res.status(500).json({ error: err.message || 'Gagal memuat laporan retail.' });
+  }
+});
+
+// ─── 7. GET /api/retail/customers/:id/statement ───────────────────────────
+// Lembar Tagihan Bon Akumulatif per Pelanggan / Mandor (Customer AR Statement)
+router.get('/customers/:id/statement', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const tenantId = (req as any).user?.tenantId;
+    const customerId = Number(req.params.id);
+    const { status = 'ALL', startDate, endDate } = req.query;
+
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context wajib disertakan.' });
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, tenantId, deletedAt: null }
+    });
+    if (!customer) return res.status(404).json({ error: 'Data pelanggan tidak ditemukan.' });
+
+    const debtWhere: any = {
+      tenantId,
+      customerId
+    };
+
+    if (status === 'UNPAID') {
+      debtWhere.status = { not: 'Lunas' };
+    } else if (status === 'PAID') {
+      debtWhere.status = 'Lunas';
+    }
+
+    if (startDate || endDate) {
+      debtWhere.createdAt = {};
+      if (startDate) debtWhere.createdAt.gte = new Date(String(startDate));
+      if (endDate) debtWhere.createdAt.lte = new Date(String(endDate) + 'T23:59:59.999Z');
+    }
+
+    const debts = await prisma.debt.findMany({
+      where: debtWhere,
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            createdAt: true,
+            total: true,
+            notes: true,
+            items: {
+              select: {
+                id: true,
+                qty: true,
+                price: true,
+                subtotal: true,
+                uomName: true,
+                product: { select: { id: true, name: true, barcode: true } }
+              }
+            }
+          }
+        },
+        payments: {
+          orderBy: { createdAt: 'desc' }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const now = new Date();
+    let totalBilled = 0;
+    let totalRemaining = 0;
+    let totalPaid = 0;
+    let overdueCount = 0;
+
+    const formattedDebts = debts.map(d => {
+      const remaining = d.remaining ?? d.amount;
+      const isOverdue = d.status !== 'Lunas' && d.dueDate && new Date(d.dueDate) < now;
+      if (isOverdue) overdueCount++;
+
+      totalBilled += d.amount;
+      totalRemaining += remaining;
+      const paid = d.amount - remaining;
+      totalPaid += paid;
+
+      const created = new Date(d.createdAt);
+      const ageDays = Math.floor((now.getTime() - created.getTime()) / (1000 * 3600 * 24));
+
+      return {
+        id: d.id,
+        invoiceNumber: d.order?.orderNumber || `BON-${d.id}`,
+        date: d.createdAt,
+        dueDate: d.dueDate,
+        amount: d.amount,
+        remaining,
+        paid,
+        status: d.status,
+        ageDays,
+        isOverdue,
+        notes: d.notes,
+        items: (d.order?.items || []).map((it: any) => ({
+          productName: it.product?.name || 'Barang Toko',
+          barcode: it.product?.barcode || '',
+          qty: it.qty,
+          uomName: it.uomName || 'PCS',
+          price: it.price,
+          subtotal: it.subtotal
+        })),
+        payments: (d.payments || []).map((p: any) => ({
+          id: p.id,
+          amountPaid: p.amountPaid,
+          paymentMethod: p.paymentMethod,
+          date: p.createdAt
+        }))
+      };
+    });
+
+    res.json({
+      customer: {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        address: (customer as any).address || (customer as any).notes || 'Alamat tidak terdata',
+        creditLimit: customer.creditLimit,
+        creditTermDays: customer.creditTermDays,
+        isCreditBlocked: customer.isCreditBlocked,
+        priceTier: customer.priceTier
+      },
+      summary: {
+        totalDebtsCount: debts.length,
+        totalBilled,
+        totalPaid,
+        totalRemaining,
+        overdueCount
+      },
+      debts: formattedDebts
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal memuat lembar tagihan pelanggan.' });
+  }
+});
+
+// ─── 8. GET /api/retail/inventory/opname-sheet ────────────────────────────
+// Formulir Stock Opname Fisik Rak & Valuasi Persediaan Toko
+router.get('/inventory/opname-sheet', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const tenantId = (req as any).user?.tenantId;
+    const { categoryId, sortBy = 'location' } = req.query;
+
+    if (!tenantId) return res.status(400).json({ error: 'Tenant context wajib disertakan.' });
+
+    const whereClause: any = {
+      tenantId,
+      deletedAt: null
+    };
+
+    if (categoryId && categoryId !== 'ALL') {
+      whereClause.categoryId = Number(categoryId);
+    }
+
+    const products = await prisma.product.findMany({
+      where: whereClause,
+      include: {
+        category: { select: { id: true, name: true } },
+        productUoms: { select: { unitName: true, conversionRatio: true, barcode: true, priceSell: true } }
+      },
+      orderBy: sortBy === 'name' ? { name: 'asc' } : { storageLocation: 'asc' }
+    });
+
+    let totalValuation = 0;
+    let totalPieces = 0;
+    let lowStockCount = 0;
+
+    const items = products.map(p => {
+      const buyP = p.buyPrice || 0;
+      const stock = p.stock || 0;
+      const val = stock * buyP;
+
+      totalValuation += val;
+      totalPieces += stock;
+      if (p.minStock > 0 && stock <= p.minStock) lowStockCount++;
+
+      return {
+        id: p.id,
+        name: p.name,
+        barcode: p.barcode || '-',
+        categoryName: p.category?.name || 'Umum',
+        storageLocation: p.storageLocation || 'Rak Etalase',
+        baseUom: p.baseUom || 'PCS',
+        systemStock: stock,
+        minStock: p.minStock,
+        buyPrice: buyP,
+        sellPrice: p.sellPrice || 0,
+        valuation: val,
+        uoms: (p.productUoms || []).map(u => `${u.unitName} (${u.conversionRatio}x)`)
+      };
+    });
+
+    res.json({
+      summary: {
+        totalSKU: products.length,
+        totalPieces,
+        totalValuation,
+        lowStockCount
+      },
+      items
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal memuat lembar stock opname.' });
   }
 });
 
 export default router;
+

@@ -42,6 +42,7 @@ import { toast } from '../../utils/alert';
 import { exportRetailReportPDF } from '../../utils/retailPdfGenerator';
 import { exportRetailReportExcel } from '../../utils/retailExcelGenerator';
 import { printRetailThermalSummary } from '../../utils/retailThermalReport';
+import { RetailPdfExportModal, type RetailPdfDocType } from './RetailPdfExportModal';
 
 type QuickFilterType = 'today' | 'yesterday' | 'week' | 'this_month' | 'last_month' | 'month_30' | 'custom';
 type ActiveTabType = 'SUMMARY' | 'VELOCITY' | 'AR' | 'DELIVERIES' | 'PL' | 'SHIFT';
@@ -63,6 +64,9 @@ export const RetailReports: React.FC = () => {
   const [chartViewMode, setChartViewMode] = useState<'all' | 'total' | 'umum' | 'mitra' | 'grosir'>('all');
   const [loading, setLoading] = useState<boolean>(true);
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [exportModalDocType, setExportModalDocType] = useState<RetailPdfDocType>('OMNIBUS');
+  const [exportModalCustomerId, setExportModalCustomerId] = useState<number | null>(null);
   const [excelLoading, setExcelLoading] = useState<boolean>(false);
   const [reportData, setReportData] = useState<any>(null);
 
@@ -148,25 +152,11 @@ export const RetailReports: React.FC = () => {
     if (startDate && endDate) fetchReports();
   }, [fetchReports, startDate, endDate]);
 
-  // ── PDF Export ───────────────────────────────────────────────────────────────
-  const handleExportPDF = async () => {
-    if (!reportData) return;
-    setIsExportingPdf(true);
-    try {
-      await exportRetailReportPDF(
-        posContext?.settings || { storeName: 'TOKO GROSIR & RETAIL' },
-        reportData,
-        startDate,
-        endDate,
-        (posContext?.user as any)?.name || posContext?.user?.username || 'Admin Toko'
-      );
-      toast('Dokumen PDF Laporan Retail berhasil diunduh!', 'success');
-    } catch (e) {
-      console.error(e);
-      toast('Gagal mengekspor PDF laporan', 'error');
-    } finally {
-      setIsExportingPdf(false);
-    }
+  // ── PDF Export Modal Trigger ─────────────────────────────────────────────────
+  const handleOpenExportModal = (docType: RetailPdfDocType = 'OMNIBUS', customerId: number | null = null) => {
+    setExportModalDocType(docType);
+    setExportModalCustomerId(customerId);
+    setIsExportModalOpen(true);
   };
 
   // ── Excel Export ─────────────────────────────────────────────────────────────
@@ -307,12 +297,12 @@ export const RetailReports: React.FC = () => {
           {/* Action Buttons Header */}
           <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
             <button
-              onClick={handleExportPDF}
-              disabled={isExportingPdf || loading || !reportData}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-indigo-700 to-purple-700 hover:from-indigo-800 hover:to-purple-800 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+              onClick={() => handleOpenExportModal('OMNIBUS')}
+              disabled={loading || !reportData}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-indigo-700 to-purple-700 hover:from-indigo-800 hover:to-purple-800 text-white rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all disabled:opacity-50 shrink-0 cursor-pointer"
               title="Unduh Berkas PDF Resmi Berkepala Surat & Tanda Tangan"
             >
-              {isExportingPdf ? <RefreshCw size={14} className="animate-spin" /> : <Printer size={15} />}
+              <Printer size={15} />
               <span>Unduh PDF Resmi</span>
             </button>
 
@@ -972,6 +962,7 @@ export const RetailReports: React.FC = () => {
                     <th className="p-3.5 text-right">Sisa Piutang</th>
                     <th className="p-3.5 text-center">Umur Bon</th>
                     <th className="p-3.5 text-center">Status Ageing</th>
+                    <th className="p-3.5 text-center">Aksi Dokumen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -991,10 +982,20 @@ export const RetailReports: React.FC = () => {
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">MACET</span>
                         )}
                       </td>
+                      <td className="p-3.5 text-center">
+                        <button
+                          onClick={() => handleOpenExportModal('CUSTOMER_STATEMENT', d.customerId || null)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 font-bold text-[11px] transition-all cursor-pointer"
+                          title="Cetak Lembar Rekapitulasi & Tagihan Bon Pelanggan"
+                        >
+                          <Printer size={12} />
+                          <span>Cetak Tagihan</span>
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {arAgeing.debts?.length === 0 && (
-                    <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-semibold">Tidak ada piutang bon tempo aktif pada periode ini.</td></tr>
+                    <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-semibold">Tidak ada piutang bon tempo aktif pada periode ini.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1073,9 +1074,18 @@ export const RetailReports: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Action Bar (WhatsApp Tagih) */}
-                      {d.customerPhone && (
-                        <div className="pt-0.5 flex justify-end">
+                      {/* Action Bar (Cetak Tagihan & WhatsApp Tagih) */}
+                      <div className="pt-0.5 flex items-center justify-end gap-2 flex-wrap">
+                        <button
+                          onClick={() => handleOpenExportModal('CUSTOMER_STATEMENT', d.customerId || null)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold border border-slate-200 transition-all cursor-pointer"
+                          title="Cetak Lembar Rekapitulasi Bon Pelanggan"
+                        >
+                          <Printer size={12} className="text-slate-500" />
+                          <span>Cetak Bon PDF</span>
+                        </button>
+
+                        {d.customerPhone && (
                           <a
                             href={`https://wa.me/${d.customerPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}?text=${encodeURIComponent(`Halo ${d.customerName}, kami menginformasikan catatan sisa piutang bon belanja Anda sebesar ${formatCurrency(d.remaining)} (umur bon: ${d.ageDays} hari). Mohon konfirmasi jadwal pembayarannya. Terima kasih.`)}`}
                             target="_blank"
@@ -1085,8 +1095,8 @@ export const RetailReports: React.FC = () => {
                             <MessageSquare size={12} />
                             <span>Tagih via WhatsApp</span>
                           </a>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -1394,6 +1404,19 @@ export const RetailReports: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL EKSPOR PDF MULTI-DOKUMEN RETAIL
+      ────────────────────────────────────────────────────────────── */}
+      <RetailPdfExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        reportData={reportData}
+        startDate={startDate}
+        endDate={endDate}
+        initialCustomerId={exportModalCustomerId}
+        initialDocType={exportModalDocType}
+      />
     </div>
   );
 };

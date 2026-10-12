@@ -531,3 +531,319 @@ export const exportRetailReportPDF = async (
   a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
 };
+
+// ─── LEMBAR REKAPITULASI BON & TAGIHAN PELANGGAN / MANDOR ─────────────────────
+export const exportCustomerStatementPDF = async (
+  settings: RetailStoreSettings,
+  statementData: any,
+  userName: string = 'Kasir Toko'
+): Promise<void> => {
+  let logoBase64 = '';
+  if (settings.logoUrl) {
+    try { logoBase64 = await getImageDataUrl(settings.logoUrl); } catch { /* skip */ }
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  const pageW = doc.internal.pageSize.width;
+  const pageH = doc.internal.pageSize.height;
+  const M = 14;
+  const TITLE = 'LEMBAR REKAPITULASI BON & TAGIHAN PELANGGAN';
+
+  const customer = statementData?.customer || {};
+  const summary = statementData?.summary || {};
+  const debts: any[] = statementData?.debts || [];
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  buildHeader(doc, settings, logoBase64, TITLE, todayStr, todayStr, userName, pageW, M);
+  let curY = 38;
+
+  // Box Informasi Pelanggan / Mitra
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(M, curY, pageW - M * 2, 22, 2, 2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(79, 70, 229);
+  doc.text('INFORMASI MITRA / PELANGGAN PENERIMA TAGIHAN:', M + 4, curY + 5.5);
+
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(customer.name || 'Pelanggan Langganan', M + 4, curY + 11.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`No. Telp / WA : ${customer.phone || '-'}`, M + 4, curY + 16.5);
+  doc.text(`Alamat Proyek / Toko : ${customer.address || '-'}`, M + 4, curY + 20);
+
+  // Status Plafon & Kategori (Sisi Kanan Box)
+  const rightX = pageW - M - 75;
+  doc.text(`Level Harga : ${customer.priceTier || 'UMUM'}`, rightX, curY + 11.5);
+  doc.text(`Plafon Kredit : ${customer.creditLimit ? fmt(customer.creditLimit) : 'Tanpa Limit'}`, rightX, curY + 16.5);
+  doc.text(`Tempo Bon : ${customer.creditTermDays || 14} Hari`, rightX, curY + 20);
+
+  curY += 26;
+
+  // KPI Boxes: Total Tagihan, Terbayar, Sisa Wajib Bayar
+  const kpis = [
+    { label: 'Total Bon Akumulatif', value: fmt(summary.totalBilled), sub: `${debts.length} Nota Faktur`, r: 71, g: 85, b: 105 },
+    { label: 'Sudah Dibayar (Cicilan)', value: fmt(summary.totalPaid), sub: 'Pelunasan Masuk', r: 5, g: 150, b: 105 },
+    { label: 'Sisa Tagihan Wajib Bayar', value: fmt(summary.totalRemaining), sub: 'Saldo Hutang Aktif', r: 220, g: 38, b: 38 },
+    { label: 'Nota Lewat Jatuh Tempo', value: `${summary.overdueCount || 0} Faktur`, sub: (summary.overdueCount || 0) > 0 ? 'Perlu Segera Ditagih' : 'Status Lancar', r: 217, g: 119, b: 6 },
+  ];
+
+  const boxW = (pageW - M * 2 - 9) / 4;
+  kpis.forEach((box, i) => {
+    const bx = M + i * (boxW + 3);
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(250, 250, 255);
+    doc.roundedRect(bx, curY, boxW, 20, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(box.r, box.g, box.b);
+    doc.text(box.label.toUpperCase(), bx + 3, curY + 5);
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(box.value, bx + 3, curY + 12.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(box.sub, bx + 3, curY + 17);
+  });
+
+  curY += 25;
+
+  // Tabel Rincian Bon & Barang
+  curY = sectionHeader(doc, 'RINCIAN NOTA BON & BARANG YANG DIAMBIL', curY, pageW, M);
+
+  const tableBody = debts.map((d: any, idx: number) => {
+    const itemsSummary = (d.items || []).map((it: any) => `${it.qty} ${it.uomName} ${it.productName}`).join(', ');
+    const dateStr = d.date ? new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-';
+    const dueStr = d.dueDate ? new Date(d.dueDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-';
+    return [
+      `${idx + 1}`,
+      `${d.invoiceNumber}\n(${dateStr})`,
+      itemsSummary || d.notes || 'Barang Toko',
+      dueStr,
+      fmt(d.amount),
+      fmt(d.paid),
+      fmt(d.remaining),
+      d.status === 'Lunas' ? 'Lunas' : d.isOverdue ? 'JATUH TEMPO' : 'Belum Lunas'
+    ];
+  });
+
+  autoTable(doc, {
+    startY: curY,
+    head: [['#', 'No. Faktur / Tgl', 'Rincian Barang Diambil', 'Jatuh Tempo', 'Nilai Bon', 'Dibayar', 'Sisa Tagihan', 'Status']],
+    body: tableBody.length > 0 ? tableBody : [['—', 'Tidak ada data tagihan bon.', '', '', '', '', '', '']],
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
+    columnStyles: {
+      0: { cellWidth: 7, halign: 'center' },
+      1: { cellWidth: 26, fontStyle: 'bold' },
+      2: { cellWidth: 55 },
+      3: { cellWidth: 18, halign: 'center' },
+      4: { cellWidth: 20, halign: 'right' },
+      5: { cellWidth: 18, halign: 'right' },
+      6: { cellWidth: 22, halign: 'right', fontStyle: 'bold' },
+      7: { cellWidth: 18, halign: 'center', fontStyle: 'bold' }
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: M, right: M }
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 8;
+
+  // Box Informasi Pembayaran & No Rekening
+  curY = ensureSpace(doc, curY, 45, pageH, settings, logoBase64, TITLE, todayStr, todayStr, userName, pageW, M);
+  doc.setFillColor(254, 243, 199);
+  doc.setDrawColor(245, 158, 11);
+  doc.roundedRect(M, curY, pageW - M * 2, 12, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(146, 64, 14);
+  doc.text('CATATAN PEMBAYARAN & REKENING TOKO:', M + 4, curY + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text('Mohon pelunasan dapat ditransfer ke Rekening Resmi Toko atau diserahkan langsung kepada Kasir dengan bukti tanda terima.', M + 4, curY + 8.5);
+
+  curY += 18;
+
+  // Kotak 3 Tanda Tangan: Pelanggan, Kasir, Owner
+  if (curY + 35 > pageH - 15) { doc.addPage(); curY = 40; }
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.setFont('helvetica', 'normal');
+
+  doc.text('Penerima Tagihan (Mandor / Pelanggan),', M + 5, curY);
+  doc.setDrawColor(203, 213, 225);
+  doc.line(M + 5, curY + 20, M + 55, curY + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(customer.name || 'Penerima', M + 5, curY + 24);
+
+  const midX = pageW / 2 - 25;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Petugas Kasir / Penagih,', midX, curY);
+  doc.line(midX, curY + 20, midX + 50, curY + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(userName, midX, curY + 24);
+
+  const rX = pageW - M - 55;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Mengetahui Owner / Pengelola Toko,', rX, curY);
+  doc.line(rX, curY + 20, rX + 50, curY + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Owner Toko', rX, curY + 24);
+
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    if (p > 1) buildHeader(doc, settings, logoBase64, TITLE, todayStr, todayStr, userName, pageW, M);
+    buildFooter(doc, settings, p, totalPages, pageW, pageH, M);
+  }
+
+  const custClean = (customer.name || 'PELANGGAN').replace(/\s+/g, '_').toUpperCase();
+  const fileName = `TAGIHAN_BON_${custClean}_${todayStr}.pdf`;
+  const pdfBlob = doc.output('blob');
+  const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+};
+
+// ─── LEMBAR AUDIT FISIK STOCK OPNAME & VALUASI PERSEDIAAN ─────────────────────
+export const exportStockOpnamePDF = async (
+  settings: RetailStoreSettings,
+  opnameData: any,
+  userName: string = 'Kepala Gudang'
+): Promise<void> => {
+  let logoBase64 = '';
+  if (settings.logoUrl) {
+    try { logoBase64 = await getImageDataUrl(settings.logoUrl); } catch { /* skip */ }
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  const pageW = doc.internal.pageSize.width;
+  const pageH = doc.internal.pageSize.height;
+  const M = 14;
+  const TITLE = 'LEMBAR AUDIT FISIK STOCK OPNAME & VALUASI PERSEDIAAN';
+
+  const summary = opnameData?.summary || {};
+  const items: any[] = opnameData?.items || [];
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  buildHeader(doc, settings, logoBase64, TITLE, todayStr, todayStr, userName, pageW, M);
+  let curY = 38;
+
+  // KPI Boxes
+  const kpis = [
+    { label: 'Total Item SKU', value: `${summary.totalSKU || items.length} SKU`, sub: 'Komoditas Terdaftar', r: 79, g: 70, b: 229 },
+    { label: 'Total Stok Sistem', value: `${(summary.totalPieces || 0).toLocaleString('id-ID')} Pcs`, sub: 'Satuan Terkecil Base Unit', r: 5, g: 150, b: 105 },
+    { label: 'Valuasi Modal Persediaan', value: fmt(summary.totalValuation), sub: 'Modal Aset Stok Fisik', r: 37, g: 99, b: 235 },
+    { label: 'Peringatan Stok Menipis', value: `${summary.lowStockCount || 0} SKU`, sub: 'Perlu Segera Kulakan', r: 217, g: 119, b: 6 },
+  ];
+
+  const boxW = (pageW - M * 2 - 9) / 4;
+  kpis.forEach((box, i) => {
+    const bx = M + i * (boxW + 3);
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(250, 250, 255);
+    doc.roundedRect(bx, curY, boxW, 20, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(box.r, box.g, box.b);
+    doc.text(box.label.toUpperCase(), bx + 3, curY + 5);
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(box.value, bx + 3, curY + 12.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(box.sub, bx + 3, curY + 17);
+  });
+
+  curY += 25;
+
+  curY = sectionHeader(doc, 'TABEL AUDIT FISIK RAK & GUDANG (DIISI OLEH PETUGAS OPNAME)', curY, pageW, M);
+
+  const tableBody = items.map((it: any, idx: number) => {
+    const uomStr = (it.uoms && it.uoms.length > 0) ? `\n[${it.uoms.join(', ')}]` : '';
+    return [
+      `${idx + 1}`,
+      it.storageLocation || 'Rak Etalase',
+      it.barcode || '-',
+      `${it.name}${uomStr}`,
+      it.baseUom || 'PCS',
+      `${it.systemStock}`,
+      '[      ]', // Kolom kosong isi fisik
+      '[      ]', // Kolom selisih
+      '[      ]'  // Kolom paraf
+    ];
+  });
+
+  autoTable(doc, {
+    startY: curY,
+    head: [['#', 'Lokasi / Rak', 'Barcode', 'Nama Barang & Kemasan UOM', 'Satuan', 'Stok Sistem', 'Fisik Nyata', 'Selisih (+/-)', 'Paraf']],
+    body: tableBody.length > 0 ? tableBody : [['—', 'Tidak ada data produk.', '', '', '', '', '', '', '']],
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7 },
+    bodyStyles: { fontSize: 7.5, textColor: [15, 23, 42] },
+    columnStyles: {
+      0: { cellWidth: 7, halign: 'center' },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 22, fontStyle: 'bold' },
+      3: { cellWidth: 50 },
+      4: { cellWidth: 14, halign: 'center' },
+      5: { cellWidth: 16, halign: 'right', fontStyle: 'bold' },
+      6: { cellWidth: 18, halign: 'center' },
+      7: { cellWidth: 17, halign: 'center' },
+      8: { cellWidth: 16, halign: 'center' }
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    margin: { left: M, right: M }
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 10;
+
+  // Kotak Tanda Tangan
+  curY = ensureSpace(doc, curY, 40, pageH, settings, logoBase64, TITLE, todayStr, todayStr, userName, pageW, M);
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.setFont('helvetica', 'normal');
+
+  doc.text('Petugas Pelaksana Hitung Fisik,', M + 10, curY);
+  doc.setDrawColor(203, 213, 225);
+  doc.line(M + 10, curY + 20, M + 65, curY + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(userName, M + 10, curY + 24);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text('Mengetahui Kepala Toko / Owner,', pageW - M - 65, curY);
+  doc.line(pageW - M - 65, curY + 20, pageW - M - 10, curY + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Kepala Toko / Owner', pageW - M - 65, curY + 24);
+
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    if (p > 1) buildHeader(doc, settings, logoBase64, TITLE, todayStr, todayStr, userName, pageW, M);
+    buildFooter(doc, settings, p, totalPages, pageW, pageH, M);
+  }
+
+  const storeClean = (settings.storeName || 'TOKO').replace(/\s+/g, '_').toUpperCase();
+  const fileName = `STOCK_OPNAME_${storeClean}_${todayStr}.pdf`;
+  const pdfBlob = doc.output('blob');
+  const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+};
+
