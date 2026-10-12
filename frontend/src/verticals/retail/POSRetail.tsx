@@ -19,6 +19,8 @@ import {
   Barcode, 
   Check, 
   AlertCircle,
+  AlertTriangle,
+  Zap,
   HelpCircle,
   ClipboardList,
   ArrowRight,
@@ -193,8 +195,24 @@ export const POSRetail: React.FC = () => {
   useEffect(() => {
     const unbind = initHardwareBarcodeListener({
       onScan: (scannedCode) => {
-        const clean = scannedCode.trim().toLowerCase();
-        
+        let clean = scannedCode.trim().toLowerCase();
+        let qtyMultiplier = 1;
+
+        // Cek jika kasir sebelumnya sudah mengetik multiplier di searchQuery (misal "40*" lalu men-scan barcode fisik)
+        if (searchQuery.trim()) {
+          const prefixMatch = searchQuery.trim().match(/^(\d+)\s*[\*xX]\s*$/);
+          if (prefixMatch) {
+            qtyMultiplier = Math.max(1, parseInt(prefixMatch[1], 10));
+          }
+        }
+
+        // Cek juga jika barcode scanner mengirim format multiplier langsung "N*Barcode"
+        const multMatch = clean.match(/^(\d+)\s*[\*xX]\s*(.*)$/);
+        if (multMatch) {
+          qtyMultiplier = Math.max(1, parseInt(multMatch[1], 10));
+          clean = multMatch[2].trim();
+        }
+
         // Cek barcode produk utama atau barcode UOM
         let matchedProduct: Product | undefined;
         let matchedUom: ProductUOM | undefined;
@@ -218,9 +236,10 @@ export const POSRetail: React.FC = () => {
         }
 
         if (matchedProduct) {
-          handleAddProduct(matchedProduct, matchedUom);
+          handleAddProduct(matchedProduct, matchedUom, qtyMultiplier);
           setSearchQuery('');
           playScannerBeep(true);
+          toast(`+${qtyMultiplier} ${matchedProduct.name} ditambahkan`, 'success');
         } else {
           playScannerBeep(false);
           toast(`Barang barcode "${scannedCode}" tidak ditemukan.`, 'error');
@@ -229,7 +248,7 @@ export const POSRetail: React.FC = () => {
     });
 
     return () => unbind();
-  }, [products, priceTier]);
+  }, [products, priceTier, searchQuery]);
 
   // Keyboard Shortcuts (F1, F2, F3, F4, F9, F10 / Space)
   useEffect(() => {
@@ -341,16 +360,17 @@ export const POSRetail: React.FC = () => {
   };
 
   // Add product to cart
-  const handleAddProduct = (product: Product, uom?: ProductUOM) => {
+  const handleAddProduct = (product: Product, uom?: ProductUOM, initialQty: number = 1) => {
     const activeUomName = uom ? uom.unitName : (product.baseUom || 'PCS');
     const activeUomRatio = uom ? uom.conversionRatio : 1;
     const cartItemId = `${product.id}_${activeUomName}`;
     const unitPrice = resolvePrice(product, uom, priceTier);
+    const addedQty = Math.max(1, initialQty);
 
     setCart(prev => {
       const existing = prev.find(item => item.id === cartItemId);
       if (existing) {
-        const newQty = existing.qty + 1;
+        const newQty = existing.qty + addedQty;
         return prev.map(item => 
           item.id === cartItemId 
             ? { ...item, qty: newQty, subtotal: newQty * item.price }
@@ -362,10 +382,10 @@ export const POSRetail: React.FC = () => {
           productId: product.id,
           productName: product.name,
           barcode: uom?.barcode || product.barcode || '',
-          qty: 1,
+          qty: addedQty,
           price: unitPrice,
           buyPrice: product.buyPrice * activeUomRatio,
-          subtotal: unitPrice,
+          subtotal: unitPrice * addedQty,
           uomName: activeUomName,
           uomRatio: activeUomRatio,
           baseUom: product.baseUom || 'PCS',
@@ -463,16 +483,55 @@ export const POSRetail: React.FC = () => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
-    const clean = searchQuery.trim().toLowerCase();
-    const matched = products.find(
-      p => (p.barcode && p.barcode.toLowerCase() === clean) ||
-           p.name.toLowerCase() === clean ||
-           String(p.id) === clean
-    );
+    let targetQuery = searchQuery.trim();
+    let qtyMultiplier = 1;
+
+    // Pola Pengali Kuantitas: "40*barcode" atau "12*indomie" atau "5 * 899..." atau "25*"
+    const multMatch = targetQuery.match(/^(\d+)\s*[\*xX]\s*(.*)$/);
+    if (multMatch) {
+      qtyMultiplier = Math.max(1, parseInt(multMatch[1], 10));
+      targetQuery = multMatch[2].trim();
+    }
+
+    if (!targetQuery) {
+      toast(`Kuantitas pengali ${qtyMultiplier}x aktif. Silakan scan barcode atau ketik nama barang.`, 'info');
+      return;
+    }
+
+    const clean = targetQuery.toLowerCase();
+    let matched: Product | undefined;
+    let matchedUom: ProductUOM | undefined;
+
+    for (const p of products) {
+      if (
+        (p.barcode && p.barcode.toLowerCase() === clean) ||
+        p.name.toLowerCase() === clean ||
+        String(p.id) === clean
+      ) {
+        matched = p;
+        break;
+      }
+      if (p.productUoms) {
+        const u = p.productUoms.find(uom => uom.barcode && uom.barcode.toLowerCase() === clean);
+        if (u) {
+          matched = p;
+          matchedUom = u;
+          break;
+        }
+      }
+    }
+
+    // Partial search fallback jika tidak ada exact match
+    if (!matched) {
+      matched = products.find(p => p.name.toLowerCase().includes(clean));
+    }
 
     if (matched) {
-      handleAddProduct(matched);
+      handleAddProduct(matched, matchedUom, qtyMultiplier);
       setSearchQuery('');
+      toast(`+${qtyMultiplier} ${matched.name} ditambahkan ke faktur`, 'success');
+    } else {
+      toast(`Barang "${targetQuery}" tidak ditemukan.`, 'error');
     }
   };
 
@@ -533,11 +592,25 @@ export const POSRetail: React.FC = () => {
   const subtotal = useMemo(() => cart.reduce((sum, i) => sum + i.subtotal, 0), [cart]);
   const total = subtotal;
 
+  // Fast-Pick Products: Komoditas curah / tanpa barcode fisik (atau komoditas cepat)
+  const fastPickProducts = useMemo(() => {
+    const nonBarcode = products.filter(p => !p.barcode || p.barcode === '-' || p.barcode.trim() === '');
+    if (nonBarcode.length > 0) return nonBarcode.slice(0, 10);
+    return products.slice(0, 8);
+  }, [products]);
+
   // Filtered Products
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
       const matchesCategory = selectedCategoryId === 'ALL' || p.categoryId === selectedCategoryId;
-      const q = searchQuery.toLowerCase().trim();
+      
+      // Bersihkan query dan lepas prefix pengali jika ada (misal "40*semen" tetap filter "semen")
+      let q = searchQuery.toLowerCase().trim();
+      const multMatch = q.match(/^(\d+)\s*[\*xX]\s*(.*)$/);
+      if (multMatch) {
+        q = multMatch[2].trim();
+      }
+
       const matchesSearch = !q || 
         p.name.toLowerCase().includes(q) || 
         (p.barcode && p.barcode.toLowerCase().includes(q)) ||
@@ -658,7 +731,7 @@ export const POSRetail: React.FC = () => {
               autoFocus
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="⚡ Scan barcode barang (auto-add) atau ketik nama sembako/rak..."
+              placeholder="⚡ Scan barcode (atau ketik '40*barcode' / nama sembako)..."
               className="bg-transparent border-none outline-none text-xs sm:text-sm font-bold text-slate-900 w-full placeholder:text-slate-400"
             />
             <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-lg bg-emerald-500 text-white shadow-sm shrink-0">
@@ -717,6 +790,48 @@ export const POSRetail: React.FC = () => {
             <b className="text-amber-300">F10 / Space</b> Bayar Lengkap
           </span>
         </div>
+
+        {/* Fast-Pick Tiles (Barang Cepat Non-Barcode / Curah) */}
+        {fastPickProducts.length > 0 && (
+          <div className="bg-gradient-to-r from-purple-50 via-indigo-50/60 to-slate-50 p-2.5 rounded-2xl border border-purple-200 shadow-2xs">
+            <div className="flex items-center justify-between mb-1.5 px-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-black text-purple-950 uppercase tracking-wider">
+                <Zap size={14} className="text-amber-500 fill-amber-500" />
+                <span>Barang Cepat (Non-Barcode / Curah)</span>
+                <span className="hidden sm:inline text-[10px] font-medium text-slate-500 normal-case">(1-klik langsung masuk faktur)</span>
+              </div>
+              <span className="text-[10px] font-bold text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full">
+                {fastPickProducts.length} Komoditas
+              </span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
+              {fastPickProducts.map(p => {
+                const price = resolvePrice(p, undefined, priceTier);
+                return (
+                  <button
+                    key={`fast-${p.id}`}
+                    type="button"
+                    onClick={() => handleAddProduct(p)}
+                    className="flex-shrink-0 flex items-center gap-2 px-2.5 py-1.5 bg-white hover:bg-purple-700 hover:text-white border border-purple-200/80 rounded-xl shadow-2xs transition-all active:scale-95 group cursor-pointer text-left"
+                    title={`Klik untuk tambah 1 ${p.name}`}
+                  >
+                    <div className="w-5 h-5 rounded-lg bg-amber-100 group-hover:bg-amber-400 text-amber-800 group-hover:text-purple-950 flex items-center justify-center font-black text-[10px] shrink-0">
+                      ⚡
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-800 group-hover:text-white truncate max-w-[110px]">
+                        {p.name}
+                      </div>
+                      <div className="text-[10px] font-mono text-purple-900 group-hover:text-purple-100 font-extrabold">
+                        Rp {price.toLocaleString('id-ID')}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Category Chips Filter */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -979,6 +1094,20 @@ export const POSRetail: React.FC = () => {
                   </div>
                 </div>
 
+                {/* HPP Margin Protection Warning Badge */}
+                {item.buyPrice > 0 && item.price < item.buyPrice && (
+                  <div 
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-[10px] font-bold"
+                    title={`Modal Beli (HPP): Rp ${item.buyPrice.toLocaleString('id-ID')} / ${item.uomName}. Rugi Rp ${(item.buyPrice - item.price).toLocaleString('id-ID')} per unit.`}
+                  >
+                    <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                    <span>⚠️ Di bawah modal (HPP: Rp {item.buyPrice.toLocaleString('id-ID')})</span>
+                    <span className="text-rose-600 font-mono font-black ml-auto">
+                      -Rp {((item.buyPrice - item.price) * item.qty).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                )}
+
                 {/* Qty Controls & UOM Dropdown */}
                 <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-50">
                   {/* UOM Selector jika tersedia */}
@@ -1031,6 +1160,22 @@ export const POSRetail: React.FC = () => {
                       <Trash2 size={12} />
                     </button>
                   </div>
+                </div>
+
+                {/* Quick Quantity Jump Multipliers */}
+                <div className="flex items-center justify-end gap-1 pt-1 border-t border-dashed border-slate-100">
+                  <span className="text-[9px] text-slate-400 font-bold mr-0.5">Tambah:</span>
+                  {[5, 10, 25, 50].map(jump => (
+                    <button
+                      key={jump}
+                      type="button"
+                      onClick={() => updateQty(item.id, jump)}
+                      className="px-1.5 py-0.5 rounded-md bg-purple-50 hover:bg-purple-700 text-purple-700 hover:text-white border border-purple-200/80 text-[10px] font-bold font-mono transition cursor-pointer"
+                      title={`Tambah ${jump} ${item.uomName}`}
+                    >
+                      +{jump}
+                    </button>
+                  ))}
                 </div>
               </div>
             ))
@@ -1179,6 +1324,20 @@ export const POSRetail: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* HPP Margin Protection Warning Badge (Mobile) */}
+                  {item.buyPrice > 0 && item.price < item.buyPrice && (
+                    <div 
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-[10px] font-bold"
+                      title={`Modal Beli (HPP): Rp ${item.buyPrice.toLocaleString('id-ID')} / ${item.uomName}. Rugi Rp ${(item.buyPrice - item.price).toLocaleString('id-ID')} per unit.`}
+                    >
+                      <AlertTriangle size={12} className="text-amber-600 shrink-0" />
+                      <span>⚠️ Di bawah modal (HPP: Rp {item.buyPrice.toLocaleString('id-ID')})</span>
+                      <span className="text-rose-600 font-mono font-black ml-auto">
+                        -Rp {((item.buyPrice - item.price) * item.qty).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Controls */}
                   <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-50">
                     {item.availableUoms && item.availableUoms.length > 0 ? (
@@ -1225,6 +1384,22 @@ export const POSRetail: React.FC = () => {
                         <Trash2 size={13} />
                       </button>
                     </div>
+                  </div>
+
+                  {/* Quick Quantity Jump Multipliers (Mobile) */}
+                  <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-dashed border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-bold mr-0.5">Tambah:</span>
+                    {[5, 10, 25, 50].map(jump => (
+                      <button
+                        key={jump}
+                        type="button"
+                        onClick={() => updateQty(item.id, jump)}
+                        className="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-700 text-purple-700 hover:text-white border border-purple-200 text-[10px] font-bold font-mono transition cursor-pointer"
+                        title={`Tambah ${jump} ${item.uomName}`}
+                      >
+                        +{jump}
+                      </button>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -1345,14 +1520,33 @@ export const POSRetail: React.FC = () => {
           onClose={() => setIsScannerOpen(false)}
           onDetected={(code: string) => {
             const clean = code.trim().toLowerCase();
-            const matched = products.find(p => (p.barcode && p.barcode.toLowerCase() === clean) || String(p.id) === clean);
-            if (matched) {
-              handleAddProduct(matched);
-              toast(`Berhasil scan: ${matched.name}`, 'success');
+            let matchedProduct: Product | undefined;
+            let matchedUom: ProductUOM | undefined;
+
+            for (const p of products) {
+              if (
+                (p.barcode && p.barcode.toLowerCase() === clean) ||
+                String(p.id) === clean
+              ) {
+                matchedProduct = p;
+                break;
+              }
+              if (p.productUoms) {
+                const u = p.productUoms.find(uom => uom.barcode && uom.barcode.toLowerCase() === clean);
+                if (u) {
+                  matchedProduct = p;
+                  matchedUom = u;
+                  break;
+                }
+              }
+            }
+
+            if (matchedProduct) {
+              handleAddProduct(matchedProduct, matchedUom);
+              toast(`Berhasil scan: ${matchedProduct.name}`, 'success');
             } else {
               toast(`Barang tidak ditemukan untuk kode: ${code}`, 'error');
             }
-            setIsScannerOpen(false);
           }}
         />
       )}

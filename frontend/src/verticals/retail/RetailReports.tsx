@@ -198,6 +198,20 @@ export const RetailReports: React.FC = () => {
 
   const formatCurrency = (val: number | undefined | null) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
+  const buildWaBillingMessage = (debtItem: any) => {
+    const storeTitle = posContext?.settings?.storeName || 'TOKO GROSIR & RETAIL';
+    const bankName = (posContext?.settings as any)?.bankName || '';
+    const bankAccount = (posContext?.settings as any)?.bankAccount || '';
+    const bankHolder = (posContext?.settings as any)?.bankHolder || (posContext?.settings as any)?.bankAccountName || '';
+    
+    let bankInfo = '';
+    if (bankAccount) {
+      bankInfo = `\n\nPembayaran dapat ditransfer ke:\n🏦 *Bank ${bankName || 'BCA/Mandiri/BRI'}*\n💳 No. Rekening: *${bankAccount}*\n👤 A/N: *${bankHolder || storeTitle}*`;
+    }
+
+    return `Halo *${debtItem.customerName}*,\nKami dari *${storeTitle}* menginformasikan catatan sisa piutang bon belanja Anda saat ini sebesar *${formatCurrency(debtItem.remaining)}* (Umur bon: ${debtItem.ageDays} hari).${bankInfo}\n\nMohon konfirmasi jika telah melakukan pembayaran. Terima kasih atas kerja samanya. 🙏`;
+  };
+
   // ── Data Extraction ──────────────────────────────────────────────────────────
   const summary = reportData?.summary || {};
   const tierSales = reportData?.tierSales || [];
@@ -983,14 +997,29 @@ export const RetailReports: React.FC = () => {
                         )}
                       </td>
                       <td className="p-3.5 text-center">
-                        <button
-                          onClick={() => handleOpenExportModal('CUSTOMER_STATEMENT', d.customerId || null)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 font-bold text-[11px] transition-all cursor-pointer"
-                          title="Cetak Lembar Rekapitulasi & Tagihan Bon Pelanggan"
-                        >
-                          <Printer size={12} />
-                          <span>Cetak Tagihan</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenExportModal('CUSTOMER_STATEMENT', d.customerId || null)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 font-bold text-[11px] transition-all cursor-pointer"
+                            title="Cetak Lembar Rekapitulasi & Tagihan Bon Pelanggan"
+                          >
+                            <Printer size={12} />
+                            <span>Tagihan</span>
+                          </button>
+
+                          {d.customerPhone && (
+                            <a
+                              href={`https://wa.me/${d.customerPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}?text=${encodeURIComponent(buildWaBillingMessage(d))}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-[11px] transition-all cursor-pointer"
+                              title="Kirim pesan tagihan via WhatsApp lengkap dengan rekening toko"
+                            >
+                              <MessageSquare size={12} />
+                              <span>Tagih WA</span>
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1087,10 +1116,11 @@ export const RetailReports: React.FC = () => {
 
                         {d.customerPhone && (
                           <a
-                            href={`https://wa.me/${d.customerPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}?text=${encodeURIComponent(`Halo ${d.customerName}, kami menginformasikan catatan sisa piutang bon belanja Anda sebesar ${formatCurrency(d.remaining)} (umur bon: ${d.ageDays} hari). Mohon konfirmasi jadwal pembayarannya. Terima kasih.`)}`}
+                            href={`https://wa.me/${d.customerPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}?text=${encodeURIComponent(buildWaBillingMessage(d))}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs active:scale-95 transition-all"
+                            title="Kirim pesan tagihan via WhatsApp lengkap dengan rekening toko"
                           >
                             <MessageSquare size={12} />
                             <span>Tagih via WhatsApp</span>

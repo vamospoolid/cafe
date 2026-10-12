@@ -23,6 +23,9 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
   const [manualCode, setManualCode] = useState('');
   const [hasTorch, setHasTorch] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [continuousMode, setContinuousMode] = useState<boolean>(false);
+  const [scannedCount, setScannedCount] = useState<number>(0);
+  const lastScanTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -121,8 +124,20 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
 
         const onScanSuccess = (decodedText: string) => {
           if (!mounted) return;
+          const now = Date.now();
+          if (
+            lastScanTimeRef.current.code === decodedText &&
+            now - lastScanTimeRef.current.time < 1500
+          ) {
+            return;
+          }
+          lastScanTimeRef.current = { code: decodedText, time: now };
           if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+          setScannedCount(prev => prev + 1);
           onDetected(decodedText);
+          if (!continuousMode) {
+            onClose();
+          }
         };
 
         try {
@@ -366,6 +381,22 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
         >
           <Keyboard size={13} /> Ketik Manual
         </button>
+
+        {/* Toggle Scan Beruntun (Continuous Multi-Scan) */}
+        {mode === 'camera' && (
+          <button
+            type="button"
+            onClick={() => setContinuousMode(prev => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 ml-auto cursor-pointer ${
+              continuousMode
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md shadow-amber-400/30'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+            title="Kamera tetap aktif membaca banyak barcode sekaligus"
+          >
+            <span>⚡ Scan Beruntun {continuousMode && scannedCount > 0 ? `(${scannedCount})` : ''}</span>
+          </button>
+        )}
       </div>
 
       {/* ── Body ── */}
