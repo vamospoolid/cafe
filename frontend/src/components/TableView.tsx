@@ -1075,12 +1075,19 @@ const TableView = () => {
                               )}
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <div className="flex justify-end gap-2">
-                                <button className="p-2 rounded-lg text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors" onClick={() => { setSelectedTable(table); setIsModalOpen(true); }}><Edit size={16} /></button>
+                              <div className="flex justify-end items-center gap-1.5">
+                                <button className="p-2 rounded-xl text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer" onClick={() => { setSelectedTable(table); setIsModalOpen(true); }} title="Edit Meja"><Edit size={15} /></button>
                                 {activeOrder ? (
                                   <>
                                     <button
-                                      className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
+                                      className="px-2.5 py-1 rounded-xl text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors font-bold text-xs flex items-center gap-1 border border-indigo-200 cursor-pointer"
+                                      onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                                      title="Tambah Pesanan Menu Baru"
+                                    >
+                                      <Plus size={12} /> Menu
+                                    </button>
+                                    <button
+                                      className="px-2.5 py-1 rounded-xl text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100 cursor-pointer"
                                       onClick={() => {
                                         setMoveMergeSourceTable(table);
                                         setIsMoveMergeOpen(true);
@@ -1089,7 +1096,7 @@ const TableView = () => {
                                       <RefreshCw size={12} /> Pindah
                                     </button>
                                     <button
-                                      className="px-3 py-1 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100"
+                                      className="px-2.5 py-1 rounded-xl text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors font-semibold text-xs flex items-center gap-1 border border-indigo-100 cursor-pointer"
                                       onClick={() => {
                                         const tableOrders = activeOrders.filter(o => o.tableId === table.id);
                                         setSplitTableId(table.id);
@@ -1101,13 +1108,23 @@ const TableView = () => {
                                       <Scissors size={12} /> Split
                                     </button>
                                     {activeOrder.status === 'Paid' ? (
-                                      <button className="px-3 py-1 rounded-lg text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs" onClick={() => handleClearTable(table.id, table.tableNo)}>Kosongkan</button>
+                                      <button className="px-3 py-1 rounded-xl text-white font-bold bg-emerald-600 hover:bg-emerald-700 transition-colors text-xs cursor-pointer shadow-sm" onClick={() => handleClearTable(table.id, table.tableNo)}>Kosongkan</button>
                                     ) : (
-                                      <button className="px-3 py-1 rounded-lg text-white font-bold bg-primary hover:bg-primary/90 transition-colors text-xs" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
+                                      <button className="px-3 py-1 rounded-xl text-white font-bold bg-indigo-600 hover:bg-indigo-700 transition-colors text-xs cursor-pointer shadow-sm" onClick={() => { setSelectedOrderToPay(activeOrder); setIsCheckoutOpen(true); }}>Bayar</button>
                                     )}
                                   </>
                                 ) : (
-                                  <button className="p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors" onClick={() => handleDelete(table.id)}><Trash2 size={16} /></button>
+                                  <>
+                                    <button
+                                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm shadow-indigo-200 transition-all active:scale-95 cursor-pointer"
+                                      onClick={() => navigate(`/pos?tableId=${table.id}`)}
+                                      title="Buka Pesanan Kasir untuk Meja Ini"
+                                    >
+                                      <Plus size={13} className="stroke-[3]" />
+                                      <span>Pesan</span>
+                                    </button>
+                                    <button className="p-2 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 transition-colors cursor-pointer" onClick={() => handleDelete(table.id)} title="Hapus Meja"><Trash2 size={15} /></button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -1393,6 +1410,7 @@ const TableView = () => {
                         onMouseDown={(e) => handleMouseDown(e, table.id)}
                         onTouchStart={(e) => handleTouchStart(e, table.id)}
                         onClick={() => handleTableClick(table)}
+                        onDoubleClick={() => !isOccupied && !isEditMode && navigate(`/pos?tableId=${table.id}`)}
                       style={{
                         position: 'absolute',
                         left: `${posX}%`,
@@ -1448,10 +1466,15 @@ const TableView = () => {
                         </div>
                       ) : (
                         <div className="flex flex-col items-center">
-                          <span className="text-[8px] font-black tracking-widest text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          <span className="text-[8px] font-black tracking-widest text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
                             KOSONG
                           </span>
-                          <span className="text-[8px] font-bold text-slate-400 mt-1">Siap Pakai</span>
+                          <span className="text-[8px] font-bold text-slate-400 mt-0.5">
+                            {table.capacity || 2} Kursi
+                          </span>
+                          <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mt-1 flex items-center gap-0.5 shadow-xs">
+                            <Plus size={8} className="stroke-[3]" /> Pesan
+                          </span>
                         </div>
                       )}
                     </div>
@@ -1687,7 +1710,17 @@ const TableView = () => {
                       {/* Tombol Aksi Tambahan */}
                       <div className="flex gap-2">
                         <button
-                          className="flex-1 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                          className="flex-1 py-2.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                          onClick={() => {
+                            navigate(`/pos?tableId=${actionTable.id}`);
+                            setActionTable(null);
+                          }}
+                        >
+                          <Plus size={13} className="stroke-[3]" /> + Tambah Menu
+                        </button>
+
+                        <button
+                          className="flex-1 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                           onClick={() => {
                             const tableOrders = activeOrders.filter(o => o.tableId === actionTable.id);
                             setSplitTableId(actionTable.id);
@@ -1701,14 +1734,14 @@ const TableView = () => {
                         </button>
 
                         <button
-                          className="flex-1 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm"
+                          className="flex-1 py-2.5 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                           onClick={() => {
                             setMoveMergeSourceTable(actionTable);
                             setIsMoveMergeOpen(true);
                             setActionTable(null);
                           }}
                         >
-                          <RefreshCw size={13} /> Pindah / Gabung
+                          <RefreshCw size={13} /> Pindah
                         </button>
                       </div>
 
@@ -1744,32 +1777,73 @@ const TableView = () => {
                   );
                 } else {
                   return (
-                    <div className="space-y-4">
-                      <div className="border-t border-slate-150 pt-4 flex flex-col items-center justify-center py-6 text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded-2xl">
-                        <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">KOSONG</span>
-                        <p className="text-[11px] text-slate-400 mt-2 font-medium">Meja ini siap digunakan oleh pelanggan baru.</p>
+                    <div className="space-y-3.5">
+                      {/* Hero Empty Table Card */}
+                      <div className="border border-emerald-150 bg-gradient-to-b from-emerald-50/70 to-emerald-50/30 rounded-2xl p-4 text-center flex flex-col items-center shadow-xs">
+                        <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2 shadow-xs">
+                          <Armchair size={22} />
+                        </div>
+                        <span className="text-[11px] font-black text-emerald-700 uppercase tracking-widest bg-emerald-100/90 px-3 py-0.5 rounded-full border border-emerald-200">
+                          MEJA KOSONG &bull; SIAP DIGUNAKAN
+                        </span>
+                        <p className="text-xs text-slate-500 mt-2 font-medium max-w-xs leading-relaxed">
+                          Meja <strong>#{actionTable.tableNo}</strong> berkapasitas <strong>{actionTable.capacity || 2} kursi</strong>. Siap melayani pelanggan baru.
+                        </p>
                       </div>
 
-                      <div className="flex gap-3 pt-2">
+                      {/* Tombol Utama Hero: Buka Pesanan Kasir */}
+                      <button
+                        className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-black rounded-2xl transition-all text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 cursor-pointer"
+                        onClick={() => {
+                          navigate(`/pos?tableId=${actionTable.id}`);
+                          setActionTable(null);
+                        }}
+                      >
+                        <Plus size={16} className="stroke-[3]" />
+                        <span>Buka Pesanan Kasir di Meja Ini</span>
+                      </button>
+
+                      {/* Aksi Tambahan: Link/QR Self Order Tamu */}
+                      <button
+                        className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 active:scale-[0.99] text-slate-700 font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-2 border border-slate-200/80 cursor-pointer"
+                        onClick={() => {
+                          const guestUrl = `${window.location.origin}/dinein/table/${actionTable.id}`;
+                          if (navigator.clipboard) {
+                            navigator.clipboard.writeText(guestUrl).then(() => {
+                              toast(`Link Self-Order Meja ${actionTable.tableNo} berhasil disalin! Tamu dapat memesan mandiri via link ini.`, 'success');
+                            }).catch(() => {
+                              toast(`Link: ${guestUrl}`, 'info');
+                            });
+                          } else {
+                            toast(`Link: ${guestUrl}`, 'info');
+                          }
+                        }}
+                      >
+                        <Sparkles size={14} className="text-amber-500" />
+                        <span>Salin Link Self-Order Tamu (QR HP)</span>
+                      </button>
+
+                      {/* Aksi Admin: Edit & Hapus */}
+                      <div className="flex gap-2.5 pt-1 border-t border-slate-150">
                         <button
-                          className="flex-1 py-3 bg-slate-100 hover:bg-slate-250 text-slate-700 font-bold rounded-2xl transition-all text-xs flex items-center justify-center gap-1.5"
+                          className="flex-1 py-2.5 bg-slate-50 hover:bg-slate-150 text-slate-600 font-bold rounded-xl border border-slate-200 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                           onClick={() => {
                             setSelectedTable(actionTable);
                             setIsModalOpen(true);
                             setActionTable(null);
                           }}
                         >
-                          <Edit size={14} /> Edit Meja
+                          <Edit size={13} /> Edit Meja
                         </button>
                         
                         <button
-                          className="flex-1 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-2xl border border-rose-100 transition-all text-xs flex items-center justify-center gap-1.5"
+                          className="flex-1 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl border border-rose-150 transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                           onClick={() => {
                             handleDelete(actionTable.id);
                             setActionTable(null);
                           }}
                         >
-                          <Trash2 size={14} /> Hapus Meja
+                          <Trash2 size={13} /> Hapus Meja
                         </button>
                       </div>
                     </div>

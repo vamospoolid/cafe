@@ -1,15 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { X, Droplets, Thermometer, Layers, MessageSquare, Coffee, Check, Sparkles } from 'lucide-react';
+import { X, Droplets, Thermometer, Layers, MessageSquare, Coffee, Check, Sparkles, Plus } from 'lucide-react';
+
+export type ModifierAddon = {
+  id: string;
+  name: string;
+  category: 'SHOT' | 'MILK' | 'TOPPING' | 'SYRUP';
+  price: number;
+  emoji: string;
+  ingredientName?: string;
+  qtyUsed?: number;
+  unit?: string;
+};
+
+export const DEFAULT_CAFE_ADDONS: ModifierAddon[] = [
+  { id: 'extra_shot', name: 'Extra Shot Espresso', category: 'SHOT', price: 5000, emoji: '☕', ingredientName: 'Biji Kopi House Blend (Arabica-Robusta)', qtyUsed: 15, unit: 'gram' },
+  { id: 'oat_milk', name: 'Upgrade Susu Oat', category: 'MILK', price: 8000, emoji: '🌾', ingredientName: 'Susu Fresh Milk UHT 1L', qtyUsed: 150, unit: 'ml' },
+  { id: 'syrup_vanilla', name: 'Sirup Vanilla', category: 'SYRUP', price: 4000, emoji: '🍯', ingredientName: 'Sirup Vanilla Monin', qtyUsed: 20, unit: 'ml' },
+  { id: 'syrup_caramel', name: 'Sirup Salted Caramel', category: 'SYRUP', price: 4000, emoji: '🍮', ingredientName: 'Sirup Salted Caramel Monin', qtyUsed: 20, unit: 'ml' },
+  { id: 'topping_boba', name: 'Topping Boba Brown Sugar', category: 'TOPPING', price: 4000, emoji: '🧋', ingredientName: 'Topping Boba', qtyUsed: 30, unit: 'gram' },
+  { id: 'topping_cheese', name: 'Cream Cheese Foam', category: 'TOPPING', price: 5000, emoji: '🧀', ingredientName: 'Cream Cheese', qtyUsed: 40, unit: 'gram' },
+];
 
 export type DrinkCustomization = {
   sugar: string;
   ice: string;
   temperature: string;
   notes: string;
+  addons: ModifierAddon[];
+  extraPrice: number;
 };
 
 interface DrinkCustomizationModalProps {
   productName: string;
+  productPrice?: number;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (customization: DrinkCustomization) => void;
@@ -37,6 +60,7 @@ const ICE_OPTIONS = [
 
 const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
   productName,
+  productPrice = 0,
   isOpen,
   onClose,
   onConfirm,
@@ -45,6 +69,7 @@ const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
   const [sugar, setSugar] = useState('Normal');
   const [ice, setIce] = useState('Normal Ice');
   const [notes, setNotes] = useState('');
+  const [selectedAddons, setSelectedAddons] = useState<ModifierAddon[]>([]);
 
   // Reset state when opening modal
   useEffect(() => {
@@ -53,10 +78,25 @@ const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
       setSugar('Normal');
       setIce('Normal Ice');
       setNotes('');
+      setSelectedAddons([]);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const toggleAddon = (addon: ModifierAddon) => {
+    setSelectedAddons(prev => {
+      const exists = prev.some(a => a.id === addon.id);
+      if (exists) {
+        return prev.filter(a => a.id !== addon.id);
+      } else {
+        return [...prev, addon];
+      }
+    });
+  };
+
+  const extraPrice = selectedAddons.reduce((sum, a) => sum + a.price, 0);
+  const totalItemPrice = Number(productPrice || 0) + extraPrice;
 
   const handleConfirm = () => {
     onConfirm({
@@ -64,6 +104,8 @@ const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
       sugar,
       ice: temperature === 'Iced' ? ice : '-',
       notes: notes.trim(),
+      addons: selectedAddons,
+      extraPrice,
     });
   };
 
@@ -215,7 +257,61 @@ const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
             </div>
           </div>
 
-          {/* 4. Catatan Tambahan */}
+          {/* 4. Topping & Tambahan Berbayar (Paid Modifiers) */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="flex items-center gap-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider">
+                <Sparkles size={14} className="text-purple-600" />
+                Topping &amp; Tambahan (BOM)
+              </span>
+              {selectedAddons.length > 0 && (
+                <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                  +{selectedAddons.length} Dipilih (+Rp {extraPrice.toLocaleString('id-ID')})
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {DEFAULT_CAFE_ADDONS.map(addon => {
+                const isSelected = selectedAddons.some(a => a.id === addon.id);
+                return (
+                  <button
+                    key={addon.id}
+                    type="button"
+                    onClick={() => toggleAddon(addon)}
+                    className={`p-2.5 rounded-2xl border-2 flex items-center justify-between gap-2 transition-all active:scale-95 text-left ${
+                      isSelected
+                        ? 'border-purple-600 bg-purple-50/70 shadow-sm ring-2 ring-purple-200'
+                        : 'border-slate-200 bg-slate-50/40 hover:bg-slate-100/70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-xl p-1 bg-white rounded-xl shadow-xs shrink-0">{addon.emoji}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-slate-800 leading-tight truncate">
+                          {addon.name}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          {addon.qtyUsed && addon.unit ? `${addon.qtyUsed} ${addon.unit}` : addon.category}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-extrabold text-purple-700 block">
+                        +Rp {addon.price.toLocaleString('id-ID')}
+                      </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md inline-block mt-0.5 ${
+                        isSelected ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {isSelected ? '✓ Terpilih' : '+ Tambah'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 5. Catatan Tambahan */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="flex items-center gap-1.5 font-bold text-xs text-slate-700 uppercase tracking-wider">
@@ -254,6 +350,12 @@ const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
                   {ice}
                 </span>
               )}
+              {selectedAddons.map(a => (
+                <span key={a.id} className="text-xs font-bold px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200 flex items-center gap-1">
+                  <span>{a.emoji}</span>
+                  <span>{a.name} (+Rp {a.price.toLocaleString('id-ID')})</span>
+                </span>
+              ))}
               {notes.trim() && (
                 <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 truncate max-w-full">
                   📝 "{notes.trim()}"
@@ -279,7 +381,7 @@ const DrinkCustomizationModal: React.FC<DrinkCustomizationModalProps> = ({
             className="w-full sm:w-2/3 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black text-xs sm:text-sm shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-2"
           >
             <Check size={16} />
-            <span>Tambah ke Keranjang</span>
+            <span>Tambah ke Keranjang {totalItemPrice > 0 ? `(Rp ${totalItemPrice.toLocaleString('id-ID')})` : ''}</span>
           </button>
         </div>
       </div>

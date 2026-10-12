@@ -1,6 +1,7 @@
 import prisma from '../db';
 import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
+import { requireFeature } from '../middlewares/featureMiddleware';
 import { io, emitToTenant } from '../index';
 import { TenantContext } from '../utils/tenantContext';
 import { cacheService } from '../services/CacheService';
@@ -18,6 +19,9 @@ router.use((req: Request, res: Response, next) => {
   (req as any).tenantId = tenantId;
   next();
 });
+
+// SaaS Feature Gating: validasi hak akses paket langganan ke fitur KDS
+router.use(requireFeature('pos.kds'));
 
 // Vertical Guard: KDS khusus untuk profil usaha CAFE / F&B
 router.use(async (req: Request, res: Response, next) => {

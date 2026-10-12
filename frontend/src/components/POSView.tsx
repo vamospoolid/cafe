@@ -9,7 +9,7 @@ import {
 import CheckoutModal from './CheckoutModal';
 import CustomerModal from './CustomerModal';
 import DrinkCustomizationModal from './DrinkCustomizationModal';
-import type { DrinkCustomization } from './DrinkCustomizationModal';
+import type { DrinkCustomization, ModifierAddon } from './DrinkCustomizationModal';
 import OpenShiftModal from './OpenShiftModal';
 import { POSContext } from '../context/POSContext';
 import { ProductImage } from './ProductImage';
@@ -25,6 +25,8 @@ export interface CartItem {
   product: any;
   qty: number;
   notes?: string;
+  price?: number;
+  selectedAddons?: ModifierAddon[];
 }
 
 export const getCategoryIcon = (name: string) => {
@@ -361,16 +363,35 @@ export const POSView = () => {
 
   const addToCart = (product: any, customization?: DrinkCustomization) => {
     posContext?.triggerHaptic(25);
-    const notesStr = customization
-      ? [customization.temperature, customization.sugar, customization.ice, customization.notes].filter(Boolean).join(' • ')
-      : '';
-    setCart(prev => {
-      // If same product and same notes -> stack qty
-      const existing = prev.find(item => item.product.id === product.id && item.notes === notesStr);
-      if (existing) {
-        return prev.map(item => item.product.id === product.id && item.notes === notesStr ? { ...item, qty: item.qty + 1 } : item);
+    const basePrice = Number(product.sellPrice ?? product.price ?? 0);
+    const extraPrice = customization?.extraPrice || 0;
+    const effectivePrice = basePrice + extraPrice;
+
+    const parts: string[] = [];
+    if (customization) {
+      if (customization.temperature) parts.push(customization.temperature);
+      if (customization.sugar) parts.push(customization.sugar);
+      if (customization.ice && customization.temperature === 'Iced') parts.push(customization.ice);
+      if (customization.addons && customization.addons.length > 0) {
+        parts.push(`+${customization.addons.map(a => a.name).join(', ')}`);
       }
-      return [...prev, { product, qty: 1, notes: notesStr }];
+      if (customization.notes) parts.push(customization.notes);
+    }
+    const notesStr = parts.join(' • ');
+
+    setCart(prev => {
+      // If same product, same notes, and same effective price -> stack qty
+      const existing = prev.find(item => item.product.id === product.id && item.notes === notesStr && (item.price ?? basePrice) === effectivePrice);
+      if (existing) {
+        return prev.map(item => item.product.id === product.id && item.notes === notesStr && (item.price ?? basePrice) === effectivePrice ? { ...item, qty: item.qty + 1 } : item);
+      }
+      return [...prev, { 
+        product, 
+        qty: 1, 
+        notes: notesStr,
+        price: effectivePrice,
+        selectedAddons: customization?.addons || []
+      }];
     });
   };
 
@@ -405,6 +426,28 @@ export const POSView = () => {
     }
   };
 
+  const increaseCartItem = (index: number) => {
+    posContext?.triggerHaptic(20);
+    setCart(prev => prev.map((item, i) => i === index ? { ...item, qty: item.qty + 1 } : item));
+  };
+
+  const decreaseCartItem = (index: number) => {
+    posContext?.triggerHaptic(20);
+    setCart(prev => {
+      const item = prev[index];
+      if (!item) return prev;
+      if (item.qty > 1) {
+        return prev.map((it, i) => i === index ? { ...it, qty: it.qty - 1 } : it);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const removeCartItem = (index: number) => {
+    posContext?.triggerHaptic(30);
+    setCart(prev => prev.filter((_, i) => i !== index));
+  };
+
   const decreaseQty = (productId: number) => {
     posContext?.triggerHaptic(20);
     setCart(prev => {
@@ -425,7 +468,7 @@ export const POSView = () => {
   const serviceChargeRate = posContext?.settings?.serviceCharge || 0;
 
   const subtotal = cart.reduce((sum, item) => {
-    const p = Number(item?.product?.sellPrice ?? item?.product?.price ?? 0);
+    const p = item.price ?? Number(item?.product?.sellPrice ?? item?.product?.price ?? 0);
     return sum + (p * item.qty);
   }, 0);
   const discount = customer?.discountAmount || 0;
@@ -450,8 +493,9 @@ export const POSView = () => {
         items: cart.map(item => ({
           productId: item.product.id,
           qty: item.qty,
-          price: Number(item.product.sellPrice ?? item.product.price ?? 0),
-          notes: item.notes || ''
+          price: item.price ?? Number(item.product.sellPrice ?? item.product.price ?? 0),
+          notes: item.notes || '',
+          selectedAddons: item.selectedAddons || []
         })),
         subtotal,
         tax,
@@ -1049,17 +1093,17 @@ export const POSView = () => {
                     {item.notes && (
                       <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem', lineHeight: 1.3 }}>{item.notes}</div>
                     )}
-                    <div className="cart-item-price">{formatCurrency(item.product.sellPrice ?? item.product.price)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
+                    <div className="cart-item-price">{formatCurrency(item.price ?? item.product.sellPrice ?? item.product.price)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
                     
                     <div className="cart-item-controls mt-2">
-                      <button className="qty-btn" onClick={() => decreaseQty(item.product.id)}><Minus size={14} /></button>
+                      <button className="qty-btn" onClick={() => decreaseCartItem(idx)}><Minus size={14} /></button>
                       <span className="qty-val">{item.qty}</span>
-                      <button className="qty-btn" onClick={() => addToCart(item.product)}><Plus size={14} /></button>
+                      <button className="qty-btn" onClick={() => increaseCartItem(idx)}><Plus size={14} /></button>
                     </div>
                   </div>
                   <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between'}}>
-                    <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeFromCart(item.product.id)}><X size={16}/></button>
-                    <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
+                    <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeCartItem(idx)}><X size={16}/></button>
+                    <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency((item.price ?? item.product.sellPrice ?? item.product.price) * item.qty)}</div>
                   </div>
                 </div>
               ))
@@ -1317,16 +1361,16 @@ export const POSView = () => {
                       {item.notes && (
                         <div className="text-[10px] text-indigo-600 font-semibold mt-0.5">{item.notes}</div>
                       )}
-                      <div className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrency(item.product.sellPrice ?? item.product.price)} x {item.qty}</div>
+                      <div className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrency(item.price ?? item.product.sellPrice ?? item.product.price)} x {item.qty}</div>
                       <div className="flex items-center gap-2 mt-2">
-                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => decreaseQty(item.product.id)}><Minus size={12} /></button>
+                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => decreaseCartItem(idx)}><Minus size={12} /></button>
                         <span className="text-xs font-bold text-slate-800 min-w-[20px] text-center">{item.qty}</span>
-                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => addToCart(item.product)}><Plus size={12} /></button>
+                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => increaseCartItem(idx)}><Plus size={12} /></button>
                       </div>
                     </div>
                     <div className="flex flex-col items-end justify-between min-h-[70px]">
-                      <button className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-slate-100/50" onClick={() => removeFromCart(item.product.id)}><X size={14}/></button>
-                      <div className="font-extrabold text-xs text-slate-800">{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
+                      <button className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-slate-100/50" onClick={() => removeCartItem(idx)}><X size={14}/></button>
+                      <div className="font-extrabold text-xs text-slate-800">{formatCurrency((item.price ?? item.product.sellPrice ?? item.product.price) * item.qty)}</div>
                     </div>
                   </div>
                 ))
@@ -1553,6 +1597,7 @@ export const POSView = () => {
       <DrinkCustomizationModal
         isOpen={drinkModalOpen}
         productName={pendingProduct?.name || ''}
+        productPrice={pendingProduct ? Number(pendingProduct.sellPrice ?? pendingProduct.price ?? 0) : 0}
         onClose={() => { setDrinkModalOpen(false); setPendingProduct(null); }}
         onConfirm={(customization) => {
           if (pendingProduct) addToCart(pendingProduct, customization);

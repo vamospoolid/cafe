@@ -44,14 +44,15 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
           e.preventDefault();
           playScannerBeep(true);
           setPin(bufferedBarcode);
-          processAttendance('IN', bufferedBarcode);
+          // ATT-FIX-BUG7: Auto-detect IN/OUT via barcode scanner
+          processSmartAttendance(bufferedBarcode);
           return;
         }
 
-        // If human pressed Enter with manual PIN
+        // If human pressed Enter with manual PIN — tetap manual (user pilih tombol IN/OUT)
         if (pin.length >= 4 && !loading) {
           e.preventDefault();
-          processAttendance('IN', pin);
+          processSmartAttendance(pin);
           return;
         }
       }
@@ -97,15 +98,22 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
     }
   };
 
-  const processAttendance = async (type: 'IN' | 'OUT', overrideCode?: string) => {
+  // ATT-FIX-BUG7: processAttendance sekarang return { ok, code } untuk auto-detect
+  const processAttendance = async (
+    type: 'IN' | 'OUT',
+    overrideCode?: string,
+    opts: { silent?: boolean } = {}
+  ): Promise<{ ok: boolean; code?: string }> => {
     const codeToSend = overrideCode || pin;
     if (codeToSend.length < 3) {
-      setStatusMsg({ type: 'error', text: 'PIN atau Barcode minimal 3-4 digit!' });
-      playScannerBeep(false);
-      return;
+      if (!opts.silent) {
+        setStatusMsg({ type: 'error', text: 'PIN atau Barcode minimal 3-4 digit!' });
+        playScannerBeep(false);
+      }
+      return { ok: false };
     }
 
-    setLoading(true);
+    if (!opts.silent) setLoading(true);
     try {
       const token = localStorage.getItem('token') || localStorage.getItem('staff_token') || sessionStorage.getItem('token');
       const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('activeTenantId') || sessionStorage.getItem('tenantId');
@@ -136,17 +144,42 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
           onSuccess();
           onClose();
         }, 1200);
+        return { ok: true };
       } else {
-        playScannerBeep(false);
-        setStatusMsg({ type: 'error', text: data.error || 'Gagal melakukan absensi' });
-        setLoading(false);
-        setPin(''); // Reset on error for retry
+        if (!opts.silent) {
+          playScannerBeep(false);
+          setStatusMsg({ type: 'error', text: data.error || 'Gagal melakukan absensi' });
+          setLoading(false);
+          setPin('');
+        }
+        return { ok: false, code: data.code };
       }
     } catch (err) {
       console.error(err);
+      if (!opts.silent) {
+        playScannerBeep(false);
+        setStatusMsg({ type: 'error', text: 'Terjadi kesalahan sistem atau koneksi' });
+        setLoading(false);
+      }
+      return { ok: false };
+    }
+  };
+
+  // ATT-FIX-BUG7: Smart auto-detect — barcode scanner bisa untuk IN maupun OUT
+  // Coba Clock IN dulu; jika sudah IN, otomatis switch ke Clock OUT
+  const processSmartAttendance = async (code: string) => {
+    setLoading(true);
+    const result = await processAttendance('IN', code, { silent: true });
+    if (!result.ok && result.code === 'ALREADY_CLOCKED_IN') {
+      // Staf sudah Clock IN hari ini — lakukan Clock OUT
+      setStatusMsg({ type: 'success', text: '🔄 Mendeteksi Clock OUT...' });
+      await processAttendance('OUT', code);
+    } else if (!result.ok) {
+      // Error lain (PIN salah, dll) — tampilkan error normal
       playScannerBeep(false);
-      setStatusMsg({ type: 'error', text: 'Terjadi kesalahan sistem atau koneksi' });
       setLoading(false);
+      // Re-fetch error message with visible mode
+      await processAttendance('IN', code);
     }
   };
 

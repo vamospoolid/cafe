@@ -33,6 +33,46 @@ function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2:
   return Math.round(R * c);
 }
 
+// ─── Timezone Utility (WIB = UTC+7) ──────────────────────────────────────────
+// Server bisa berjalan di UTC. Semua kalkulasi absensi HARUS menggunakan
+// waktu WIB agar "hari ini" dan "keterlambatan" akurat untuk Indonesia.
+
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7 dalam milidetik
+
+/** Mengembalikan Date yang sudah digeser ke zona WIB. Gunakan getUTC* untuk baca jam WIB. */
+function getNowWIB(): Date {
+  return new Date(Date.now() + WIB_OFFSET_MS);
+}
+
+/** Mengembalikan string 'YYYY-MM-DD' dalam zona WIB. */
+function getTodayWIBStr(): string {
+  return getNowWIB().toISOString().slice(0, 10);
+}
+
+/** Mengembalikan Date awal hari (00:00:00 WIB) sebagai UTC timestamp. */
+function getTodayStartWIB(): Date {
+  return new Date(getTodayWIBStr() + 'T00:00:00+07:00');
+}
+
+/** Mengembalikan menit WIB sejak tengah malam (0–1439). */
+function getWIBMinutes(): number {
+  const wib = getNowWIB();
+  return wib.getUTCHours() * 60 + wib.getUTCMinutes();
+}
+
+/** Menghitung jumlah hari kerja (default Senin–Sabtu) dalam range tanggal. */
+function countWorkdays(start: Date, end: Date, workDays: number[] = [1,2,3,4,5,6]): number {
+  let count = 0;
+  const cur = new Date(start);
+  cur.setUTCHours(0, 0, 0, 0);
+  const endMs = end.getTime();
+  while (cur.getTime() <= endMs) {
+    if (workDays.includes(cur.getUTCDay())) count++;
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return count;
+}
+
 const DEFAULT_SHIFTS = [
   { id: 'pagi', name: 'Shift Pagi (08:00 - 16:00)', start: '08:00', end: '16:00', lateTolerance: 15 },
   { id: 'siang', name: 'Shift Siang / Sore (14:00 - 22:00)', start: '14:00', end: '22:00', lateTolerance: 15 },
@@ -254,7 +294,8 @@ router.post('/clock', async (req: Request, res: Response) => {
     });
 
     // Validasi toggle absensi dari Pengaturan Toko
-    if ((settings as any)?.enableAttendance === false) {
+    // ATT-FIX-BUG8: enableAttendance ada di schema Prisma — hapus cast 'as any'
+    if (settings?.enableAttendance === false) {
       return res.status(400).json({
         error: 'Fitur absensi karyawan dinonaktifkan di Pengaturan Toko.',
         code: 'ATTENDANCE_DISABLED'
@@ -319,13 +360,14 @@ router.post('/clock', async (req: Request, res: Response) => {
       }
     }
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // ATT-TZ-FIX BUG-1: Gunakan awal hari WIB, bukan jam server (UTC)
+    // Field 'date' (YYYY-MM-DD) lebih akurat dan memanfaatkan index @@index([tenantId, userId, date])
+    const todayDateStr = getTodayWIBStr();
 
     const existingLog = await prisma.attendance.findFirst({
       where: {
         userId: user.id,
-        clockIn: { gte: todayStart },
+        date: todayDateStr,
         ...tenantWhere(resolvedTenantId)
       },
       orderBy: { clockIn: 'desc' }
@@ -333,7 +375,10 @@ router.post('/clock', async (req: Request, res: Response) => {
 
     if (type === 'IN') {
       if (existingLog && !existingLog.clockOut) {
-        return res.status(400).json({ error: `Anda sudah Clock In hari ini (${user.name}) pada ${new Date(existingLog.clockIn).toLocaleTimeString('id-ID')}` });
+        return res.status(400).json({
+          error: `Anda sudah Clock In hari ini (${user.name}) pada ${new Date(existingLog.clockIn).toLocaleTimeString('id-ID')}`,
+          code: 'ALREADY_CLOCKED_IN' // ATT-FIX-BUG7: Digunakan frontend untuk auto-switch ke OUT
+        });
       }
 
       // Hitung Keterlambatan berdasarkan Shift yang dipilih
@@ -353,8 +398,8 @@ router.post('/clock', async (req: Request, res: Response) => {
 
       if (selectedShift?.start) {
         const [shiftStartHour, shiftStartMin] = selectedShift.start.split(':').map(Number);
-        const now = new Date();
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        // ATT-TZ-FIX BUG-2: Hitung menit dalam WIB, bukan jam server UTC
+        const nowMinutes = getWIBMinutes();
         const shiftStartTotalMinutes = shiftStartHour * 60 + (shiftStartMin || 0);
         const tolerance = selectedShift.lateTolerance || 15;
 
@@ -373,7 +418,7 @@ router.post('/clock', async (req: Request, res: Response) => {
           tenantId: resolvedTenantId,
           outletId: bodyOutletId || null,
           userId: user.id,
-          date: new Date().toISOString().slice(0, 10),
+          date: getTodayWIBStr(), // ATT-TZ-FIX: WIB date, bukan UTC
           clockIn: new Date(),
           shiftName: actualShiftName,
           photoIn: photo || null,
@@ -546,11 +591,18 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
           orderBy: { clockIn: 'desc' }
         });
 
-        const totalTerlambat = logs.filter(l => l.status === 'Terlambat' || (l.lateMinutes || 0) > 0).length;
-        const totalHadir = logs.filter(l => (l.status === 'Hadir' || l.status === 'Tepat Waktu') && (l.lateMinutes || 0) === 0).length;
-        const totalLuarRadius = logs.filter(l => l.status === 'Di Luar Radius').length;
-        const totalEntries = logs.length;
-        const totalLateMinutes = logs.reduce((sum, l) => sum + (l.lateMinutes || 0), 0);
+        // M1-FIX: Deduplikasi berdasarkan 'date' — hitung 1 entri per hari
+        const logsByDate = new Map<string, typeof logs[0]>();
+        for (const log of logs) {
+          if (!logsByDate.has(log.date)) logsByDate.set(log.date, log);
+        }
+        const uniqueDailyLogs = Array.from(logsByDate.values());
+
+        const totalTerlambat = uniqueDailyLogs.filter(l => l.status === 'Terlambat' || (l.lateMinutes || 0) > 0).length;
+        const totalHadir = uniqueDailyLogs.filter(l => (l.status === 'Hadir' || l.status === 'Tepat Waktu') && (l.lateMinutes || 0) === 0).length;
+        const totalLuarRadius = uniqueDailyLogs.filter(l => l.status === 'Di Luar Radius').length;
+        const totalEntries = uniqueDailyLogs.length;
+        const totalLateMinutes = uniqueDailyLogs.reduce((sum, l) => sum + (l.lateMinutes || 0), 0);
 
         // Hitung total jam kerja
         let totalWorkHours = 0;
@@ -579,6 +631,52 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
           }
         }
 
+        // BUG-6 FIX: Hitung Alpha (hari kerja tanpa absensi dan tanpa izin approved)
+        let totalAlphaCount = 0;
+        let totalAlphaPenalty = 0;
+        if (enableAlphaPenalty && dateFilter.gte) {
+          // Ambil izin approved yang overlap dengan periode
+          const approvedLeaves = await prisma.leaveRequest.findMany({
+            where: {
+              userId: u.id,
+              status: 'Approved',
+              tenantId,
+              OR: [
+                { startDate: { gte: dateFilter.gte.toISOString().slice(0, 10), lte: dateFilter.lte.toISOString().slice(0, 10) } },
+                { endDate:   { gte: dateFilter.gte.toISOString().slice(0, 10), lte: dateFilter.lte.toISOString().slice(0, 10) } },
+              ]
+            },
+            select: { startDate: true, endDate: true }
+          });
+
+          // Kumpulkan semua tanggal yang ada izin approved
+          const leaveDateSet = new Set<string>();
+          for (const leave of approvedLeaves) {
+            const s = new Date(leave.startDate);
+            const e = new Date(leave.endDate);
+            const cur = new Date(s);
+            while (cur <= e) {
+              leaveDateSet.add(cur.toISOString().slice(0, 10));
+              cur.setUTCDate(cur.getUTCDate() + 1);
+            }
+          }
+
+          // Tanggal yang ada absensi (deduplicated)
+          const attendanceDateSet = new Set(uniqueDailyLogs.map(l => l.date));
+
+          // Hari kerja yang tidak ada absensi dan tidak ada izin = ALPHA
+          const periodStart = new Date(dateFilter.gte);
+          const periodEnd = new Date(dateFilter.lte);
+          for (const cur = new Date(periodStart); cur <= periodEnd; cur.setUTCDate(cur.getUTCDate() + 1)) {
+            const dateStr = cur.toISOString().slice(0, 10);
+            const isWorkday = [1, 2, 3, 4, 5, 6].includes(cur.getUTCDay()); // Senin–Sabtu
+            if (isWorkday && !attendanceDateSet.has(dateStr) && !leaveDateSet.has(dateStr)) {
+              totalAlphaCount++;
+            }
+          }
+          totalAlphaPenalty = totalAlphaCount * alphaPenaltyAmount;
+        }
+
         // Hitung Denda Keterlambatan
         let totalLatePenalty = 0;
         if (enableLatePenalty) {
@@ -589,7 +687,7 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
           }
         }
 
-        const netDisciplineAmount = zeroLateBonusEarned - totalLatePenalty;
+        const netDisciplineAmount = zeroLateBonusEarned - totalLatePenalty - totalAlphaPenalty;
 
         // ─────────────────────────────────────────────────────────────
         // 2. KINERJA FINANSIAL KASIR (SHIFTS & ORDERS)
@@ -730,6 +828,10 @@ router.get('/summary-individual', authenticateToken, async (req: Request, res: R
             latePenaltyType,
             latePenaltyAmount,
             totalLatePenalty,
+            enableAlphaPenalty,
+            alphaPenaltyAmount,
+            totalAlphaCount,
+            totalAlphaPenalty,
             netDisciplineAmount
           },
           cashierStats: {
@@ -780,6 +882,14 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
     const tenantId = user?.tenantId || TenantContext.getTenantId();
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
+    // ATT-FIX-BUG4: Fail-closed — tenantId wajib ada
+    if (!tenantId) {
+      return res.status(400).json({
+        error: 'Tenant context tidak tersedia.',
+        code: 'MISSING_TENANT_CONTEXT'
+      });
+    }
+
     const userDb = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, name: true, username: true, role: true }
@@ -824,16 +934,12 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
       }
     });
 
-    // Cek status hari ini
-    // ATT-006: Tambahkan tenantId ke query agar tidak return log dari tenant yang salah
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // Cek status hari ini — ATT-TZ-FIX: pakai date field WIB
     const todayLog = await prisma.attendance.findFirst({
       where: {
         userId: user.id,
-        clockIn: { gte: todayStart },
-        // ATT-HARDENED: Fail-closed — jika tenantId tidak tersedia, tolak query
-        // daripada mengembalikan data dari tenant manapun (fail-open)
+        date: getTodayWIBStr(), // ATT-TZ-FIX + ATT-006: WIB date & tenant-scoped
+        // ATT-HARDENED: Fail-closed
         tenantId: tenantId || 'BLOCKED_NULL_TENANT'
       },
       orderBy: { clockIn: 'desc' }
@@ -1031,6 +1137,14 @@ router.post('/handover', authenticateToken, async (req: Request, res: Response) 
       return res.status(400).json({ error: 'Data serah terima shift tidak lengkap' });
     }
 
+    // M2-FIX: Validasi userId harus anggota aktif tenant ini (anti-IDOR)
+    const handoverTargetUser = await prisma.user.findFirst({
+      where: { id: Number(userId), memberships: { some: { tenantId, status: 'ACTIVE' } } }
+    });
+    if (!handoverTargetUser) {
+      return res.status(404).json({ error: 'Karyawan tidak ditemukan di outlet ini', code: 'INVALID_USER_FOR_TENANT' });
+    }
+
     const todayStr = new Date().toISOString().split('T')[0];
     const handover = await prisma.shiftHandover.create({
       data: {
@@ -1087,6 +1201,14 @@ router.post('/checklist', authenticateToken, async (req: Request, res: Response)
     const { userId, type, shiftName, items, notes } = req.body;
     if (!userId || !type || !items) {
       return res.status(400).json({ error: 'Lengkapi data checklist SOP' });
+    }
+
+    // M2-FIX: Validasi kepemilikan userId terhadap tenant (anti-IDOR)
+    const checklistTargetUser = await prisma.user.findFirst({
+      where: { id: Number(userId), memberships: { some: { tenantId, status: 'ACTIVE' } } }
+    });
+    if (!checklistTargetUser) {
+      return res.status(404).json({ error: 'Karyawan tidak ditemukan di outlet ini', code: 'INVALID_USER_FOR_TENANT' });
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1205,12 +1327,27 @@ router.put('/:id/adjust', authenticateToken, async (req: Request, res: Response)
     }
 
     const updateData: any = {};
-    if (clockIn) updateData.clockIn = new Date(clockIn);
+    if (clockIn) {
+      updateData.clockIn = new Date(clockIn);
+      // M3-FIX: Auto-recalculate lateMinutes saat clockIn dikoreksi
+      if (existing.shiftName) {
+        const shiftMatch = existing.shiftName.match(/\((\d{2}):(\d{2})/);
+        if (shiftMatch) {
+          const shiftStartMinutes = parseInt(shiftMatch[1]) * 60 + parseInt(shiftMatch[2]);
+          const newClockInWIB = new Date(new Date(clockIn).getTime() + WIB_OFFSET_MS);
+          const clockInMinutes = newClockInWIB.getUTCHours() * 60 + newClockInWIB.getUTCMinutes();
+          const lateTolerance = 15;
+          const recalcLateMinutes = Math.max(0, clockInMinutes - shiftStartMinutes - lateTolerance);
+          if (!updateData.lateMinutes) updateData.lateMinutes = recalcLateMinutes;
+          if (!status) updateData.status = recalcLateMinutes > 0 ? 'Terlambat' : 'Hadir';
+        }
+      }
+    }
     if (clockOut !== undefined) {
       updateData.clockOut = clockOut ? new Date(clockOut) : null;
     }
-    if (status) updateData.status = status;
-    if (lateMinutes !== undefined) updateData.lateMinutes = Number(lateMinutes);
+    if (status) updateData.status = status; // Manual override tetap berlaku
+    if (lateMinutes !== undefined) updateData.lateMinutes = Number(lateMinutes); // Manual override tetap berlaku
     if (notes !== undefined) updateData.notes = notes;
 
     const updated = await prisma.attendance.update({
@@ -1323,7 +1460,8 @@ router.post('/sync-offline', authenticateToken, async (req: Request, res: Respon
               },
             });
           } else {
-            // Out without existing IN record
+            // ATT-FIX-BUG5: Clock OUT offline tanpa Clock IN — buat rekord tapi tandai 'Tidak Lengkap'
+            // clockIn diisi clientDate karena kolom NOT NULL, tapi status menandai butuh koreksi manual
             await prisma.attendance.create({
               data: {
                 tenantId,
@@ -1334,8 +1472,8 @@ router.post('/sync-offline', authenticateToken, async (req: Request, res: Respon
                 photoOut: att.photoBase64 || null,
                 latitudeOut: att.latitude ? Number(att.latitude) : null,
                 longitudeOut: att.longitude ? Number(att.longitude) : null,
-                status: 'Hadir',
-                notes: 'Clock Out (Sync Offline)',
+                status: 'Tidak Lengkap',
+                notes: '[Sync Offline] Clock Out tanpa rekord Clock In — perlu koreksi manual oleh Admin',
                 offlineId: att.offlineId || null,
               },
             });

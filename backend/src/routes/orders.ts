@@ -127,6 +127,96 @@ const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRed
   }
 };
 
+/**
+ * Helper: Kurangi stok bahan baku untuk modifier / topping berbayar (BOM Addon).
+ * Memvalidasi isolasi tenantId, mengecek ketersediaan stok, dan mencatat log mutasi.
+ */
+const deductModifierIngredients = async (
+  tx: any,
+  item: any,
+  tenantId: string | null | undefined,
+  outletId: string | null | undefined,
+  orderNumber: string,
+  sourceLabel: string
+) => {
+  if (!item.selectedAddons || !Array.isArray(item.selectedAddons) || item.selectedAddons.length === 0) {
+    return;
+  }
+
+  for (const addon of item.selectedAddons) {
+    const qtyMultiplier = Number(item.qty) || 1;
+    const qtyPerAddon = Number(addon.qtyUsed) || 1;
+    const totalDeduct = qtyPerAddon * qtyMultiplier;
+
+    let matchedIng: any = null;
+    if (addon.ingredientId) {
+      matchedIng = await tx.ingredient.findFirst({
+        where: {
+          id: Number(addon.ingredientId),
+          deletedAt: null,
+          ...(tenantId ? { tenantId } : {})
+        }
+      });
+    }
+
+    if (!matchedIng && addon.ingredientName) {
+      matchedIng = await tx.ingredient.findFirst({
+        where: {
+          deletedAt: null,
+          ...(tenantId ? { tenantId } : {}),
+          name: { contains: addon.ingredientName, mode: 'insensitive' }
+        }
+      });
+      if (!matchedIng) {
+        const cleanName = addon.ingredientName.replace(/^(Biji Kopi|Susu|Sirup|Topping|Cream)\s+/i, '').trim();
+        if (cleanName.length > 2) {
+          matchedIng = await tx.ingredient.findFirst({
+            where: {
+              deletedAt: null,
+              ...(tenantId ? { tenantId } : {}),
+              name: { contains: cleanName, mode: 'insensitive' }
+            }
+          });
+        }
+      }
+    }
+
+    if (!matchedIng && addon.name) {
+      const cleanAddon = addon.name.replace(/^(Extra|Upgrade|Sirup|Topping)\s+/i, '').trim();
+      matchedIng = await tx.ingredient.findFirst({
+        where: {
+          deletedAt: null,
+          ...(tenantId ? { tenantId } : {}),
+          name: { contains: cleanAddon, mode: 'insensitive' }
+        }
+      });
+    }
+
+    if (matchedIng) {
+      if (matchedIng.stock < totalDeduct) {
+        throw new Error(`Stok bahan baku modifier "${matchedIng.name}" tidak mencukupi (tersisa: ${matchedIng.stock}, dibutuhkan: ${totalDeduct})`);
+      }
+
+      await tx.ingredient.update({
+        where: { id: matchedIng.id },
+        data: { stock: { decrement: totalDeduct } }
+      });
+
+      await tx.ingredientLog.create({
+        data: {
+          tenantId: tenantId || null,
+          outletId: outletId || null,
+          ingredientId: matchedIng.id,
+          change: -totalDeduct,
+          type: 'Produksi',
+          description: `Order ${orderNumber} (${sourceLabel} Modifier: ${addon.name})`,
+          referenceId: orderNumber
+        }
+      });
+    }
+  }
+};
+
 // Fungsi untuk generate nomor order (Contoh: ORD-VAM-20231025-001)
 // WAJIB mengandung kode tenant agar tidak collision antar kafe (race condition)
 export const generateOrderNumber = async (tenantId?: string | null, tzOffset?: number | string) => {
@@ -251,7 +341,7 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         { status: 'Pending' },
         {
           status: 'Paid',
-          kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+          kdsStatus: { in: ['Pending', 'Cooking', 'Ready'] }
         }
       ];
     } else if (status) {
@@ -410,42 +500,47 @@ router.post('/dinein', async (req: Request, res: Response) => {
     }
     const userId = defaultUser.id;
 
+    // SECURITY: Ekstrak tenant context lebih awal dari headers, query, atau body
+    let tenantId = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || (req.body?.tenantId as string) || null;
+    const tenantSlug = (req.query?.tenantSlug as string) || (req.body?.tenantSlug as string);
+    if (!tenantId && tenantSlug) {
+      const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+      if (tenant) tenantId = tenant.id;
+    }
+
     let resolvedTableId: number | null = null;
+    let outletId: string | null = null;
+
     if (tableId) {
       const numId = Number(tableId);
-      let tableExists = null;
+      let tableExists: any = null;
+
+      // 1. Jika tableId berupa angka ID unik meja
       if (!isNaN(numId)) {
-        tableExists = await prisma.table.findUnique({
-          where: { id: numId }
+        tableExists = await prisma.table.findFirst({
+          where: tenantId
+            ? { id: numId, tenantId, deletedAt: null }
+            : { id: numId, deletedAt: null }
         });
       }
+
+      // 2. Jika tableId berupa nomor meja (string tableNo), WAJIB discoping ke tenantId agar tidak membajak meja tenant lain
       if (!tableExists) {
         const tableStr = String(tableId);
-        tableExists = await prisma.table.findFirst({
-          where: { tableNo: tableStr }
-        });
-        if (!tableExists) {
-          const allTables = await prisma.table.findMany();
-          tableExists = allTables.find(t => t.tableNo.toLowerCase() === tableStr.toLowerCase()) || null;
+        if (tenantId) {
+          tableExists = await prisma.table.findFirst({
+            where: { tableNo: tableStr, tenantId, deletedAt: null }
+          });
         }
       }
+
       if (tableExists) {
         resolvedTableId = tableExists.id;
+        tenantId = tenantId || tableExists.tenantId;
+        outletId = tableExists.outletId;
       }
     }
 
-    let tenantId = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string) || null;
-    let outletId: string | null = null;
-    if (resolvedTableId) {
-      const tableInfo = await prisma.table.findUnique({
-        where: { id: resolvedTableId },
-        select: { tenantId: true, outletId: true }
-      });
-      if (tableInfo) {
-        tenantId = tenantId || tableInfo.tenantId;
-        outletId = tableInfo.outletId;
-      }
-    }
     if (!tenantId) {
       return res.status(400).json({ error: 'Tenant context tidak valid untuk Self-Order. Silakan scan ulang QR meja.', code: 'MISSING_TENANT_CONTEXT' });
     }
@@ -525,6 +620,17 @@ router.post('/dinein', async (req: Request, res: Response) => {
 
         for (const recipe of recipes) {
           const used = recipe.qtyPerServing * Number(item.qty);
+          // Validasi kepemilikan tenant & ketersediaan stok bahan baku
+          const currentIng = await tx.ingredient.findFirst({
+            where: { id: recipe.ingredientId, tenantId, deletedAt: null },
+            select: { id: true, stock: true, name: true }
+          });
+          if (!currentIng) {
+            throw new Error(`Bahan baku resep tidak ditemukan atau bukan milik tenant ini.`);
+          }
+          if (currentIng.stock < used) {
+            throw new Error(`Stok bahan baku "${currentIng.name}" tidak mencukupi (sisa: ${currentIng.stock}, dibutuhkan: ${used})`);
+          }
           await tx.ingredient.update({
             where: { id: recipe.ingredientId },
             data: { stock: { decrement: used } }
@@ -541,6 +647,9 @@ router.post('/dinein', async (req: Request, res: Response) => {
             }
           });
         }
+
+        // Kurangi stok bahan baku modifier/addon berbayar jika ada
+        await deductModifierIngredients(tx, item, tenantId, outletId, orderNumber, 'Self-Order');
       }
 
       return order;
@@ -761,6 +870,9 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
               }
             });
           }
+
+          // Kurangi stok bahan baku modifier/addon berbayar jika ada
+          await deductModifierIngredients(tx, item, tenantId, outletId, orderNumber, 'Sync Offline');
         }
 
         // Poin Loyalitas
@@ -1187,6 +1299,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             });
           }
         }
+
+        // Kurangi stok bahan baku modifier/addon berbayar jika ada
+        await deductModifierIngredients(tx, item, tenantId, outletId, orderNumber, 'POS');
       }
 
       // 3. Loyalty Points
@@ -1662,6 +1777,33 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
         }
       }
 
+      // Kembalikan juga stok bahan baku modifier/addon berbayar yang dicatat di ingredientLog
+      const modifierLogs = await tx.ingredientLog.findMany({
+        where: {
+          referenceId: orderData.orderNumber,
+          type: 'Produksi',
+          description: { contains: 'Modifier:' }
+        }
+      });
+      for (const mLog of modifierLogs) {
+        const restoreAmount = Math.abs(mLog.change);
+        await tx.ingredient.update({
+          where: { id: mLog.ingredientId },
+          data: { stock: { increment: restoreAmount } }
+        });
+        await tx.ingredientLog.create({
+          data: {
+            tenantId: orderData.tenantId || null,
+            outletId: orderData.outletId || null,
+            ingredientId: mLog.ingredientId,
+            change: restoreAmount,
+            type: 'Void',
+            description: `Void Modifier #${orderData.orderNumber}`,
+            referenceId: orderData.orderNumber
+          }
+        });
+      }
+
       // 3. Batalkan Poin Loyalitas
       if (orderData.customerId) {
         const settings = await tx.settings.findFirst({ where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined });
@@ -2006,6 +2148,20 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
 
     const user = (req as any).user;
     const moveTenantId = user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+    if (!moveTenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    // Validasi kepemilikan meja asal dan meja tujuan (Anti-IDOR)
+    if (moveTenantId) {
+      const [sourceTable, targetTable] = await Promise.all([
+        prisma.table.findFirst({ where: { id: sId, tenantId: moveTenantId, deletedAt: null } }),
+        prisma.table.findFirst({ where: { id: tId, tenantId: moveTenantId, deletedAt: null } })
+      ]);
+      if (!sourceTable || !targetTable) {
+        return res.status(404).json({ error: 'Meja asal atau meja tujuan tidak ditemukan atau bukan milik tenant ini' });
+      }
+    }
 
     // 1. Pastikan meja tujuan aktif & kosong (terisolasi ke tenant aktif ini)
     const allActiveOrders = await prisma.order.findMany({
@@ -2015,7 +2171,7 @@ router.post('/move-table', authenticateToken, async (req: Request, res: Response
           { status: 'Pending' },
           {
             status: 'Paid',
-            kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+            kdsStatus: { in: ['Pending', 'Cooking', 'Ready'] }
           }
         ]
       },
@@ -2105,6 +2261,20 @@ router.post('/merge-table', authenticateToken, async (req: Request, res: Respons
 
     const user = (req as any).user;
     const mergeTenantId = user?.tenantId || (req.headers['x-tenant-id'] as string) || null;
+    if (!mergeTenantId && !user?.isPlatformAdmin) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    }
+
+    // Validasi kepemilikan meja asal dan meja tujuan (Anti-IDOR)
+    if (mergeTenantId) {
+      const [sourceTable, targetTable] = await Promise.all([
+        prisma.table.findFirst({ where: { id: sId, tenantId: mergeTenantId, deletedAt: null } }),
+        prisma.table.findFirst({ where: { id: tId, tenantId: mergeTenantId, deletedAt: null } })
+      ]);
+      if (!sourceTable || !targetTable) {
+        return res.status(404).json({ error: 'Meja asal atau meja tujuan tidak ditemukan atau bukan milik tenant ini' });
+      }
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       // Cari semua order aktif milik tenant ini
@@ -2115,7 +2285,7 @@ router.post('/merge-table', authenticateToken, async (req: Request, res: Respons
             { status: 'Pending' },
             {
               status: 'Paid',
-              kdsStatus: { in: ['Pending', 'Cooking', 'Ready', 'Cancelled'] }
+              kdsStatus: { in: ['Pending', 'Cooking', 'Ready'] }
             }
           ]
         },

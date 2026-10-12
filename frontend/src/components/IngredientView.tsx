@@ -246,6 +246,7 @@ export const IngredientView: React.FC = () => {
     notes: ''
   });
   const [submittingLoss, setSubmittingLoss] = useState(false);
+  const [lossIngSearch, setLossIngSearch] = useState<string>('');
 
   // Shopping & Restock Analytics
   const [shoppingData, setShoppingData] = useState<any>(null);
@@ -279,6 +280,7 @@ export const IngredientView: React.FC = () => {
   const [submittingOpname, setSubmittingOpname] = useState(false);
   const [opnameHistory, setOpnameHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [opnameSearch, setOpnameSearch] = useState<string>('');
 
   // Modals & PDF Dropdown
   const [showModal, setShowModal] = useState(false);
@@ -4755,9 +4757,25 @@ export const IngredientView: React.FC = () => {
               </div>
             </div>
 
+
+            {/* Search Filter Bahan Baku - Stock Opname */}
+            <div className="relative mb-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input
+                type="text"
+                value={opnameSearch}
+                onChange={e => setOpnameSearch(e.target.value)}
+                placeholder="Cari nama bahan baku..."
+                className="w-full pl-8 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all"
+              />
+              {opnameSearch && (
+                <button type="button" onClick={() => setOpnameSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-300 hover:bg-slate-400 text-slate-600 flex items-center justify-center text-xs font-black leading-none">×</button>
+              )}
+            </div>
+
             {/* MOBILE CARD VIEW (< md) */}
             <div className="md:hidden divide-y divide-slate-100 max-h-[600px] overflow-y-auto space-y-1">
-              {opnameItems.map(item => {
+              {opnameItems.filter(item => !opnameSearch.trim() || item.name.toLowerCase().includes(opnameSearch.trim().toLowerCase())).map(item => {
                 const diff = Number(item.physicalStock) - item.systemStock;
                 const isMiss = Math.abs(diff) > 0.001;
 
@@ -4828,7 +4846,7 @@ export const IngredientView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {opnameItems.map(item => {
+                  {opnameItems.filter(item => !opnameSearch.trim() || item.name.toLowerCase().includes(opnameSearch.trim().toLowerCase())).map(item => {
                     const diff = Number(item.physicalStock) - item.systemStock;
                     const isMiss = Math.abs(diff) > 0.001;
 
@@ -5695,12 +5713,25 @@ export const IngredientView: React.FC = () => {
                       Stok saat ini: <strong className="text-slate-800">{selectedLossIngredient?.stock || 0} {selectedLossIngredient?.unit}</strong>
                     </span>
                   </div>
+                  <div className="relative mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input
+                      type="text"
+                      value={lossIngSearch}
+                      onChange={e => setLossIngSearch(e.target.value)}
+                      placeholder="Cari bahan baku..."
+                      className="w-full pl-7 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-rose-500 focus:bg-white transition-all"
+                    />
+                    {lossIngSearch && (
+                      <button type="button" onClick={() => setLossIngSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-300 hover:bg-slate-400 text-slate-600 flex items-center justify-center text-xs font-black leading-none">×</button>
+                    )}
+                  </div>
                   <select
                     value={lossForm.ingredientId}
                     onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500 focus:bg-white transition-all"
                   >
-                    {ingredients.map(i => (
+                    {ingredients.filter(i => !lossIngSearch.trim() || i.name.toLowerCase().includes(lossIngSearch.trim().toLowerCase())).map(i => (
                       <option key={i.id} value={i.id.toString()}>
                         {i.name} (Stok: {i.stock} {i.unit}){isAdminRole && typeof i.buyPrice === 'number' ? ` — Rp ${i.buyPrice.toLocaleString('id-ID')}/${i.unit}` : ''}
                       </option>

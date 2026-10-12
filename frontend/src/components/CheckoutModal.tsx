@@ -108,7 +108,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       items: cart.map(i => ({
         name: i.product?.name || i.name,
         qty: i.qty,
-        price: Number(i.product?.sellPrice || i.product?.price || i.price || 0),
+        price: Number(i.price ?? i.product?.sellPrice ?? i.product?.price ?? 0),
         notes: i.notes
       })),
       subtotal,
@@ -518,8 +518,9 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           items: cart.map((item: any) => ({
             productId: item.product.id,
             qty: item.qty,
-            price: item.product.sellPrice,
-            notes: item.notes || ''
+            price: item.price ?? item.product.sellPrice ?? item.product.price ?? 0,
+            notes: item.notes || '',
+            selectedAddons: item.selectedAddons || []
           })),
           subtotal,
           discount: totalDiscount,
@@ -580,7 +581,13 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             tableName: customer?.tableName || undefined,
             tableId: customer?.tableId || null,
             joinedTableIds: customer?.joinedTableIds || undefined,
-            items: cart.map((item: any) => ({ productId: item.product.id, qty: item.qty, price: item.product.sellPrice, notes: item.notes || '' })),
+            items: cart.map((item: any) => ({ 
+              productId: item.product.id, 
+              qty: item.qty, 
+              price: item.price ?? item.product.sellPrice ?? item.product.price ?? 0, 
+              notes: item.notes || '',
+              selectedAddons: item.selectedAddons || []
+            })),
             subtotal,
             discount: totalDiscount,
             voucherId: appliedVoucher?.voucher?.id || null,
@@ -811,7 +818,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="max-h-32 overflow-y-auto pr-1 space-y-1.5 scrollbar-thin">
                 {cart && cart.map((item: any, idx: number) => {
                   const prod = item.product || item;
-                  const price = prod.sellPrice || item.price || 0;
+                  const price = item.price ?? prod.sellPrice ?? prod.price ?? 0;
                   return (
                     <div key={idx} className="flex justify-between items-start text-xs py-1 border-b border-slate-200/60 last:border-none">
                       <div className="flex-1 pr-2">
