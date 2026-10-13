@@ -414,21 +414,34 @@ export const STARTER_TEMPLATES: Record<string, StarterTemplate> = {
  * GET /api/tenant-reset/templates
  * Mengambil daftar seluruh starter templates industri yang tersedia
  */
-router.get('/templates', authenticateToken, async (_req: Request, res: Response) => {
+router.get('/templates', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const list = Object.values(STARTER_TEMPLATES).map(t => ({
-      id: t.id,
-      name: t.name,
-      badge: t.badge,
-      description: t.description,
-      icon: t.icon,
-      businessType: t.businessType || 'CAFE',
-      categoriesCount: t.categories.length,
-      ingredientsCount: t.ingredients.length,
-      productsCount: t.products.length,
-      servicesCount: t.serviceTypes ? t.serviceTypes.length : 0,
-      tablesCount: t.tables ? t.tables.length : 0
-    }));
+    const tenantId = req.user?.tenantId;
+    let businessType = 'CAFE';
+    if (tenantId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { businessType: true }
+      });
+      if (tenant?.businessType) businessType = tenant.businessType;
+    }
+
+    // Filter template agar fokus pada profil bisnis tenant (Muki Ramen / Cafe hanya melihat template F&B)
+    const list = Object.values(STARTER_TEMPLATES)
+      .filter(t => (t.businessType || 'CAFE') === businessType)
+      .map(t => ({
+        id: t.id,
+        name: t.name,
+        badge: t.badge,
+        description: t.description,
+        icon: t.icon,
+        businessType: t.businessType || 'CAFE',
+        categoriesCount: t.categories.length,
+        ingredientsCount: t.ingredients.length,
+        productsCount: t.products.length,
+        servicesCount: t.serviceTypes ? t.serviceTypes.length : 0,
+        tablesCount: t.tables ? t.tables.length : 0
+      }));
     res.json(list);
   } catch (error: any) {
     res.status(500).json({ error: 'Gagal memuat template usaha' });
@@ -1400,16 +1413,31 @@ export async function executeTenantRestoreTransaction(
     const customerMap = new Map<number, number>();
     if (Array.isArray(data.customers)) {
       for (const cust of data.customers) {
-        const createdCust = await tx.customer.create({
-          data: {
-            tenantId,
-            name: cust.name,
-            phone: cust.phone || null,
-            email: cust.email || null,
-            address: cust.address || null,
-            points: Number(cust.points) || 0
-          }
+        const phone = cust.phone ? String(cust.phone).trim() : `08${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+        const existingCust = await tx.customer.findFirst({
+          where: { tenantId, phone }
         });
+        let createdCust;
+        if (existingCust) {
+          createdCust = await tx.customer.update({
+            where: { id: existingCust.id },
+            data: {
+              name: cust.name || 'Pelanggan',
+              email: cust.email || null,
+              points: Number(cust.points) || existingCust.points
+            }
+          });
+        } else {
+          createdCust = await tx.customer.create({
+            data: {
+              tenantId,
+              name: cust.name || 'Pelanggan',
+              phone,
+              email: cust.email || null,
+              points: Number(cust.points) || 0
+            }
+          });
+        }
         customerMap.set(cust.id, createdCust.id);
         restoredCustomersCount++;
       }
@@ -1432,8 +1460,10 @@ export async function executeTenantRestoreTransaction(
             discount: Number(ord.discount) || 0,
             total: Number(ord.total) || 0,
             paymentMethod: ord.paymentMethod || 'Cash',
-            paymentStatus: ord.paymentStatus || 'PAID',
-            status: ord.status || 'Completed',
+            status: ord.status || 'Paid',
+            kdsStatus: ord.kdsStatus || 'Served',
+            servedAt: ord.servedAt ? new Date(ord.servedAt) : null,
+            paidAt: ord.paidAt ? new Date(ord.paidAt) : (ord.status === 'Paid' ? new Date(ord.createdAt || Date.now()) : null),
             userId: userId,
             createdAt: ord.createdAt ? new Date(ord.createdAt) : new Date()
           }
@@ -1452,6 +1482,7 @@ export async function executeTenantRestoreTransaction(
                   orderId: createdOrder.id,
                   productId: newProdId,
                   price: Number(item.price) || 0,
+                  buyPrice: Number(item.buyPrice) || 0,
                   qty: Number(item.qty) || 1,
                   subtotal: Number(item.subtotal) || 0,
                   notes: item.notes || null
