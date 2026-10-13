@@ -861,6 +861,9 @@ model Settings {
   loyaltyGoldThreshold    Float   @default(3000000)
   loyaltySilverMultiplier Float   @default(1.2)
   loyaltyGoldMultiplier   Float   @default(1.5)
+  loyaltyMaxRedeemPerOrder Int    @default(0)    // 0 = tanpa batas per transaksi
+  loyaltyRedeemMinPoints   Int    @default(1)    // min poin yang bisa ditukar sekaligus
+  loyaltyMinOrderForEarn   Float  @default(0)    // min total belanja (setelah diskon) untuk earn poin
 
   // Mode Inventaris: false = Simple (HPP manual), true = Advanced (HPP dari resep bahan baku)
   ingredientTrackingEnabled Boolean @default(false)
