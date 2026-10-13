@@ -478,7 +478,7 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {templates
                   .filter(tmpl => {
-                    const currentVertical = posContext?.tenant?.businessType || 'CAFE';
+                    const currentVertical = posContext?.user?.businessType || 'CAFE';
                     if (currentVertical === 'CAFE') {
                       return !['BENGKEL_MOTOR_UMUM', 'BENGKEL_MOBIL_DAN_AC', 'LAUNDRY_KILOAN_SATUAN'].includes(tmpl.id);
                     }
