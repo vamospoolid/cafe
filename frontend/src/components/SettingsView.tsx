@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { RotateCcw, Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Shirt, AlertCircle, Wrench } from 'lucide-react';
+import { Download, RotateCcw, Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Shirt, AlertCircle, Wrench } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -4162,6 +4162,7 @@ const SettingsView = () => {
 };
 
 const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) => {
+  const posContext = useContext(POSContext);
   const [backingUp, setBackingUp] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [healthData, setHealthData] = useState<any>(null);
