@@ -230,6 +230,7 @@ import tenantsRoutes from './routes/tenants';
 import platformAdminRoutes from './routes/platformAdmin';
 import fastProvisioningRoutes from './routes/fastProvisioning';
 import publicInvoiceRoutes from './routes/publicInvoice';
+import tenantResetRoutes from './routes/tenantReset';
 import { whatsAppManager } from './services/WhatsAppManager';
 
 app.use('/api/public/invoice', publicInvoiceRoutes);
@@ -241,6 +242,7 @@ app.use('/api/bengkel', bengkelRoutes);
 app.use('/api/retail', retailRoutes);
 app.use('/api/laundry', laundryRoutes);
 app.use('/api/recycle-bin', recycleBinRoutes);
+app.use('/api/tenant-reset', tenantResetRoutes);
 app.use('/api/devices', devicePairingRoutes);
 app.get('/api/app/version', (_req, res) => {
   res.json({
