@@ -628,7 +628,9 @@ router.post('/dinein', async (req: Request, res: Response) => {
           if (!currentIng) {
             throw new Error(`Bahan baku resep tidak ditemukan atau bukan milik tenant ini.`);
           }
-          if (currentIng.stock < used) {
+          const dineinSettings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+          const allowBufferMode = dineinSettings?.allowSaleWhenOutOfStock !== false;
+          if (!allowBufferMode && currentIng.stock < used) {
             throw new Error(`Stok bahan baku "${currentIng.name}" tidak mencukupi (sisa: ${currentIng.stock}, dibutuhkan: ${used})`);
           }
           await tx.ingredient.update({
@@ -1261,7 +1263,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
               ? { id: Number(item.productId), tenantId }
               : { id: Number(item.productId) }
           });
-          if (product && product.stock < Number(item.qty)) {
+          const orderSettings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+          const allowBufferMode = orderSettings?.allowSaleWhenOutOfStock !== false;
+          if (!allowBufferMode && product && product.stock < Number(item.qty)) {
             throw new Error(`Stok produk "${product.name}" tidak mencukupi (tersisa: ${product.stock}, dibutuhkan: ${item.qty})`);
           }
           await tx.product.update({
@@ -1279,7 +1283,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
                 : { id: recipe.ingredientId },
               select: { stock: true, name: true }
             });
-            if (currentIng && currentIng.stock < used) {
+            const orderSettings = await tx.settings.findFirst({ where: tenantId ? { tenantId } : undefined });
+            const allowBufferMode = orderSettings?.allowSaleWhenOutOfStock !== false;
+            if (!allowBufferMode && currentIng && currentIng.stock < used) {
               throw new Error(`Stok bahan baku "${currentIng.name}" tidak mencukupi (sisa: ${currentIng.stock}, dibutuhkan: ${used})`);
             }
             await tx.ingredient.update({

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Shirt, AlertCircle, Wrench } from 'lucide-react';
+import { RotateCcw, Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Shirt, AlertCircle, Wrench } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -167,6 +167,7 @@ const SettingsView = () => {
     loyaltySilverMultiplier: 1.2,
     loyaltyGoldMultiplier: 1.5,
     ingredientTrackingEnabled: false,
+    allowSaleWhenOutOfStock: true,
     enableKitchenAuditMode: false,
     enableStaffMealTracking: true,
     enableBlindClose: true,
@@ -3074,6 +3075,29 @@ const SettingsView = () => {
               {/* Kontrol Dapur & Mode Audit Opsional (HANYA KAFE / F&B) */}
               {isCafe && (
                 <div className="pt-6 border-t border-slate-100 space-y-4">
+                  {/* Mode Buffer Kasir (Izinkan Jual Saat Stok 0) */}
+                  <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                    <div className="space-y-0.5 pr-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-slate-800">Mode Buffer Kasir (Izinkan Jual Saat Stok Habis/Nol)</span>
+                        <span className="text-[10px] bg-indigo-50 text-indigo-700 font-extrabold px-2 py-0.5 rounded-full border border-indigo-200">
+                          Auto-Buffer
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Jika aktif, kasir tidak akan diblokir saat stok sistem habis jika stok fisik di dapur masih ada. Bahan baku otomatis tercatat defisit negatif dan ter-offset saat staf menginput restock.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={formData.allowSaleWhenOutOfStock !== false}
+                        onChange={e => setFormData(p => ({ ...p, allowSaleWhenOutOfStock: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
                       <ShieldAlert size={18} />
@@ -4142,6 +4166,9 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
   const [restarting, setRestarting] = useState(false);
   const [healthData, setHealthData] = useState<any>(null);
   const [backups, setBackups] = useState<any[]>([]);
+  const [downloadingSnapshot, setDownloadingSnapshot] = useState(false);
+  const [restoringSnapshot, setRestoringSnapshot] = useState(false);
+  const isOwner = (posContext?.user?.role || '').toUpperCase() === 'OWNER' || (posContext?.user?.role || '').toUpperCase() === 'SUPERADMIN';
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(true);
 
@@ -4202,6 +4229,67 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
       toast(err.message || 'Terjadi kesalahan saat membuat backup', 'error');
     } finally {
       setBackingUp(false);
+    }
+  };
+
+  const handleDownloadSnapshot = async (fileName: string) => {
+    if (!token) return;
+    setDownloadingSnapshot(true);
+    try {
+      const res = await fetch(`/api/health/backups/download/${encodeURIComponent(fileName)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Gagal mengunduh berkas backup');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast(`Berkas ${fileName} berhasil diunduh.`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal mengunduh berkas backup', 'error');
+    } finally {
+      setDownloadingSnapshot(false);
+    }
+  };
+
+  const handleRestoreSnapshot = async (fileName: string) => {
+    if (!token) return;
+    if (!isOwner) {
+      toast('Hanya akun Role OWNER yang memiliki wewenang memulihkan database.', 'error');
+      return;
+    }
+
+    const confirmed = await confirmAlert(
+      `⚠️ Pulihkan Database dari ${fileName}?`,
+      'PERINGATAN KRITIS: Tindakan ini akan menimpa data operasional toko dengan snapshot yang dipilih. Pastikan Anda telah mengunduh backup terkini sebelum melanjutkan.'
+    );
+    if (!confirmed.isConfirmed) return;
+
+    setRestoringSnapshot(true);
+    try {
+      const res = await fetch('/api/health/backups/restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ fileName })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal memulihkan database');
+
+      toast(`Database berhasil dipulihkan dari ${fileName}! Memuat ulang...`, 'success');
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (err: any) {
+      toast(err.message || 'Gagal memulihkan database', 'error');
+    } finally {
+      setRestoringSnapshot(false);
     }
   };
 
@@ -4457,6 +4545,7 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
                   <th className="py-2.5 px-3">Ukuran</th>
                   <th className="py-2.5 px-3">Keamanan</th>
                   <th className="py-2.5 px-3">Waktu Dibuat</th>
+                  <th className="py-2.5 px-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -4479,6 +4568,30 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
                       )}
                     </td>
                     <td className="py-3 px-3 text-slate-400">{new Date(b.createdAt).toLocaleString('id-ID')}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadSnapshot(b.fileName)}
+                          disabled={downloadingSnapshot}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold border border-slate-200 flex items-center gap-1 transition-all cursor-pointer"
+                          title="Unduh Berkas Snapshot"
+                        >
+                          <Download size={11} />
+                          <span>Unduh</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreSnapshot(b.fileName)}
+                          disabled={restoringSnapshot || !isOwner}
+                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold border border-indigo-200 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                          title="Pulihkan Toko dari Snapshot Ini"
+                        >
+                          <RotateCcw size={11} />
+                          <span>Pulihkan</span>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

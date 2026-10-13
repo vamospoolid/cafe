@@ -726,6 +726,56 @@ export class BackupService {
         restoredCounts.outlets = count;
       }
 
+      // 2b. Users & Memberships
+      if (Array.isArray(data.users)) {
+        let count = 0;
+        for (const u of data.users) {
+          if (targetTenantId) {
+            const hasMembership = Array.isArray(data.memberships) && data.memberships.some((m: any) => m.userId === u.id && m.tenantId === targetTenantId);
+            if (!hasMembership && u.tenantId !== targetTenantId) continue;
+          }
+          await tx.user.upsert({
+            where: { id: u.id },
+            update: {
+              name: u.name,
+              username: u.username,
+              pin: u.pin || '123456',
+              role: u.role || 'Kasir',
+              employmentType: u.employmentType || 'FULL_TIME',
+              permissions: typeof u.permissions === 'string' ? u.permissions : JSON.stringify(u.permissions || {}),
+              status: u.status || 'Aktif',
+              isPlatformAdmin: Boolean(u.isPlatformAdmin),
+              tenantId: u.tenantId
+            },
+            create: {
+              id: u.id,
+              name: u.name,
+              username: u.username,
+              passwordHash: u.passwordHash || '$2a$10$Defaulthashedpasswordplaceholder',
+              pin: u.pin || '123456',
+              role: u.role || 'Kasir',
+              employmentType: u.employmentType || 'FULL_TIME',
+              permissions: typeof u.permissions === 'string' ? u.permissions : JSON.stringify(u.permissions || {}),
+              status: u.status || 'Aktif',
+              isPlatformAdmin: Boolean(u.isPlatformAdmin),
+              tenantId: u.tenantId
+            }
+          });
+          count++;
+        }
+        restoredCounts.users = count;
+      }
+
+      const defaultUser = await tx.user.findFirst({
+        where: targetTenantId ? {
+          OR: [
+            { tenantId: targetTenantId },
+            { memberships: { some: { tenantId: targetTenantId } } }
+          ]
+        } : {}
+      });
+      const fallbackUserId = defaultUser?.id || 1;
+
       // 3. Categories
       if (Array.isArray(data.categories)) {
         let count = 0;
@@ -750,22 +800,24 @@ export class BackupService {
             where: { id: p.id },
             update: {
               name: p.name,
-              sellPrice: p.sellPrice,
-              buyPrice: p.buyPrice,
-              stock: p.stock,
+              sellPrice: Number(p.sellPrice) || 0,
+              buyPrice: Number(p.buyPrice) || 0,
+              stock: Number(p.stock) || 0,
               tenantId: p.tenantId,
               categoryId: p.categoryId,
-              status: p.status
+              status: p.status || 'Aktif',
+              imageUrl: p.imageUrl || null
             },
             create: {
               id: p.id,
               name: p.name,
-              sellPrice: p.sellPrice,
-              buyPrice: p.buyPrice,
-              stock: p.stock,
+              sellPrice: Number(p.sellPrice) || 0,
+              buyPrice: Number(p.buyPrice) || 0,
+              stock: Number(p.stock) || 0,
               tenantId: p.tenantId,
               categoryId: p.categoryId,
-              status: p.status
+              status: p.status || 'Aktif',
+              imageUrl: p.imageUrl || null
             }
           });
           count++;
@@ -788,6 +840,38 @@ export class BackupService {
         restoredCounts.tables = count;
       }
 
+      // 5b. Suppliers
+      if (Array.isArray(data.suppliers)) {
+        let count = 0;
+        for (const sup of data.suppliers) {
+          if (targetTenantId && sup.tenantId !== targetTenantId) continue;
+          await tx.supplier.upsert({
+            where: { id: sup.id },
+            update: {
+              name: sup.name,
+              contact: sup.contact || null,
+              phone: sup.phone || null,
+              email: sup.email || null,
+              address: sup.address || null,
+              notes: sup.notes || null,
+              tenantId: sup.tenantId
+            },
+            create: {
+              id: sup.id,
+              name: sup.name,
+              contact: sup.contact || null,
+              phone: sup.phone || null,
+              email: sup.email || null,
+              address: sup.address || null,
+              notes: sup.notes || null,
+              tenantId: sup.tenantId
+            }
+          });
+          count++;
+        }
+        restoredCounts.suppliers = count;
+      }
+
       // 6. Ingredients
       if (Array.isArray(data.ingredients)) {
         let count = 0;
@@ -795,12 +879,64 @@ export class BackupService {
           if (targetTenantId && ing.tenantId !== targetTenantId) continue;
           await tx.ingredient.upsert({
             where: { id: ing.id },
-            update: { name: ing.name, stock: ing.stock, unit: ing.unit, costPerUnit: ing.costPerUnit, tenantId: ing.tenantId },
-            create: { id: ing.id, name: ing.name, stock: ing.stock, unit: ing.unit, costPerUnit: ing.costPerUnit, tenantId: ing.tenantId }
+            update: {
+              name: ing.name,
+              category: ing.category || 'FOOD',
+              subCategory: ing.subCategory || null,
+              unit: ing.unit || 'gram',
+              stock: Number(ing.stock) || 0,
+              minStock: Number(ing.minStock) || 0,
+              buyPrice: Number(ing.buyPrice || ing.costPerUnit) || 0,
+              tenantId: ing.tenantId,
+              supplierId: ing.supplierId || null
+            },
+            create: {
+              id: ing.id,
+              name: ing.name,
+              category: ing.category || 'FOOD',
+              subCategory: ing.subCategory || null,
+              unit: ing.unit || 'gram',
+              stock: Number(ing.stock) || 0,
+              minStock: Number(ing.minStock) || 0,
+              buyPrice: Number(ing.buyPrice || ing.costPerUnit) || 0,
+              tenantId: ing.tenantId,
+              supplierId: ing.supplierId || null
+            }
           });
           count++;
         }
         restoredCounts.ingredients = count;
+      }
+
+      // 6b. Recipe Items (Relink Products with Ingredients)
+      if (Array.isArray(data.recipeItems)) {
+        let count = 0;
+        for (const r of data.recipeItems) {
+          const prodExists = await tx.product.findUnique({ where: { id: r.productId } });
+          const ingExists = await tx.ingredient.findUnique({ where: { id: r.ingredientId } });
+          if (prodExists && ingExists) {
+            await tx.recipeItem.upsert({
+              where: {
+                productId_ingredientId: {
+                  productId: r.productId,
+                  ingredientId: r.ingredientId
+                }
+              },
+              update: {
+                qtyPerServing: Number(r.qtyPerServing) || 1,
+                tenantId: r.tenantId || prodExists.tenantId
+              },
+              create: {
+                productId: r.productId,
+                ingredientId: r.ingredientId,
+                qtyPerServing: Number(r.qtyPerServing) || 1,
+                tenantId: r.tenantId || prodExists.tenantId
+              }
+            });
+            count++;
+          }
+        }
+        restoredCounts.recipeItems = count;
       }
 
       // 7. Customers
@@ -816,6 +952,440 @@ export class BackupService {
           count++;
         }
         restoredCounts.customers = count;
+      }
+
+      // 7b. Orders (Full Transaction History)
+      if (Array.isArray(data.orders)) {
+        let count = 0;
+        for (const ord of data.orders) {
+          if (targetTenantId && ord.tenantId !== targetTenantId) continue;
+          const assignedUserId = ord.userId || fallbackUserId;
+          const userExists = await tx.user.findUnique({ where: { id: assignedUserId } });
+          const safeUserId = userExists ? assignedUserId : fallbackUserId;
+
+          await tx.order.upsert({
+            where: { id: ord.id },
+            update: {
+              tenantId: ord.tenantId,
+              outletId: ord.outletId,
+              orderNumber: ord.orderNumber,
+              offlineId: ord.offlineId || null,
+              customerName: ord.customerName || 'Pelanggan',
+              customerPhone: ord.customerPhone || null,
+              customerId: ord.customerId || null,
+              tableId: ord.tableId || null,
+              joinedTableIds: ord.joinedTableIds || null,
+              userId: safeUserId,
+              subtotal: Number(ord.subtotal) || 0,
+              discount: Number(ord.discount) || 0,
+              tax: Number(ord.tax) || 0,
+              serviceCharge: Number(ord.serviceCharge) || 0,
+              total: Number(ord.total) || 0,
+              paymentMethod: ord.paymentMethod || 'Cash',
+              status: ord.status || 'Paid',
+              kdsStatus: ord.kdsStatus || 'Served',
+              servedAt: ord.servedAt ? new Date(ord.servedAt) : null,
+              paidAt: ord.paidAt ? new Date(ord.paidAt) : null,
+              createdAt: ord.createdAt ? new Date(ord.createdAt) : new Date()
+            },
+            create: {
+              id: ord.id,
+              tenantId: ord.tenantId,
+              outletId: ord.outletId,
+              orderNumber: ord.orderNumber,
+              offlineId: ord.offlineId || null,
+              customerName: ord.customerName || 'Pelanggan',
+              customerPhone: ord.customerPhone || null,
+              customerId: ord.customerId || null,
+              tableId: ord.tableId || null,
+              joinedTableIds: ord.joinedTableIds || null,
+              userId: safeUserId,
+              subtotal: Number(ord.subtotal) || 0,
+              discount: Number(ord.discount) || 0,
+              tax: Number(ord.tax) || 0,
+              serviceCharge: Number(ord.serviceCharge) || 0,
+              total: Number(ord.total) || 0,
+              paymentMethod: ord.paymentMethod || 'Cash',
+              status: ord.status || 'Paid',
+              kdsStatus: ord.kdsStatus || 'Served',
+              servedAt: ord.servedAt ? new Date(ord.servedAt) : null,
+              paidAt: ord.paidAt ? new Date(ord.paidAt) : null,
+              createdAt: ord.createdAt ? new Date(ord.createdAt) : new Date()
+            }
+          });
+          count++;
+        }
+        restoredCounts.orders = count;
+      }
+
+      // 7c. Order Items
+      if (Array.isArray(data.orderItems)) {
+        let count = 0;
+        for (const item of data.orderItems) {
+          const ordExists = await tx.order.findUnique({ where: { id: item.orderId } });
+          const prodExists = await tx.product.findUnique({ where: { id: item.productId } });
+          if (ordExists && prodExists) {
+            await tx.orderItem.upsert({
+              where: { id: item.id },
+              update: {
+                tenantId: item.tenantId || ordExists.tenantId,
+                outletId: item.outletId || ordExists.outletId,
+                orderId: item.orderId,
+                productId: item.productId,
+                qty: Number(item.qty) || 1,
+                price: Number(item.price) || 0,
+                buyPrice: Number(item.buyPrice) || 0,
+                subtotal: Number(item.subtotal) || 0,
+                notes: item.notes || null,
+                uomName: item.uomName || null,
+                uomRatio: item.uomRatio ? Number(item.uomRatio) : null,
+                priceTierName: item.priceTierName || null
+              },
+              create: {
+                id: item.id,
+                tenantId: item.tenantId || ordExists.tenantId,
+                outletId: item.outletId || ordExists.outletId,
+                orderId: item.orderId,
+                productId: item.productId,
+                qty: Number(item.qty) || 1,
+                price: Number(item.price) || 0,
+                buyPrice: Number(item.buyPrice) || 0,
+                subtotal: Number(item.subtotal) || 0,
+                notes: item.notes || null,
+                uomName: item.uomName || null,
+                uomRatio: item.uomRatio ? Number(item.uomRatio) : null,
+                priceTierName: item.priceTierName || null
+              }
+            });
+            count++;
+          }
+        }
+        restoredCounts.orderItems = count;
+      }
+
+      // 7d. Cash Flows
+      if (Array.isArray(data.cashFlows)) {
+        let count = 0;
+        for (const cf of data.cashFlows) {
+          if (targetTenantId && cf.tenantId !== targetTenantId) continue;
+          const assignedUserId = cf.userId || fallbackUserId;
+          const userExists = await tx.user.findUnique({ where: { id: assignedUserId } });
+          const safeUserId = userExists ? assignedUserId : fallbackUserId;
+
+          await tx.cashFlow.upsert({
+            where: { id: cf.id },
+            update: {
+              tenantId: cf.tenantId,
+              outletId: cf.outletId,
+              type: cf.type || 'Pemasukan',
+              category: cf.category || 'Operasional',
+              amount: Number(cf.amount) || 0,
+              description: cf.description || '-',
+              userId: safeUserId,
+              date: cf.date ? new Date(cf.date) : new Date(),
+              cashPocket: cf.cashPocket || 'KAS_OPERASIONAL',
+              status: cf.status || 'APPROVED'
+            },
+            create: {
+              id: cf.id,
+              tenantId: cf.tenantId,
+              outletId: cf.outletId,
+              type: cf.type || 'Pemasukan',
+              category: cf.category || 'Operasional',
+              amount: Number(cf.amount) || 0,
+              description: cf.description || '-',
+              userId: safeUserId,
+              date: cf.date ? new Date(cf.date) : new Date(),
+              cashPocket: cf.cashPocket || 'KAS_OPERASIONAL',
+              status: cf.status || 'APPROVED'
+            }
+          });
+          count++;
+        }
+        restoredCounts.cashFlows = count;
+      }
+
+      // 7e. Shifts
+      if (Array.isArray(data.shifts)) {
+        let count = 0;
+        for (const sh of data.shifts) {
+          if (targetTenantId && sh.tenantId !== targetTenantId) continue;
+          const assignedUserId = sh.userId || fallbackUserId;
+          const userExists = await tx.user.findUnique({ where: { id: assignedUserId } });
+          const safeUserId = userExists ? assignedUserId : fallbackUserId;
+
+          await tx.shift.upsert({
+            where: { id: sh.id },
+            update: {
+              tenantId: sh.tenantId,
+              outletId: sh.outletId,
+              userId: safeUserId,
+              waktuBuka: sh.waktuBuka ? new Date(sh.waktuBuka) : new Date(),
+              waktuTutup: sh.waktuTutup ? new Date(sh.waktuTutup) : null,
+              saldoAwal: Number(sh.saldoAwal) || 0,
+              saldoSistem: sh.saldoSistem ? Number(sh.saldoSistem) : null,
+              saldoElektronik: sh.saldoElektronik ? Number(sh.saldoElektronik) : null,
+              saldoFisikLaci: sh.saldoFisikLaci ? Number(sh.saldoFisikLaci) : null,
+              selisih: sh.selisih ? Number(sh.selisih) : null,
+              status: sh.status || 'Closed'
+            },
+            create: {
+              id: sh.id,
+              tenantId: sh.tenantId,
+              outletId: sh.outletId,
+              userId: safeUserId,
+              waktuBuka: sh.waktuBuka ? new Date(sh.waktuBuka) : new Date(),
+              waktuTutup: sh.waktuTutup ? new Date(sh.waktuTutup) : null,
+              saldoAwal: Number(sh.saldoAwal) || 0,
+              saldoSistem: sh.saldoSistem ? Number(sh.saldoSistem) : null,
+              saldoElektronik: sh.saldoElektronik ? Number(sh.saldoElektronik) : null,
+              saldoFisikLaci: sh.saldoFisikLaci ? Number(sh.saldoFisikLaci) : null,
+              selisih: sh.selisih ? Number(sh.selisih) : null,
+              status: sh.status || 'Closed'
+            }
+          });
+          count++;
+        }
+        restoredCounts.shifts = count;
+      }
+
+      // 7f. Attendances
+      if (Array.isArray(data.attendances)) {
+        let count = 0;
+        for (const att of data.attendances) {
+          if (targetTenantId && att.tenantId !== targetTenantId) continue;
+          const assignedUserId = att.userId || fallbackUserId;
+          const userExists = await tx.user.findUnique({ where: { id: assignedUserId } });
+          const safeUserId = userExists ? assignedUserId : fallbackUserId;
+
+          await tx.attendance.upsert({
+            where: { id: att.id },
+            update: {
+              tenantId: att.tenantId,
+              outletId: att.outletId,
+              userId: safeUserId,
+              clockIn: att.clockIn ? new Date(att.clockIn) : new Date(),
+              clockOut: att.clockOut ? new Date(att.clockOut) : null,
+              date: att.date || new Date().toISOString().slice(0, 10),
+              status: att.status || 'Hadir'
+            },
+            create: {
+              id: att.id,
+              tenantId: att.tenantId,
+              outletId: att.outletId,
+              userId: safeUserId,
+              clockIn: att.clockIn ? new Date(att.clockIn) : new Date(),
+              clockOut: att.clockOut ? new Date(att.clockOut) : null,
+              date: att.date || new Date().toISOString().slice(0, 10),
+              status: att.status || 'Hadir'
+            }
+          });
+          count++;
+        }
+        restoredCounts.attendances = count;
+      }
+
+      // 7g. Settings
+      if (Array.isArray(data.settings)) {
+        let count = 0;
+        for (const set of data.settings) {
+          if (targetTenantId && set.tenantId !== targetTenantId) continue;
+          await tx.settings.upsert({
+            where: { id: set.id },
+            update: {
+              tenantId: set.tenantId,
+              storeName: set.storeName,
+              address: set.address || set.storeAddress || '',
+              phone: set.phone || set.storePhone || '',
+              taxRate: Number(set.taxRate) || 0,
+              serviceCharge: Number(set.serviceCharge || set.serviceRate) || 0,
+              receiptFooter: set.receiptFooter || ''
+            },
+            create: {
+              id: set.id,
+              tenantId: set.tenantId,
+              storeName: set.storeName,
+              address: set.address || set.storeAddress || '',
+              phone: set.phone || set.storePhone || '',
+              taxRate: Number(set.taxRate) || 0,
+              serviceCharge: Number(set.serviceCharge || set.serviceRate) || 0,
+              receiptFooter: set.receiptFooter || ''
+            }
+          });
+          count++;
+        }
+        restoredCounts.settings = count;
+      }
+
+      // 7h. Bengkel Vertical (Vehicles, ServiceTypes, MechanicProfiles, WorkOrders)
+      if (Array.isArray(data.vehicles)) {
+        let count = 0;
+        for (const v of data.vehicles) {
+          if (targetTenantId && v.tenantId !== targetTenantId) continue;
+          await tx.vehicle.upsert({
+            where: { id: v.id },
+            update: {
+              tenantId: v.tenantId,
+              plateNumber: v.plateNumber,
+              brand: v.brand,
+              model: v.model,
+              year: v.year ? Number(v.year) : null,
+              color: v.color,
+              customerPhone: v.customerPhone,
+              customerId: v.customerId || null
+            },
+            create: {
+              id: v.id,
+              tenantId: v.tenantId,
+              plateNumber: v.plateNumber,
+              brand: v.brand,
+              model: v.model,
+              year: v.year ? Number(v.year) : null,
+              color: v.color,
+              customerPhone: v.customerPhone,
+              customerId: v.customerId || null
+            }
+          });
+          count++;
+        }
+        restoredCounts.vehicles = count;
+      }
+
+      if (Array.isArray(data.serviceTypes)) {
+        let count = 0;
+        for (const st of data.serviceTypes) {
+          if (targetTenantId && st.tenantId !== targetTenantId) continue;
+          await tx.serviceType.upsert({
+            where: { id: st.id },
+            update: {
+              tenantId: st.tenantId,
+              name: st.name,
+              category: st.category,
+              priceRetail: Number(st.priceRetail) || 0,
+              priceMitra: Number(st.priceMitra) || 0,
+              priceGrosir: Number(st.priceGrosir) || 0,
+              defaultCommission: Number(st.defaultCommission) || 0,
+              vehicleType: st.vehicleType || 'MOTOR'
+            },
+            create: {
+              id: st.id,
+              tenantId: st.tenantId,
+              name: st.name,
+              category: st.category,
+              priceRetail: Number(st.priceRetail) || 0,
+              priceMitra: Number(st.priceMitra) || 0,
+              priceGrosir: Number(st.priceGrosir) || 0,
+              defaultCommission: Number(st.defaultCommission) || 0,
+              vehicleType: st.vehicleType || 'MOTOR'
+            }
+          });
+          count++;
+        }
+        restoredCounts.serviceTypes = count;
+      }
+
+      if (Array.isArray(data.mechanicProfiles)) {
+        let count = 0;
+        for (const mp of data.mechanicProfiles) {
+          if (targetTenantId && mp.tenantId !== targetTenantId) continue;
+          await tx.mechanicProfile.upsert({
+            where: { id: mp.id },
+            update: {
+              tenantId: mp.tenantId,
+              userId: mp.userId,
+              commissionType: mp.commissionType || 'PERCENT',
+              commissionRate: Number(mp.commissionRate) || 0,
+              pendingCommission: Number(mp.pendingCommission) || 0,
+              paidCommission: Number(mp.paidCommission) || 0
+            },
+            create: {
+              id: mp.id,
+              tenantId: mp.tenantId,
+              userId: mp.userId,
+              commissionType: mp.commissionType || 'PERCENT',
+              commissionRate: Number(mp.commissionRate) || 0,
+              pendingCommission: Number(mp.pendingCommission) || 0,
+              paidCommission: Number(mp.paidCommission) || 0
+            }
+          });
+          count++;
+        }
+        restoredCounts.mechanicProfiles = count;
+      }
+
+      if (Array.isArray(data.workOrders)) {
+        let count = 0;
+        for (const wo of data.workOrders) {
+          if (targetTenantId && wo.tenantId !== targetTenantId) continue;
+          await tx.workOrder.upsert({
+            where: { id: wo.id },
+            update: {
+              tenantId: wo.tenantId,
+              spkNumber: wo.spkNumber,
+              vehicleId: wo.vehicleId,
+              mechanicId: wo.mechanicId || null,
+              status: wo.status || 'PENDING',
+              pricingTier: wo.pricingTier || 'RETAIL',
+              complaint: wo.complaint || null,
+              kmIn: wo.kmIn ? Number(wo.kmIn) : null,
+              kmOut: wo.kmOut ? Number(wo.kmOut) : null,
+              totalServices: Number(wo.totalServices) || 0,
+              totalParts: Number(wo.totalParts) || 0,
+              grandTotal: Number(wo.grandTotal) || 0,
+              createdAt: wo.createdAt ? new Date(wo.createdAt) : new Date()
+            },
+            create: {
+              id: wo.id,
+              tenantId: wo.tenantId,
+              spkNumber: wo.spkNumber,
+              vehicleId: wo.vehicleId,
+              mechanicId: wo.mechanicId || null,
+              status: wo.status || 'PENDING',
+              pricingTier: wo.pricingTier || 'RETAIL',
+              complaint: wo.complaint || null,
+              kmIn: wo.kmIn ? Number(wo.kmIn) : null,
+              kmOut: wo.kmOut ? Number(wo.kmOut) : null,
+              totalServices: Number(wo.totalServices) || 0,
+              totalParts: Number(wo.totalParts) || 0,
+              grandTotal: Number(wo.grandTotal) || 0,
+              createdAt: wo.createdAt ? new Date(wo.createdAt) : new Date()
+            }
+          });
+          count++;
+        }
+        restoredCounts.workOrders = count;
+      }
+
+      // 7i. Retail Vertical (Product UOMs)
+      if (Array.isArray(data.productUoms)) {
+        let count = 0;
+        for (const u of data.productUoms) {
+          if (targetTenantId && u.tenantId !== targetTenantId) continue;
+          await tx.productUOM.upsert({
+            where: { id: u.id },
+            update: {
+              tenantId: u.tenantId,
+              productId: u.productId,
+              unitName: u.unitName || u.name || 'PCS',
+              conversionRatio: Number(u.conversionRatio || u.ratio) || 1,
+              barcode: u.barcode || null,
+              priceSell: Number(u.priceSell || u.sellPrice) || 0,
+              isDefaultSale: Boolean(u.isDefaultSale ?? u.isDefaultSell)
+            },
+            create: {
+              id: u.id,
+              tenantId: u.tenantId,
+              productId: u.productId,
+              unitName: u.unitName || u.name || 'PCS',
+              conversionRatio: Number(u.conversionRatio || u.ratio) || 1,
+              barcode: u.barcode || null,
+              priceSell: Number(u.priceSell || u.sellPrice) || 0,
+              isDefaultSale: Boolean(u.isDefaultSale ?? u.isDefaultSell)
+            }
+          });
+          count++;
+        }
+        restoredCounts.productUoms = count;
       }
 
       // 8. Laundry Orders
@@ -915,8 +1485,8 @@ export class BackupService {
         restoredCounts.laundryOrderItems = count;
       }
     }, {
-      maxWait: 15000,
-      timeout: 60000
+      maxWait: 30000,
+      timeout: 120000
     });
 
     const durationMs = Date.now() - startTime;

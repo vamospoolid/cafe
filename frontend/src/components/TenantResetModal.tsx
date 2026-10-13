@@ -19,6 +19,7 @@ interface TemplateOption {
   badge: string;
   description: string;
   icon: string;
+  businessType?: string;
   categoriesCount: number;
   ingredientsCount: number;
   productsCount: number;
@@ -475,8 +476,16 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {templates.map(tmpl => {
-                  const isSelected = selectedTemplate === tmpl.id;
+                {templates
+                  .filter(tmpl => {
+                    const currentVertical = posContext?.user?.businessType || 'CAFE';
+                    if (currentVertical === 'CAFE') {
+                      return !['BENGKEL_MOTOR_UMUM', 'BENGKEL_MOBIL_DAN_AC', 'LAUNDRY_KILOAN_SATUAN'].includes(tmpl.id);
+                    }
+                    return (tmpl.businessType || 'CAFE') === currentVertical;
+                  })
+                  .map(tmpl => {
+                    const isSelected = selectedTemplate === tmpl.id;
                   return (
                     <div
                       key={tmpl.id}

@@ -297,6 +297,7 @@ export const StaffPWAView: React.FC = () => {
   const [showLossModal, setShowLossModal] = useState(false);
   const [wasteType, setWasteType] = useState<'INGREDIENT' | 'PRODUCT'>('INGREDIENT');
   const [wastePhoto, setWastePhoto] = useState<string | null>(null);
+  const [lossSearchTerm, setLossSearchTerm] = useState<string>('');
   const [lossForm, setLossForm] = useState({
     ingredientId: '',
     qtyLoss: '',
@@ -3820,15 +3821,46 @@ export const StaffPWAView: React.FC = () => {
 
                 <form onSubmit={handleSubmitStockLoss} className="space-y-3">
                   <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                      {isCafe
-                        ? wasteType === 'INGREDIENT'
-                          ? 'Pilih Bahan Baku Rusak:'
-                          : 'Pilih Menu / Porsi Terbuang:'
-                        : isBengkel
-                        ? 'Pilih Suku Cadang / Part:'
-                        : 'Pilih Produk / Barang:'}
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-bold text-slate-700">
+                        {isCafe
+                          ? wasteType === 'INGREDIENT'
+                            ? 'Pilih Bahan Baku Rusak:'
+                            : 'Pilih Menu / Porsi Terbuang:'
+                          : isBengkel
+                          ? 'Pilih Suku Cadang / Part:'
+                          : 'Pilih Produk / Barang:'}
+                      </label>
+                      {lossSearchTerm && (
+                        <span className="text-[10px] text-[#F43F5E] font-bold">
+                          {isCafe && wasteType === 'PRODUCT'
+                            ? `${productsList.filter(p => p.name.toLowerCase().includes(lossSearchTerm.toLowerCase())).length} item`
+                            : `${ingredients.filter(i => i.name.toLowerCase().includes(lossSearchTerm.toLowerCase())).length} item`}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick Search Input */}
+                    <div className="relative mb-1.5">
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={lossSearchTerm}
+                        onChange={e => setLossSearchTerm(e.target.value)}
+                        placeholder={`Cari nama ${isCafe && wasteType === 'PRODUCT' ? 'menu masakan...' : 'bahan baku / item...'}`}
+                        className="w-full pl-8 pr-7 py-1.5 bg-[#F4F6F9] border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#F43F5E]"
+                      />
+                      {lossSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setLossSearchTerm('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+
                     <select
                       required
                       value={lossForm.ingredientId}
@@ -3839,16 +3871,20 @@ export const StaffPWAView: React.FC = () => {
                         -- {isCafe && wasteType === 'PRODUCT' ? 'Pilih Menu' : isBengkel ? 'Pilih Part' : 'Pilih Item'} --
                       </option>
                       {isCafe && wasteType === 'PRODUCT'
-                        ? productsList.map(prod => (
-                            <option key={prod.id} value={prod.id}>
-                              {prod.name} (HPP: Rp {(prod.buyPrice || prod.price || 0).toLocaleString('id-ID')})
-                            </option>
-                          ))
-                        : ingredients.map(ing => (
-                            <option key={ing.id} value={ing.id}>
-                              {ing.name} (Stok: {ing.stock} {ing.unit})
-                            </option>
-                          ))}
+                        ? productsList
+                            .filter(prod => !lossSearchTerm.trim() || prod.name.toLowerCase().includes(lossSearchTerm.toLowerCase()))
+                            .map(prod => (
+                              <option key={prod.id} value={prod.id}>
+                                {prod.name} (HPP: Rp {(prod.buyPrice || prod.price || 0).toLocaleString('id-ID')})
+                              </option>
+                            ))
+                        : ingredients
+                            .filter(ing => !lossSearchTerm.trim() || ing.name.toLowerCase().includes(lossSearchTerm.toLowerCase()))
+                            .map(ing => (
+                              <option key={ing.id} value={ing.id}>
+                                {ing.name} (Stok: {ing.stock} {ing.unit})
+                              </option>
+                            ))}
                     </select>
                   </div>
 

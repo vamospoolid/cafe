@@ -2,15 +2,13 @@ import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { 
   Package, Plus, Edit2, Trash2, AlertTriangle, ChevronDown, ChevronUp, 
   RefreshCw, TrendingDown, TrendingUp, Search, History, Utensils, ClipboardCheck, 
-  CheckCircle2, XCircle, AlertCircle, Sparkles, Filter, DollarSign, ArrowRight, 
+  CheckCircle2, XCircle, AlertCircle, Sparkles, Filter, DollarSign, ArrowRight, ArrowLeft, 
   ShieldAlert, FileText, Coffee, ShoppingBag, Truck, BarChart3, PieChart, 
   ArrowUpRight, ArrowDownRight, Layers, HelpCircle, Send, ShoppingCart,
-  Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target, X, Wrench,
-  Calendar
+  Download, Printer, MessageCircle, Copy, Boxes, ChefHat, UserCheck, Flame, Award, Activity, Users, Target, X, Wrench
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
-import { StarterPackModal } from './StarterPackModal';
 import { 
   exportIngredientValuationPDF, 
   exportStockLossAuditPDF, 
@@ -163,62 +161,6 @@ export const IngredientView: React.FC = () => {
   const [staffEndDate, setStaffEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedStaffUserFilter, setSelectedStaffUserFilter] = useState<string>('ALL');
 
-  // Starter Pack AI Modal State
-  const [showStarterPackModal, setShowStarterPackModal] = useState(false);
-
-  // Master Period Filter (Harian / Mingguan / Bulanan / Semua)
-  const [masterPeriod, setMasterPeriod] = useState<'today' | 'last7' | 'this_month' | 'all'>('this_month');
-  const [periodSummary, setPeriodSummary] = useState<{
-    totalCostUsage: number;
-    totalLossCost: number;
-    usageMap: Record<number, { qty: number; cost: number }>;
-    loading: boolean;
-  }>({ totalCostUsage: 0, totalLossCost: 0, usageMap: {}, loading: false });
-
-  const fetchPeriodSummary = async (period: 'today' | 'last7' | 'this_month' | 'all') => {
-    try {
-      setPeriodSummary(prev => ({ ...prev, loading: true }));
-      let start = '';
-      let end = new Date().toISOString().split('T')[0];
-      const now = new Date();
-
-      if (period === 'today') {
-        start = end;
-      } else if (period === 'last7') {
-        const d = new Date();
-        d.setDate(d.getDate() - 7);
-        start = d.toISOString().split('T')[0];
-      } else if (period === 'this_month') {
-        start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      } else {
-        start = '2020-01-01';
-      }
-
-      const headers: any = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`${API}/ingredients/analytics/daily-usage?startDate=${start}T00:00:00.000Z&endDate=${end}T23:59:59.999Z&category=ALL&type=ALL`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        const uMap: Record<number, { qty: number; cost: number }> = {};
-        (data.items || []).forEach((it: any) => {
-          uMap[it.ingredientId] = { qty: it.totalQtyUsed || 0, cost: it.totalCost || 0 };
-        });
-        setPeriodSummary({
-          totalCostUsage: data.summary?.totalCostUsage || 0,
-          totalLossCost: data.summary?.totalLossCost || 0,
-          usageMap: uMap,
-          loading: false
-        });
-      } else {
-        setPeriodSummary(prev => ({ ...prev, loading: false }));
-      }
-    } catch (e) {
-      console.error(e);
-      setPeriodSummary(prev => ({ ...prev, loading: false }));
-    }
-  };
-
   // Daily Usage & COGS Analytics State
   const [usageData, setUsageData] = useState<any>(null);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -236,6 +178,8 @@ export const IngredientView: React.FC = () => {
   const [lossStartDate, setLossStartDate] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [lossEndDate, setLossEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showLossModal, setShowLossModal] = useState(false);
+  const [lossItemSearch, setLossItemSearch] = useState<string>('');
+  const [lossLogSearch, setLossLogSearch] = useState<string>('');
   const [allProducts, setAllProducts] = useState<any[]>([]);
   const [lossForm, setLossForm] = useState({
     targetType: 'INGREDIENT' as 'INGREDIENT' | 'PRODUCT',
@@ -246,7 +190,6 @@ export const IngredientView: React.FC = () => {
     notes: ''
   });
   const [submittingLoss, setSubmittingLoss] = useState(false);
-  const [lossIngSearch, setLossIngSearch] = useState<string>('');
 
   // Shopping & Restock Analytics
   const [shoppingData, setShoppingData] = useState<any>(null);
@@ -275,12 +218,13 @@ export const IngredientView: React.FC = () => {
 
   // Stock Opname Audit State
   const [opnameItems, setOpnameItems] = useState<OpnameItemState[]>([]);
+  const [opnameSearch, setOpnameSearch] = useState<string>('');
+  const [opnameFilter, setOpnameFilter] = useState<'ALL' | 'VARIANCE' | 'MATCH' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
   const [auditorName, setAuditorName] = useState<string>(posContext?.user?.username || 'Admin');
   const [opnameNotes, setOpnameNotes] = useState<string>('Stock Opname Rutin Dapur');
   const [submittingOpname, setSubmittingOpname] = useState(false);
   const [opnameHistory, setOpnameHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [opnameSearch, setOpnameSearch] = useState<string>('');
 
   // Modals & PDF Dropdown
   const [showModal, setShowModal] = useState(false);
@@ -548,7 +492,7 @@ export const IngredientView: React.FC = () => {
   };
 
   const copySupplierOrderToWA = (sup: any) => {
-    const store = posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe Mitra';
+    const store = posContext?.settings?.storeName || 'MUKI RAMEN';
     const dateStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     
     let text = `*ORDER PEMBELIAN BAHAN BAKU*\n`;
@@ -580,7 +524,7 @@ export const IngredientView: React.FC = () => {
   };
 
   const copyAllShoppingToWA = () => {
-    const store = posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe Mitra';
+    const store = posContext?.settings?.storeName || 'MUKI RAMEN';
     const dateStr = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     
     let text = `*DAFTAR KEBUTUHAN BELANJA DAPUR*\n`;
@@ -974,7 +918,7 @@ export const IngredientView: React.FC = () => {
     if (token) {
       fetchData();
     }
-  }, [token, posContext?.user?.tenantId]);
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -986,7 +930,7 @@ export const IngredientView: React.FC = () => {
     else if (activeTab === 'opname') fetchOpnameHistory();
     else if (activeTab === 'daily_usage') fetchDailyUsage();
     else if (activeTab === 'yield') fetchYieldAnalytics();
-  }, [activeTab, movementTypeFilter, movementIngredientFilter, usageCategoryFilter, usageTypeFilter, selectedStaffUserFilter, yieldCategoryFilter, yieldScopeFilter, token, posContext?.user?.tenantId]);
+  }, [activeTab, movementTypeFilter, movementIngredientFilter, usageCategoryFilter, usageTypeFilter, selectedStaffUserFilter, yieldCategoryFilter, yieldScopeFilter, token]);
 
   const initOpnameItems = (ings: Ingredient[]) => {
     setOpnameItems(
@@ -1100,6 +1044,7 @@ export const IngredientView: React.FC = () => {
   };
 
   const handleOpenLossModal = (preselectedId?: number, initialType: 'INGREDIENT' | 'PRODUCT' = 'INGREDIENT') => {
+    setLossItemSearch('');
     setLossForm({
       targetType: initialType,
       ingredientId: preselectedId ? preselectedId.toString() : (ingredients[0]?.id.toString() || ''),
@@ -1376,7 +1321,7 @@ export const IngredientView: React.FC = () => {
               Master Bahan Baku & Intelijen Stok
             </h2>
             <span className="px-2.5 py-0.5 bg-purple-50 text-indigo-700 border border-purple-200/80 rounded-full text-xs font-black">
-              {posContext?.settings?.storeName || posContext?.user?.memberships?.[0]?.tenantName || 'Kafe Mitra'}
+              {posContext?.settings?.storeName || 'MUKI RAMEN'}
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -2009,6 +1954,7 @@ export const IngredientView: React.FC = () => {
                 </div>
               ) : (
                 filtered.map((ing) => {
+                  const isNegative = ing.stock < 0;
                   const isOut = ing.stock === 0;
                   const isLow = ing.stock > 0 && ing.stock <= ing.minStock;
                   const cat = ing.category || 'FOOD';
@@ -2044,7 +1990,12 @@ export const IngredientView: React.FC = () => {
 
                         {/* Status Badge */}
                         <div className="shrink-0">
-                          {isOut ? (
+                          {isNegative ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200" title="Stok minus karena terjual sebelum staf input restock. Otomatis tertutup saat restock diinput.">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
+                              Defisit Buffer
+                            </span>
+                          ) : isOut ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
                               Habis
@@ -2067,7 +2018,7 @@ export const IngredientView: React.FC = () => {
                       <div className="grid grid-cols-3 gap-2 p-2.5 bg-white rounded-xl border border-slate-200/80 text-center">
                         <div>
                           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Stok Fisik</p>
-                          <p className={`text-xs font-black mt-0.5 ${isOut ? 'text-rose-600' : (isLow ? 'text-amber-600' : 'text-slate-900')}`}>
+                          <p className={`text-xs font-black mt-0.5 ${isNegative ? 'text-purple-700' : (isOut ? 'text-rose-600' : (isLow ? 'text-amber-600' : 'text-slate-900'))}`}>
                             {ing.stock.toLocaleString('id-ID')} <span className="text-[10px] font-medium text-slate-500">{ing.unit}</span>
                           </p>
                           <p className="text-[9px] text-slate-400 mt-0.5">Min: {ing.minStock.toLocaleString('id-ID')}</p>
@@ -2200,6 +2151,7 @@ export const IngredientView: React.FC = () => {
                     </tr>
                   ) : (
                     filtered.map((ing) => {
+                      const isNegative = ing.stock < 0;
                       const isOut = ing.stock === 0;
                       const isLow = ing.stock > 0 && ing.stock <= ing.minStock;
                       const cat = ing.category || 'FOOD';
@@ -2234,7 +2186,12 @@ export const IngredientView: React.FC = () => {
                           </td>
 
                           <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                            {isOut ? (
+                            {isNegative ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200" title="Stok minus karena terjual sebelum staf input restock. Otomatis tertutup saat restock diinput.">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
+                                Defisit Buffer
+                              </span>
+                            ) : isOut ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
                                 Habis
@@ -2252,7 +2209,7 @@ export const IngredientView: React.FC = () => {
                             )}
                           </td>
 
-                          <td className="py-3.5 px-4 text-right font-black text-slate-900 whitespace-nowrap">
+                          <td className={`py-3.5 px-4 text-right font-black whitespace-nowrap ${isNegative ? 'text-purple-700' : 'text-slate-900'}`}>
                             {ing.stock.toLocaleString('id-ID')} <span className="text-[10px] font-bold text-slate-400">{ing.unit}</span>
                           </td>
 
@@ -3066,6 +3023,27 @@ export const IngredientView: React.FC = () => {
               </span>
             </div>
 
+            {/* SEARCH INPUT UNTUK RIWAYAT WASTE LOG */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={lossLogSearch}
+                onChange={e => setLossLogSearch(e.target.value)}
+                placeholder="Cari riwayat waste (nama bahan baku, porsi menu, alasan, staf dapur, atau catatan)..."
+                className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white transition-all shadow-2xs"
+              />
+              {lossLogSearch && (
+                <button
+                  type="button"
+                  onClick={() => setLossLogSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
             {/* MOBILE CARD VIEW (< md screen) */}
             <div className="block md:hidden space-y-3">
               {lossLoading ? (
@@ -3077,7 +3055,17 @@ export const IngredientView: React.FC = () => {
                   Belum ada log stock loss yang tercatat pada rentang tanggal ini.
                 </div>
               ) : (
-                lossData.logs.map((l: any) => {
+                (lossData.logs as any[])
+                  .filter(l => {
+                    if (!lossLogSearch.trim()) return true;
+                    const q = lossLogSearch.toLowerCase();
+                    const itemName = (l.productName || l.ingredient?.name || '').toLowerCase();
+                    const staffName = (l.user?.name || '').toLowerCase();
+                    const reason = (l.reason || '').toLowerCase();
+                    const notes = (l.notes || '').toLowerCase();
+                    return itemName.includes(q) || staffName.includes(q) || reason.includes(q) || notes.includes(q);
+                  })
+                  .map((l: any) => {
                   const isMenu = l.targetType === 'PRODUCT' || !!l.productName;
                   const itemName = l.productName || l.ingredient?.name || 'Item Unknown';
                   const unitStr = isMenu ? 'porsi' : (l.ingredient?.unit || 'unit');
@@ -3170,7 +3158,17 @@ export const IngredientView: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    lossData.logs.map((l: any) => {
+                    (lossData.logs as any[])
+                      .filter(l => {
+                        if (!lossLogSearch.trim()) return true;
+                        const q = lossLogSearch.toLowerCase();
+                        const itemName = (l.productName || l.ingredient?.name || '').toLowerCase();
+                        const staffName = (l.user?.name || '').toLowerCase();
+                        const reason = (l.reason || '').toLowerCase();
+                        const notes = (l.notes || '').toLowerCase();
+                        return itemName.includes(q) || staffName.includes(q) || reason.includes(q) || notes.includes(q);
+                      })
+                      .map((l: any) => {
                       const isMenu = l.targetType === 'PRODUCT' || !!l.productName;
                       const itemName = l.productName || l.ingredient?.name || 'Unknown';
                       const unitStr = isMenu ? 'porsi' : (l.ingredient?.unit || '');
@@ -4757,147 +4755,235 @@ export const IngredientView: React.FC = () => {
               </div>
             </div>
 
+            {/* SEARCH & FILTER TOOLBAR UNTUK AUDIT STOCK OPNAME */}
+            <div className="bg-slate-50/80 p-3 sm:p-4 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={opnameSearch}
+                    onChange={e => setOpnameSearch(e.target.value)}
+                    placeholder="Cari nama bahan baku opname (cth: Daging, Telur, Mie, Kopi)..."
+                    className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                  {opnameSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setOpnameSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                      title="Hapus pencarian"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
 
-            {/* Search Filter Bahan Baku - Stock Opname */}
-            <div className="relative mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <input
-                type="text"
-                value={opnameSearch}
-                onChange={e => setOpnameSearch(e.target.value)}
-                placeholder="Cari nama bahan baku..."
-                className="w-full pl-8 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all"
-              />
-              {opnameSearch && (
-                <button type="button" onClick={() => setOpnameSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-300 hover:bg-slate-400 text-slate-600 flex items-center justify-center text-xs font-black leading-none">×</button>
-              )}
+                {/* Quick Action Button */}
+                <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpnameItems(prev => prev.map(i => ({ ...i, physicalStock: i.systemStock.toString() })));
+                      toast('Semua stok fisik diselaraskan sama dengan stok sistem', 'info');
+                    }}
+                    className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold transition-all shadow-2xs"
+                  >
+                    Set Semua Sesuai Sistem
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 text-xs">
+                {[
+                  { id: 'ALL', label: `Semua (${opnameItems.length})` },
+                  { id: 'VARIANCE', label: `Ada Selisih (${opnameItems.filter(i => Math.abs(Number(i.physicalStock) - i.systemStock) > 0.001).length})`, isAlert: true },
+                  { id: 'MATCH', label: `Sesuai (${opnameItems.filter(i => Math.abs(Number(i.physicalStock) - i.systemStock) <= 0.001).length})` },
+                  { id: 'FOOD', label: 'Bahan Makanan' },
+                  { id: 'DRINK', label: 'Minuman' },
+                  { id: 'PACKAGING', label: 'Packaging' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setOpnameFilter(tab.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                      opnameFilter === tab.id
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                        : tab.isAlert && opnameItems.some(i => Math.abs(Number(i.physicalStock) - i.systemStock) > 0.001)
+                        ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
+                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* MOBILE CARD VIEW (< md) */}
-            <div className="md:hidden divide-y divide-slate-100 max-h-[600px] overflow-y-auto space-y-1">
-              {opnameItems.filter(item => !opnameSearch.trim() || item.name.toLowerCase().includes(opnameSearch.trim().toLowerCase())).map(item => {
+            {/* Filtered Opname Items */}
+            {(() => {
+              const filteredOpnameItems = opnameItems.filter(item => {
+                if (opnameSearch.trim()) {
+                  const q = opnameSearch.toLowerCase();
+                  if (!item.name.toLowerCase().includes(q) && !(item.notes || '').toLowerCase().includes(q)) return false;
+                }
                 const diff = Number(item.physicalStock) - item.systemStock;
-                const isMiss = Math.abs(diff) > 0.001;
+                const hasVariance = Math.abs(diff) > 0.001;
+                if (opnameFilter === 'VARIANCE') return hasVariance;
+                if (opnameFilter === 'MATCH') return !hasVariance;
+                if (opnameFilter === 'FOOD' || opnameFilter === 'DRINK' || opnameFilter === 'PACKAGING') {
+                  const orig = ingredients.find(ing => ing.id === item.ingredientId);
+                  return (orig?.category || '').toUpperCase().includes(opnameFilter);
+                }
+                return true;
+              });
 
+              if (filteredOpnameItems.length === 0) {
                 return (
-                  <div key={item.ingredientId} className={`p-2.5 space-y-2 rounded-xl transition-colors ${isMiss ? 'bg-amber-50/50' : 'bg-white'}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-bold text-slate-900 text-xs truncate">{item.name}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                        diff < 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (diff > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-500')
-                      }`}>
-                        {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="p-1.5 bg-slate-50 rounded-lg border border-slate-100 text-center">
-                        <span className="text-[9px] font-bold text-slate-400 block uppercase">Stok Sistem</span>
-                        <span className="text-xs font-black text-slate-700">{item.systemStock.toLocaleString('id-ID')} {item.unit}</span>
-                      </div>
-                      <div className="p-1.5 bg-blue-50/60 rounded-lg border border-blue-100 text-center">
-                        <span className="text-[9px] font-bold text-blue-600 block uppercase">Fisik Riil</span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={item.physicalStock}
-                          onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
-                          className="w-full mt-0.5 px-2 py-0.5 bg-white border border-blue-200 rounded text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={item.reason}
-                        onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
-                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700"
-                      >
-                        <option value="Normal">Normal</option>
-                        <option value="Susut/Trimming">Susut / Trimming</option>
-                        <option value="Busuk/Rusak">Busuk / Rusak</option>
-                        <option value="Selisih Timbang">Selisih Timbang</option>
-                        <option value="Lainnya">Lainnya</option>
-                      </select>
-                      <input
-                        type="text"
-                        value={item.notes}
-                        onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
-                        placeholder="Catatan..."
-                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px]"
-                      />
-                    </div>
+                  <div className="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6 space-y-2">
+                    <p className="text-xs font-bold text-slate-600">Tidak ada bahan baku yang cocok dengan filter atau kata kunci "{opnameSearch}"</p>
+                    <button
+                      onClick={() => { setOpnameSearch(''); setOpnameFilter('ALL'); }}
+                      className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-blue-600 rounded-xl text-xs font-bold transition-all"
+                    >
+                      Reset Filter &amp; Tampilkan Semua Bahan
+                    </button>
                   </div>
                 );
-              })}
-            </div>
+              }
 
-            {/* DESKTOP TABLE VIEW (>= md) */}
-            <div className="hidden md:block overflow-x-auto max-h-[600px]">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase sticky top-0">
-                  <tr>
-                    <th className="py-3 px-4">Nama Bahan</th>
-                    <th className="py-3 px-4 text-right">Stok Sistem</th>
-                    <th className="py-3 px-4 text-center">Stok Fisik Riil</th>
-                    <th className="py-3 px-4 text-right">Selisih (Variance)</th>
-                    <th className="py-3 px-4">Alasan Selisih</th>
-                    <th className="py-3 px-4">Catatan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {opnameItems.filter(item => !opnameSearch.trim() || item.name.toLowerCase().includes(opnameSearch.trim().toLowerCase())).map(item => {
-                    const diff = Number(item.physicalStock) - item.systemStock;
-                    const isMiss = Math.abs(diff) > 0.001;
+              return (
+                <>
+                  {/* MOBILE CARD VIEW (< md) */}
+                  <div className="md:hidden divide-y divide-slate-100 max-h-[600px] overflow-y-auto space-y-1">
+                    {filteredOpnameItems.map(item => {
+                      const diff = Number(item.physicalStock) - item.systemStock;
+                      const isMiss = Math.abs(diff) > 0.001;
 
-                    return (
-                      <tr key={item.ingredientId} className={isMiss ? 'bg-amber-50/40' : ''}>
-                        <td className="py-3 px-4 font-black text-slate-900">{item.name}</td>
-                        <td className="py-3 px-4 text-right font-bold text-slate-600">
-                          {item.systemStock.toLocaleString('id-ID')} {item.unit}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <input
-                            type="number"
-                            step="any"
-                            value={item.physicalStock}
-                            onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
-                            className="w-28 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          />
-                        </td>
-                        <td className={`py-3 px-4 text-right font-black ${
-                          diff < 0 ? 'text-rose-600' : (diff > 0 ? 'text-emerald-600' : 'text-slate-400')
-                        }`}>
-                          {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
-                        </td>
-                        <td className="py-3 px-4">
-                          <select
-                            value={item.reason}
-                            onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
-                            className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-                          >
-                            <option value="Normal">Normal</option>
-                            <option value="Susut/Trimming">Susut / Trimming</option>
-                            <option value="Busuk/Rusak">Busuk / Rusak</option>
-                            <option value="Selisih Timbang">Selisih Timbang</option>
-                            <option value="Lainnya">Lainnya</option>
-                          </select>
-                        </td>
-                        <td className="py-3 px-4">
-                          <input
-                            type="text"
-                            value={item.notes}
-                            onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
-                            placeholder="Catatan..."
-                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <div key={item.ingredientId} className={`p-2.5 space-y-2 rounded-xl transition-colors ${isMiss ? 'bg-amber-50/50' : 'bg-white'}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-bold text-slate-900 text-xs truncate">{item.name}</div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                              diff < 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (diff > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-500')
+                            }`}>
+                              {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="p-1.5 bg-slate-50 rounded-lg border border-slate-100 text-center">
+                              <span className="text-[9px] font-bold text-slate-400 block uppercase">Stok Sistem</span>
+                              <span className="text-xs font-black text-slate-700">{item.systemStock.toLocaleString('id-ID')} {item.unit}</span>
+                            </div>
+                            <div className="p-1.5 bg-blue-50/60 rounded-lg border border-blue-100 text-center">
+                              <span className="text-[9px] font-bold text-blue-600 block uppercase">Fisik Riil</span>
+                              <input
+                                type="number"
+                                step="any"
+                                value={item.physicalStock}
+                                onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
+                                className="w-full mt-0.5 px-2 py-0.5 bg-white border border-blue-200 rounded text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              value={item.reason}
+                              onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700"
+                            >
+                              <option value="Normal">Normal</option>
+                              <option value="Susut/Trimming">Susut / Trimming</option>
+                              <option value="Busuk/Rusak">Busuk / Rusak</option>
+                              <option value="Selisih Timbang">Selisih Timbang</option>
+                              <option value="Lainnya">Lainnya</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={item.notes}
+                              onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
+                              placeholder="Catatan..."
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px]"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* DESKTOP TABLE VIEW (>= md) */}
+                  <div className="hidden md:block overflow-x-auto max-h-[600px]">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase sticky top-0">
+                        <tr>
+                          <th className="py-3 px-4">Nama Bahan</th>
+                          <th className="py-3 px-4 text-right">Stok Sistem</th>
+                          <th className="py-3 px-4 text-center">Stok Fisik Riil</th>
+                          <th className="py-3 px-4 text-right">Selisih (Variance)</th>
+                          <th className="py-3 px-4">Alasan Selisih</th>
+                          <th className="py-3 px-4">Catatan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                        {filteredOpnameItems.map(item => {
+                          const diff = Number(item.physicalStock) - item.systemStock;
+                          const isMiss = Math.abs(diff) > 0.001;
+
+                          return (
+                            <tr key={item.ingredientId} className={isMiss ? 'bg-amber-50/40' : ''}>
+                              <td className="py-3 px-4 font-black text-slate-900">{item.name}</td>
+                              <td className="py-3 px-4 text-right font-bold text-slate-600">
+                                {item.systemStock.toLocaleString('id-ID')} {item.unit}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={item.physicalStock}
+                                  onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
+                                  className="w-28 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                />
+                              </td>
+                              <td className={`py-3 px-4 text-right font-black ${
+                                diff < 0 ? 'text-rose-600' : (diff > 0 ? 'text-emerald-600' : 'text-slate-400')
+                              }`}>
+                                {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
+                              </td>
+                              <td className="py-3 px-4">
+                                <select
+                                  value={item.reason}
+                                  onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
+                                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
+                                >
+                                  <option value="Normal">Normal</option>
+                                  <option value="Susut/Trimming">Susut / Trimming</option>
+                                  <option value="Busuk/Rusak">Busuk / Rusak</option>
+                                  <option value="Selisih Timbang">Selisih Timbang</option>
+                                  <option value="Lainnya">Lainnya</option>
+                                </select>
+                              </td>
+                              <td className="py-3 px-4">
+                                <input
+                                  type="text"
+                                  value={item.notes}
+                                  onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
+                                  placeholder="Catatan..."
+                                  className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -5629,31 +5715,48 @@ export const IngredientView: React.FC = () => {
       {/* ─────────────────────────────────────────────────────────────
           MODAL 2: CATAT STOCK LOSS (WASTE & KERUSAKAN)
       ───────────────────────────────────────────────────────────── */}
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 2: CATAT STOCK LOSS (WASTE & KERUSAKAN) - FULL PAGE VIEW
+      ───────────────────────────────────────────────────────────── */}
       {showLossModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-4 animate-scale-up my-auto border border-slate-100 max-h-[92vh] flex flex-col">
-            
-            {/* Header with Title & Close button */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
-                  <TrendingDown size={22} />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900">Catat Kerusakan / Stock Loss</h3>
-                  <p className="text-xs text-slate-500">Mencatat bahan busuk, rusak, expired, atau porsi menu gagal.</p>
-                </div>
-              </div>
+        <div className="fixed inset-0 z-50 bg-white flex flex-col w-full h-full min-h-screen overflow-hidden animate-fade-in">
+          {/* TOP HEADER BAR (STICKY) */}
+          <div className="bg-white border-b border-slate-200/80 px-4 sm:px-6 py-3.5 sm:py-4 shrink-0 flex items-center justify-between shadow-2xs z-20">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowLossModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all active:scale-95"
+                title="Kembali"
               >
-                <X size={16} />
+                <ArrowLeft size={18} />
               </button>
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                <TrendingDown size={22} />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                  Catat Kerusakan / Stock Loss
+                </h2>
+                <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
+                  Mencatat bahan busuk, rusak, expired, atau porsi menu gagal dapur.
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handleSubmitLoss} className="space-y-4 overflow-y-auto pr-1 flex-1">
+            <button
+              type="button"
+              onClick={() => setShowLossModal(false)}
+              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors"
+              title="Tutup"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* SCROLLABLE FORM BODY */}
+          <form onSubmit={handleSubmitLoss} className="flex-1 overflow-y-auto flex flex-col">
+            <div className="w-full max-w-2xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-5 flex-1">
               
               {/* DUAL-MODE TOGGLE TABS */}
               <div>
@@ -5664,6 +5767,7 @@ export const IngredientView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      setLossItemSearch('');
                       setLossForm(prev => ({
                         ...prev,
                         targetType: 'INGREDIENT',
@@ -5684,6 +5788,7 @@ export const IngredientView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      setLossItemSearch('');
                       if (allProducts.length === 0) fetchProducts();
                       setLossForm(prev => ({
                         ...prev,
@@ -5713,29 +5818,40 @@ export const IngredientView: React.FC = () => {
                       Stok saat ini: <strong className="text-slate-800">{selectedLossIngredient?.stock || 0} {selectedLossIngredient?.unit}</strong>
                     </span>
                   </div>
-                  <div className="relative mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+
+                  {/* Search Input for Ingredients */}
+                  <div className="relative mb-1.5">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
-                      value={lossIngSearch}
-                      onChange={e => setLossIngSearch(e.target.value)}
-                      placeholder="Cari bahan baku..."
-                      className="w-full pl-7 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-rose-500 focus:bg-white transition-all"
+                      value={lossItemSearch}
+                      onChange={e => setLossItemSearch(e.target.value)}
+                      placeholder="Cari nama bahan baku (cth: Daging, Telur, Kopi)..."
+                      className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white transition-all shadow-2xs"
                     />
-                    {lossIngSearch && (
-                      <button type="button" onClick={() => setLossIngSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-300 hover:bg-slate-400 text-slate-600 flex items-center justify-center text-xs font-black leading-none">×</button>
+                    {lossItemSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setLossItemSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
                     )}
                   </div>
+
                   <select
                     value={lossForm.ingredientId}
                     onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500 focus:bg-white transition-all shadow-2xs"
                   >
-                    {ingredients.filter(i => !lossIngSearch.trim() || i.name.toLowerCase().includes(lossIngSearch.trim().toLowerCase())).map(i => (
-                      <option key={i.id} value={i.id.toString()}>
-                        {i.name} (Stok: {i.stock} {i.unit}){isAdminRole && typeof i.buyPrice === 'number' ? ` — Rp ${i.buyPrice.toLocaleString('id-ID')}/${i.unit}` : ''}
-                      </option>
-                    ))}
+                    {ingredients
+                      .filter(i => !lossItemSearch.trim() || i.name.toLowerCase().includes(lossItemSearch.toLowerCase()))
+                      .map(i => (
+                        <option key={i.id} value={i.id.toString()}>
+                          {i.name} (Stok: {i.stock} {i.unit}){isAdminRole && typeof i.buyPrice === 'number' ? ` — Rp ${i.buyPrice.toLocaleString('id-ID')}/${i.unit}` : ''}
+                        </option>
+                      ))}
                   </select>
                 </div>
               ) : (
@@ -5746,19 +5862,43 @@ export const IngredientView: React.FC = () => {
                       {isAdminRole ? `HPP Satuan: Rp ${(unitHpp || 0).toLocaleString('id-ID')}` : 'Stok Terhubung ke Resep'}
                     </span>
                   </div>
+
+                  {/* Search Input for Products */}
+                  <div className="relative mb-1.5">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={lossItemSearch}
+                      onChange={e => setLossItemSearch(e.target.value)}
+                      placeholder="Cari nama menu masakan (cth: Ramen, Katsu)..."
+                      className="w-full pl-8 pr-7 py-2 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white transition-all shadow-2xs"
+                    />
+                    {lossItemSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setLossItemSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
                   <select
                     value={lossForm.productId}
                     onChange={e => setLossForm({ ...lossForm, productId: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500 focus:bg-white transition-all"
+                    className="w-full px-3.5 py-2.5 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500 focus:bg-white transition-all shadow-2xs"
                   >
-                    {allProducts.map(p => {
-                      const pCost = p.buyPrice || 0;
-                      return (
-                        <option key={p.id} value={p.id.toString()}>
-                          {p.name} {isAdminRole && pCost > 0 ? `— HPP: Rp ${pCost.toLocaleString('id-ID')}` : ''}
-                        </option>
-                      );
-                    })}
+                    {allProducts
+                      .filter(p => !lossItemSearch.trim() || p.name.toLowerCase().includes(lossItemSearch.toLowerCase()))
+                      .map(p => {
+                        const pCost = p.buyPrice || 0;
+                        return (
+                          <option key={p.id} value={p.id.toString()}>
+                            {p.name} {isAdminRole && pCost > 0 ? `— HPP: Rp ${pCost.toLocaleString('id-ID')}` : ''}
+                          </option>
+                        );
+                      })}
                   </select>
                   <p className="text-[10px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200/80 mt-1.5 flex items-center gap-1.5">
                     <Sparkles size={12} className="shrink-0" />
@@ -5786,7 +5926,7 @@ export const IngredientView: React.FC = () => {
                   placeholder="0"
                   value={lossForm.qtyLoss}
                   onChange={e => setLossForm({ ...lossForm, qtyLoss: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-slate-900 outline-none focus:border-rose-500 focus:bg-white transition-all"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-base font-black text-slate-900 outline-none focus:border-rose-500 focus:bg-white transition-all shadow-2xs"
                 />
 
                 {/* Quick Increment Buttons */}
@@ -5799,7 +5939,7 @@ export const IngredientView: React.FC = () => {
                       key={inc}
                       type="button"
                       onClick={() => handleIncrementQty(inc)}
-                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 rounded-lg text-xs font-black transition-all border border-slate-200"
+                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 rounded-lg text-xs font-black transition-all border border-slate-200 shadow-2xs"
                     >
                       +{inc}
                     </button>
@@ -5807,7 +5947,7 @@ export const IngredientView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleIncrementQty(0)}
-                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-all border border-rose-200 ml-auto"
+                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-all border border-rose-200 ml-auto shadow-2xs"
                   >
                     Reset
                   </button>
@@ -5819,7 +5959,7 @@ export const IngredientView: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Alasan Kerusakan / Pembuangan (Pilih 1-Tap)
                 </label>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                   {[
                     { label: 'Busuk / Basi', val: 'Busuk / Basi', color: 'border-amber-200 text-amber-800 bg-amber-50/80', active: 'bg-amber-600 text-white border-amber-600' },
                     { label: 'Kadaluarsa (Expired)', val: 'Kadaluarsa (Expired)', color: 'border-rose-200 text-rose-800 bg-rose-50/80', active: 'bg-rose-600 text-white border-rose-600' },
@@ -5834,14 +5974,14 @@ export const IngredientView: React.FC = () => {
                       key={r.val}
                       type="button"
                       onClick={() => setLossForm({ ...lossForm, reason: r.val })}
-                      className={`p-2 rounded-xl text-[11px] font-black border text-left transition-all flex items-center justify-between gap-1 ${
+                      className={`p-2.5 rounded-xl text-xs font-black border text-left transition-all flex items-center justify-between gap-1 shadow-2xs ${
                         lossForm.reason === r.val
                           ? `${r.active} shadow-sm ring-2 ring-slate-900/10`
                           : `${r.color} hover:opacity-90`
                       }`}
                     >
                       <span className="truncate">{r.label}</span>
-                      {lossForm.reason === r.val && <CheckCircle2 size={13} className="shrink-0" />}
+                      {lossForm.reason === r.val && <CheckCircle2 size={14} className="shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -5849,22 +5989,22 @@ export const IngredientView: React.FC = () => {
 
               {/* LIVE HPP CALCULATION CARD (Admin only) / OPERATIONAL SUMMARY (Dapur) */}
               {isAdminRole ? (
-                <div className="p-3.5 bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl border border-rose-200/80 flex items-center justify-between">
+                <div className="p-4 bg-gradient-to-br from-rose-50 to-amber-50 rounded-2xl border border-rose-200/80 flex items-center justify-between shadow-2xs">
                   <div>
                     <div className="text-[10px] font-black text-rose-600 uppercase tracking-wider">
                       Estimasi Kerugian HPP Riil
                     </div>
-                    <div className="text-lg sm:text-xl font-black text-rose-700">
+                    <div className="text-xl font-black text-rose-700">
                       Rp {(estimatedLossAmount || 0).toLocaleString('id-ID')}
                     </div>
                   </div>
-                  <div className="text-right text-[11px] text-slate-600 font-medium">
+                  <div className="text-right text-xs text-slate-600 font-medium">
                     <div>{lossForm.qtyLoss || 0} {unitLabel} × Rp {(unitHpp || 0).toLocaleString('id-ID')}</div>
                     <div className="text-[10px] text-slate-400">HPP Satuan {unitLabel}</div>
                   </div>
                 </div>
               ) : (
-                <div className="p-3 bg-rose-50/70 rounded-2xl border border-rose-200/70 flex items-center justify-between">
+                <div className="p-3.5 bg-rose-50/70 rounded-2xl border border-rose-200/70 flex items-center justify-between shadow-2xs">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
                       <TrendingDown size={16} />
@@ -5892,39 +6032,42 @@ export const IngredientView: React.FC = () => {
                   placeholder="Contoh: Chiller mati semalam / Salah resep ramen pedas meja 4..."
                   value={lossForm.notes}
                   onChange={e => setLossForm({ ...lossForm, notes: e.target.value })}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 resize-none outline-none focus:border-rose-500 focus:bg-white"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 resize-none outline-none focus:border-rose-500 focus:bg-white shadow-2xs"
                 />
               </div>
 
-              {/* MODAL FOOTER ACTIONS */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
+            </div>
+
+            {/* STICKY BOTTOM ACTIONS BAR */}
+            <div className="sticky bottom-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 p-3 sm:p-4 z-20 shrink-0">
+              <div className="w-full max-w-2xl mx-auto flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setShowLossModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                  className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-bold transition-all text-center"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submittingLoss}
-                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md shadow-rose-500/20 active:scale-95 transition-all flex items-center gap-1.5"
+                  className="flex-2 py-3 px-6 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-lg shadow-rose-500/25 active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {submittingLoss ? (
                     <>
-                      <RefreshCw size={14} className="animate-spin" />
+                      <RefreshCw size={16} className="animate-spin" />
                       <span>Menyimpan...</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 size={15} />
+                      <CheckCircle2 size={16} />
                       <span>Simpan Stock Loss</span>
                     </>
                   )}
                 </button>
               </div>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
       )}
 

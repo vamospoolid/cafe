@@ -209,6 +209,7 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.loyaltyGoldMultiplier !== undefined) updateData.loyaltyGoldMultiplier = Number(updateData.loyaltyGoldMultiplier);
     
     if (updateData.ingredientTrackingEnabled !== undefined) updateData.ingredientTrackingEnabled = Boolean(updateData.ingredientTrackingEnabled);
+    if (updateData.allowSaleWhenOutOfStock !== undefined) updateData.allowSaleWhenOutOfStock = Boolean(updateData.allowSaleWhenOutOfStock);
     if (updateData.enableKitchenAuditMode !== undefined) updateData.enableKitchenAuditMode = Boolean(updateData.enableKitchenAuditMode);
     if (updateData.enableStaffMealTracking !== undefined) updateData.enableStaffMealTracking = Boolean(updateData.enableStaffMealTracking);
     if (updateData.enableBlindClose !== undefined) updateData.enableBlindClose = Boolean(updateData.enableBlindClose);

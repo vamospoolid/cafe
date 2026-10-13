@@ -864,6 +864,7 @@ model Settings {
 
   // Mode Inventaris: false = Simple (HPP manual), true = Advanced (HPP dari resep bahan baku)
   ingredientTrackingEnabled Boolean @default(false)
+  allowSaleWhenOutOfStock   Boolean @default(true) // Buffer Mode: izinkan kasir jual menu stok 0 jika
 
   // Kontrol Dapur & Audit Opsional
   enableKitchenAuditMode    Boolean @default(false)

@@ -414,21 +414,34 @@ export const STARTER_TEMPLATES: Record<string, StarterTemplate> = {
  * GET /api/tenant-reset/templates
  * Mengambil daftar seluruh starter templates industri yang tersedia
  */
-router.get('/templates', authenticateToken, async (_req: Request, res: Response) => {
+router.get('/templates', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const list = Object.values(STARTER_TEMPLATES).map(t => ({
-      id: t.id,
-      name: t.name,
-      badge: t.badge,
-      description: t.description,
-      icon: t.icon,
-      businessType: t.businessType || 'CAFE',
-      categoriesCount: t.categories.length,
-      ingredientsCount: t.ingredients.length,
-      productsCount: t.products.length,
-      servicesCount: t.serviceTypes ? t.serviceTypes.length : 0,
-      tablesCount: t.tables ? t.tables.length : 0
-    }));
+    const tenantId = req.user?.tenantId;
+    let businessType = 'CAFE';
+    if (tenantId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { businessType: true }
+      });
+      if (tenant?.businessType) businessType = tenant.businessType;
+    }
+
+    // Filter template agar fokus pada profil bisnis tenant (Muki Ramen / Cafe hanya melihat template F&B)
+    const list = Object.values(STARTER_TEMPLATES)
+      .filter(t => (t.businessType || 'CAFE') === businessType)
+      .map(t => ({
+        id: t.id,
+        name: t.name,
+        badge: t.badge,
+        description: t.description,
+        icon: t.icon,
+        businessType: t.businessType || 'CAFE',
+        categoriesCount: t.categories.length,
+        ingredientsCount: t.ingredients.length,
+        productsCount: t.products.length,
+        servicesCount: t.serviceTypes ? t.serviceTypes.length : 0,
+        tablesCount: t.tables ? t.tables.length : 0
+      }));
     res.json(list);
   } catch (error: any) {
     res.status(500).json({ error: 'Gagal memuat template usaha' });
@@ -1169,255 +1182,7 @@ router.post('/restore/execute', authenticateToken, async (req: AuthRequest, res:
     const tenantCondition = { tenantId };
 
     // 5. Atomic Transacted Restore
-    const restoredStats = await prisma.$transaction(async (tx) => {
-      // a. Wipe current data based on mode
-      if (mode === 'FULL_OVERWRITE') {
-        const orders = await tx.order.findMany({ where: tenantCondition, select: { id: true } });
-        const orderIds = orders.map(o => o.id);
-        if (orderIds.length > 0) {
-          await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-          await tx.paymentTransaction.deleteMany({ where: { orderId: { in: orderIds } } });
-        }
-        await tx.order.deleteMany({ where: tenantCondition });
-        await tx.cashFlow.deleteMany({ where: tenantCondition });
-        await tx.shift.deleteMany({ where: tenantCondition });
-        await tx.attendance.deleteMany({ where: tenantCondition });
-        await tx.reservation.deleteMany({ where: tenantCondition });
-        await tx.debtPayment.deleteMany({ where: tenantCondition });
-        await tx.debt.deleteMany({ where: tenantCondition });
-        await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
-        await tx.shiftHandover.deleteMany({ where: tenantCondition });
-
-        // Retail vertical deletion
-        await tx.deliveryOrderItem.deleteMany({ where: { deliveryOrder: { tenantId } } });
-        await tx.deliveryOrder.deleteMany({ where: tenantCondition });
-        await tx.productUOM.deleteMany({ where: tenantCondition });
-        await tx.productPriceTier.deleteMany({ where: tenantCondition });
-
-        await tx.wasteLog.deleteMany({ where: tenantCondition });
-        await tx.ingredientLog.deleteMany({ where: tenantCondition });
-        await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
-        await tx.product.deleteMany({ where: tenantCondition });
-        await tx.category.deleteMany({ where: tenantCondition });
-        await tx.ingredient.deleteMany({ where: tenantCondition });
-        await tx.table.deleteMany({ where: tenantCondition });
-        await tx.supplier.deleteMany({ where: tenantCondition });
-      } else if (mode === 'CATALOG_ONLY') {
-        await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
-        await tx.wasteLog.deleteMany({ where: { product: { tenantId } } });
-        await tx.product.deleteMany({ where: tenantCondition });
-        await tx.category.deleteMany({ where: tenantCondition });
-        await tx.ingredient.deleteMany({ where: tenantCondition });
-      }
-
-      // b. Restore Categories (Hierarchy Aware)
-      const categoryMap = new Map<number, number>();
-      if (Array.isArray(data.categories)) {
-        // Parent categories first
-        const parents = data.categories.filter((c: any) => !c.parentId);
-        for (const cat of parents) {
-          const created = await tx.category.create({
-            data: {
-              tenantId,
-              name: cat.name,
-              printerTarget: cat.printerTarget || 'KITCHEN'
-            }
-          });
-          categoryMap.set(cat.id, created.id);
-        }
-
-        // Sub categories next
-        const subs = data.categories.filter((c: any) => c.parentId);
-        for (const cat of subs) {
-          const newParentId = categoryMap.get(cat.parentId) || null;
-          const created = await tx.category.create({
-            data: {
-              tenantId,
-              name: cat.name,
-              printerTarget: cat.printerTarget || 'KITCHEN',
-              parentId: newParentId
-            }
-          });
-          categoryMap.set(cat.id, created.id);
-        }
-      }
-
-      // Default category fallback if none restored
-      let fallbackCategoryId: number | null = null;
-      if (categoryMap.size === 0) {
-        const defaultCat = await tx.category.create({
-          data: { tenantId, name: 'Menu Umum', printerTarget: 'KITCHEN' }
-        });
-        fallbackCategoryId = defaultCat.id;
-        categoryMap.set(0, defaultCat.id);
-      } else {
-        fallbackCategoryId = Array.from(categoryMap.values())[0];
-      }
-
-      // c. Restore Suppliers
-      const supplierMap = new Map<number, number>();
-      if (Array.isArray(data.suppliers)) {
-        for (const sup of data.suppliers) {
-          const created = await tx.supplier.create({
-            data: {
-              tenantId,
-              name: sup.name,
-              contact: sup.contact || null,
-              phone: sup.phone || null,
-              email: sup.email || null,
-              address: sup.address || null,
-              notes: sup.notes || null
-            }
-          });
-          supplierMap.set(sup.id, created.id);
-        }
-      }
-
-      // d. Restore Ingredients
-      const ingredientMap = new Map<number, number>();
-      if (Array.isArray(data.ingredients)) {
-        for (const ing of data.ingredients) {
-          const newSupplierId = ing.supplierId ? (supplierMap.get(ing.supplierId) || null) : null;
-          const created = await tx.ingredient.create({
-            data: {
-              tenantId,
-              name: ing.name,
-              category: ing.category || 'FOOD',
-              subCategory: ing.subCategory || null,
-              unit: ing.unit || 'gram',
-              stock: Number(ing.stock) || 0,
-              minStock: Number(ing.minStock) || 0,
-              buyPrice: Number(ing.buyPrice) || 0,
-              supplierId: newSupplierId,
-              purchaseUnit: ing.purchaseUnit || null,
-              conversionRatio: Number(ing.conversionRatio) || 1,
-              warehouseMinStock: Number(ing.warehouseMinStock) || 0
-            }
-          });
-          ingredientMap.set(ing.id, created.id);
-        }
-      }
-
-      // e. Restore Products
-      const productMap = new Map<number, number>();
-      if (Array.isArray(data.products)) {
-        for (const prod of data.products) {
-          const newCategoryId = (prod.categoryId && categoryMap.get(prod.categoryId)) || fallbackCategoryId!;
-          const newSubCategoryId = prod.subCategoryId ? (categoryMap.get(prod.subCategoryId) || null) : null;
-
-          const created = await tx.product.create({
-            data: {
-              tenantId,
-              name: prod.name,
-              barcode: prod.barcode ? `${prod.barcode}` : null,
-              categoryId: newCategoryId,
-              subCategoryId: newSubCategoryId,
-              sellPrice: Number(prod.sellPrice) || 0,
-              buyPrice: Number(prod.buyPrice) || 0,
-              stock: Number(prod.stock) || 0,
-              minStock: Number(prod.minStock) || 1,
-              imageUrl: prod.imageUrl || null,
-              status: prod.status || 'Aktif'
-            }
-          });
-          productMap.set(prod.id, created.id);
-        }
-      }
-
-      // f. Restore Recipe Items (Relink Products with Ingredients)
-      let restoredRecipesCount = 0;
-      if (Array.isArray(data.recipeItems)) {
-        for (const r of data.recipeItems) {
-          const newProductId = productMap.get(r.productId);
-          const newIngredientId = ingredientMap.get(r.ingredientId);
-          if (newProductId && newIngredientId) {
-            await tx.recipeItem.create({
-              data: {
-                productId: newProductId,
-                ingredientId: newIngredientId,
-                qtyPerServing: Number(r.qtyPerServing) || 1
-              }
-            });
-            restoredRecipesCount++;
-          }
-        }
-      }
-
-      // g. Restore Tables
-      let restoredTablesCount = 0;
-      if (Array.isArray(data.tables)) {
-        for (const tbl of data.tables) {
-          await tx.table.create({
-            data: {
-              tenantId,
-              tableNo: tbl.tableNo,
-              name: tbl.name || null,
-              capacity: Number(tbl.capacity) || 2,
-              status: tbl.status || 'Aktif',
-              qrUrl: tbl.qrUrl || null,
-              posX: Number(tbl.posX) || 10,
-              posY: Number(tbl.posY) || 10,
-              shape: tbl.shape || 'square'
-            }
-          });
-          restoredTablesCount++;
-        }
-      }
-
-      // h. If FULL_OVERWRITE: Restore Orders & Transactions
-      let restoredOrdersCount = 0;
-      if (mode === 'FULL_OVERWRITE' && Array.isArray(data.orders)) {
-        for (const ord of data.orders) {
-          const createdOrder = await tx.order.create({
-            data: {
-              tenantId,
-              orderNumber: ord.orderNumber,
-              customerName: ord.customerName || 'Pelanggan',
-              subtotal: Number(ord.subtotal) || 0,
-              tax: Number(ord.tax) || 0,
-              serviceCharge: Number(ord.serviceCharge) || 0,
-              discount: Number(ord.discount) || 0,
-              total: Number(ord.total) || 0,
-              paymentMethod: ord.paymentMethod || 'Cash',
-              paymentStatus: ord.paymentStatus || 'PAID',
-              status: ord.status || 'Completed',
-              userId: userId,
-              createdAt: ord.createdAt ? new Date(ord.createdAt) : new Date()
-            }
-          });
-          restoredOrdersCount++;
-
-          // Restore associated OrderItems if provided
-          if (Array.isArray(data.orderItems)) {
-            const matchingItems = data.orderItems.filter((i: any) => i.orderId === ord.id);
-            for (const item of matchingItems) {
-              const newProdId = productMap.get(item.productId) || Array.from(productMap.values())[0];
-              if (newProdId) {
-                await tx.orderItem.create({
-                  data: {
-                    orderId: createdOrder.id,
-                    productId: newProdId,
-                    price: Number(item.price) || 0,
-                    qty: Number(item.qty) || 1,
-                    subtotal: Number(item.subtotal) || 0,
-                    notes: item.notes || null
-                  }
-                });
-              }
-            }
-          }
-        }
-      }
-
-      return {
-        categoriesCount: categoryMap.size,
-        ingredientsCount: ingredientMap.size,
-        productsCount: productMap.size,
-        recipesCount: restoredRecipesCount,
-        tablesCount: restoredTablesCount,
-        ordersCount: restoredOrdersCount
-      };
-    });
+    const restoredStats = await executeTenantRestoreTransaction(tenantId, userId, data, mode);
 
     await AuditLogger.log({
       tenantId,
@@ -1429,7 +1194,7 @@ router.post('/restore/execute', authenticateToken, async (req: AuthRequest, res:
 
     res.json({
       success: true,
-      message: 'Pemulihan data cadangan berhasil! Seluruh relasi menu, bahan, dan resep telah disinkronkan.',
+      message: 'Pemulihan data cadangan berhasil! Seluruh relasi menu, bahan, resep, transaksi, dan arus kas telah disinkronkan.',
       stats: restoredStats,
       hasRollbackAvailable: preRestoreSnapshots.has(tenantId)
     });
@@ -1438,6 +1203,356 @@ router.post('/restore/execute', authenticateToken, async (req: AuthRequest, res:
     res.status(500).json({ error: error?.message || 'Gagal memulihkan data cadangan' });
   }
 });
+
+/**
+ * Reusable Atomic Transacted Tenant Restoration Logic
+ */
+export async function executeTenantRestoreTransaction(
+  tenantId: string,
+  userId: number,
+  data: any,
+  mode: 'FULL_OVERWRITE' | 'CATALOG_ONLY' = 'FULL_OVERWRITE'
+) {
+  const tenantCondition = { tenantId };
+
+  return await prisma.$transaction(async (tx) => {
+    // a. Wipe current data based on mode
+    if (mode === 'FULL_OVERWRITE') {
+      const orders = await tx.order.findMany({ where: tenantCondition, select: { id: true } });
+      const orderIds = orders.map(o => o.id);
+      if (orderIds.length > 0) {
+        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
+        await tx.paymentTransaction.deleteMany({ where: { orderId: { in: orderIds } } });
+      }
+      await tx.order.deleteMany({ where: tenantCondition });
+      await tx.cashFlow.deleteMany({ where: tenantCondition });
+      await tx.shift.deleteMany({ where: tenantCondition });
+      await tx.attendance.deleteMany({ where: tenantCondition });
+      await tx.reservation.deleteMany({ where: tenantCondition });
+      await tx.debtPayment.deleteMany({ where: tenantCondition });
+      await tx.debt.deleteMany({ where: tenantCondition });
+      await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
+      await tx.shiftHandover.deleteMany({ where: tenantCondition });
+
+      // Retail vertical deletion
+      await tx.deliveryOrderItem.deleteMany({ where: { deliveryOrder: { tenantId } } });
+      await tx.deliveryOrder.deleteMany({ where: tenantCondition });
+      await tx.productUOM.deleteMany({ where: tenantCondition });
+      await tx.productPriceTier.deleteMany({ where: tenantCondition });
+
+      await tx.wasteLog.deleteMany({ where: tenantCondition });
+      await tx.ingredientLog.deleteMany({ where: tenantCondition });
+      await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
+      await tx.product.deleteMany({ where: tenantCondition });
+      await tx.category.deleteMany({ where: tenantCondition });
+      await tx.ingredient.deleteMany({ where: tenantCondition });
+      await tx.table.deleteMany({ where: tenantCondition });
+      await tx.supplier.deleteMany({ where: tenantCondition });
+    } else if (mode === 'CATALOG_ONLY') {
+      await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
+      await tx.wasteLog.deleteMany({ where: { product: { tenantId } } });
+      await tx.product.deleteMany({ where: tenantCondition });
+      await tx.category.deleteMany({ where: tenantCondition });
+      await tx.ingredient.deleteMany({ where: tenantCondition });
+    }
+
+    // b. Restore Categories (Hierarchy Aware)
+    const categoryMap = new Map<number, number>();
+    if (Array.isArray(data.categories)) {
+      const parents = data.categories.filter((c: any) => !c.parentId);
+      for (const cat of parents) {
+        const created = await tx.category.create({
+          data: {
+            tenantId,
+            name: cat.name,
+            printerTarget: cat.printerTarget || 'KITCHEN'
+          }
+        });
+        categoryMap.set(cat.id, created.id);
+      }
+
+      const subs = data.categories.filter((c: any) => c.parentId);
+      for (const cat of subs) {
+        const newParentId = categoryMap.get(cat.parentId) || null;
+        const created = await tx.category.create({
+          data: {
+            tenantId,
+            name: cat.name,
+            printerTarget: cat.printerTarget || 'KITCHEN',
+            parentId: newParentId
+          }
+        });
+        categoryMap.set(cat.id, created.id);
+      }
+    }
+
+    let fallbackCategoryId: number | null = null;
+    if (categoryMap.size === 0) {
+      const defaultCat = await tx.category.create({
+        data: { tenantId, name: 'Menu Umum', printerTarget: 'KITCHEN' }
+      });
+      fallbackCategoryId = defaultCat.id;
+      categoryMap.set(0, defaultCat.id);
+    } else {
+      fallbackCategoryId = Array.from(categoryMap.values())[0];
+    }
+
+    // c. Restore Suppliers
+    const supplierMap = new Map<number, number>();
+    if (Array.isArray(data.suppliers)) {
+      for (const sup of data.suppliers) {
+        const created = await tx.supplier.create({
+          data: {
+            tenantId,
+            name: sup.name,
+            contact: sup.contact || null,
+            phone: sup.phone || null,
+            email: sup.email || null,
+            address: sup.address || null,
+            notes: sup.notes || null
+          }
+        });
+        supplierMap.set(sup.id, created.id);
+      }
+    }
+
+    // d. Restore Ingredients
+    const ingredientMap = new Map<number, number>();
+    if (Array.isArray(data.ingredients)) {
+      for (const ing of data.ingredients) {
+        const newSupplierId = ing.supplierId ? (supplierMap.get(ing.supplierId) || null) : null;
+        const created = await tx.ingredient.create({
+          data: {
+            tenantId,
+            name: ing.name,
+            category: ing.category || 'FOOD',
+            subCategory: ing.subCategory || null,
+            unit: ing.unit || 'gram',
+            stock: Number(ing.stock) || 0,
+            minStock: Number(ing.minStock) || 0,
+            buyPrice: Number(ing.buyPrice) || 0,
+            supplierId: newSupplierId,
+            purchaseUnit: ing.purchaseUnit || null,
+            conversionRatio: Number(ing.conversionRatio) || 1,
+            warehouseMinStock: Number(ing.warehouseMinStock) || 0
+          }
+        });
+        ingredientMap.set(ing.id, created.id);
+      }
+    }
+
+    // e. Restore Products
+    const productMap = new Map<number, number>();
+    if (Array.isArray(data.products)) {
+      for (const prod of data.products) {
+        const newCategoryId = (prod.categoryId && categoryMap.get(prod.categoryId)) || fallbackCategoryId!;
+        const newSubCategoryId = prod.subCategoryId ? (categoryMap.get(prod.subCategoryId) || null) : null;
+
+        const created = await tx.product.create({
+          data: {
+            tenantId,
+            name: prod.name,
+            barcode: prod.barcode ? `${prod.barcode}` : null,
+            categoryId: newCategoryId,
+            subCategoryId: newSubCategoryId,
+            sellPrice: Number(prod.sellPrice) || 0,
+            buyPrice: Number(prod.buyPrice) || 0,
+            stock: Number(prod.stock) || 0,
+            minStock: Number(prod.minStock) || 1,
+            imageUrl: prod.imageUrl || null,
+            status: prod.status || 'Aktif'
+          }
+        });
+        productMap.set(prod.id, created.id);
+      }
+    }
+
+    // f. Restore Recipe Items
+    let restoredRecipesCount = 0;
+    if (Array.isArray(data.recipeItems)) {
+      for (const r of data.recipeItems) {
+        const newProductId = productMap.get(r.productId);
+        const newIngredientId = ingredientMap.get(r.ingredientId);
+        if (newProductId && newIngredientId) {
+          await tx.recipeItem.create({
+            data: {
+              productId: newProductId,
+              ingredientId: newIngredientId,
+              qtyPerServing: Number(r.qtyPerServing) || 1,
+              tenantId
+            }
+          });
+          restoredRecipesCount++;
+        }
+      }
+    }
+
+    // g. Restore Tables
+    let restoredTablesCount = 0;
+    if (Array.isArray(data.tables)) {
+      for (const tbl of data.tables) {
+        await tx.table.create({
+          data: {
+            tenantId,
+            tableNo: tbl.tableNo,
+            name: tbl.name || null,
+            capacity: Number(tbl.capacity) || 2,
+            status: tbl.status || 'Aktif',
+            qrUrl: tbl.qrUrl || null,
+            posX: Number(tbl.posX) || 10,
+            posY: Number(tbl.posY) || 10,
+            shape: tbl.shape || 'square'
+          }
+        });
+        restoredTablesCount++;
+      }
+    }
+
+    // g2. Restore Customers
+    let restoredCustomersCount = 0;
+    const customerMap = new Map<number, number>();
+    if (Array.isArray(data.customers)) {
+      for (const cust of data.customers) {
+        const phone = cust.phone ? String(cust.phone).trim() : `08${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+        const existingCust = await tx.customer.findFirst({
+          where: { tenantId, phone }
+        });
+        let createdCust;
+        if (existingCust) {
+          createdCust = await tx.customer.update({
+            where: { id: existingCust.id },
+            data: {
+              name: cust.name || 'Pelanggan',
+              email: cust.email || null,
+              points: Number(cust.points) || existingCust.points
+            }
+          });
+        } else {
+          createdCust = await tx.customer.create({
+            data: {
+              tenantId,
+              name: cust.name || 'Pelanggan',
+              phone,
+              email: cust.email || null,
+              points: Number(cust.points) || 0
+            }
+          });
+        }
+        customerMap.set(cust.id, createdCust.id);
+        restoredCustomersCount++;
+      }
+    }
+
+    // h. If FULL_OVERWRITE: Restore Orders & Transactions
+    let restoredOrdersCount = 0;
+    if (mode === 'FULL_OVERWRITE' && Array.isArray(data.orders)) {
+      for (const ord of data.orders) {
+        const mappedCustomerId = ord.customerId ? (customerMap.get(ord.customerId) || null) : null;
+        const createdOrder = await tx.order.create({
+          data: {
+            tenantId,
+            orderNumber: ord.orderNumber,
+            customerName: ord.customerName || 'Pelanggan',
+            customerId: mappedCustomerId,
+            subtotal: Number(ord.subtotal) || 0,
+            tax: Number(ord.tax) || 0,
+            serviceCharge: Number(ord.serviceCharge) || 0,
+            discount: Number(ord.discount) || 0,
+            total: Number(ord.total) || 0,
+            paymentMethod: ord.paymentMethod || 'Cash',
+            status: ord.status || 'Paid',
+            kdsStatus: ord.kdsStatus || 'Served',
+            servedAt: ord.servedAt ? new Date(ord.servedAt) : null,
+            paidAt: ord.paidAt ? new Date(ord.paidAt) : (ord.status === 'Paid' ? new Date(ord.createdAt || Date.now()) : null),
+            userId: userId,
+            createdAt: ord.createdAt ? new Date(ord.createdAt) : new Date()
+          }
+        });
+        restoredOrdersCount++;
+
+        // Restore associated OrderItems
+        if (Array.isArray(data.orderItems)) {
+          const matchingItems = data.orderItems.filter((i: any) => i.orderId === ord.id);
+          for (const item of matchingItems) {
+            const newProdId = productMap.get(item.productId) || Array.from(productMap.values())[0];
+            if (newProdId) {
+              await tx.orderItem.create({
+                data: {
+                  tenantId,
+                  orderId: createdOrder.id,
+                  productId: newProdId,
+                  price: Number(item.price) || 0,
+                  buyPrice: Number(item.buyPrice) || 0,
+                  qty: Number(item.qty) || 1,
+                  subtotal: Number(item.subtotal) || 0,
+                  notes: item.notes || null
+                }
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // i. If FULL_OVERWRITE: Restore CashFlows
+    let restoredCashFlowsCount = 0;
+    if (mode === 'FULL_OVERWRITE' && Array.isArray(data.cashFlows)) {
+      for (const cf of data.cashFlows) {
+        await tx.cashFlow.create({
+          data: {
+            tenantId,
+            type: cf.type || 'Pemasukan',
+            category: cf.category || 'Operasional',
+            amount: Number(cf.amount) || 0,
+            description: cf.description || '-',
+            userId: userId,
+            date: cf.date ? new Date(cf.date) : new Date(),
+            cashPocket: cf.cashPocket || 'KAS_OPERASIONAL',
+            status: cf.status || 'APPROVED'
+          }
+        });
+        restoredCashFlowsCount++;
+      }
+    }
+
+    // j. If FULL_OVERWRITE: Restore Shifts
+    let restoredShiftsCount = 0;
+    if (mode === 'FULL_OVERWRITE' && Array.isArray(data.shifts)) {
+      for (const sh of data.shifts) {
+        await tx.shift.create({
+          data: {
+            tenantId,
+            userId: userId,
+            waktuBuka: sh.waktuBuka ? new Date(sh.waktuBuka) : new Date(),
+            waktuTutup: sh.waktuTutup ? new Date(sh.waktuTutup) : null,
+            saldoAwal: Number(sh.saldoAwal) || 0,
+            saldoSistem: sh.saldoSistem ? Number(sh.saldoSistem) : null,
+            saldoElektronik: sh.saldoElektronik ? Number(sh.saldoElektronik) : null,
+            saldoFisikLaci: sh.saldoFisikLaci ? Number(sh.saldoFisikLaci) : null,
+            selisih: sh.selisih ? Number(sh.selisih) : null,
+            status: sh.status || 'Closed'
+          }
+        });
+        restoredShiftsCount++;
+      }
+    }
+
+    return {
+      categoriesCount: categoryMap.size,
+      ingredientsCount: ingredientMap.size,
+      productsCount: productMap.size,
+      recipesCount: restoredRecipesCount,
+      tablesCount: restoredTablesCount,
+      customersCount: restoredCustomersCount,
+      ordersCount: restoredOrdersCount,
+      cashFlowsCount: restoredCashFlowsCount,
+      shiftsCount: restoredShiftsCount
+    };
+  }, {
+    maxWait: 20000,
+    timeout: 90000
+  });
+}
 
 /**
  * POST /api/tenant-reset/rollback
@@ -1466,23 +1581,25 @@ router.post('/rollback', authenticateToken, async (req: AuthRequest, res: Respon
       return res.status(401).json({ error: 'Kata sandi akun Owner salah. Rollback dibatalkan.' });
     }
 
-    // Re-run restore using the emergency snapshot
+    // Re-run actual restore using the emergency snapshot
     const emergencyPayload = cached.snapshot;
     preRestoreSnapshots.delete(tenantId);
 
-    // Call the internal execution logic or forward
+    const rollbackData = emergencyPayload.data || emergencyPayload;
+    const restoredStats = await executeTenantRestoreTransaction(tenantId, userId, rollbackData, 'FULL_OVERWRITE');
+
     await AuditLogger.log({
       tenantId,
       action: 'DATA_ROLLBACK',
       resource: 'SETTINGS',
-      description: `Rollback data darurat pra-pemulihan berhasil dijalankan.`,
+      description: `Rollback data darurat pra-pemulihan berhasil dijalankan (${restoredStats.productsCount} produk, ${restoredStats.ordersCount} pesanan).`,
       severity: 'CRITICAL'
     }, req);
 
     res.json({
       success: true,
-      message: 'Rollback darurat berhasil! Kondisi toko dikembalikan ke saat sebelum restore.',
-      emergencyPayload
+      message: 'Rollback darurat berhasil! Kondisi toko telah dipulihkan ke saat sebelum restore.',
+      stats: restoredStats
     });
   } catch (error: any) {
     console.error('[Tenant Rollback Error]', error);
