@@ -160,7 +160,7 @@ async function main() {
   // B. Definisikan 3 Target Aplikasi
   const isMukiRamen = info.cleanSlug === 'mukiramen' || info.baseUrl.includes('mukiramen');
   
-  const cashierUrl = isMukiRamen ? 'https://app.mukiramen.id' : `${info.baseUrl}/pos`;
+  const cashierUrl = isMukiRamen ? 'https://app.mukiramen.id/pos' : `${info.baseUrl}/pos`;
   const staffUrl = isMukiRamen ? 'https://staff.mukiramen.id' : `${info.baseUrl}/staff`;
   const adminUrl = isMukiRamen ? 'https://app.mukiramen.id/dashboard' : `${info.baseUrl}/dashboard`;
   

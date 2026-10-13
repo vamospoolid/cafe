@@ -1,9 +1,9 @@
 {
-  "appId": "id.mukiramen.admin",
-  "appName": "Muki Ramen Admin",
+  "appId": "id.mukiramen.staff",
+  "appName": "Muki Ramen Staf",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://app.mukiramen.id/dashboard",
+    "url": "https://staff.mukiramen.id",
     "cleartext": true
   }
 }

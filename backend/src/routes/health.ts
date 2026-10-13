@@ -215,9 +215,14 @@ router.get('/deep', async (_req: Request, res: Response) => {
 /**
  * GET /api/health/backups - List all backups (Admin only)
  */
-router.get('/backups', authenticateToken, requireRole('SUPERADMIN', 'OWNER', 'ADMIN'), async (_req: AuthRequest, res: Response) => {
+router.get('/backups', authenticateToken, requireRole('SUPERADMIN', 'OWNER', 'ADMIN'), async (req: AuthRequest, res: Response) => {
   try {
-    const backups = await BackupService.listBackups();
+    const isPlatformAdmin = req.user?.isPlatformAdmin ?? false;
+    const tenantId = req.user?.tenantId;
+    let backups = await BackupService.listBackups();
+    if (!isPlatformAdmin && tenantId) {
+      backups = backups.filter(b => b.filename.includes(tenantId) || b.tenantId === tenantId || b.filename.includes('platform'));
+    }
     res.json({
       success: true,
       total: backups.length,
@@ -291,7 +296,33 @@ router.post('/backups/purge', authenticateToken, requireRole('SUPERADMIN', 'OWNE
 });
 
 /**
- * POST /api/health/backups/restore - Disaster Recovery Restore (Superadmin only)
+ * GET /api/health/backups/download/:fileName - Download specific backup file
+ */
+router.get('/backups/download/:fileName', authenticateToken, requireRole('SUPERADMIN', 'OWNER', 'ADMIN'), async (req: AuthRequest, res: Response) => {
+  try {
+    const isPlatformAdmin = req.user?.isPlatformAdmin ?? false;
+    const tenantId = req.user?.tenantId;
+    const fileName = req.params.fileName as string;
+
+    const safeFilename = path.basename(fileName);
+    const filepath = path.resolve(process.cwd(), 'backups', 'db', safeFilename);
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Berkas backup tidak ditemukan di server' });
+    }
+
+    if (!isPlatformAdmin && (!tenantId || (!safeFilename.includes(tenantId) && !safeFilename.includes('platform')))) {
+      return res.status(403).json({ error: 'Akses ditolak: Anda tidak memiliki izin mengunduh berkas backup ini' });
+    }
+
+    return res.download(filepath, safeFilename);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Gagal mengunduh berkas backup' });
+  }
+});
+
+/**
+ * POST /api/health/backups/restore - Disaster Recovery Restore (Admin only)
  */
 router.post('/backups/restore', authenticateToken, requireRole('SUPERADMIN', 'OWNER'), async (req: AuthRequest, res: Response) => {
   try {
@@ -300,10 +331,22 @@ router.post('/backups/restore', authenticateToken, requireRole('SUPERADMIN', 'OW
       return res.status(400).json({ error: 'Parameter fileName wajib disertakan' });
     }
 
-    const result = await BackupService.restoreBackup(fileName, targetTenantId);
+    const isPlatformAdmin = req.user?.isPlatformAdmin ?? false;
+    const effectiveTenantId = isPlatformAdmin ? (targetTenantId || null) : req.user?.tenantId;
+
+    if (!isPlatformAdmin) {
+      if (!effectiveTenantId) {
+        return res.status(403).json({ error: 'Akses ditolak: Tenant ID tidak ditemukan pada sesi Anda.' });
+      }
+      if (!fileName.includes(effectiveTenantId) && !fileName.includes('platform')) {
+        return res.status(403).json({ error: 'Akses ditolak: Berkas backup ini bukan milik toko Anda.' });
+      }
+    }
+
+    const result = await BackupService.restoreBackup(fileName, effectiveTenantId);
 
     await AuditLogger.log({
-      tenantId: targetTenantId || req.user?.tenantId || null,
+      tenantId: effectiveTenantId || null,
       action: 'DATABASE_RESTORE',
       resource: 'BACKUP_ENGINE',
       description: `Melakukan restore disaster recovery dari berkas ${fileName}`,

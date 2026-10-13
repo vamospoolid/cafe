@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, PackageCheck, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, PackageCheck, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Trash2, AlertTriangle, Download, RotateCcw } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -2854,6 +2854,9 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(true);
   const [isResetStandaloneOpen, setIsResetStandaloneOpen] = useState(false);
+  const [isTenantResetOpen, setIsTenantResetOpen] = useState(false);
+  const [restoringSnapshot, setRestoringSnapshot] = useState(false);
+  const [downloadingSnapshot, setDownloadingSnapshot] = useState(false);
 
   const isOwner = (posContext?.user?.role || '').toUpperCase() === 'OWNER' ||
     Boolean(posContext?.user?.isPlatformAdmin) ||
@@ -3008,6 +3011,69 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
     }
   };
 
+  const handleDownloadSnapshot = async (fileName: string) => {
+    if (!token) return;
+    setDownloadingSnapshot(true);
+    try {
+      const res = await fetch(`/api/health/backups/download/${encodeURIComponent(fileName)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Gagal mengunduh berkas backup');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast(`Berkas ${fileName} berhasil diunduh.`, 'success');
+    } catch (err: any) {
+      toast(err.message || 'Gagal mengunduh berkas backup', 'error');
+    } finally {
+      setDownloadingSnapshot(false);
+    }
+  };
+
+  const handleRestoreSnapshot = async (fileName: string) => {
+    if (!token) return;
+    if (!isOwner) {
+      toast('Hanya akun Role OWNER yang memiliki wewenang memulihkan database.', 'error');
+      return;
+    }
+
+    const confirmed = await confirmAlert(
+      `⚠️ Pulihkan Database dari ${fileName}?`,
+      'PERINGATAN KRITIS: Tindakan ini akan menimpa data operasional toko dengan snapshot yang dipilih. Pastikan Anda telah mengunduh backup terkini sebelum melanjutkan.'
+    );
+    if (!confirmed.isConfirmed) return;
+
+    setRestoringSnapshot(true);
+    try {
+      const res = await fetch('/api/health/backups/restore', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ fileName })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gagal memulihkan database');
+
+      toast(`✅ Pemulihan database berhasil! (${data.durationMs} ms)`, 'success');
+      fetchHealthAndBackups();
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      toast(err.message || 'Gagal memulihkan database dari snapshot', 'error');
+    } finally {
+      setRestoringSnapshot(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Header Status Observability & Telemetry ── */}
@@ -3147,7 +3213,38 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
           </div>
         </div>
 
-        {/* Card 3: Zona Berbahaya - Reset Database Penuh (Muki Ramen Independent Mode) */}
+        {/* Card 3: Pusat Pemulihan Data & Starter Templates (Restore Engine) */}
+        <div className="p-6 rounded-3xl border border-indigo-200/90 dark:border-indigo-800/60 bg-gradient-to-br from-indigo-50/60 via-white to-amber-50/30 dark:from-slate-800 dark:to-indigo-950/40 hover:border-indigo-400 shadow-sm transition-all space-y-4 md:col-span-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20 shrink-0">
+                <UploadCloud size={24} className="text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Pusat Pemulihan Data (Restore JSON) &amp; Template Usaha</h4>
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                    Proteksi Ganda
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                  Unggah berkas cadangan JSON toko dari laptop, pratinjau katalog &amp; pesanan sebelum dieksekusi, atau pasang starter template industri dengan proteksi kata sandi ganda.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsTenantResetOpen(true)}
+              className="btn btn-primary bg-indigo-600 hover:bg-indigo-700 border-indigo-600 text-xs font-bold py-3 px-5 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 shrink-0 self-start sm:self-auto text-white"
+            >
+              <UploadCloud size={16} className="text-amber-300" />
+              <span>Buka Menu Pulihkan &amp; Template</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Card 4: Zona Berbahaya - Reset Database Penuh (Muki Ramen Independent Mode) */}
         <div className="p-6 rounded-3xl border-2 border-red-200 dark:border-red-900/60 bg-gradient-to-br from-red-50/70 via-white to-rose-50/40 dark:from-slate-900 dark:to-red-950/30 hover:border-red-400 shadow-sm transition-all space-y-4 md:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3.5">
@@ -3220,6 +3317,7 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
                   <th className="py-2.5 px-3">Ukuran</th>
                   <th className="py-2.5 px-3">Keamanan</th>
                   <th className="py-2.5 px-3">Waktu Dibuat</th>
+                  <th className="py-2.5 px-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -3242,6 +3340,30 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
                       )}
                     </td>
                     <td className="py-3 px-3 text-slate-400">{new Date(b.createdAt).toLocaleString('id-ID')}</td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadSnapshot(b.fileName)}
+                          disabled={downloadingSnapshot}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold border border-slate-200 flex items-center gap-1 transition-all cursor-pointer"
+                          title="Unduh Berkas Snapshot"
+                        >
+                          <Download size={11} />
+                          <span>Unduh</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreSnapshot(b.fileName)}
+                          disabled={restoringSnapshot || !isOwner}
+                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold border border-indigo-200 flex items-center gap-1 transition-all disabled:opacity-50 cursor-pointer"
+                          title="Pulihkan Database dari Snapshot Ini"
+                        >
+                          <RotateCcw size={11} className={restoringSnapshot ? 'animate-spin' : ''} />
+                          <span>Restore</span>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -3249,6 +3371,13 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
           </div>
         )}
       </div>
+
+      {/* Tenant Reset & Restore Modal */}
+      <TenantResetModal
+        isOpen={isTenantResetOpen}
+        onClose={() => setIsTenantResetOpen(false)}
+        onSuccess={() => fetchHealthAndBackups()}
+      />
 
       {/* Reset Standalone Modal */}
       <ResetStandaloneModal
