@@ -142,17 +142,16 @@ export const VERTICAL_SOP_PRESETS: Record<string, { opening: SOPCheckItem[]; clo
 
 export const StaffPWAView: React.FC = () => {
   // Authentication state
+  // B-04 FIX: Hanya gunakan staff_token yang diset dari login Staff PWA
+  // JANGAN fallback ke pos_token (token kasir) — mencegah sesi kasir bocor ke portal staf
   const [token, setToken] = useState<string>(() => 
-    localStorage.getItem('staff_token') || 
-    localStorage.getItem('pos_token') || 
-    localStorage.getItem('token') || ''
+    localStorage.getItem('staff_token') || ''
   );
   const [user, setUser] = useState<any>(() => {
     try {
+      // Hanya baca staff_user — bukan pos_user atau user umum
       return JSON.parse(
-        localStorage.getItem('staff_user') || 
-        localStorage.getItem('pos_user') || 
-        localStorage.getItem('user') || 'null'
+        localStorage.getItem('staff_user') || 'null'
       );
     } catch {
       return null;
@@ -385,7 +384,7 @@ export const StaffPWAView: React.FC = () => {
       }
 
       // 2. Jika token tersedia, ambil pengaturan lengkap terotentikasi & daftar shift
-      const effectiveToken = token || localStorage.getItem('staff_token') || localStorage.getItem('pos_token') || localStorage.getItem('token');
+      const effectiveToken = token || localStorage.getItem('staff_token');
       if (!effectiveToken) return;
 
       const headers: Record<string, string> = {

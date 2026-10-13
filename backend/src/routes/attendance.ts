@@ -254,9 +254,13 @@ router.post('/clock', async (req: Request, res: Response) => {
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
         const shiftStartTotalMinutes = shiftStartHour * 60 + (shiftStartMin || 0);
         const tolerance = selectedShift.lateTolerance || 15;
+        const toleranceBoundary = shiftStartTotalMinutes + tolerance;
 
-        if (nowMinutes > (shiftStartTotalMinutes + tolerance)) {
-          lateMinutes = nowMinutes - shiftStartTotalMinutes;
+        if (nowMinutes > toleranceBoundary) {
+          // B-05 FIX: lateMinutes dihitung dari BATAS TOLERANSI, bukan dari jam mulai shift
+          // Contoh: Shift 08:00, toleransi 15 mnt, masuk 08:25 → late = 25-15 = 10 mnt (adil)
+          // Bug lama: 08:25 - 08:00 = 25 mnt (terlalu besar, melebih-lebihkan denda)
+          lateMinutes = nowMinutes - toleranceBoundary;
           status = 'Terlambat';
         }
       }
@@ -803,7 +807,7 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
 // ─── Leave & Permission Requests (Izin / Sakit / Cuti) ──────────────────
 
 // POST Submit Leave Request
-// ATT-003: Validasi userId milik tenant sebelum create — mencegah injection izin atas nama staf tenant lain
+// ATT-003: userId WAJIB dari JWT (bukan body) — mencegah IDOR / injeksi izin atas nama staf lain
 router.post('/leaves', authenticateToken, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantId(req);
@@ -811,15 +815,23 @@ router.post('/leaves', authenticateToken, async (req: Request, res: Response) =>
       return res.status(400).json({ error: 'Tenant context tidak tersedia.', code: 'MISSING_TENANT_CONTEXT' });
     }
 
-    const { userId, type, startDate, endDate, reason, photoUrl } = req.body;
-    if (!userId || !type || !startDate || !endDate || !reason) {
+    // B-09 FIX: Ambil userId dari JWT yang sudah terautentikasi, ABAIKAN userId dari body
+    // Staff hanya bisa mengajukan izin untuk dirinya sendiri
+    const requestingUser = (req as AuthRequest).user;
+    const userId = requestingUser?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Sesi tidak valid, silakan login ulang.' });
+    }
+
+    const { type, startDate, endDate, reason, photoUrl } = req.body;
+    if (!type || !startDate || !endDate || !reason) {
       return res.status(400).json({ error: 'Lengkapi seluruh data pengajuan izin/sakit' });
     }
 
-    // Validasi kepemilikan: userId harus anggota aktif tenant yang mengajukan
+    // Validasi kepemilikan: user pemohon harus anggota aktif tenant ini
     const targetUser = await prisma.user.findFirst({
       where: {
-        id: Number(userId),
+        id: userId,
         memberships: { some: { tenantId, status: 'ACTIVE' } }
       }
     });
@@ -833,7 +845,7 @@ router.post('/leaves', authenticateToken, async (req: Request, res: Response) =>
     const leave = await prisma.leaveRequest.create({
       data: {
         tenantId,
-        userId: Number(userId),
+        userId, // Selalu dari JWT
         type,
         startDate,
         endDate,
@@ -879,12 +891,24 @@ router.get('/leaves', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
-// PATCH Approve or Reject Leave Request (Admin only)
+// PATCH Approve or Reject Leave Request (Admin/Owner/Manager only)
+// B-02 FIX: Tambah role guard ketat — staff biasa tidak boleh approve izin siapapun (termasuk dirinya sendiri)
 router.patch('/leaves/:id/status', authenticateToken, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantId(req);
     const { id } = req.params;
     const { status, approvedBy, adminNotes } = req.body;
+
+    // B-02: Validasi role — hanya admin/owner/manager/supervisor yang boleh approve/reject
+    const requestingUser = (req as AuthRequest).user;
+    const approverRole = (requestingUser?.role || '').toLowerCase();
+    const ALLOWED_APPROVER_ROLES = ['owner', 'admin', 'manager', 'supervisor', 'superadmin'];
+    if (!ALLOWED_APPROVER_ROLES.includes(approverRole)) {
+      return res.status(403).json({
+        error: 'Akses ditolak. Hanya Owner/Admin/Manager yang dapat menyetujui atau menolak pengajuan izin.',
+        code: 'INSUFFICIENT_ROLE'
+      });
+    }
 
     if (!['Approved', 'Rejected', 'Pending'].includes(status)) {
       return res.status(400).json({ error: 'Status tidak valid' });
@@ -901,7 +925,7 @@ router.patch('/leaves/:id/status', authenticateToken, async (req: Request, res: 
       where: { id: Number(id) },
       data: {
         status,
-        approvedBy: approvedBy || 'Admin',
+        approvedBy: approvedBy || requestingUser?.name || 'Admin',
         adminNotes: adminNotes || null,
       },
       include: {
@@ -977,18 +1001,50 @@ router.get('/handover', authenticateToken, async (req: Request, res: Response) =
 // ─── Kitchen SOP Checklist (Opening & Closing) ──────────────────────────
 
 // POST Kitchen Checklist
+// B-07 FIX: Cek duplikasi — staff tidak bisa submit SOP yang sama (Opening/Closing) lebih dari sekali per hari
+// Jika sudah ada, update (upsert) daripada create baru untuk menjaga data clean
 router.post('/checklist', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const user = (req as AuthRequest).user;
-    const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
-    const outletId = user?.outletId;
+    const authUser = (req as AuthRequest).user;
+    const tenantId = authUser?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+    const outletId = authUser?.outletId;
     const { userId, type, shiftName, items, notes } = req.body;
     if (!userId || !type || !items) {
       return res.status(400).json({ error: 'Lengkapi data checklist SOP' });
     }
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const checklist = await prisma.kitchenChecklist.create({
+    const itemsJsonStr = typeof items === 'string' ? items : JSON.stringify(items);
+
+    // B-07: Cek apakah sudah ada checklist tipe ini hari ini untuk user ini
+    const existingChecklist = await prisma.kitchenChecklist.findFirst({
+      where: {
+        userId: Number(userId),
+        type,
+        date: todayStr,
+        tenantId
+      }
+    });
+
+    let checklist;
+    if (existingChecklist) {
+      // Update checklist yang sudah ada (termasuk progress terbaru)
+      checklist = await prisma.kitchenChecklist.update({
+        where: { id: existingChecklist.id },
+        data: {
+          shiftName: shiftName || existingChecklist.shiftName,
+          itemsJson: itemsJsonStr,
+          notes: notes || existingChecklist.notes,
+        },
+        include: {
+          user: { select: { id: true, name: true, username: true, role: true } }
+        }
+      });
+      return res.json({ ...checklist, _updated: true });
+    }
+
+    // Buat checklist baru jika belum ada hari ini
+    checklist = await prisma.kitchenChecklist.create({
       data: {
         tenantId,
         outletId,
@@ -996,7 +1052,7 @@ router.post('/checklist', authenticateToken, async (req: Request, res: Response)
         type, // OPENING or CLOSING
         date: todayStr,
         shiftName: shiftName || null,
-        itemsJson: typeof items === 'string' ? items : JSON.stringify(items),
+        itemsJson: itemsJsonStr,
         notes: notes || null,
       },
       include: {
