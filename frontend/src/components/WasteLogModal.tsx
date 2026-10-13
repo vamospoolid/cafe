@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { 
   X, Trash2, AlertTriangle, Flame, Clock, Sparkles, 
   CheckCircle2, DollarSign, Package, Utensils, Info, 
-  HelpCircle, AlertOctagon, RefreshCw, ArrowRight 
+  HelpCircle, AlertOctagon, RefreshCw, ArrowRight, Search 
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -43,6 +43,7 @@ const WasteLogModal: React.FC<WasteLogModalProps> = ({
   const [loadingItems, setLoadingItems] = useState(false);
 
   const [selectedItemId, setSelectedItemId] = useState<string>(initialItemId ? String(initialItemId) : '');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [qty, setQty] = useState<string>('1');
   const [reason, setReason] = useState<string>('Busuk / Basi');
   const [notes, setNotes] = useState<string>('');
@@ -52,6 +53,7 @@ const WasteLogModal: React.FC<WasteLogModalProps> = ({
     if (isOpen) {
       setType(initialType);
       setSelectedItemId(initialItemId ? String(initialItemId) : '');
+      setSearchQuery('');
       setQty('1');
       setReason('Busuk / Basi');
       setNotes('');
@@ -184,7 +186,7 @@ const WasteLogModal: React.FC<WasteLogModalProps> = ({
           <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
             <button
               type="button"
-              onClick={() => { setType('INGREDIENT'); setSelectedItemId(''); }}
+              onClick={() => { setType('INGREDIENT'); setSelectedItemId(''); setSearchQuery(''); }}
               className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                 type === 'INGREDIENT'
                   ? 'bg-white text-slate-900 shadow-sm'
@@ -196,7 +198,7 @@ const WasteLogModal: React.FC<WasteLogModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => { setType('PRODUCT'); setSelectedItemId(''); }}
+              onClick={() => { setType('PRODUCT'); setSelectedItemId(''); setSearchQuery(''); }}
               className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                 type === 'PRODUCT'
                   ? 'bg-white text-slate-900 shadow-sm'
@@ -208,29 +210,64 @@ const WasteLogModal: React.FC<WasteLogModalProps> = ({
             </button>
           </div>
 
-          {/* Item Selector */}
+          {/* Item Selector & Search */}
           <div className="space-y-1.5">
-            <label className="block font-bold text-slate-700 uppercase tracking-wider text-[11px]">
-              {type === 'INGREDIENT' ? 'Pilih Bahan Baku' : 'Pilih Menu / Porsi Masakan'}
-            </label>
+            <div className="flex justify-between items-center">
+              <label className="block font-bold text-slate-700 uppercase tracking-wider text-[11px]">
+                {type === 'INGREDIENT' ? 'Pilih Bahan Baku' : 'Pilih Menu / Porsi Masakan'}
+              </label>
+              {searchQuery && (
+                <span className="text-[10px] text-rose-600 font-bold">
+                  {type === 'INGREDIENT' 
+                    ? `${ingredients.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).length} bahan ditemukan`
+                    : `${products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())).length} menu ditemukan`}
+                </span>
+              )}
+            </div>
+
+            {/* Quick Search Input */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={`Cari nama ${type === 'INGREDIENT' ? 'bahan baku (cth: Daging, Telur, Kopi)...' : 'menu masakan (cth: Ramen, Katsu)...'}`}
+                className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white transition-all"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
             <select
               value={selectedItemId}
               onChange={(e) => setSelectedItemId(e.target.value)}
-              className="w-full px-3.5 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold text-xs outline-none focus:border-rose-500 focus:bg-white transition-all"
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 font-bold text-xs outline-none focus:border-rose-500 focus:bg-white transition-all"
               required
             >
               <option value="">-- Pilih {type === 'INGREDIENT' ? 'Bahan Baku' : 'Menu Produk'} --</option>
               {type === 'INGREDIENT'
-                ? ingredients.map((ing) => (
-                    <option key={ing.id} value={ing.id}>
-                      {ing.name} (Sisa Stok: {ing.stock} {ing.unit} • HPP: Rp {Number(ing.buyPrice || 0).toLocaleString('id-ID')}/{ing.unit})
-                    </option>
-                  ))
-                : products.map((prod) => (
-                    <option key={prod.id} value={prod.id}>
-                      {prod.name} (Harga: Rp {prod.sellPrice.toLocaleString('id-ID')})
-                    </option>
-                  ))}
+                ? ingredients
+                    .filter(ing => !searchQuery.trim() || ing.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map((ing) => (
+                      <option key={ing.id} value={ing.id}>
+                        {ing.name} (Sisa Stok: {ing.stock} {ing.unit} • HPP: Rp {Number(ing.buyPrice || 0).toLocaleString('id-ID')}/{ing.unit})
+                      </option>
+                    ))
+                : products
+                    .filter(prod => !searchQuery.trim() || prod.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map((prod) => (
+                      <option key={prod.id} value={prod.id}>
+                        {prod.name} (Harga: Rp {prod.sellPrice.toLocaleString('id-ID')})
+                      </option>
+                    ))}
             </select>
           </div>
 

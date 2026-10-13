@@ -169,6 +169,8 @@ export const IngredientView: React.FC = () => {
   const [lossStartDate, setLossStartDate] = useState<string>(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
   const [lossEndDate, setLossEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showLossModal, setShowLossModal] = useState(false);
+  const [lossItemSearch, setLossItemSearch] = useState<string>('');
+  const [lossLogSearch, setLossLogSearch] = useState<string>('');
   const [allProducts, setAllProducts] = useState<any[]>([]);
   const [lossForm, setLossForm] = useState({
     targetType: 'INGREDIENT' as 'INGREDIENT' | 'PRODUCT',
@@ -207,6 +209,8 @@ export const IngredientView: React.FC = () => {
 
   // Stock Opname Audit State
   const [opnameItems, setOpnameItems] = useState<OpnameItemState[]>([]);
+  const [opnameSearch, setOpnameSearch] = useState<string>('');
+  const [opnameFilter, setOpnameFilter] = useState<'ALL' | 'VARIANCE' | 'MATCH' | 'FOOD' | 'DRINK' | 'PACKAGING'>('ALL');
   const [auditorName, setAuditorName] = useState<string>(posContext?.user?.username || 'Admin');
   const [opnameNotes, setOpnameNotes] = useState<string>('Stock Opname Rutin Dapur');
   const [submittingOpname, setSubmittingOpname] = useState(false);
@@ -1031,6 +1035,7 @@ export const IngredientView: React.FC = () => {
   };
 
   const handleOpenLossModal = (preselectedId?: number, initialType: 'INGREDIENT' | 'PRODUCT' = 'INGREDIENT') => {
+    setLossItemSearch('');
     setLossForm({
       targetType: initialType,
       ingredientId: preselectedId ? preselectedId.toString() : (ingredients[0]?.id.toString() || ''),
@@ -2997,6 +3002,27 @@ export const IngredientView: React.FC = () => {
               </span>
             </div>
 
+            {/* SEARCH INPUT UNTUK RIWAYAT WASTE LOG */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={lossLogSearch}
+                onChange={e => setLossLogSearch(e.target.value)}
+                placeholder="Cari riwayat waste (nama bahan baku, porsi menu, alasan, staf dapur, atau catatan)..."
+                className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white transition-all shadow-2xs"
+              />
+              {lossLogSearch && (
+                <button
+                  type="button"
+                  onClick={() => setLossLogSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
             {/* MOBILE CARD VIEW (< md screen) */}
             <div className="block md:hidden space-y-3">
               {lossLoading ? (
@@ -3008,7 +3034,17 @@ export const IngredientView: React.FC = () => {
                   Belum ada log stock loss yang tercatat pada rentang tanggal ini.
                 </div>
               ) : (
-                lossData.logs.map((l: any) => {
+                (lossData.logs as any[])
+                  .filter(l => {
+                    if (!lossLogSearch.trim()) return true;
+                    const q = lossLogSearch.toLowerCase();
+                    const itemName = (l.productName || l.ingredient?.name || '').toLowerCase();
+                    const staffName = (l.user?.name || '').toLowerCase();
+                    const reason = (l.reason || '').toLowerCase();
+                    const notes = (l.notes || '').toLowerCase();
+                    return itemName.includes(q) || staffName.includes(q) || reason.includes(q) || notes.includes(q);
+                  })
+                  .map((l: any) => {
                   const isMenu = l.targetType === 'PRODUCT' || !!l.productName;
                   const itemName = l.productName || l.ingredient?.name || 'Item Unknown';
                   const unitStr = isMenu ? 'porsi' : (l.ingredient?.unit || 'unit');
@@ -3101,7 +3137,17 @@ export const IngredientView: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    lossData.logs.map((l: any) => {
+                    (lossData.logs as any[])
+                      .filter(l => {
+                        if (!lossLogSearch.trim()) return true;
+                        const q = lossLogSearch.toLowerCase();
+                        const itemName = (l.productName || l.ingredient?.name || '').toLowerCase();
+                        const staffName = (l.user?.name || '').toLowerCase();
+                        const reason = (l.reason || '').toLowerCase();
+                        const notes = (l.notes || '').toLowerCase();
+                        return itemName.includes(q) || staffName.includes(q) || reason.includes(q) || notes.includes(q);
+                      })
+                      .map((l: any) => {
                       const isMenu = l.targetType === 'PRODUCT' || !!l.productName;
                       const itemName = l.productName || l.ingredient?.name || 'Unknown';
                       const unitStr = isMenu ? 'porsi' : (l.ingredient?.unit || '');
@@ -4688,131 +4734,235 @@ export const IngredientView: React.FC = () => {
               </div>
             </div>
 
-            {/* MOBILE CARD VIEW (< md) */}
-            <div className="md:hidden divide-y divide-slate-100 max-h-[600px] overflow-y-auto space-y-1">
-              {opnameItems.map(item => {
+            {/* SEARCH & FILTER TOOLBAR UNTUK AUDIT STOCK OPNAME */}
+            <div className="bg-slate-50/80 p-3 sm:p-4 rounded-2xl border border-slate-200/80 space-y-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={opnameSearch}
+                    onChange={e => setOpnameSearch(e.target.value)}
+                    placeholder="Cari nama bahan baku opname (cth: Daging, Telur, Mie, Kopi)..."
+                    className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                  {opnameSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setOpnameSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                      title="Hapus pencarian"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Quick Action Button */}
+                <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpnameItems(prev => prev.map(i => ({ ...i, physicalStock: i.systemStock.toString() })));
+                      toast('Semua stok fisik diselaraskan sama dengan stok sistem', 'info');
+                    }}
+                    className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[11px] font-bold transition-all shadow-2xs"
+                  >
+                    Set Semua Sesuai Sistem
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 text-xs">
+                {[
+                  { id: 'ALL', label: `Semua (${opnameItems.length})` },
+                  { id: 'VARIANCE', label: `Ada Selisih (${opnameItems.filter(i => Math.abs(Number(i.physicalStock) - i.systemStock) > 0.001).length})`, isAlert: true },
+                  { id: 'MATCH', label: `Sesuai (${opnameItems.filter(i => Math.abs(Number(i.physicalStock) - i.systemStock) <= 0.001).length})` },
+                  { id: 'FOOD', label: 'Bahan Makanan' },
+                  { id: 'DRINK', label: 'Minuman' },
+                  { id: 'PACKAGING', label: 'Packaging' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setOpnameFilter(tab.id as any)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
+                      opnameFilter === tab.id
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                        : tab.isAlert && opnameItems.some(i => Math.abs(Number(i.physicalStock) - i.systemStock) > 0.001)
+                        ? 'bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100'
+                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Filtered Opname Items */}
+            {(() => {
+              const filteredOpnameItems = opnameItems.filter(item => {
+                if (opnameSearch.trim()) {
+                  const q = opnameSearch.toLowerCase();
+                  if (!item.name.toLowerCase().includes(q) && !(item.notes || '').toLowerCase().includes(q)) return false;
+                }
                 const diff = Number(item.physicalStock) - item.systemStock;
-                const isMiss = Math.abs(diff) > 0.001;
+                const hasVariance = Math.abs(diff) > 0.001;
+                if (opnameFilter === 'VARIANCE') return hasVariance;
+                if (opnameFilter === 'MATCH') return !hasVariance;
+                if (opnameFilter === 'FOOD' || opnameFilter === 'DRINK' || opnameFilter === 'PACKAGING') {
+                  const orig = ingredients.find(ing => ing.id === item.ingredientId);
+                  return (orig?.category || '').toUpperCase().includes(opnameFilter);
+                }
+                return true;
+              });
 
+              if (filteredOpnameItems.length === 0) {
                 return (
-                  <div key={item.ingredientId} className={`p-2.5 space-y-2 rounded-xl transition-colors ${isMiss ? 'bg-amber-50/50' : 'bg-white'}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-bold text-slate-900 text-xs truncate">{item.name}</div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                        diff < 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (diff > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-500')
-                      }`}>
-                        {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="p-1.5 bg-slate-50 rounded-lg border border-slate-100 text-center">
-                        <span className="text-[9px] font-bold text-slate-400 block uppercase">Stok Sistem</span>
-                        <span className="text-xs font-black text-slate-700">{item.systemStock.toLocaleString('id-ID')} {item.unit}</span>
-                      </div>
-                      <div className="p-1.5 bg-blue-50/60 rounded-lg border border-blue-100 text-center">
-                        <span className="text-[9px] font-bold text-blue-600 block uppercase">Fisik Riil</span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={item.physicalStock}
-                          onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
-                          className="w-full mt-0.5 px-2 py-0.5 bg-white border border-blue-200 rounded text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={item.reason}
-                        onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
-                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700"
-                      >
-                        <option value="Normal">Normal</option>
-                        <option value="Susut/Trimming">Susut / Trimming</option>
-                        <option value="Busuk/Rusak">Busuk / Rusak</option>
-                        <option value="Selisih Timbang">Selisih Timbang</option>
-                        <option value="Lainnya">Lainnya</option>
-                      </select>
-                      <input
-                        type="text"
-                        value={item.notes}
-                        onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
-                        placeholder="Catatan..."
-                        className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px]"
-                      />
-                    </div>
+                  <div className="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-6 space-y-2">
+                    <p className="text-xs font-bold text-slate-600">Tidak ada bahan baku yang cocok dengan filter atau kata kunci "{opnameSearch}"</p>
+                    <button
+                      onClick={() => { setOpnameSearch(''); setOpnameFilter('ALL'); }}
+                      className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-blue-600 rounded-xl text-xs font-bold transition-all"
+                    >
+                      Reset Filter &amp; Tampilkan Semua Bahan
+                    </button>
                   </div>
                 );
-              })}
-            </div>
+              }
 
-            {/* DESKTOP TABLE VIEW (>= md) */}
-            <div className="hidden md:block overflow-x-auto max-h-[600px]">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase sticky top-0">
-                  <tr>
-                    <th className="py-3 px-4">Nama Bahan</th>
-                    <th className="py-3 px-4 text-right">Stok Sistem</th>
-                    <th className="py-3 px-4 text-center">Stok Fisik Riil</th>
-                    <th className="py-3 px-4 text-right">Selisih (Variance)</th>
-                    <th className="py-3 px-4">Alasan Selisih</th>
-                    <th className="py-3 px-4">Catatan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {opnameItems.map(item => {
-                    const diff = Number(item.physicalStock) - item.systemStock;
-                    const isMiss = Math.abs(diff) > 0.001;
+              return (
+                <>
+                  {/* MOBILE CARD VIEW (< md) */}
+                  <div className="md:hidden divide-y divide-slate-100 max-h-[600px] overflow-y-auto space-y-1">
+                    {filteredOpnameItems.map(item => {
+                      const diff = Number(item.physicalStock) - item.systemStock;
+                      const isMiss = Math.abs(diff) > 0.001;
 
-                    return (
-                      <tr key={item.ingredientId} className={isMiss ? 'bg-amber-50/40' : ''}>
-                        <td className="py-3 px-4 font-black text-slate-900">{item.name}</td>
-                        <td className="py-3 px-4 text-right font-bold text-slate-600">
-                          {item.systemStock.toLocaleString('id-ID')} {item.unit}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <input
-                            type="number"
-                            step="any"
-                            value={item.physicalStock}
-                            onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
-                            className="w-28 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                          />
-                        </td>
-                        <td className={`py-3 px-4 text-right font-black ${
-                          diff < 0 ? 'text-rose-600' : (diff > 0 ? 'text-emerald-600' : 'text-slate-400')
-                        }`}>
-                          {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
-                        </td>
-                        <td className="py-3 px-4">
-                          <select
-                            value={item.reason}
-                            onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
-                            className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
-                          >
-                            <option value="Normal">Normal</option>
-                            <option value="Susut/Trimming">Susut / Trimming</option>
-                            <option value="Busuk/Rusak">Busuk / Rusak</option>
-                            <option value="Selisih Timbang">Selisih Timbang</option>
-                            <option value="Lainnya">Lainnya</option>
-                          </select>
-                        </td>
-                        <td className="py-3 px-4">
-                          <input
-                            type="text"
-                            value={item.notes}
-                            onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
-                            placeholder="Catatan..."
-                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <div key={item.ingredientId} className={`p-2.5 space-y-2 rounded-xl transition-colors ${isMiss ? 'bg-amber-50/50' : 'bg-white'}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-bold text-slate-900 text-xs truncate">{item.name}</div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                              diff < 0 ? 'bg-rose-50 text-rose-600 border border-rose-200' : (diff > 0 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-500')
+                            }`}>
+                              {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="p-1.5 bg-slate-50 rounded-lg border border-slate-100 text-center">
+                              <span className="text-[9px] font-bold text-slate-400 block uppercase">Stok Sistem</span>
+                              <span className="text-xs font-black text-slate-700">{item.systemStock.toLocaleString('id-ID')} {item.unit}</span>
+                            </div>
+                            <div className="p-1.5 bg-blue-50/60 rounded-lg border border-blue-100 text-center">
+                              <span className="text-[9px] font-bold text-blue-600 block uppercase">Fisik Riil</span>
+                              <input
+                                type="number"
+                                step="any"
+                                value={item.physicalStock}
+                                onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
+                                className="w-full mt-0.5 px-2 py-0.5 bg-white border border-blue-200 rounded text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              value={item.reason}
+                              onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-700"
+                            >
+                              <option value="Normal">Normal</option>
+                              <option value="Susut/Trimming">Susut / Trimming</option>
+                              <option value="Busuk/Rusak">Busuk / Rusak</option>
+                              <option value="Selisih Timbang">Selisih Timbang</option>
+                              <option value="Lainnya">Lainnya</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={item.notes}
+                              onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
+                              placeholder="Catatan..."
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px]"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* DESKTOP TABLE VIEW (>= md) */}
+                  <div className="hidden md:block overflow-x-auto max-h-[600px]">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase sticky top-0">
+                        <tr>
+                          <th className="py-3 px-4">Nama Bahan</th>
+                          <th className="py-3 px-4 text-right">Stok Sistem</th>
+                          <th className="py-3 px-4 text-center">Stok Fisik Riil</th>
+                          <th className="py-3 px-4 text-right">Selisih (Variance)</th>
+                          <th className="py-3 px-4">Alasan Selisih</th>
+                          <th className="py-3 px-4">Catatan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                        {filteredOpnameItems.map(item => {
+                          const diff = Number(item.physicalStock) - item.systemStock;
+                          const isMiss = Math.abs(diff) > 0.001;
+
+                          return (
+                            <tr key={item.ingredientId} className={isMiss ? 'bg-amber-50/40' : ''}>
+                              <td className="py-3 px-4 font-black text-slate-900">{item.name}</td>
+                              <td className="py-3 px-4 text-right font-bold text-slate-600">
+                                {item.systemStock.toLocaleString('id-ID')} {item.unit}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={item.physicalStock}
+                                  onChange={e => handleOpnameChange(item.ingredientId, e.target.value)}
+                                  className="w-28 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-center text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                />
+                              </td>
+                              <td className={`py-3 px-4 text-right font-black ${
+                                diff < 0 ? 'text-rose-600' : (diff > 0 ? 'text-emerald-600' : 'text-slate-400')
+                              }`}>
+                                {diff !== 0 ? (diff > 0 ? `+${diff.toLocaleString('id-ID')}` : diff.toLocaleString('id-ID')) : '0'} {item.unit}
+                              </td>
+                              <td className="py-3 px-4">
+                                <select
+                                  value={item.reason}
+                                  onChange={e => handleOpnameReasonChange(item.ingredientId, e.target.value)}
+                                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700"
+                                >
+                                  <option value="Normal">Normal</option>
+                                  <option value="Susut/Trimming">Susut / Trimming</option>
+                                  <option value="Busuk/Rusak">Busuk / Rusak</option>
+                                  <option value="Selisih Timbang">Selisih Timbang</option>
+                                  <option value="Lainnya">Lainnya</option>
+                                </select>
+                              </td>
+                              <td className="py-3 px-4">
+                                <input
+                                  type="text"
+                                  value={item.notes}
+                                  onChange={e => handleOpnameNotesChange(item.ingredientId, e.target.value)}
+                                  placeholder="Catatan..."
+                                  className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -5579,6 +5729,7 @@ export const IngredientView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      setLossItemSearch('');
                       setLossForm(prev => ({
                         ...prev,
                         targetType: 'INGREDIENT',
@@ -5599,6 +5750,7 @@ export const IngredientView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      setLossItemSearch('');
                       if (allProducts.length === 0) fetchProducts();
                       setLossForm(prev => ({
                         ...prev,
@@ -5628,16 +5780,40 @@ export const IngredientView: React.FC = () => {
                       Stok saat ini: <strong className="text-slate-800">{selectedLossIngredient?.stock || 0} {selectedLossIngredient?.unit}</strong>
                     </span>
                   </div>
+
+                  {/* Search Input for Ingredients */}
+                  <div className="relative mb-1.5">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={lossItemSearch}
+                      onChange={e => setLossItemSearch(e.target.value)}
+                      placeholder="Cari nama bahan baku (cth: Daging, Telur, Kopi)..."
+                      className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white transition-all"
+                    />
+                    {lossItemSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setLossItemSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
                   <select
                     value={lossForm.ingredientId}
                     onChange={e => setLossForm({ ...lossForm, ingredientId: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-500 focus:bg-white transition-all"
                   >
-                    {ingredients.map(i => (
-                      <option key={i.id} value={i.id.toString()}>
-                        {i.name} (Stok: {i.stock} {i.unit}){isAdminRole && typeof i.buyPrice === 'number' ? ` — Rp ${i.buyPrice.toLocaleString('id-ID')}/${i.unit}` : ''}
-                      </option>
-                    ))}
+                    {ingredients
+                      .filter(i => !lossItemSearch.trim() || i.name.toLowerCase().includes(lossItemSearch.toLowerCase()))
+                      .map(i => (
+                        <option key={i.id} value={i.id.toString()}>
+                          {i.name} (Stok: {i.stock} {i.unit}){isAdminRole && typeof i.buyPrice === 'number' ? ` — Rp ${i.buyPrice.toLocaleString('id-ID')}/${i.unit}` : ''}
+                        </option>
+                      ))}
                   </select>
                 </div>
               ) : (
@@ -5648,19 +5824,43 @@ export const IngredientView: React.FC = () => {
                       {isAdminRole ? `HPP Satuan: Rp ${(unitHpp || 0).toLocaleString('id-ID')}` : 'Stok Terhubung ke Resep'}
                     </span>
                   </div>
+
+                  {/* Search Input for Products */}
+                  <div className="relative mb-1.5">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={lossItemSearch}
+                      onChange={e => setLossItemSearch(e.target.value)}
+                      placeholder="Cari nama menu masakan (cth: Ramen, Katsu)..."
+                      className="w-full pl-8 pr-7 py-1.5 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white transition-all"
+                    />
+                    {lossItemSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setLossItemSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
                   <select
                     value={lossForm.productId}
                     onChange={e => setLossForm({ ...lossForm, productId: e.target.value })}
                     className="w-full px-3.5 py-2.5 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-purple-500 focus:bg-white transition-all"
                   >
-                    {allProducts.map(p => {
-                      const pCost = p.buyPrice || 0;
-                      return (
-                        <option key={p.id} value={p.id.toString()}>
-                          {p.name} {isAdminRole && pCost > 0 ? `— HPP: Rp ${pCost.toLocaleString('id-ID')}` : ''}
-                        </option>
-                      );
-                    })}
+                    {allProducts
+                      .filter(p => !lossItemSearch.trim() || p.name.toLowerCase().includes(lossItemSearch.toLowerCase()))
+                      .map(p => {
+                        const pCost = p.buyPrice || 0;
+                        return (
+                          <option key={p.id} value={p.id.toString()}>
+                            {p.name} {isAdminRole && pCost > 0 ? `— HPP: Rp ${pCost.toLocaleString('id-ID')}` : ''}
+                          </option>
+                        );
+                      })}
                   </select>
                   <p className="text-[10px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200/80 mt-1.5 flex items-center gap-1.5">
                     <Sparkles size={12} className="shrink-0" />
