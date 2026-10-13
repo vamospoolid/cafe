@@ -18,6 +18,13 @@ const getOrderCashPortion = (paymentMethod: string | null, total: number): numbe
   return 0;
 };
 
+// Helper untuk verifikasi role Owner / Admin / Manager secara case-insensitive
+export const checkIsAdminOrOwner = (user: any): boolean => {
+  if (!user) return false;
+  const roleUpper = String(user.role || '').toUpperCase();
+  return ['ADMIN', 'OWNER', 'SUPERADMIN', 'MANAGER'].includes(roleUpper) || Boolean(user.isPlatformAdmin);
+};
+
 // GET /api/cashflow/summary - Agregasi Metrik Kas Operasional, Laci Kasir, Approval, dan Burn Rate
 router.get('/summary', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -157,9 +164,14 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { type, pocket, status, search, startDate, endDate, tzOffset } = req.query;
     const tenantId = (req as any).tenantId || (req as any).user?.tenantId;
-    
-    const whereClause: any = {};
-    if (tenantId) whereClause.tenantId = tenantId;
+
+    // BUG-003 FIX: Fail-closed — wajib ada tenantId sebelum query. Pola lama
+    // `if (tenantId) whereClause.tenantId = tenantId` adalah fail-open dan berbahaya
+    // di multi-tenant SaaS karena bisa membaca seluruh tabel CashFlow tanpa filter.
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
+    }
+    const whereClause: any = { tenantId };
 
     if (type && type !== 'ALL') whereClause.type = type;
     if (pocket && pocket !== 'ALL') {
@@ -257,7 +269,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
     }
 
     // Role-based status determination
-    const isAdminOrOwner = user.role === 'Admin' || user.role === 'Owner' || user.isPlatformAdmin;
+    const isAdminOrOwner = checkIsAdminOrOwner(user);
     let finalStatus = 'APPROVED';
 
     if (!isAdminOrOwner && type === 'Pengeluaran') {
@@ -351,7 +363,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 router.patch('/:id/approve', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const isAdminOrOwner = user.role === 'Admin' || user.role === 'Owner' || user.isPlatformAdmin;
+    const isAdminOrOwner = checkIsAdminOrOwner(user);
 
     if (!isAdminOrOwner) {
       return res.status(403).json({ error: 'Hanya Owner atau Admin yang dapat menyetujui pengeluaran' });
@@ -437,7 +449,7 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
 router.patch('/:id/reject', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
-    const isAdminOrOwner = user.role === 'Admin' || user.role === 'Owner' || user.isPlatformAdmin;
+    const isAdminOrOwner = checkIsAdminOrOwner(user);
 
     if (!isAdminOrOwner) {
       return res.status(403).json({ error: 'Hanya Owner atau Admin yang dapat menolak pengeluaran' });
@@ -502,7 +514,7 @@ router.delete('/:id', authenticateToken, async (req: Request, res: Response) => 
       return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
     }
 
-    const isAdminOrOwner = user.role === 'Admin' || user.role === 'Owner' || user.isPlatformAdmin;
+    const isAdminOrOwner = checkIsAdminOrOwner(user);
     const isOwnerOfRecord = existing.userId === user.id && existing.status === 'PENDING';
 
     if (!isAdminOrOwner && !isOwnerOfRecord) {

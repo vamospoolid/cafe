@@ -4,7 +4,7 @@ import {
   Camera, Plus, Trash2, Minus, Search, CreditCard, User, Edit2, 
   ShoppingCart, Package, ArrowRight, X, Save, Lock, Play,
   Maximize2, Minimize2, Download, RefreshCw, Wifi, WifiOff, Smartphone,
-  Clock, AlertTriangle, Printer
+  Clock, AlertTriangle, Printer, Check
 } from 'lucide-react';
 import CheckoutModal from './CheckoutModal';
 import CustomerModal from './CustomerModal';
@@ -74,6 +74,8 @@ export const POSView = () => {
 
   const [drinkModalOpen, setDrinkModalOpen] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<any>(null);
+  const [pendingIsBuffer, setPendingIsBuffer] = useState(false);
+  const [bufferConfirmProduct, setBufferConfirmProduct] = useState<{ product: any; capInfo: any } | null>(null);
   const [isOpenShiftOpen, setIsOpenShiftOpen] = useState(false);
   const [isCloseShiftOpen, setIsCloseShiftOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -128,6 +130,7 @@ export const POSView = () => {
   
   const drinkCustomizationEnabled = posContext?.settings?.enableDrinkCustomization ?? false;
   const isAdvancedMode = posContext?.settings?.ingredientTrackingEnabled ?? false;
+  const allowSaleWhenOutOfStock = posContext?.settings?.allowSaleWhenOutOfStock !== false;
 
   useEffect(() => {
     if (posContext?.token) {
@@ -143,28 +146,12 @@ export const POSView = () => {
 
     const handleStockSync = (data: any) => {
       console.log('[POS Socket] menu:stock_sync received:', data);
-      if (data?.soldOutProductIds) {
-        setProducts(prev => prev.map(p => {
-          if (data.soldOutProductIds.includes(p.id)) {
-            return { ...p, isSoldOut: true, stock: 0 };
-          }
-          if (data.availableProductIds && data.availableProductIds.includes(p.id)) {
-            return { ...p, isSoldOut: false };
-          }
-          return p;
-        }));
-      } else {
-        // Full refresh if needed
-        fetchProducts();
-      }
+      fetchProducts();
     };
 
     const handleProductSoldOut = (data: any) => {
       console.log('[POS Socket] product:sold_out received:', data);
-      if (data?.productId) {
-        setProducts(prev => prev.map(p => p.id === data.productId ? { ...p, isSoldOut: true, stock: 0 } : p));
-        toast(`⚠️ Dapur: Menu "${data.productName}" telah habis & dikunci otomatis!`, 'warning');
-      }
+      fetchProducts();
     };
 
     let categoryDebounceTimer: any = null;
@@ -251,13 +238,16 @@ export const POSView = () => {
 
   const getProductPortionCapacity = (product: any) => {
     const hasRecipes = Array.isArray(product.recipes) && product.recipes.length > 0;
+    const isManuallySoldOut = Boolean(product.status === 'Nonaktif' || product.isSoldOutManual);
 
     // Jika tidak memiliki resep, gunakan stok fisik barang jadi (product.stock)
     if (!hasRecipes) {
       const s = product.stock !== undefined ? Number(product.stock) : 9999;
+      const isDepleted = s <= 0;
       return {
         capacity: s,
-        isSoldOut: s <= 0,
+        isSoldOut: isManuallySoldOut || (!allowSaleWhenOutOfStock && isDepleted),
+        isBuffer: isDepleted && !isManuallySoldOut && allowSaleWhenOutOfStock,
         bottleneck: null,
         hasRecipe: false
       };
@@ -280,10 +270,12 @@ export const POSView = () => {
     }
 
     const recipeCap = minCapacity === Infinity ? 0 : minCapacity;
+    const isDepleted = recipeCap <= 0;
 
     return {
       capacity: recipeCap,
-      isSoldOut: recipeCap <= 0,
+      isSoldOut: isManuallySoldOut || (!allowSaleWhenOutOfStock && isDepleted),
+      isBuffer: isDepleted && !isManuallySoldOut && allowSaleWhenOutOfStock,
       bottleneck: bottleneckIng,
       hasRecipe: true
     };
@@ -362,18 +354,25 @@ export const POSView = () => {
     }
   };
 
-  const addToCart = (product: any, customization?: DrinkCustomization) => {
+  const addToCart = (product: any, customization?: DrinkCustomization, isBufferConfirmed?: boolean) => {
     posContext?.triggerHaptic(25);
-    const notesStr = customization
-      ? [customization.temperature, customization.sugar, customization.ice, customization.notes].filter(Boolean).join(' • ')
-      : '';
+    const notesParts: string[] = [];
+    if (customization) {
+      const cNotes = [customization.temperature, customization.sugar, customization.ice, customization.notes].filter(Boolean).join(' • ');
+      if (cNotes) notesParts.push(cNotes);
+    }
+    if (isBufferConfirmed) {
+      notesParts.push('[Fisik Ada • Belum Restock]');
+    }
+    const notesStr = notesParts.join(' • ');
 
     const capInfo = getProductPortionCapacity(product);
     const existingTotal = cart
       .filter(item => item.product.id === product.id)
       .reduce((sum, item) => sum + item.qty, 0);
 
-    if (capInfo.capacity !== Infinity && existingTotal + 1 > capInfo.capacity) {
+    // Jika allowSaleWhenOutOfStock dimatikan dan melebihi kapasitas -> hard block
+    if (!allowSaleWhenOutOfStock && capInfo.capacity !== Infinity && existingTotal + 1 > capInfo.capacity) {
       if (capInfo.bottleneck) {
         const u = capInfo.bottleneck.unit ? ` ${capInfo.bottleneck.unit}` : '';
         toast(`Maksimal ${capInfo.capacity} porsi: Bahan baku "${capInfo.bottleneck.name}" tersisa ${capInfo.bottleneck.stock || 0}${u} (hanya cukup untuk ${capInfo.capacity} porsi)! Cek bahan baku dapur.`, 'warning');
@@ -389,7 +388,7 @@ export const POSView = () => {
       if (existing) {
         return prev.map(item => item.product.id === product.id && item.notes === notesStr ? { ...item, qty: item.qty + 1 } : item);
       }
-      return [...prev, { product, qty: 1, notes: notesStr }];
+      return [...prev, { product, qty: 1, notes: notesStr, isBuffer: Boolean(isBufferConfirmed || capInfo.isBuffer) }];
     });
   };
 
@@ -401,12 +400,30 @@ export const POSView = () => {
     }
 
     const capInfo = getProductPortionCapacity(product);
-    if (product.isSoldOut || capInfo.isSoldOut) {
+    if (capInfo.isSoldOut) {
+      toast(`Menu "${product.name}" sedang dinonaktifkan atau stok habis (kontrol ketat)!`, 'warning');
+      return;
+    }
+
+    const existingTotal = cart
+      .filter(item => item.product.id === product.id)
+      .reduce((sum, item) => sum + item.qty, 0);
+
+    const isExceedingCapacity = capInfo.capacity !== Infinity && (existingTotal + 1 > capInfo.capacity);
+
+    // Jika stok 0 atau kapasitas terlampaui dan Buffer Mode aktif -> Buka modal konfirmasi
+    if (isExceedingCapacity && allowSaleWhenOutOfStock) {
+      setBufferConfirmProduct({ product, capInfo });
+      return;
+    }
+
+    // Jika melebihi kapasitas dan Buffer Mode nonaktif -> Hard warning block
+    if (isExceedingCapacity && !allowSaleWhenOutOfStock) {
       if (capInfo.bottleneck) {
         const u = capInfo.bottleneck.unit ? ` ${capInfo.bottleneck.unit}` : '';
-        toast(`Menu "${product.name}" tidak dapat dipesan: Bahan baku "${capInfo.bottleneck.name}" tersisa 0${u} (habis). Cek bahan baku dapur!`, 'warning');
+        toast(`Menu "${product.name}" tidak dapat dipesan: Bahan baku "${capInfo.bottleneck.name}" tersisa 0${u} (habis). Cek bahan dapur!`, 'warning');
       } else {
-        toast(`Menu "${product.name}" sudah habis di dapur!`, 'warning');
+        toast(`Stok "${product.name}" habis di sistem!`, 'warning');
       }
       return;
     }
@@ -416,10 +433,79 @@ export const POSView = () => {
     const isDrink = categoryName.includes('minum') || categoryName.includes('bev');
     if (drinkCustomizationEnabled && isDrink) {
       setPendingProduct(product);
+      setPendingIsBuffer(false);
       setDrinkModalOpen(true);
     } else {
       addToCart(product);
     }
+  };
+
+  const handleConfirmBufferSale = () => {
+    if (!bufferConfirmProduct) return;
+    const { product } = bufferConfirmProduct;
+    setBufferConfirmProduct(null);
+
+    const categoryName = categories.find((c: any) => c.id === product.categoryId)?.name?.toLowerCase() || '';
+    const isDrink = categoryName.includes('minum') || categoryName.includes('bev');
+
+    if (drinkCustomizationEnabled && isDrink) {
+      setPendingProduct(product);
+      setPendingIsBuffer(true);
+      setDrinkModalOpen(true);
+    } else {
+      addToCart(product, undefined, true);
+      toast(`⚡ Menu "${product.name}" ditambahkan via Buffer Mode (Fisik Ada).`, 'success');
+    }
+  };
+
+  const increaseCartItemQty = (cartIndex: number) => {
+    posContext?.triggerHaptic(20);
+    const targetItem = cart[cartIndex];
+    if (!targetItem) return;
+
+    const capInfo = getProductPortionCapacity(targetItem.product);
+    const existingTotal = cart
+      .filter(item => item.product.id === targetItem.product.id)
+      .reduce((sum, item) => sum + item.qty, 0);
+
+    const isExceedingCapacity = capInfo.capacity !== Infinity && (existingTotal + 1 > capInfo.capacity);
+
+    // Jika kontrol ketat (!allowSaleWhenOutOfStock) dan melebihi kapasitas -> block
+    if (isExceedingCapacity && !allowSaleWhenOutOfStock) {
+      if (capInfo.bottleneck) {
+        const u = capInfo.bottleneck.unit ? ` ${capInfo.bottleneck.unit}` : '';
+        toast(`Maksimal ${capInfo.capacity} porsi: Bahan baku "${capInfo.bottleneck.name}" tersisa ${capInfo.bottleneck.stock || 0}${u}! Cek bahan baku dapur.`, 'warning');
+      } else {
+        toast(`Maksimal ${capInfo.capacity} porsi sesuai stok produk!`, 'warning');
+      }
+      return;
+    }
+
+    // Jika melebihi kapasitas dan belum bertanda buffer -> tampilkan konfirmasi buffer
+    if (isExceedingCapacity && allowSaleWhenOutOfStock && !targetItem.notes?.includes('[Fisik Ada • Belum Restock]')) {
+      setBufferConfirmProduct({ product: targetItem.product, capInfo });
+      return;
+    }
+
+    // Naikkan qty pada baris keranjang tersebut
+    setCart(prev => prev.map((item, idx) => idx === cartIndex ? { ...item, qty: item.qty + 1 } : item));
+  };
+
+  const decreaseCartItemQty = (cartIndex: number) => {
+    posContext?.triggerHaptic(20);
+    setCart(prev => {
+      const target = prev[cartIndex];
+      if (!target) return prev;
+      if (target.qty > 1) {
+        return prev.map((item, idx) => idx === cartIndex ? { ...item, qty: item.qty - 1 } : item);
+      }
+      return prev.filter((_, idx) => idx !== cartIndex);
+    });
+  };
+
+  const removeCartItem = (cartIndex: number) => {
+    posContext?.triggerHaptic(30);
+    setCart(prev => prev.filter((_, idx) => idx !== cartIndex));
   };
 
   const decreaseQty = (productId: number) => {
@@ -930,17 +1016,20 @@ export const POSView = () => {
         <div className="product-grid flex-1">
           {filteredProducts.map(product => {
             const capInfo = getProductPortionCapacity(product);
-            const isSoldOut = Boolean(product.isSoldOut || capInfo.isSoldOut);
+            const isHardSoldOut = capInfo.isSoldOut;
+            const isBuffer = capInfo.isBuffer && !isHardSoldOut;
             const cartQty = cart.find(item => item.product.id === product.id)?.qty || 0;
             return (
               <div 
                 key={product.id} 
                 className={`product-card group relative transition-all rounded-2xl overflow-hidden border bg-white shadow-sm hover:shadow-md active:scale-95 flex flex-col justify-between ${
-                  isSoldOut 
+                  isHardSoldOut 
                     ? 'opacity-60 grayscale cursor-not-allowed border-rose-200/50 bg-slate-50' 
                     : cartQty > 0
                       ? 'border-emerald-500 ring-2 ring-emerald-400/30 bg-emerald-50/15 shadow-emerald-100/50 cursor-pointer'
-                      : 'border-slate-200/80 cursor-pointer hover:border-indigo-500'
+                      : isBuffer
+                        ? 'border-amber-300 hover:border-amber-500 cursor-pointer bg-amber-50/10'
+                        : 'border-slate-200/80 cursor-pointer hover:border-indigo-500'
                 }`} 
                 onClick={() => {
                   posContext?.triggerHaptic(15);
@@ -952,28 +1041,30 @@ export const POSView = () => {
                     src={product.imageUrl}
                     alt={product.name}
                     categoryName={product.category?.name}
-                    className={`product-img w-full h-full object-cover ${!isSoldOut ? 'group-hover:scale-105' : ''} transition-transform duration-300`}
+                    className={`product-img w-full h-full object-cover ${!isHardSoldOut ? 'group-hover:scale-105' : ''} transition-transform duration-300`}
                   />
 
                   {/* Quantity In-Cart Badge */}
-                  {cartQty > 0 && !isSoldOut && (
-                    <div className="absolute top-2 right-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-lg border border-white/90 animate-in zoom-in-75 duration-200 flex items-center gap-1">
+                  {cartQty > 0 && !isHardSoldOut && (
+                    <div className="absolute top-2 right-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-lg border border-white/90 animate-in zoom-in-75 duration-200 flex items-center gap-1 z-10">
                       <span>✓</span> {cartQty}x
                     </div>
                   )}
+
+                  {/* Buffer Badge Indicator (Still sellable!) */}
+                  {isBuffer && (
+                    <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-md flex items-center gap-1 z-10 border border-white/60">
+                      <span>⚠️ Buffer (0)</span>
+                    </div>
+                  )}
                   
-                  {/* Sold Out Badge Overlay */}
-                  {isSoldOut ? (
+                  {/* Sold Out Badge Overlay (Only for hard nonaktif items) */}
+                  {isHardSoldOut ? (
                     <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center z-10 animate-fade-in">
                       <div className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg border border-white/20 flex items-center gap-1 mb-1">
                         <AlertTriangle size={12} />
-                        <span>HABIS</span>
+                        <span>{allowSaleWhenOutOfStock ? 'NONAKTIF' : 'STOK HABIS'}</span>
                       </div>
-                      {capInfo.bottleneck && (
-                        <div className="text-[10px] font-bold text-rose-200 px-1 leading-tight line-clamp-2">
-                          {capInfo.bottleneck.name} (0 {capInfo.bottleneck.unit || 'gram'})
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -992,12 +1083,18 @@ export const POSView = () => {
                       {formatCurrency(product.sellPrice ?? product.price)}
                     </div>
                     <div className="product-stock mt-1.5">
-                      {isSoldOut ? (
+                      {isHardSoldOut ? (
                         <div className="px-2 py-1 bg-rose-50 border border-rose-200/80 rounded-lg flex items-center gap-1.5 text-[10px] font-bold text-rose-700">
                           <AlertTriangle size={12} className="shrink-0 text-rose-500" />
-                          <span className="truncate">
-                            {capInfo.bottleneck ? `Habis: ${capInfo.bottleneck.name}` : 'Stok Habis'}
+                          <span className="truncate">{allowSaleWhenOutOfStock ? 'Menu Nonaktif' : 'Stok Habis'}</span>
+                        </div>
+                      ) : isBuffer ? (
+                        <div className="px-2 py-0.5 rounded-lg flex items-center justify-between text-[10px] bg-amber-50 text-amber-800 border border-amber-200/80 font-bold">
+                          <span className="flex items-center gap-1 truncate">
+                            <AlertTriangle size={10} className="text-amber-600 shrink-0" />
+                            <span className="truncate">{capInfo.bottleneck ? `0 ${capInfo.bottleneck.unit || ''}` : 'Stok 0'} (Buffer)</span>
                           </span>
+                          <span className="text-[9px] uppercase tracking-wider text-amber-700 font-extrabold px-1 rounded bg-amber-200/60 ml-1 shrink-0">Bisa Order</span>
                         </div>
                       ) : capInfo.hasRecipe ? (
                         <div className={`px-2 py-0.5 rounded-lg flex items-center justify-between text-[10px] ${
@@ -1059,18 +1156,24 @@ export const POSView = () => {
                   <div className="cart-item-info">
                     <div className="cart-item-name truncate max-w-[150px]">{item.product.name}</div>
                     {item.notes && (
-                      <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 600, marginTop: '0.15rem', lineHeight: 1.3 }}>{item.notes}</div>
+                      <div className={`mt-1 leading-snug ${
+                        item.notes.includes('[Fisik Ada • Belum Restock]')
+                          ? 'text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80 inline-block'
+                          : 'text-[0.7rem] font-semibold text-indigo-600'
+                      }`}>
+                        {item.notes}
+                      </div>
                     )}
                     <div className="cart-item-price">{formatCurrency(item.product.sellPrice ?? item.product.price)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
                     
                     <div className="cart-item-controls mt-2">
-                      <button className="qty-btn" onClick={() => decreaseQty(item.product.id)}><Minus size={14} /></button>
+                      <button className="qty-btn" onClick={() => decreaseCartItemQty(idx)}><Minus size={14} /></button>
                       <span className="qty-val">{item.qty}</span>
-                      <button className="qty-btn" onClick={() => addToCart(item.product)}><Plus size={14} /></button>
+                      <button className="qty-btn" onClick={() => increaseCartItemQty(idx)}><Plus size={14} /></button>
                     </div>
                   </div>
                   <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between'}}>
-                    <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeFromCart(item.product.id)}><X size={16}/></button>
+                    <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeCartItem(idx)}><X size={16}/></button>
                     <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
                   </div>
                 </div>
@@ -1327,17 +1430,23 @@ export const POSView = () => {
                     <div className="flex-1 min-w-0 pr-3">
                       <div className="font-bold text-xs text-slate-800 truncate">{item.product.name}</div>
                       {item.notes && (
-                        <div className="text-[10px] text-indigo-600 font-semibold mt-0.5">{item.notes}</div>
+                        <div className={`mt-0.5 leading-snug ${
+                          item.notes.includes('[Fisik Ada • Belum Restock]')
+                            ? 'text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80 inline-block'
+                            : 'text-[10px] font-semibold text-indigo-600'
+                        }`}>
+                          {item.notes}
+                        </div>
                       )}
                       <div className="text-xs text-slate-500 mt-1 font-semibold">{formatCurrency(item.product.sellPrice ?? item.product.price)} x {item.qty}</div>
                       <div className="flex items-center gap-2 mt-2">
-                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => decreaseQty(item.product.id)}><Minus size={12} /></button>
+                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => decreaseCartItemQty(idx)}><Minus size={12} /></button>
                         <span className="text-xs font-bold text-slate-800 min-w-[20px] text-center">{item.qty}</span>
-                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => addToCart(item.product)}><Plus size={12} /></button>
+                        <button className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 font-black transition-all active:scale-95 shadow-sm" onClick={() => increaseCartItemQty(idx)}><Plus size={12} /></button>
                       </div>
                     </div>
                     <div className="flex flex-col items-end justify-between min-h-[70px]">
-                      <button className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-slate-100/50" onClick={() => removeFromCart(item.product.id)}><X size={14}/></button>
+                      <button className="text-slate-400 hover:text-red-500 p-1 rounded-lg hover:bg-slate-100/50" onClick={() => removeCartItem(idx)}><X size={14}/></button>
                       <div className="font-extrabold text-xs text-slate-800">{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
                     </div>
                   </div>
@@ -1565,13 +1674,90 @@ export const POSView = () => {
       <DrinkCustomizationModal
         isOpen={drinkModalOpen}
         productName={pendingProduct?.name || ''}
-        onClose={() => { setDrinkModalOpen(false); setPendingProduct(null); }}
+        onClose={() => { setDrinkModalOpen(false); setPendingProduct(null); setPendingIsBuffer(false); }}
         onConfirm={(customization) => {
-          if (pendingProduct) addToCart(pendingProduct, customization);
+          if (pendingProduct) addToCart(pendingProduct, customization, pendingIsBuffer);
           setDrinkModalOpen(false);
           setPendingProduct(null);
+          setPendingIsBuffer(false);
         }}
       />
+
+      {/* ─── Modal Konfirmasi Penjualan Stok 0 (Buffer Mode) ────────── */}
+      {bufferConfirmProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-amber-200 overflow-hidden p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-200">
+            {/* Header Icon & Title */}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full">
+                  Buffer Mode • Stok 0
+                </span>
+                <h3 className="text-base font-black text-slate-900 leading-snug mt-1">
+                  Konfirmasi Penjualan Menu
+                </h3>
+              </div>
+            </div>
+
+            {/* Product Card Details */}
+            <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-2">
+              <div className="flex justify-between items-start gap-2">
+                <span className="font-extrabold text-sm text-slate-900 leading-tight">
+                  {bufferConfirmProduct.product.name}
+                </span>
+                <span className="font-black text-sm text-indigo-600 shrink-0">
+                  {formatCurrency(bufferConfirmProduct.product.sellPrice ?? bufferConfirmProduct.product.price)}
+                </span>
+              </div>
+
+              {bufferConfirmProduct.capInfo?.bottleneck ? (
+                <div className="text-xs text-amber-900 leading-relaxed pt-1 border-t border-amber-200/60">
+                  ⚠️ Bahan baku <strong className="font-bold underline">{bufferConfirmProduct.capInfo.bottleneck.name}</strong> tercatat <strong>0 {bufferConfirmProduct.capInfo.bottleneck.unit || ''}</strong> di sistem dapur (kapasitas: 0 porsi).
+                </div>
+              ) : (
+                <div className="text-xs text-amber-900 leading-relaxed pt-1 border-t border-amber-200/60">
+                  ⚠️ Stok sistem tercatat <strong>0 pcs</strong> (habis).
+                </div>
+              )}
+            </div>
+
+            {/* Explanation & SOP */}
+            <div className="text-xs text-slate-600 leading-relaxed space-y-1.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200/70">
+              <p className="font-bold text-slate-800">
+                Apakah fisik barang / bahan di dapur masih tersedia?
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Kemungkinan staf belum sempat menginput update stok / restock belanjaan. Jika menu masih bisa dibuat atau disajikan, Anda dapat memproses pesanan ini.
+              </p>
+              <p className="text-[10px] text-indigo-600 font-semibold pt-1">
+                ℹ️ Catatan: Stok akan otomatis dipotong defisit (minus) dan otomatis tertutup saat staf menginput restock.
+              </p>
+            </div>
+
+            {/* Buttons */}
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setBufferConfirmProduct(null)}
+                className="py-3 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all active:scale-95 text-center"
+              >
+                Batal (Habis)
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBufferSale}
+                className="py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs shadow-md shadow-amber-500/25 transition-all active:scale-95 text-center flex items-center justify-center gap-1.5"
+              >
+                <Check size={14} />
+                <span>Tetap Jual (Fisik Ada)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Tutup Shift Langsung dari POS */}
       <OpenShiftModal 

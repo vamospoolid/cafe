@@ -152,26 +152,31 @@ const DineInView = () => {
   useEffect(() => {
     if (!socket) return;
 
+    const refreshProducts = async () => {
+      try {
+        const qParams = new URLSearchParams();
+        if (tableId) qParams.set('tableId', tableId);
+        const resolvedTenantId = tableInfo?.tenantId || tableInfo?.tenant?.id;
+        if (resolvedTenantId) qParams.set('tenantId', resolvedTenantId);
+        const qs = qParams.toString() ? `?${qParams.toString()}` : '';
+        const res = await fetch(`/api/products/public${qs}`);
+        if (res.ok) {
+          const prodData = await res.json();
+          setProducts(Array.isArray(prodData) ? prodData : []);
+        }
+      } catch (e) {
+        console.warn('Failed to refresh products:', e);
+      }
+    };
+
     const handleStockSync = (data: any) => {
       console.log('[DineIn Socket] menu:stock_sync received:', data);
-      if (data?.soldOutProductIds) {
-        setProducts(prev => prev.map(p => {
-          if (data.soldOutProductIds.includes(p.id)) {
-            return { ...p, isSoldOut: true, stock: 0 };
-          }
-          if (data.availableProductIds && data.availableProductIds.includes(p.id)) {
-            return { ...p, isSoldOut: false };
-          }
-          return p;
-        }));
-      }
+      refreshProducts();
     };
 
     const handleProductSoldOut = (data: any) => {
       console.log('[DineIn Socket] product:sold_out received:', data);
-      if (data?.productId) {
-        setProducts(prev => prev.map(p => p.id === data.productId ? { ...p, isSoldOut: true, stock: 0 } : p));
-      }
+      refreshProducts();
     };
 
     socket.on('menu:stock_sync', handleStockSync);
@@ -195,12 +200,12 @@ const DineInView = () => {
   // Cart operations
   const addToCart = (product: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const isSoldOut = Boolean(product.isSoldOut || (product.stock !== undefined && product.stock <= 0 && !product.hasRecipe));
-    if (isSoldOut) {
+    const isHardSoldOut = Boolean(product.status === 'Nonaktif' || product.isSoldOutManual);
+    if (isHardSoldOut) {
       Swal.fire({
         icon: 'warning',
-        title: 'Menu Sedang Habis',
-        text: `Maaf, menu "${product.name}" baru saja habis di dapur!`,
+        title: 'Menu Sedang Tidak Tersedia',
+        text: `Maaf, menu "${product.name}" sedang tidak tersedia saat ini.`,
         confirmButtonColor: '#d97706',
         customClass: { popup: 'rounded-3xl' }
       });
@@ -769,16 +774,19 @@ const DineInView = () => {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5 sm:gap-4">
             {filteredProducts.map(prod => {
-              const isSoldOut = Boolean(prod.isSoldOut || (prod.stock !== undefined && prod.stock <= 0 && !prod.hasRecipe));
+              const isHardSoldOut = Boolean(prod.status === 'Nonaktif' || prod.isSoldOutManual);
+              const isBuffer = Boolean(prod.stock !== undefined && prod.stock <= 0 && !prod.hasRecipe);
               const cartItem = cart.find(item => item.productId === prod.id);
 
               return (
                 <div 
                   key={prod.id} 
                   className={`group bg-white rounded-3xl border p-3 flex flex-col justify-between transition-all duration-300 shadow-[0_4px_16px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_26px_rgba(0,0,0,0.06)] ${
-                    isSoldOut 
+                    isHardSoldOut 
                       ? 'border-stone-200/60 opacity-60 grayscale-[40%]' 
-                      : 'border-stone-200/70 hover:border-amber-300/80'
+                      : isBuffer
+                        ? 'border-amber-300/80 hover:border-amber-400 bg-amber-50/10'
+                        : 'border-stone-200/70 hover:border-amber-300/80'
                   }`}
                 >
                   <div className="space-y-2.5">
@@ -786,7 +794,7 @@ const DineInView = () => {
                     {/* Image Box */}
                     <div 
                       className="aspect-[4/3] w-full rounded-2xl bg-stone-100 overflow-hidden relative border border-stone-200/50 cursor-pointer"
-                      onClick={() => !isSoldOut && addToCart(prod)}
+                      onClick={() => !isHardSoldOut && addToCart(prod)}
                     >
                       <img 
                         src={prod.imageUrl || '/assets/images/cafe_login_cover.png'} 
@@ -795,13 +803,17 @@ const DineInView = () => {
                         onError={(e: any) => { e.target.src = '/assets/images/cafe_login_cover.png'; }}
                       />
 
-                      {/* Sold Out Overlay */}
-                      {isSoldOut ? (
+                      {/* Sold Out Overlay (Only for hard nonaktif items) */}
+                      {isHardSoldOut ? (
                         <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-[2px] flex flex-col items-center justify-center p-2 text-center">
                           <span className="px-2.5 py-1 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-sm">
-                            Habis
+                            Nonaktif
                           </span>
                         </div>
+                      ) : isBuffer ? (
+                        <span className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                          Buffer (0)
+                        </span>
                       ) : prod.stock !== undefined && prod.stock <= 5 && !prod.hasRecipe ? (
                         <span className="absolute top-2 left-2 bg-amber-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-xs">
                           Sisa {prod.stock}
@@ -838,7 +850,7 @@ const DineInView = () => {
                       {formatCurrency(prod.sellPrice)}
                     </span>
 
-                    {isSoldOut ? (
+                    {isHardSoldOut ? (
                       <span className="text-[10px] font-bold text-rose-500 uppercase bg-rose-50 px-2 py-1 rounded-xl border border-rose-200/50">
                         Habis
                       </span>

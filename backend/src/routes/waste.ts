@@ -61,8 +61,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           throw new Error('ID Bahan Baku wajib disertakan untuk waste bahan mentah');
         }
 
+        // IDOR Guard: Validasi kepemilikan bahan baku oleh tenant yang sedang login
         const ing = await tx.ingredient.findFirst({
-          where: { id: Number(ingredientId) }
+          where: { id: Number(ingredientId), ...(tenantId ? { tenantId } : {}) }
         });
 
         if (!ing) {
@@ -126,8 +127,9 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           throw new Error('ID Produk / Menu wajib disertakan untuk waste masakan jadi');
         }
 
+        // IDOR Guard: Validasi kepemilikan produk / menu oleh tenant yang sedang login
         const product = await tx.product.findFirst({
-          where: { id: Number(productId) },
+          where: { id: Number(productId), ...(tenantId ? { tenantId } : {}) },
           include: {
             recipes: {
               include: { ingredient: true }

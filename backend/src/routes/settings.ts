@@ -197,6 +197,7 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.loyaltyMinOrderForEarn !== undefined) updateData.loyaltyMinOrderForEarn = Number(updateData.loyaltyMinOrderForEarn);
     
     if (updateData.ingredientTrackingEnabled !== undefined) updateData.ingredientTrackingEnabled = Boolean(updateData.ingredientTrackingEnabled);
+    if (updateData.allowSaleWhenOutOfStock !== undefined) updateData.allowSaleWhenOutOfStock = Boolean(updateData.allowSaleWhenOutOfStock);
     if (updateData.enableKitchenAuditMode !== undefined) updateData.enableKitchenAuditMode = Boolean(updateData.enableKitchenAuditMode);
     if (updateData.enableStaffMealTracking !== undefined) updateData.enableStaffMealTracking = Boolean(updateData.enableStaffMealTracking);
     if (updateData.enableBlindClose !== undefined) updateData.enableBlindClose = Boolean(updateData.enableBlindClose);
@@ -324,7 +325,7 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
       'qrisUrl', 'qrCodeBaseUrl', 'enableDrinkCustomization', 'loyaltyEnabled', 'loyaltyEarnPerAmount',
       'loyaltyPointValue', 'loyaltySilverThreshold', 'loyaltyGoldThreshold', 'loyaltySilverMultiplier',
       'loyaltyGoldMultiplier', 'loyaltyMaxRedeemPerOrder', 'loyaltyRedeemMinPoints', 'loyaltyMinOrderForEarn',
-      'ingredientTrackingEnabled', 'enableKitchenAuditMode', 'enableStaffMealTracking',
+      'ingredientTrackingEnabled', 'allowSaleWhenOutOfStock', 'enableKitchenAuditMode', 'enableStaffMealTracking',
       'printerIp', 'printerPort', 'windowsPrinterName', 'autoPrintKDS', 'autoPrintReceipt',
       'kitchenPrinterIp', 'kitchenPrinterPort', 'autoPrintKitchen', 'barPrinterIp', 'barPrinterPort',
       'autoPrintBar', 'enableKDS', 'autoCompleteKDSOnPay', 'storeLatitude', 'storeLongitude',

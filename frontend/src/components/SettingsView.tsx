@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, PackageCheck, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Trash2, AlertTriangle } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -171,6 +171,7 @@ const SettingsView = () => {
     loyaltyRedeemMinPoints: 1,
     loyaltyMinOrderForEarn: 0,
     ingredientTrackingEnabled: false,
+    allowSaleWhenOutOfStock: true,
     enableKitchenAuditMode: false,
     enableStaffMealTracking: true,
     enableBlindClose: true,
@@ -1881,6 +1882,31 @@ const SettingsView = () => {
                     </div>
                     <p className="text-xs text-slate-500 leading-relaxed">
                       Mengizinkan dapur mencatat konsumsi resmi staf agar HPP makanan terpisah dari kerugian/waste dan stok tetap akurat.
+                    </p>
+                  </div>
+
+                  {/* Buffer Mode / Izinkan Penjualan Saat Stok Habis Toggle */}
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all col-span-1 md:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                        <PackageCheck size={16} className="text-indigo-600" />
+                        <span>Izinkan Penjualan Saat Stok Habis / 0 (Buffer Mode)</span>
+                      </span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="allowSaleWhenOutOfStock"
+                          checked={formData.allowSaleWhenOutOfStock !== false}
+                          onChange={handleChange}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      {formData.allowSaleWhenOutOfStock !== false
+                        ? '🟢 AKTIF (Buffer Mode): Menu yang stok produk atau bahan bakunya 0 di sistem tetap bisa dijual di kasir jika fisik barang di dapur masih tersedia (misal staf lupa update restock). Stok akan tercatat minus/defisit dan otomatis terpotong/tertutup saat staf menginput restock.'
+                        : '🔴 NONAKTIF (Ketat): Kasir diblokir total jika stok produk atau bahan baku resep di sistem mencapai 0.'}
                     </p>
                   </div>
                 </div>

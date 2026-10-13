@@ -1290,7 +1290,9 @@ router.get('/accounting', authenticateToken, async (req: Request, res: Response)
   }
 });
 
-// GET Laporan Mutasi & Valuasi Stok Bahan Baku
+// GET Laporan Mutasi & Valuasi Stok Bahan Baku / Barang Dagangan
+// BUG-002 FIX: Sebelumnya selalu membaca Ingredient, menyebabkan laporan KOSONG untuk Retail/Bengkel.
+// Sekarang deteksi businessType dan gunakan tabel yang sesuai per vertikal.
 router.get('/inventory', authenticateToken, async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantId(req);
@@ -1301,6 +1303,127 @@ router.get('/inventory', authenticateToken, async (req: Request, res: Response) 
     const eStr = (endDate as string) || sStr;
     const { startUtc: start, endUtc: end } = getCustomDateRange(sStr, eStr, tzOffset as string || -420);
 
+    // Deteksi vertikal bisnis tenant
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true }
+    });
+    const isRetailOrBengkel = tenant?.businessType === 'RETAIL' || tenant?.businessType === 'BENGKEL';
+
+    // ─── PATH A: RETAIL / BENGKEL — Berbasis Product ─────────────────────────
+    if (isRetailOrBengkel) {
+      const products = await prisma.product.findMany({
+        where: { ...tenantWhere(tenantId), deletedAt: null },
+        include: {
+          category: { select: { name: true } }
+        },
+        orderBy: { name: 'asc' }
+      });
+
+      // Fetch inbound items dalam periode (stok masuk dari kulakan)
+      const inboundItems = await prisma.warehouseInboundItem.findMany({
+        where: {
+          tenantId,
+          productId: { not: null },
+          inbound: { date: { gte: start, lte: end } }
+        },
+        include: { inbound: { select: { date: true } } }
+      });
+
+      // Fetch order items dalam periode (penjualan = stok keluar)
+      const soldItems = await prisma.orderItem.findMany({
+        where: {
+          tenantId,
+          order: {
+            status: { not: 'Void' },
+            createdAt: { gte: start, lte: end }
+          }
+        },
+        select: { productId: true, qty: true }
+      });
+
+      // Fetch waste logs dalam periode (rusak / kerugian)
+      const wasteLogs = await prisma.wasteLog.findMany({
+        where: {
+          tenantId,
+          type: 'PRODUCT',
+          createdAt: { gte: start, lte: end }
+        },
+        select: { productId: true, qty: true }
+      });
+
+      // Fetch inbound items SETELAH periode (untuk hitung stok awal mundur)
+      const postInboundItems = await prisma.warehouseInboundItem.findMany({
+        where: {
+          tenantId,
+          productId: { not: null },
+          inbound: { date: { gt: end } }
+        }
+      });
+      const postSoldItems = await prisma.orderItem.findMany({
+        where: {
+          tenantId,
+          order: { status: { not: 'Void' }, createdAt: { gt: end } }
+        },
+        select: { productId: true, qty: true }
+      });
+
+      const report = products.map(prod => {
+        // Mutasi masuk (kulakan inbound dalam periode)
+        const masuk = inboundItems
+          .filter(i => i.productId === prod.id)
+          .reduce((sum, i) => sum + (i.baseQty || i.purchaseQty || 0), 0);
+
+        // Mutasi keluar produksi (penjualan POS dalam periode)
+        const keluarProduksi = soldItems
+          .filter(i => i.productId === prod.id)
+          .reduce((sum, i) => sum + i.qty, 0);
+
+        // Mutasi keluar rusak (waste dalam periode)
+        const keluarRusak = wasteLogs
+          .filter(w => w.productId === prod.id)
+          .reduce((sum, w) => sum + w.qty, 0);
+
+        // Hitung stok akhir periode (mundur dari stok sekarang)
+        const postMasuk = postInboundItems
+          .filter(i => i.productId === prod.id)
+          .reduce((sum, i) => sum + (i.baseQty || i.purchaseQty || 0), 0);
+        const postKeluar = postSoldItems
+          .filter(i => i.productId === prod.id)
+          .reduce((sum, i) => sum + i.qty, 0);
+        const stockAkhir = prod.stock - postMasuk + postKeluar;
+        const stockAwal = stockAkhir - masuk + keluarProduksi + keluarRusak;
+        const totalValuation = Math.max(0, stockAkhir) * (prod.buyPrice || 0);
+
+        return {
+          id: prod.id,
+          name: prod.name,
+          unit: prod.baseUom || 'Pcs',
+          minStock: prod.minStock,
+          buyPrice: prod.buyPrice,
+          supplierName: prod.category?.name || (tenant?.businessType === 'BENGKEL' ? 'Suku Cadang' : 'Barang Dagangan'),
+          stockAwal: Math.round(stockAwal),
+          masuk: Math.round(masuk),
+          keluarProduksi: Math.round(keluarProduksi),
+          keluarRusak: Math.round(keluarRusak),
+          penyesuaian: 0,
+          stockAkhir: Math.round(stockAkhir),
+          totalValuation
+        };
+      });
+
+      const totalAssetValuation = report.reduce((sum, item) => sum + item.totalValuation, 0);
+      const criticalItemsCount = report.filter(item => item.stockAkhir <= item.minStock && item.minStock > 0).length;
+      const totalMutationsCount = inboundItems.length + soldItems.length + wasteLogs.length;
+
+      return res.json({
+        summary: { totalAssetValuation, criticalItemsCount, totalMutationsCount },
+        inventory: report,
+        businessType: tenant?.businessType
+      });
+    }
+
+    // ─── PATH B: CAFE — Berbasis Ingredient + IngredientLog (alur existing) ──
     // 1. Fetch all ingredients
     const ingredients = await prisma.ingredient.findMany({
       where: tenantWhere(tenantId),
@@ -1395,7 +1518,8 @@ router.get('/inventory', authenticateToken, async (req: Request, res: Response) 
         criticalItemsCount,
         totalMutationsCount
       },
-      inventory: report
+      inventory: report,
+      businessType: 'CAFE'
     });
 
   } catch (error) {
@@ -1403,6 +1527,7 @@ router.get('/inventory', authenticateToken, async (req: Request, res: Response) 
     res.status(500).json({ error: 'Gagal memuat laporan stok' });
   }
 });
+
 
 // GET Laporan Detail Menu & Valuasi Persediaan Barang Jadi
 router.get('/product-details', authenticateToken, async (req: Request, res: Response) => {

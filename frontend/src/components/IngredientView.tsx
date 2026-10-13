@@ -1945,6 +1945,7 @@ export const IngredientView: React.FC = () => {
                 </div>
               ) : (
                 filtered.map((ing) => {
+                  const isNegative = ing.stock < 0;
                   const isOut = ing.stock === 0;
                   const isLow = ing.stock > 0 && ing.stock <= ing.minStock;
                   const cat = ing.category || 'FOOD';
@@ -1980,7 +1981,12 @@ export const IngredientView: React.FC = () => {
 
                         {/* Status Badge */}
                         <div className="shrink-0">
-                          {isOut ? (
+                          {isNegative ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200" title="Stok minus karena terjual sebelum staf input restock. Otomatis tertutup saat restock diinput.">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
+                              Defisit Buffer
+                            </span>
+                          ) : isOut ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
                               Habis
@@ -2003,7 +2009,7 @@ export const IngredientView: React.FC = () => {
                       <div className="grid grid-cols-3 gap-2 p-2.5 bg-white rounded-xl border border-slate-200/80 text-center">
                         <div>
                           <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Stok Fisik</p>
-                          <p className={`text-xs font-black mt-0.5 ${isOut ? 'text-rose-600' : (isLow ? 'text-amber-600' : 'text-slate-900')}`}>
+                          <p className={`text-xs font-black mt-0.5 ${isNegative ? 'text-purple-700' : (isOut ? 'text-rose-600' : (isLow ? 'text-amber-600' : 'text-slate-900'))}`}>
                             {ing.stock.toLocaleString('id-ID')} <span className="text-[10px] font-medium text-slate-500">{ing.unit}</span>
                           </p>
                           <p className="text-[9px] text-slate-400 mt-0.5">Min: {ing.minStock.toLocaleString('id-ID')}</p>
@@ -2136,6 +2142,7 @@ export const IngredientView: React.FC = () => {
                     </tr>
                   ) : (
                     filtered.map((ing) => {
+                      const isNegative = ing.stock < 0;
                       const isOut = ing.stock === 0;
                       const isLow = ing.stock > 0 && ing.stock <= ing.minStock;
                       const cat = ing.category || 'FOOD';
@@ -2170,7 +2177,12 @@ export const IngredientView: React.FC = () => {
                           </td>
 
                           <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                            {isOut ? (
+                            {isNegative ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200" title="Stok minus karena terjual sebelum staf input restock. Otomatis tertutup saat restock diinput.">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse"></span>
+                                Defisit Buffer
+                              </span>
+                            ) : isOut ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-600 border border-rose-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
                                 Habis
@@ -2188,7 +2200,7 @@ export const IngredientView: React.FC = () => {
                             )}
                           </td>
 
-                          <td className="py-3.5 px-4 text-right font-black text-slate-900 whitespace-nowrap">
+                          <td className={`py-3.5 px-4 text-right font-black whitespace-nowrap ${isNegative ? 'text-purple-700' : 'text-slate-900'}`}>
                             {ing.stock.toLocaleString('id-ID')} <span className="text-[10px] font-bold text-slate-400">{ing.unit}</span>
                           </td>
 

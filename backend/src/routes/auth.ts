@@ -72,7 +72,8 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
       if (parsedLegacy.canManageStaff) permissionKeys.push('employees.manage');
     } catch (e) {}
 
-    if (user.role === 'Admin') {
+    const userRoleUpper = String(activeRoleName || user.role || '').toUpperCase();
+    if (['ADMIN', 'OWNER', 'SUPERADMIN'].includes(userRoleUpper)) {
       permissionKeys.push(
         'pos.view', 'pos.create', 'pos.discount', 'pos.void', 'pos.reprint',
         'tables.view', 'tables.manage', 'reservations.view', 'reservations.manage',
@@ -87,12 +88,13 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
   }
 
   // Backward-compatible boolean object untuk frontend legacy
+  const isPrivilegedRole = ['OWNER', 'ADMIN', 'SUPERADMIN'].includes(String(activeRoleName || user.role || '').toUpperCase()) || Boolean(user.isPlatformAdmin);
   const legacyPermissions = {
-    canVoid: permissionKeys.includes('pos.void') || activeRoleName === 'OWNER' || user.role === 'Admin',
-    canDiscount: permissionKeys.includes('pos.discount') || activeRoleName === 'OWNER' || user.role === 'Admin',
-    canEditMenu: permissionKeys.includes('products.manage') || activeRoleName === 'OWNER' || user.role === 'Admin',
-    canViewReports: permissionKeys.includes('reports.view') || activeRoleName === 'OWNER' || user.role === 'Admin',
-    canManageStaff: permissionKeys.includes('employees.manage') || activeRoleName === 'OWNER' || user.role === 'Admin'
+    canVoid: permissionKeys.includes('pos.void') || isPrivilegedRole,
+    canDiscount: permissionKeys.includes('pos.discount') || isPrivilegedRole,
+    canEditMenu: permissionKeys.includes('products.manage') || isPrivilegedRole,
+    canViewReports: permissionKeys.includes('reports.view') || isPrivilegedRole,
+    canManageStaff: permissionKeys.includes('employees.manage') || isPrivilegedRole
   };
 
   const tokenPayload = {

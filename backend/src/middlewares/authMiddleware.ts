@@ -104,7 +104,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       if (verified.permissions.canEditMenu) permissionsArray.push('products.manage');
       if (verified.permissions.canViewReports) permissionsArray.push('reports.view');
       if (verified.permissions.canManageStaff) permissionsArray.push('employees.manage');
-      if (verified.role === 'Admin') {
+      const verifiedRoleUpper = String(verified.role || '').toUpperCase();
+      if (['ADMIN', 'OWNER', 'SUPERADMIN'].includes(verifiedRoleUpper)) {
         permissionsArray.push('pos.view', 'pos.create', 'products.view', 'cashflow.view', 'cashflow.manage', 'settings.view', 'settings.manage', 'inventory.view');
       }
     }
@@ -139,7 +140,8 @@ export const requirePermission = (requiredPermission: string | string[]) => {
     }
 
     // Super Admin / Owner bypass
-    if (req.user.isPlatformAdmin || req.user.role === 'OWNER' || req.user.role === 'Admin') {
+    const userRoleUpper = String(req.user.role || '').toUpperCase();
+    if (req.user.isPlatformAdmin || ['OWNER', 'ADMIN', 'SUPERADMIN'].includes(userRoleUpper)) {
       return next();
     }
 
@@ -166,11 +168,13 @@ export const requireRole = (...allowedRoles: string[]) => {
       return res.status(401).json({ error: 'Akses Ditolak: Memerlukan login.' });
     }
 
-    if (req.user.isPlatformAdmin || req.user.role === 'OWNER') {
+    const userRoleUpper = String(req.user.role || '').toUpperCase();
+    if (req.user.isPlatformAdmin || ['OWNER', 'SUPERADMIN'].includes(userRoleUpper)) {
       return next();
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const allowedUpper = allowedRoles.map(r => r.toUpperCase());
+    if (!allowedUpper.includes(userRoleUpper)) {
       return res.status(403).json({
         error: `Akses Ditolak: Fitur ini hanya untuk role [${allowedRoles.join(', ')}].`
       });

@@ -428,10 +428,8 @@ router.post('/dinein', async (req: Request, res: Response) => {
         // Hanya kurangi product.stock jika TIDAK ada resep bahan baku
         // Jika ada resep, stok dikendalikan melalui ketersediaan bahan baku dapur (Advanced Mode)
         if (!hasRecipe) {
-          const prod = await tx.product.findUnique({ where: { id: Number(item.productId) } });
-          if (prod && prod.stock < Number(item.qty)) {
-            throw new Error(`Stok menu "${prod.name}" tidak mencukupi untuk Dine-In (tersisa: ${prod.stock}, diminta: ${item.qty})`);
-          }
+          // Opsi B: Tetap izinkan pemotongan stok meskipun di sistem mencapai 0 / minus (Buffer Mode).
+          // Fisik barang seringkali masih ada namun staf belum sempat input restock.
           await tx.product.update({
             where: { id: Number(item.productId) },
             data: {
@@ -442,18 +440,14 @@ router.post('/dinein', async (req: Request, res: Response) => {
         for (const recipe of recipes) {
           const used = recipe.qtyPerServing * Number(item.qty);
           const currentIng = await tx.ingredient.findUnique({ where: { id: recipe.ingredientId }, select: { stock: true, name: true, unit: true } });
-          if (currentIng && currentIng.stock < used) {
-            const u = currentIng.unit ? ` ${currentIng.unit}` : '';
-            if (currentIng.stock <= 0) {
-              throw new Error(`Bahan baku "${currentIng.name}" tersisa 0${u} (habis). Cek bahan baku dapur!`);
-            } else {
-              throw new Error(`Bahan baku "${currentIng.name}" tersisa ${currentIng.stock}${u} (kurang, dibutuhkan ${used}${u}). Cek bahan baku dapur!`);
-            }
-          }
+          // Opsi B: Tidak lagi membatalkan order saat stok habis/kurang.
+          // Stok bahan baku dapur otomatis terpotong ke nilai negatif (defisit buffer),
+          // dan saat staf dapur melakukan push restock nanti, stok akan otomatis ter-offset.
           await tx.ingredient.update({
             where: { id: recipe.ingredientId },
             data: { stock: { decrement: used } }
           });
+          const isDeficit = Boolean(currentIng && currentIng.stock < used);
           await tx.ingredientLog.create({
             data: {
               tenantId,
@@ -461,7 +455,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
               ingredientId: recipe.ingredientId,
               change: -used,
               type: 'Produksi',
-              description: `Order ${orderNumber} (Dine-in Self-Order)`,
+              description: `Order ${orderNumber} (Dine-in Self-Order)${isDeficit ? ' [Buffer Defisit]' : ''}`,
               referenceId: orderNumber
             }
           });
@@ -1107,26 +1101,22 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
 
         if (hasRecipe) {
           // 100% OTOMATIS MENGIKUTI BAHAN BAKU:
-          // Validasi dan pemotongan stok bahan baku di dapur secara atomik
+          // Validasi dan pemotongan stok bahan baku di dapur secara atomik (Buffer Mode diaktifkan)
           for (const recipe of recipes) {
             const used = recipe.qtyPerServing * Number(item.qty);
             const currentIng = await tx.ingredient.findFirst({
               where: { id: recipe.ingredientId, ...(tenantId ? { tenantId } : {}), deletedAt: null },
               select: { id: true, stock: true, name: true, unit: true }
             });
-            if (currentIng && currentIng.stock < used) {
-              const u = currentIng.unit ? ` ${currentIng.unit}` : '';
-              if (currentIng.stock <= 0) {
-                throw new Error(`Bahan baku "${currentIng.name}" tersisa 0${u} (habis). Cek bahan baku dapur!`);
-              } else {
-                throw new Error(`Bahan baku "${currentIng.name}" tersisa ${currentIng.stock}${u} (kurang, dibutuhkan ${used}${u}). Cek bahan baku dapur!`);
-              }
-            }
             if (currentIng) {
+              // Opsi B: Tidak lagi memblokir pesanan dengan error saat stok < used.
+              // Stok bahan baku dikurangi (bisa bernilai negatif sebagai buffer defisit),
+              // dan saat staf dapur melakukan push restock, buffer negatif ini otomatis tertutup.
               await tx.ingredient.update({
                 where: { id: recipe.ingredientId },
                 data: { stock: { decrement: used } }
               });
+              const isDeficit = currentIng.stock < used;
               await tx.ingredientLog.create({
                 data: {
                   tenantId: tenantId || null,
@@ -1134,7 +1124,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
                   ingredientId: recipe.ingredientId,
                   change: -used,
                   type: 'Produksi',
-                  description: `Order ${orderNumber}`,
+                  description: `Order ${orderNumber}${isDeficit ? ' [Buffer Defisit]' : ''}`,
                   referenceId: orderNumber
                 }
               });
@@ -1144,10 +1134,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
           // Advanced Mode: stok dikendalikan 100% oleh bahan baku dapur, jangan kurangi product.stock
         } else {
           // PRODUK TANPA RESEP (Barang Jadi / Retail):
-          // Validasi dan pemotongan langsung ke stok fisik produk
-          if (product && product.stock < Number(item.qty)) {
-            throw new Error(`Stok produk "${product.name}" tidak mencukupi (tersisa: ${product.stock}, dibutuhkan: ${item.qty})`);
-          }
+          // Opsi B: Pemotongan langsung ke stok fisik produk tanpa hard block (Buffer Mode)
           await tx.product.update({
             where: { id: Number(item.productId) },
             data: { stock: { decrement: Number(item.qty) } }
@@ -1620,18 +1607,30 @@ router.patch('/:id/void', authenticateToken, requirePermission('pos.void'), asyn
       }
 
       // 2. Kembalikan stok produk
+      // BUG-001 FIX: Jika produk punya resep bahan baku (Advanced Mode), product.stock TIDAK pernah
+      // dipotong saat order dibuat (hanya ingredient.stock yang dipotong). Maka saat void, kita HANYA
+      // kembalikan ingredient.stock. Jika produk tidak berresep, kembalikan product.stock seperti biasa.
       const voidSettings = await tx.settings.findFirst({ where: orderData.tenantId ? { tenantId: orderData.tenantId } : undefined });
       const isAdvancedModeVoid = voidSettings?.ingredientTrackingEnabled ?? false;
 
       for (const item of orderData.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.qty } }
-        });
+        // Cek terlebih dahulu apakah produk ini punya resep bahan baku
+        const recipes = isAdvancedModeVoid
+          ? await tx.recipeItem.findMany({ where: { productId: item.productId } })
+          : [];
+        const hasRecipe = recipes.length > 0;
 
-        // Advanced Mode: kembalikan stok bahan baku
-        if (isAdvancedModeVoid) {
-          const recipes = await tx.recipeItem.findMany({ where: { productId: item.productId } });
+        if (!hasRecipe) {
+          // Produk tanpa resep (Simple Mode / Retail / Bengkel):
+          // product.stock dipotong saat order dibuat → kembalikan di sini
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.qty } }
+          });
+        } else {
+          // Produk berresep (Advanced Mode Kafe):
+          // product.stock TIDAK pernah dipotong saat order → SKIP restore product.stock
+          // Yang dipotong adalah ingredient.stock → kembalikan ingredient saja
           for (const recipe of recipes) {
             const restored = recipe.qtyPerServing * item.qty;
             await tx.ingredient.update({

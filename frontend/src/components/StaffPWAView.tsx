@@ -2463,22 +2463,27 @@ export const StaffPWAView: React.FC = () => {
                     })
                     .filter(i => i.name.toLowerCase().includes(stockSearch.toLowerCase()) || (i.barcode && i.barcode.includes(stockSearch)))
                     .map(ing => {
+                      const isNegative = ing.stock < 0;
                       const isLow = ing.stock <= ing.minStock;
                       return (
                         <div
                           key={ing.id}
                           className={`bg-white p-3.5 rounded-3xl border shadow-sm flex items-center justify-between gap-3 ${
-                            isLow ? 'border-rose-200 bg-rose-50/20' : 'border-slate-100'
+                            isNegative ? 'border-purple-300 bg-purple-50/20' : (isLow ? 'border-rose-200 bg-rose-50/20' : 'border-slate-100')
                           }`}
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <h5 className="text-xs font-bold text-[#1A1033] truncate">{ing.name}</h5>
-                              {isLow && (
+                              {isNegative ? (
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-purple-600 text-white shrink-0" title="Stok minus. Input restock untuk menutup defisit.">
+                                  Defisit Buffer
+                                </span>
+                              ) : isLow ? (
                                 <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[#F43F5E] text-white shrink-0">
                                   Menipis
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-400">
                               <span>Min: {ing.minStock} {ing.unit}</span>
@@ -2494,7 +2499,7 @@ export const StaffPWAView: React.FC = () => {
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs font-bold text-[#1A1033] font-mono">
+                            <span className={`text-xs font-bold font-mono ${isNegative ? 'text-purple-700' : 'text-[#1A1033]'}`}>
                               {ing.stock} <span className="text-[10px] font-normal text-slate-400">{ing.unit}</span>
                             </span>
                             <button

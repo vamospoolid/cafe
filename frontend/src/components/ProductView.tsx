@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useContext, useMemo } from "react";
+import React, { useState, useEffect, useContext, useMemo } from "react";
 import {
   Package, Plus, Search, Edit, Trash2,
   AlertTriangle, CheckCircle, XCircle, Wallet,
@@ -97,7 +97,8 @@ const ProductView = () => {
   const activeCount = products.filter(p => p.status === "Aktif").length;
 
   const getStockBadge = (p: any) => {
-    if (p.stock <= 0 || p.isSoldOut) return { label: "0 pcs", cls: "bg-red-100 text-red-600 border-red-200" };
+    if (p.stock < 0) return { label: `${p.stock} pcs (Buffer)`, cls: "bg-purple-100 text-purple-700 border-purple-200" };
+    if (p.stock === 0 || p.isSoldOut) return { label: "0 pcs", cls: "bg-red-100 text-red-600 border-red-200" };
     if (p.stock <= p.minStock) return { label: `${p.stock} pcs`, cls: "bg-amber-100 text-amber-700 border-amber-200" };
     return { label: `${p.stock} pcs`, cls: "bg-emerald-100 text-emerald-700 border-emerald-200" };
   };
