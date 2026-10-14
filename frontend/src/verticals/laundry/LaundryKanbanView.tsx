@@ -79,6 +79,7 @@ export const LaundryKanbanView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'UNPAID' | 'PAID'>('ALL');
+  const [mobileStatusTab, setMobileStatusTab] = useState<'ALL' | LaundryOrder['status']>('ALL');
 
   // Modal Alokasi Rak saat order READY
   const [readyModalOrder, setReadyModalOrder] = useState<LaundryOrder | null>(null);
@@ -117,6 +118,53 @@ export const LaundryKanbanView: React.FC = () => {
     const interval = setInterval(fetchOrders, 30000); // Polling update status
     return () => clearInterval(interval);
   }, [fetchOrders]);
+
+  // Quick WhatsApp Status Notification
+  const handleSendStatusWhatsApp = (order: LaundryOrder) => {
+    if (!order.customerPhone) {
+      toast('Nomor WhatsApp pelanggan belum tercatat', 'info');
+      return;
+    }
+    const cleanPhone = order.customerPhone.replace(/[^0-9]/g, '');
+    const phone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+    const storeName = settings?.storeName || 'Laundry Kami';
+    const unpaid = Math.max(0, order.totalAmount - order.paidAmount);
+
+    let statusDesc = '';
+    switch (order.status) {
+      case 'RECEIVED':
+        statusDesc = 'telah kami *terima* dan sedang dalam antrean proses pencucian.';
+        break;
+      case 'WASHING':
+        statusDesc = 'saat ini sedang *dicuci bersih* di mesin cuci higienis kami.';
+        break;
+      case 'DRYING':
+        statusDesc = 'saat ini sedang dalam proses *pengeringan* optimal.';
+        break;
+      case 'IRONING':
+        statusDesc = 'saat ini sedang dalam proses *setrika & uap rapi*.';
+        break;
+      case 'READY':
+        statusDesc = `sudah *SELESAI & WANGI* (${order.perfumeVariant || 'Aroma Segar'}), kini tersimpan rapi di *${order.rackLocation || 'Rak Simpan'}*. Silakan diambil ya!`;
+        break;
+      case 'COMPLETED':
+        statusDesc = 'telah berhasil diserahterimakan / diambil. Terima kasih atas kepercayaan Anda!';
+        break;
+      default:
+        statusDesc = 'sedang dalam proses penanganan tim kami.';
+    }
+
+    const msg =
+      `Halo Kak *${order.customerName}*,\n` +
+      `Update status cucian Anda di *${storeName}*:\n\n` +
+      `No. Nota: *${order.orderNumber}*\n` +
+      `Status Terkini: ${statusDesc}\n\n` +
+      (unpaid > 0 ? `Sisa Pembayaran: *Rp ${unpaid.toLocaleString('id-ID')}*.\n\n` : `Status Pembayaran: *LUNAS*.\n\n`) +
+      `Jika ada pertanyaan, silakan balas pesan WhatsApp ini. Terima kasih! 🙏✨`;
+
+    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
+  };
 
   // Transisi Alur Kanban
   const handleTransitionStatus = async (order: LaundryOrder, nextStatus: LaundryOrder['status']) => {
@@ -282,6 +330,168 @@ export const LaundryKanbanView: React.FC = () => {
     return map;
   }, [filteredOrders]);
 
+  // Render individual Order Card
+  const renderOrderCard = (order: LaundryOrder, colId: string) => {
+    const unpaid = Math.max(0, order.totalAmount - order.paidAmount);
+
+    return (
+      <div
+        key={order.id}
+        className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-3 text-xs"
+      >
+        {/* Header Nota & Tag Kecepatan */}
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono font-bold text-slate-900 tracking-tight">
+                {order.orderNumber}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPrintingOrder(order);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                title="Cetak Ulang Struk Thermal"
+              >
+                <Printer size={13} />
+              </button>
+              {order.customerPhone && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSendStatusWhatsApp(order);
+                  }}
+                  className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
+                  title="Kirim Update Status WhatsApp"
+                >
+                  <MessageSquare size={13} />
+                </button>
+              )}
+            </div>
+            <span
+              className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                order.serviceSpeed === 'EXPRESS_6H'
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                  : order.serviceSpeed === 'KILAT_24H'
+                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {order.serviceSpeed === 'EXPRESS_6H' ? 'Super 6 Jam' : order.serviceSpeed === 'KILAT_24H' ? 'Kilat 24 Jam' : 'Reguler'}
+            </span>
+          </div>
+
+          <div className="mt-1.5 font-bold text-slate-900 text-sm">
+            {order.customerName}
+          </div>
+          {order.customerPhone && (
+            <a
+              href={`tel:${order.customerPhone}`}
+              className="text-[11px] text-slate-500 hover:text-cyan-700 font-mono mt-0.5 inline-flex items-center gap-1"
+            >
+              <Phone size={10} /> {order.customerPhone}
+            </a>
+          )}
+
+          {/* Detail Rincian Items */}
+          <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-1">
+            {order.items.map((it, idx) => (
+              <div key={idx} className="flex justify-between text-[11px] text-slate-600">
+                <span className="truncate pr-2">{it.qty} {it.unitType.toLowerCase()} {it.serviceName}</span>
+                <span className="font-semibold text-slate-800">Rp {it.subtotal.toLocaleString('id-ID')}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Pewangi & Lokasi Rak */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+            {order.perfumeVariant && (
+              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
+                <Sparkles size={10} /> {order.perfumeVariant}
+              </span>
+            )}
+            {order.rackLocation && (
+              <span className="px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-900 border border-cyan-300 font-black shadow-2xs">
+                📍 {order.rackLocation}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Footer Status Pembayaran & Tombol Pindah Tahap */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[10px] text-slate-400">Total Biaya:</div>
+            <div className="font-black text-slate-900 text-xs">
+              Rp {order.totalAmount.toLocaleString('id-ID')}
+            </div>
+            <div className={`text-[10px] font-bold ${order.paymentStatus === 'PAID' ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {order.paymentStatus === 'PAID' ? 'LUNAS' : `Sisa Rp ${unpaid.toLocaleString('id-ID')}`}
+            </div>
+          </div>
+
+          {/* Tombol Lanjut ke Tahap Berikutnya (Touch Target Nyaman) */}
+          {colId === 'RECEIVED' && (
+            <button
+              onClick={() => handleTransitionStatus(order, 'WASHING')}
+              className="px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white font-bold text-xs transition-all border border-blue-200 flex items-center gap-1 shadow-2xs active:scale-95"
+            >
+              <span>Cuci</span>
+              <ArrowRight size={13} />
+            </button>
+          )}
+
+          {colId === 'WASHING' && (
+            <button
+              onClick={() => handleTransitionStatus(order, 'DRYING')}
+              className="px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-600 text-sky-700 hover:text-white font-bold text-xs transition-all border border-sky-200 flex items-center gap-1 shadow-2xs active:scale-95"
+            >
+              <span>Keringkan</span>
+              <ArrowRight size={13} />
+            </button>
+          )}
+
+          {colId === 'DRYING' && (
+            <button
+              onClick={() => handleTransitionStatus(order, 'IRONING')}
+              className="px-3 py-2 rounded-xl bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white font-bold text-xs transition-all border border-purple-200 flex items-center gap-1 shadow-2xs active:scale-95"
+            >
+              <span>Setrika</span>
+              <ArrowRight size={13} />
+            </button>
+          )}
+
+          {colId === 'IRONING' && (
+            <button
+              onClick={() => handleTransitionStatus(order, 'READY')}
+              className="px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1 active:scale-95"
+            >
+              <span>Masuk Rak</span>
+              <ArrowRight size={13} />
+            </button>
+          )}
+
+          {colId === 'READY' && (
+            <button
+              onClick={() => handleTransitionStatus(order, 'COMPLETED')}
+              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1 active:scale-95"
+            >
+              <span>Serah Terima</span>
+              <Check size={13} />
+            </button>
+          )}
+
+          {colId === 'COMPLETED' && (
+            <span className="text-xs text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+              <CheckCircle2 size={13} /> Selesai
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 text-slate-800 overflow-hidden font-sans">
       
@@ -333,7 +543,7 @@ export const LaundryKanbanView: React.FC = () => {
 
           <button
             onClick={() => navigate('/pos')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold shadow-xs transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold shadow-xs transition-all active:scale-95"
           >
             <Plus size={15} />
             <span>Drop-off Baru</span>
@@ -349,8 +559,119 @@ export const LaundryKanbanView: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── KANBAN BOARD COLUMNS ────────────────────────────────────────── */}
-      <div className="flex-1 overflow-x-auto p-4 flex gap-4 bg-slate-100/70">
+      {/* ─── MOBILE STATUS CHIPS TABS (UNTUK APK / SMARTPHONE) ─────────────── */}
+      <div className="lg:hidden bg-white border-b border-slate-200 px-3 py-2 overflow-x-auto no-scrollbar flex items-center gap-1.5 shadow-2xs">
+        <button
+          onClick={() => setMobileStatusTab('ALL')}
+          className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            mobileStatusTab === 'ALL'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          <span>Semua</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${mobileStatusTab === 'ALL' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
+            {filteredOrders.length}
+          </span>
+        </button>
+
+        {STATUS_COLUMNS.map(col => {
+          const count = columnsData[col.id]?.length || 0;
+          const isActive = mobileStatusTab === col.id;
+          return (
+            <button
+              key={col.id}
+              onClick={() => setMobileStatusTab(col.id)}
+              className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                isActive
+                  ? `${col.badge} shadow-xs ring-1 ring-inset ${col.border}`
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <span>{col.label.split('. ')[1] || col.label}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/80' : 'bg-slate-200 text-slate-700'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ─── KANBAN BOARD CONTAINER ────────────────────────────────────────── */}
+      {/* 1. Mobile Focused View: Ketika kolom tertentu dipilih di HP */}
+      <div className="lg:hidden flex-1 overflow-y-auto p-3 pb-28 bg-slate-100/70">
+        {mobileStatusTab === 'ALL' ? (
+          <div className="space-y-4">
+            {STATUS_COLUMNS.map(col => {
+              const colOrders = columnsData[col.id] || [];
+              if (colOrders.length === 0) return null;
+              const Icon = col.icon;
+
+              return (
+                <div key={col.id} className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1 rounded-lg ${col.bg} ${col.color}`}>
+                        <Icon size={14} />
+                      </div>
+                      <span className="text-xs font-black text-slate-800">{col.label}</span>
+                    </div>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${col.badge}`}>
+                      {colOrders.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {colOrders.map(order => renderOrderCard(order, col.id))}
+                  </div>
+                </div>
+              );
+            })}
+            {filteredOrders.length === 0 && (
+              <div className="h-44 flex flex-col items-center justify-center text-center text-xs text-slate-400 font-medium border-2 border-dashed border-slate-200/80 rounded-2xl bg-white p-4">
+                <Shirt size={28} className="text-slate-300 mb-2" />
+                Tidak ada pesanan cucian yang sesuai filter
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {STATUS_COLUMNS.filter(c => c.id === mobileStatusTab).map(col => {
+              const colOrders = columnsData[col.id] || [];
+              const Icon = col.icon;
+              return (
+                <div key={col.id} className="space-y-2.5">
+                  <div className="p-3 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-xl ${col.bg} ${col.color}`}>
+                        <Icon size={16} />
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-black text-slate-900">{col.label}</h3>
+                        <p className="text-[10px] text-slate-400">Total {colOrders.length} pesanan di tahap ini</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-black px-2.5 py-1 rounded-full ${col.badge}`}>
+                      {colOrders.length}
+                    </span>
+                  </div>
+
+                  {colOrders.length === 0 ? (
+                    <div className="h-44 flex flex-col items-center justify-center text-center text-xs text-slate-400 font-medium border-2 border-dashed border-slate-200/80 rounded-2xl bg-white p-4">
+                      <Shirt size={28} className="text-slate-300 mb-2" />
+                      Tidak ada pakaian di tahap {col.label.split('. ')[1] || col.label}
+                    </div>
+                  ) : (
+                    colOrders.map(order => renderOrderCard(order, col.id))
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 2. Desktop Kanban Board Columns (Tampil di Laptop / Tablet Landscape) ── */}
+      <div className="hidden lg:flex flex-1 overflow-x-auto p-4 gap-4 bg-slate-100/70">
         {STATUS_COLUMNS.map(col => {
           const Icon = col.icon;
           const colOrders = columnsData[col.id] || [];
@@ -380,151 +701,7 @@ export const LaundryKanbanView: React.FC = () => {
                     Tidak ada cucian di tahap ini
                   </div>
                 ) : (
-                  colOrders.map(order => {
-                    const unpaid = Math.max(0, order.totalAmount - order.paidAmount);
-
-                    return (
-                      <div
-                        key={order.id}
-                        className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-3 text-xs"
-                      >
-                        {/* Header Nota & Tag Kecepatan */}
-                        <div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-bold text-slate-900 tracking-tight">
-                                {order.orderNumber}
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPrintingOrder(order);
-                                }}
-                                className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded transition cursor-pointer"
-                                title="Cetak Ulang Struk Thermal"
-                              >
-                                <Printer size={12} />
-                              </button>
-                            </div>
-                            <span
-                              className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                                order.serviceSpeed === 'EXPRESS_6H'
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  : order.serviceSpeed === 'KILAT_24H'
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {order.serviceSpeed === 'EXPRESS_6H' ? 'Super 6 Jam' : order.serviceSpeed === 'KILAT_24H' ? 'Kilat 24 Jam' : 'Reguler'}
-                            </span>
-                          </div>
-
-                          <div className="mt-1 font-bold text-slate-900 text-sm">
-                            {order.customerName}
-                          </div>
-                          {order.customerPhone && (
-                            <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-1">
-                              <Phone size={10} /> {order.customerPhone}
-                            </div>
-                          )}
-
-                          {/* Detail Rincian Items */}
-                          <div className="mt-2.5 pt-2 border-t border-slate-100 space-y-1">
-                            {order.items.map((it, idx) => (
-                              <div key={idx} className="flex justify-between text-[11px] text-slate-600">
-                                <span className="truncate pr-2">{it.qty} {it.unitType.toLowerCase()} {it.serviceName}</span>
-                                <span className="font-semibold text-slate-800">Rp {it.subtotal.toLocaleString('id-ID')}</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Pewangi & Lokasi Rak */}
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-                            {order.perfumeVariant && (
-                              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
-                                <Sparkles size={10} /> {order.perfumeVariant}
-                              </span>
-                            )}
-                            {order.rackLocation && (
-                              <span className="px-2 py-0.5 rounded-md bg-cyan-50 text-cyan-800 border border-cyan-200 font-black">
-                                📍 {order.rackLocation}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Footer Status Pembayaran & Tombol Pindah Tahap */}
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                          <div>
-                            <div className="text-[10px] text-slate-400">Total Biaya:</div>
-                            <div className="font-black text-slate-900 text-xs">
-                              Rp {order.totalAmount.toLocaleString('id-ID')}
-                            </div>
-                            <div className={`text-[10px] font-bold ${order.paymentStatus === 'PAID' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                              {order.paymentStatus === 'PAID' ? 'LUNAS' : `Sisa Rp ${unpaid.toLocaleString('id-ID')}`}
-                            </div>
-                          </div>
-
-                          {/* Tombol Lanjut ke Tahap Berikutnya */}
-                          {col.id === 'RECEIVED' && (
-                            <button
-                              onClick={() => handleTransitionStatus(order, 'WASHING')}
-                              className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white font-bold text-[11px] transition-all border border-blue-200 flex items-center gap-1"
-                            >
-                              <span>Cuci</span>
-                              <ArrowRight size={12} />
-                            </button>
-                          )}
-
-                          {col.id === 'WASHING' && (
-                            <button
-                              onClick={() => handleTransitionStatus(order, 'DRYING')}
-                              className="px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-600 text-sky-700 hover:text-white font-bold text-[11px] transition-all border border-sky-200 flex items-center gap-1"
-                            >
-                              <span>Keringkan</span>
-                              <ArrowRight size={12} />
-                            </button>
-                          )}
-
-                          {col.id === 'DRYING' && (
-                            <button
-                              onClick={() => handleTransitionStatus(order, 'IRONING')}
-                              className="px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white font-bold text-[11px] transition-all border border-purple-200 flex items-center gap-1"
-                            >
-                              <span>Setrika</span>
-                              <ArrowRight size={12} />
-                            </button>
-                          )}
-
-                          {col.id === 'IRONING' && (
-                            <button
-                              onClick={() => handleTransitionStatus(order, 'READY')}
-                              className="px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-[11px] transition-all shadow-xs flex items-center gap-1"
-                            >
-                              <span>Masuk Rak</span>
-                              <ArrowRight size={12} />
-                            </button>
-                          )}
-
-                          {col.id === 'READY' && (
-                            <button
-                              onClick={() => handleTransitionStatus(order, 'COMPLETED')}
-                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all shadow-xs flex items-center gap-1"
-                            >
-                              <span>Serah Terima</span>
-                              <Check size={12} />
-                            </button>
-                          )}
-
-                          {col.id === 'COMPLETED' && (
-                            <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                              <CheckCircle2 size={13} /> Selesai
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
+                  colOrders.map(order => renderOrderCard(order, col.id))
                 )}
               </div>
             </div>
@@ -534,8 +711,8 @@ export const LaundryKanbanView: React.FC = () => {
 
       {/* ─── MODAL ALOKASI RAK SIMPAN (READY MODAL) ────────────────────────── */}
       {readyModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full border border-slate-200 shadow-2xl text-slate-900 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-600">Pengepakan Selesai</span>
@@ -549,27 +726,43 @@ export const LaundryKanbanView: React.FC = () => {
               </button>
             </div>
 
-            <div className="py-4 space-y-3">
+            <div className="py-4 space-y-3.5">
               <div>
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 block">
-                  Pilih Nomor Rak / Hanger Simpan
+                  Pilih Preset Rak Simpan (1-Tap):
                 </label>
-                <select
+                {/* Quick Rack Preset Chips */}
+                <div className="grid grid-cols-3 gap-1.5 mb-2.5">
+                  {['RAK-A1', 'RAK-A2', 'RAK-B1', 'RAK-B2', 'HANGER-01', 'HANGER-02'].map(rk => (
+                    <button
+                      key={rk}
+                      type="button"
+                      onClick={() => setSelectedRack(rk)}
+                      className={`py-2 px-1 rounded-xl text-xs font-black transition-all border text-center ${
+                        selectedRack === rk
+                          ? 'bg-cyan-600 text-white border-cyan-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {rk}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="text-[11px] font-semibold text-slate-500 mb-1 block">
+                  Atau ketik kustom nomor rak/laci:
+                </label>
+                <input
+                  type="text"
                   value={selectedRack}
-                  onChange={e => setSelectedRack(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-bold outline-none focus:ring-1 focus:ring-cyan-500"
-                >
-                  <option value="RAK-A1">RAK-A1 (Pakaian Lipat)</option>
-                  <option value="RAK-A2">RAK-A2 (Pakaian Lipat)</option>
-                  <option value="RAK-B1">RAK-B1 (Kiloan Standar)</option>
-                  <option value="RAK-B2">RAK-B2 (Kiloan Standar)</option>
-                  <option value="HANGER-01">HANGER-01 (Jas & Gaun)</option>
-                  <option value="HANGER-02">HANGER-02 (Bedcover & Selimut)</option>
-                </select>
+                  onChange={e => setSelectedRack(e.target.value.toUpperCase())}
+                  placeholder="Contoh: RAK-C3"
+                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 font-bold outline-none focus:ring-2 focus:ring-cyan-500"
+                />
               </div>
 
               {/* Kirim WhatsApp Otomatis Checkbox */}
-              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200/80 cursor-pointer">
+              <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={sendWhatsAppOnReady}
@@ -578,10 +771,10 @@ export const LaundryKanbanView: React.FC = () => {
                 />
                 <div className="text-xs">
                   <div className="font-bold text-emerald-900 flex items-center gap-1">
-                    <MessageSquare size={13} /> Kirim Notifikasi WhatsApp Otomatis
+                    <MessageSquare size={13} /> Kirim WhatsApp Otomatis Siap Ambil
                   </div>
                   <div className="text-[11px] text-emerald-700 mt-0.5">
-                    Kirim pesan ke {readyModalOrder.customerPhone || 'pelanggan'} bahwa cucian sudah wangi & siap diambil.
+                    Notifikasi ke {readyModalOrder.customerPhone || 'pelanggan'} bahwa cucian sudah wangi & siap diambil di {selectedRack}.
                   </div>
                 </div>
               </label>
@@ -591,7 +784,7 @@ export const LaundryKanbanView: React.FC = () => {
               <button
                 onClick={handleConfirmReadyWithRack}
                 disabled={isUpdatingStatus}
-                className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 active:scale-95"
               >
                 {isUpdatingStatus ? <RefreshCw size={14} className="animate-spin" /> : <Check size={16} />}
                 <span>Simpan di Rak</span>
@@ -609,8 +802,8 @@ export const LaundryKanbanView: React.FC = () => {
 
       {/* ─── MODAL SERAH TERIMA & KASIR PELUNASAN (PICKUP MODAL) ───────────── */}
       {pickupModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-sm w-full border border-slate-200 shadow-2xl text-slate-900 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Pengambilan Cucian</span>
@@ -625,7 +818,7 @@ export const LaundryKanbanView: React.FC = () => {
             </div>
 
             <div className="py-4 space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
                 <div className="flex justify-between">
                   <span className="text-slate-500">No. Order:</span>
                   <span className="font-mono font-bold text-slate-800">{pickupModalOrder.orderNumber}</span>
@@ -635,8 +828,10 @@ export const LaundryKanbanView: React.FC = () => {
                   <span className="font-bold text-slate-800">{pickupModalOrder.customerName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Lokasi Rak:</span>
-                  <span className="font-black text-cyan-700">{pickupModalOrder.rackLocation || 'Rak Simpan'}</span>
+                  <span className="text-slate-500">Lokasi Rak Simpan:</span>
+                  <span className="font-black text-cyan-800 bg-cyan-100 px-2 py-0.5 rounded-md">
+                    📍 {pickupModalOrder.rackLocation || 'Rak Simpan'}
+                  </span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-slate-200">
                   <span className="text-slate-500">Total Biaya:</span>
@@ -648,9 +843,9 @@ export const LaundryKanbanView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Sisa Tagihan */}
+              {/* Sisa Tagihan & Kasir Bayar */}
               {pickupModalOrder.totalAmount > pickupModalOrder.paidAmount ? (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 space-y-2.5">
                   <div className="flex justify-between items-baseline">
                     <span className="text-xs font-bold text-amber-900">Sisa yang Wajib Dibayar:</span>
                     <span className="text-base font-black text-rose-600">
@@ -662,7 +857,7 @@ export const LaundryKanbanView: React.FC = () => {
                     <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
                       Metode Pelunasan
                     </label>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-3 gap-1.5 mb-2">
                       {[
                         { id: 'CASH', label: 'Tunai' },
                         { id: 'QRIS', label: 'QRIS' },
@@ -672,9 +867,9 @@ export const LaundryKanbanView: React.FC = () => {
                           key={m.id}
                           type="button"
                           onClick={() => setPickupPaymentMethod(m.id as any)}
-                          className={`py-1 rounded-lg text-xs font-bold transition-all border ${
+                          className={`py-1.5 rounded-xl text-xs font-bold transition-all border ${
                             pickupPaymentMethod === m.id
-                              ? 'bg-amber-600 text-white border-amber-600'
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
                               : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
                           }`}
                         >
@@ -682,11 +877,51 @@ export const LaundryKanbanView: React.FC = () => {
                         </button>
                       ))}
                     </div>
+
+                    <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
+                      Uang Diterima Kasir (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      value={pickupPayAmount}
+                      onChange={e => setPickupPayAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full text-base font-black px-3 py-2 rounded-xl border border-amber-300 bg-white text-slate-900 outline-none focus:ring-2 focus:ring-amber-500 mb-1.5"
+                    />
+
+                    {/* Quick Tender Pills */}
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {[
+                        { label: 'Uang Pas', val: (pickupModalOrder.totalAmount - pickupModalOrder.paidAmount).toString() },
+                        { label: '20k', val: '20000' },
+                        { label: '50k', val: '50000' },
+                        { label: '100k', val: '100000' }
+                      ].map((t, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setPickupPayAmount(t.val)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-amber-900 text-xs font-bold border border-amber-300 transition active:scale-95"
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Kembalian Tunai */}
+                    {pickupPaymentMethod === 'CASH' && parseFloat(pickupPayAmount) > (pickupModalOrder.totalAmount - pickupModalOrder.paidAmount) && (
+                      <div className="flex justify-between items-center text-xs font-bold text-emerald-800 bg-emerald-100/80 p-2.5 rounded-xl border border-emerald-300">
+                        <span>Kembalian Tunai:</span>
+                        <span className="text-sm font-black">
+                          Rp {(parseFloat(pickupPayAmount) - (pickupModalOrder.totalAmount - pickupModalOrder.paidAmount)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-center flex items-center justify-center gap-1.5">
-                  <CheckCircle2 size={16} /> Nota ini sudah LUNAS!
+                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-center flex items-center justify-center gap-1.5">
+                  <CheckCircle2 size={16} /> Nota cucian ini sudah LUNAS!
                 </div>
               )}
             </div>
@@ -695,7 +930,7 @@ export const LaundryKanbanView: React.FC = () => {
               <button
                 onClick={handleConfirmPickup}
                 disabled={isUpdatingStatus}
-                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 active:scale-95"
               >
                 {isUpdatingStatus ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={16} />}
                 <span>Selesaikan & Serahkan Pakaian</span>

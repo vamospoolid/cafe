@@ -8,6 +8,7 @@ import {
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
 import { offlineDB } from '../utils/offlineDb';
+import { offlineDb } from '../db/offlineDb';
 import CustomerModal from './CustomerModal';
 import ReceiptPrinter from './ReceiptPrinter';
 import SplitPrintModal from './SplitPrintModal';
@@ -539,9 +540,54 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
         };
 
         await offlineDB.addOfflineOrder(offlineOrder);
+
+        // Sinkronkan juga ke engine Dexie offlineDb untuk monitoring antrean terpadu
+        try {
+          await offlineDb.queueOfflineOrder({
+            offlineId,
+            orderNumber: offlineId.toUpperCase(),
+            tableId: customer?.tableId || undefined,
+            tableName: customer?.tableName || undefined,
+            customerName: currentCustomer?.name || 'Pelanggan Umum',
+            customerPhone: currentCustomer?.phone || undefined,
+            items: cart.map((item: any) => ({
+              productId: item.product.id,
+              productName: item.product.name,
+              quantity: item.qty,
+              price: item.price ?? item.product.sellPrice ?? item.product.price ?? 0,
+              cost: item.product.cost ?? item.product.buyPrice ?? 0,
+              notes: item.notes || '',
+              selectedVariants: item.selectedAddons || []
+            })),
+            subtotal,
+            discount: totalDiscount,
+            tax,
+            service: serviceCharge,
+            total: finalTotal,
+            paymentMethod: paymentMethod === 'tunai' ? 'CASH' : paymentMethod === 'qris' ? 'QRIS_MANUAL' : 'DEBIT',
+            cashAmountPaid: paymentMethod === 'tunai' ? (cashGiven || finalTotal) : undefined,
+            cashChange: paymentMethod === 'tunai' ? Math.max(0, (cashGiven || finalTotal) - finalTotal) : undefined,
+            clientTimestamp: new Date().toISOString(),
+            tenantId: posContext?.user?.tenantId,
+            cashierName: posContext?.user?.name || posContext?.user?.username
+          });
+
+          // Potong stok lokal secara optimistik di Dexie IndexedDB
+          await offlineDb.deductLocalCachedStock(cart.map((item: any) => ({
+            productId: item.product.id,
+            quantity: item.qty
+          })));
+        } catch (dexieErr) {
+          console.warn('[CheckoutModal] Gagal menyimpan ke Dexie offlineDb:', dexieErr);
+        }
+
+        if (posContext?.refreshOfflineQueueCount) {
+          await posContext.refreshOfflineQueueCount();
+        }
+
         setCreatedOrderId(null);
         setIsSuccess(true);
-        toast('Transaksi berhasil disimpan secara offline!', 'warning');
+        toast('Transaksi berhasil disimpan secara offline di memori tablet!', 'warning');
       } catch (err: any) {
         toast(err.message || 'Gagal menyimpan transaksi offline', 'error');
       } finally {
@@ -618,6 +664,77 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       
       setIsSuccess(true);
     } catch (err: any) {
+      // Jika fetch online gagal karena koneksi internet putus di tengah request, fallback otomatis ke mode offline
+      const isNetworkDrop = !navigator.onLine || !posContext?.isOnline || 
+        err.message?.includes('Failed to fetch') || 
+        err.message?.includes('NetworkError') || 
+        err.name === 'TypeError';
+
+      if (isNetworkDrop) {
+        console.warn('Koneksi terputus saat request online, beralih ke penyimpanan offline lokal:', err);
+        try {
+          const offlineId = 'off-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+          const offlineOrder = {
+            offlineId,
+            customerName: currentCustomer?.name || 'Pelanggan Umum',
+            customerPhone: currentCustomer?.phone || '',
+            customerId: currentCustomer?.id || null,
+            tableId: customer?.tableId || null,
+            items: cart.map((item: any) => ({
+              productId: item.product.id,
+              qty: item.qty,
+              price: item.price ?? item.product.sellPrice ?? item.product.price ?? 0,
+              notes: item.notes || '',
+              selectedAddons: item.selectedAddons || []
+            })),
+            subtotal,
+            discount: totalDiscount,
+            voucherId: appliedVoucher?.voucher?.id || null,
+            voucherCode: appliedVoucher?.voucher?.code || null,
+            pointsUsed: pointsToRedeem,
+            tax,
+            serviceCharge,
+            total: finalTotal,
+            paymentMethod: pmString,
+            isPaid: true,
+            createdAt: new Date().toISOString(),
+            paidAt: new Date().toISOString()
+          };
+
+          await offlineDB.addOfflineOrder(offlineOrder);
+          await offlineDb.queueOfflineOrder({
+            offlineId,
+            orderNumber: offlineId.toUpperCase(),
+            customerName: currentCustomer?.name || 'Pelanggan Umum',
+            items: cart.map((item: any) => ({
+              productId: item.product.id,
+              productName: item.product.name,
+              quantity: item.qty,
+              price: item.price ?? item.product.sellPrice ?? item.product.price ?? 0
+            })),
+            subtotal,
+            discount: totalDiscount,
+            tax,
+            service: serviceCharge,
+            total: finalTotal,
+            paymentMethod: paymentMethod === 'tunai' ? 'CASH' : paymentMethod === 'qris' ? 'QRIS_MANUAL' : 'DEBIT',
+            clientTimestamp: new Date().toISOString(),
+            tenantId: posContext?.user?.tenantId
+          });
+
+          if (posContext?.refreshOfflineQueueCount) {
+            await posContext.refreshOfflineQueueCount();
+          }
+
+          setCreatedOrderId(null);
+          setIsSuccess(true);
+          toast('⚠️ Koneksi internet terputus! Transaksi dialihkan & disimpan aman secara offline.', 'warning');
+          return;
+        } catch (offlineErr: any) {
+          console.error('Fallback offline gagal:', offlineErr);
+        }
+      }
+
       toast(err.message || 'Gagal memproses pesanan.', 'error');
       setLoading(false);
       if (err.message && err.message.toLowerCase().includes('shift')) {

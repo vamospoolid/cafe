@@ -986,11 +986,24 @@ const preRestoreSnapshots = new Map<string, { snapshot: any; timestamp: Date }>(
 async function captureTenantStateSnapshot(tenantId: string) {
   const whereTenant = { tenantId };
 
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { businessType: true }
+  });
+  const businessType = tenant?.businessType || 'CAFE';
+
   const [
     categories, products, tables, reservations, customers, pointLogs,
     orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
     ingredients, recipeItems, ingredientLogs, purchaseOrders,
-    debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists
+    debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists,
+    // Bengkel
+    workOrders, workOrderParts, workOrderServices, workOrderInvoices,
+    vehicles, serviceTypes, mechanicProfiles, commissionPayouts, partRequests,
+    // Retail
+    productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
+    // Laundry
+    laundryOrders, laundryOrderItems
   ] = await Promise.all([
     prisma.category.findMany({ where: whereTenant }),
     prisma.product.findMany({ where: whereTenant }),
@@ -1013,7 +1026,25 @@ async function captureTenantStateSnapshot(tenantId: string) {
     prisma.debtPayment.findMany({ where: whereTenant }),
     prisma.leaveRequest.findMany({ where: whereTenant }),
     prisma.shiftHandover.findMany({ where: whereTenant }),
-    prisma.kitchenChecklist.findMany({ where: whereTenant })
+    prisma.kitchenChecklist.findMany({ where: whereTenant }),
+    // Bengkel
+    prisma.workOrder.findMany({ where: whereTenant }),
+    prisma.workOrderPart.findMany({ where: whereTenant }),
+    prisma.workOrderService.findMany({ where: whereTenant }),
+    prisma.workOrderInvoice.findMany({ where: whereTenant }),
+    prisma.vehicle.findMany({ where: whereTenant }),
+    prisma.serviceType.findMany({ where: whereTenant }),
+    prisma.mechanicProfile.findMany({ where: whereTenant }),
+    prisma.commissionPayout.findMany({ where: whereTenant }),
+    prisma.partRequest.findMany({ where: whereTenant }),
+    // Retail
+    prisma.productUOM.findMany({ where: whereTenant }),
+    prisma.productPriceTier.findMany({ where: whereTenant }),
+    prisma.deliveryOrder.findMany({ where: whereTenant }),
+    prisma.deliveryOrderItem.findMany({ where: { deliveryOrder: { tenantId } } }),
+    // Laundry
+    prisma.laundryOrder.findMany({ where: whereTenant }),
+    prisma.laundryOrderItem.findMany({ where: { order: { tenantId } } })
   ]);
 
   const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
@@ -1027,16 +1058,24 @@ async function captureTenantStateSnapshot(tenantId: string) {
       platform: 'Codenusa Multi-Tenant B2B SaaS POS',
       scope: `TENANT_${tenantId}`,
       sourceTenantId: tenantId,
+      businessType,
       signature,
       exportedAt,
-      schemaVersion: '2026.2',
+      schemaVersion: '2026.3',
       isPreRestoreEmergency: true
     },
     data: {
       categories, products, tables, reservations, customers, pointLogs,
       orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
       ingredients, recipeItems, ingredientLogs, purchaseOrders,
-      debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists
+      debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists,
+      // Bengkel
+      workOrders, workOrderParts, workOrderServices, workOrderInvoices,
+      vehicles, serviceTypes, mechanicProfiles, commissionPayouts, partRequests,
+      // Retail
+      productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
+      // Laundry
+      laundryOrders, laundryOrderItems
     }
   };
 }
@@ -1085,15 +1124,30 @@ router.post('/restore/inspect', authenticateToken, async (req: AuthRequest, res:
                       metadata.scope?.replace('TENANT_', '') || 
                       'Toko Backup';
 
+    // Detect Business Vertical
+    let detectedBusinessType = metadata.businessType;
+    if (!detectedBusinessType) {
+      if ((Array.isArray(data.workOrders) && data.workOrders.length > 0) || (Array.isArray(data.vehicles) && data.vehicles.length > 0)) {
+        detectedBusinessType = 'BENGKEL';
+      } else if (Array.isArray(data.laundryOrders) && data.laundryOrders.length > 0) {
+        detectedBusinessType = 'LAUNDRY';
+      } else if ((Array.isArray(data.deliveryOrders) && data.deliveryOrders.length > 0) || (Array.isArray(data.productUoms) && data.productUoms.length > 0)) {
+        detectedBusinessType = 'RETAIL';
+      } else {
+        detectedBusinessType = 'CAFE';
+      }
+    }
+
     const summary = {
       isValid: true,
       storeName,
       sourceTenantId: sourceTenantId || null,
+      businessType: detectedBusinessType,
       isCrossTenant,
       isTargetPaid,
       crossTenantWarning,
       exportedAt: metadata.exportedAt || null,
-      schemaVersion: metadata.schemaVersion || '2026.x',
+      schemaVersion: metadata.schemaVersion || '2026.3',
       platform: metadata.platform || 'Codenusa POS',
       counts: {
         categories: Array.isArray(data.categories) ? data.categories.length : 0,
@@ -1103,7 +1157,15 @@ router.post('/restore/inspect', authenticateToken, async (req: AuthRequest, res:
         tables: Array.isArray(data.tables) ? data.tables.length : 0,
         suppliers: Array.isArray(data.suppliers) ? data.suppliers.length : 0,
         orders: Array.isArray(data.orders) ? data.orders.length : 0,
-        customers: Array.isArray(data.customers) ? data.customers.length : 0
+        customers: Array.isArray(data.customers) ? data.customers.length : 0,
+        // Multi-Vertical entities
+        workOrders: Array.isArray(data.workOrders) ? data.workOrders.length : 0,
+        vehicles: Array.isArray(data.vehicles) ? data.vehicles.length : 0,
+        serviceTypes: Array.isArray(data.serviceTypes) ? data.serviceTypes.length : 0,
+        mechanics: Array.isArray(data.mechanicProfiles) ? data.mechanicProfiles.length : 0,
+        productUoms: Array.isArray(data.productUoms) ? data.productUoms.length : 0,
+        deliveryOrders: Array.isArray(data.deliveryOrders) ? data.deliveryOrders.length : 0,
+        laundryOrders: Array.isArray(data.laundryOrders) ? data.laundryOrders.length : 0
       }
     };
 
@@ -1233,6 +1295,27 @@ export async function executeTenantRestoreTransaction(
       await tx.debt.deleteMany({ where: tenantCondition });
       await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
       await tx.shiftHandover.deleteMany({ where: tenantCondition });
+
+      // Bengkel vertical deletion (dependents first)
+      await tx.commissionPayout.deleteMany({ where: tenantCondition });
+      await tx.workOrderInvoiceItem.deleteMany({ where: { invoice: { tenantId } } });
+      await tx.workOrderInvoice.deleteMany({ where: tenantCondition });
+      await tx.workOrderReturnItem.deleteMany({ where: { return: { tenantId } } });
+      await tx.workOrderReturn.deleteMany({ where: tenantCondition });
+      await tx.workOrderPart.deleteMany({ where: tenantCondition });
+      await tx.workOrderService.deleteMany({ where: tenantCondition });
+      await tx.partRequest.deleteMany({ where: tenantCondition });
+      await tx.supplierInvoicePayment.deleteMany({ where: tenantCondition });
+      await tx.supplierInvoiceItem.deleteMany({ where: { invoice: { tenantId } } });
+      await tx.supplierInvoice.deleteMany({ where: tenantCondition });
+      await tx.workOrder.deleteMany({ where: tenantCondition });
+      await tx.mechanicProfile.deleteMany({ where: tenantCondition });
+      await tx.serviceType.deleteMany({ where: tenantCondition });
+      await tx.vehicle.deleteMany({ where: tenantCondition });
+
+      // Laundry vertical deletion
+      await tx.laundryOrderItem.deleteMany({ where: { order: { tenantId } } });
+      await tx.laundryOrder.deleteMany({ where: tenantCondition });
 
       // Retail vertical deletion
       await tx.deliveryOrderItem.deleteMany({ where: { deliveryOrder: { tenantId } } });
@@ -1367,48 +1450,47 @@ export async function executeTenantRestoreTransaction(
       }
     }
 
-    // f. Restore Recipe Items
-    let restoredRecipesCount = 0;
-    if (Array.isArray(data.recipeItems)) {
-      for (const r of data.recipeItems) {
-        const newProductId = productMap.get(r.productId);
-        const newIngredientId = ingredientMap.get(r.ingredientId);
-        if (newProductId && newIngredientId) {
-          await tx.recipeItem.create({
+    // e2. Restore Retail Vertical Master (UOM & Price Tiers)
+    let restoredProductUomsCount = 0;
+    if (Array.isArray(data.productUoms)) {
+      for (const u of data.productUoms) {
+        const newProdId = productMap.get(u.productId);
+        if (newProdId) {
+          await tx.productUOM.create({
             data: {
-              productId: newProductId,
-              ingredientId: newIngredientId,
-              qtyPerServing: Number(r.qtyPerServing) || 1,
-              tenantId
+              tenantId,
+              productId: newProdId,
+              unitName: u.unitName || 'PCS',
+              conversionRatio: Number(u.conversionRatio) || 1,
+              barcode: u.barcode ? `${u.barcode}` : null,
+              priceSell: Number(u.priceSell) || 0,
+              isDefaultSale: Boolean(u.isDefaultSale)
             }
-          });
-          restoredRecipesCount++;
+          }).catch(() => null);
+          restoredProductUomsCount++;
         }
       }
     }
 
-    // g. Restore Tables
-    let restoredTablesCount = 0;
-    if (Array.isArray(data.tables)) {
-      for (const tbl of data.tables) {
-        await tx.table.create({
-          data: {
-            tenantId,
-            tableNo: tbl.tableNo,
-            name: tbl.name || null,
-            capacity: Number(tbl.capacity) || 2,
-            status: tbl.status || 'Aktif',
-            qrUrl: tbl.qrUrl || null,
-            posX: Number(tbl.posX) || 10,
-            posY: Number(tbl.posY) || 10,
-            shape: tbl.shape || 'square'
-          }
-        });
-        restoredTablesCount++;
+    if (Array.isArray(data.productPriceTiers)) {
+      for (const pt of data.productPriceTiers) {
+        const newProdId = productMap.get(pt.productId);
+        if (newProdId) {
+          await tx.productPriceTier.create({
+            data: {
+              tenantId,
+              productId: newProdId,
+              minQty: Number(pt.minQty) || 1,
+              tierName: pt.tierName || 'Grosir',
+              unitPrice: Number(pt.unitPrice) || 0,
+              customerCategory: pt.customerCategory || null
+            }
+          }).catch(() => null);
+        }
       }
     }
 
-    // g2. Restore Customers
+    // f. Restore Customers (Required for Orders & Vehicles)
     let restoredCustomersCount = 0;
     const customerMap = new Map<number, number>();
     if (Array.isArray(data.customers)) {
@@ -1443,7 +1525,109 @@ export async function executeTenantRestoreTransaction(
       }
     }
 
-    // h. If FULL_OVERWRITE: Restore Orders & Transactions
+    // g. Restore Tables
+    let restoredTablesCount = 0;
+    if (Array.isArray(data.tables)) {
+      for (const tbl of data.tables) {
+        await tx.table.create({
+          data: {
+            tenantId,
+            tableNo: tbl.tableNo,
+            name: tbl.name || null,
+            capacity: Number(tbl.capacity) || 2,
+            status: tbl.status || 'Aktif',
+            qrUrl: tbl.qrUrl || null,
+            posX: Number(tbl.posX) || 10,
+            posY: Number(tbl.posY) || 10,
+            shape: tbl.shape || 'square'
+          }
+        });
+        restoredTablesCount++;
+      }
+    }
+
+    // g2. Restore Recipe Items
+    let restoredRecipesCount = 0;
+    if (Array.isArray(data.recipeItems)) {
+      for (const r of data.recipeItems) {
+        const newProductId = productMap.get(r.productId);
+        const newIngredientId = ingredientMap.get(r.ingredientId);
+        if (newProductId && newIngredientId) {
+          await tx.recipeItem.create({
+            data: {
+              productId: newProductId,
+              ingredientId: newIngredientId,
+              qtyPerServing: Number(r.qtyPerServing) || 1,
+              tenantId
+            }
+          });
+          restoredRecipesCount++;
+        }
+      }
+    }
+
+    // h. Restore Bengkel Vertical Master (Vehicles, ServiceTypes, MechanicProfiles)
+    let restoredVehiclesCount = 0;
+    const vehicleMap = new Map<string, string>();
+    if (Array.isArray(data.vehicles)) {
+      for (const v of data.vehicles) {
+        const mappedCustId = v.customerId ? (customerMap.get(v.customerId) || null) : null;
+        const created = await tx.vehicle.create({
+          data: {
+            tenantId,
+            plateNumber: v.plateNumber || 'B 0000 XX',
+            brand: v.brand || 'Umum',
+            model: v.model || 'Standar',
+            vehicleType: v.vehicleType || 'MOTOR',
+            year: v.year ? Number(v.year) : null,
+            color: v.color || null,
+            notes: v.notes || null,
+            customerId: mappedCustId
+          }
+        });
+        vehicleMap.set(v.id, created.id);
+        restoredVehiclesCount++;
+      }
+    }
+
+    let restoredServiceTypesCount = 0;
+    const serviceTypeMap = new Map<string, string>();
+    if (Array.isArray(data.serviceTypes)) {
+      for (const st of data.serviceTypes) {
+        const created = await tx.serviceType.create({
+          data: {
+            tenantId,
+            name: st.name,
+            description: st.description || null,
+            vehicleType: st.vehicleType || 'ALL',
+            priceRetail: Number(st.priceRetail) || 0,
+            priceMitra: st.priceMitra ? Number(st.priceMitra) : null,
+            priceGrosir: st.priceGrosir ? Number(st.priceGrosir) : null,
+            isActive: st.isActive !== false
+          }
+        });
+        serviceTypeMap.set(st.id, created.id);
+        restoredServiceTypesCount++;
+      }
+    }
+
+    if (Array.isArray(data.mechanicProfiles)) {
+      for (const mp of data.mechanicProfiles) {
+        await tx.mechanicProfile.create({
+          data: {
+            tenantId,
+            userId: mp.userId || userId,
+            specialization: mp.specialization || 'Mekanik Umum',
+            commissionRate: Number(mp.commissionRate) || 0,
+            commissionType: mp.commissionType || 'PERCENT',
+            pendingCommission: Number(mp.pendingCommission) || 0,
+            paidCommission: Number(mp.paidCommission) || 0
+          }
+        }).catch(() => null);
+      }
+    }
+
+    // i. If FULL_OVERWRITE: Restore Orders & Transactions
     let restoredOrdersCount = 0;
     if (mode === 'FULL_OVERWRITE' && Array.isArray(data.orders)) {
       for (const ord of data.orders) {
@@ -1494,7 +1678,7 @@ export async function executeTenantRestoreTransaction(
       }
     }
 
-    // i. If FULL_OVERWRITE: Restore CashFlows
+    // j. If FULL_OVERWRITE: Restore CashFlows
     let restoredCashFlowsCount = 0;
     if (mode === 'FULL_OVERWRITE' && Array.isArray(data.cashFlows)) {
       for (const cf of data.cashFlows) {
@@ -1515,7 +1699,7 @@ export async function executeTenantRestoreTransaction(
       }
     }
 
-    // j. If FULL_OVERWRITE: Restore Shifts
+    // k. If FULL_OVERWRITE: Restore Shifts
     let restoredShiftsCount = 0;
     if (mode === 'FULL_OVERWRITE' && Array.isArray(data.shifts)) {
       for (const sh of data.shifts) {
@@ -1537,6 +1721,177 @@ export async function executeTenantRestoreTransaction(
       }
     }
 
+    // l. If FULL_OVERWRITE: Restore Bengkel Transactions (WorkOrders, Parts, Services)
+    let restoredWorkOrdersCount = 0;
+    const workOrderMap = new Map<string, string>();
+    if (mode === 'FULL_OVERWRITE' && Array.isArray(data.workOrders)) {
+      for (const wo of data.workOrders) {
+        const newVehicleId = wo.vehicleId ? (vehicleMap.get(wo.vehicleId) || null) : null;
+        const newCustomerId = wo.customerId ? (customerMap.get(wo.customerId) || null) : null;
+        const createdWo = await tx.workOrder.create({
+          data: {
+            tenantId,
+            spkNumber: wo.spkNumber,
+            customerId: newCustomerId,
+            vehicleId: newVehicleId,
+            vehiclePlate: wo.vehiclePlate || null,
+            vehicleBrand: wo.vehicleBrand || null,
+            vehicleModel: wo.vehicleModel || null,
+            vehicleType: wo.vehicleType || 'MOTOR',
+            odometer: wo.odometer ? Number(wo.odometer) : null,
+            fuelLevel: wo.fuelLevel || null,
+            complaint: wo.complaint || null,
+            diagnosis: wo.diagnosis || null,
+            notes: wo.notes || null,
+            status: wo.status || 'DONE',
+            priceTier: wo.priceTier || 'UMUM',
+            mechanicName: wo.mechanicName || null,
+            totalServices: Number(wo.totalServices) || 0,
+            totalParts: Number(wo.totalParts) || 0,
+            discount: Number(wo.discount) || 0,
+            taxAmount: Number(wo.taxAmount) || 0,
+            totalAmount: Number(wo.totalAmount) || 0,
+            paidAmount: Number(wo.paidAmount) || 0,
+            createdAt: wo.createdAt ? new Date(wo.createdAt) : new Date()
+          }
+        });
+        workOrderMap.set(wo.id, createdWo.id);
+        restoredWorkOrdersCount++;
+      }
+
+      if (Array.isArray(data.workOrderParts)) {
+        for (const part of data.workOrderParts) {
+          const newWoId = workOrderMap.get(part.workOrderId);
+          const newProdId = productMap.get(part.productId) || Array.from(productMap.values())[0];
+          if (newWoId && newProdId) {
+            await tx.workOrderPart.create({
+              data: {
+                tenantId,
+                workOrderId: newWoId,
+                productId: newProdId,
+                partName: part.partName || 'Sparepart',
+                partCode: part.partCode || null,
+                price: Number(part.price || part.sellPrice) || 0,
+                qty: Number(part.qty) || 1,
+                subtotal: Number(part.subtotal) || 0
+              }
+            });
+          }
+        }
+      }
+
+      if (Array.isArray(data.workOrderServices)) {
+        for (const svc of data.workOrderServices) {
+          const newWoId = workOrderMap.get(svc.workOrderId);
+          if (newWoId) {
+            const newStId = svc.serviceTypeId ? (serviceTypeMap.get(svc.serviceTypeId) || null) : null;
+            await tx.workOrderService.create({
+              data: {
+                tenantId,
+                workOrderId: newWoId,
+                serviceTypeId: newStId,
+                serviceName: svc.serviceName || 'Jasa Servis',
+                vehicleType: svc.vehicleType || 'MOTOR',
+                price: Number(svc.price) || 0,
+                qty: Number(svc.qty) || 1,
+                subtotal: Number(svc.subtotal) || 0
+              }
+            });
+          }
+        }
+      }
+    }
+
+    // l. If FULL_OVERWRITE: Restore Retail Transactions (Delivery Orders)
+    let restoredDeliveryOrdersCount = 0;
+    if (mode === 'FULL_OVERWRITE' && Array.isArray(data.deliveryOrders)) {
+      for (const d of data.deliveryOrders) {
+        const createdDo = await tx.deliveryOrder.create({
+          data: {
+            tenantId,
+            doNumber: d.doNumber,
+            shippingAddress: d.shippingAddress || '-',
+            driverName: d.driverName || null,
+            vehiclePlate: d.vehiclePlate || null,
+            status: d.status || 'DELIVERED',
+            recipientName: d.recipientName || null,
+            deliveredAt: d.deliveredAt ? new Date(d.deliveredAt) : null,
+            notes: d.notes || null,
+            createdAt: d.createdAt ? new Date(d.createdAt) : new Date()
+          }
+        });
+        restoredDeliveryOrdersCount++;
+
+        if (Array.isArray(data.deliveryOrderItems)) {
+          const items = data.deliveryOrderItems.filter((it: any) => it.deliveryOrderId === d.id);
+          for (const it of items) {
+            await tx.deliveryOrderItem.create({
+              data: {
+                deliveryOrderId: createdDo.id,
+                productName: it.productName || 'Barang',
+                qtyShipped: Number(it.qtyShipped) || 1,
+                unitName: it.unitName || 'PCS'
+              }
+            });
+          }
+        }
+      }
+    }
+
+    // m. If FULL_OVERWRITE: Restore Laundry Transactions (Laundry Orders)
+    let restoredLaundryOrdersCount = 0;
+    if (mode === 'FULL_OVERWRITE' && Array.isArray(data.laundryOrders)) {
+      for (const lo of data.laundryOrders) {
+        const mappedCustId = lo.customerId ? (customerMap.get(lo.customerId) || null) : null;
+        const createdLo = await tx.laundryOrder.create({
+          data: {
+            tenantId,
+            orderNumber: lo.orderNumber,
+            customerId: mappedCustId,
+            customerName: lo.customerName || 'Pelanggan',
+            customerPhone: lo.customerPhone || null,
+            serviceCategory: lo.serviceCategory || 'KILOAN',
+            serviceSpeed: lo.serviceSpeed || 'REGULAR',
+            perfumeVariant: lo.perfumeVariant || 'Standar',
+            rackLocation: lo.rackLocation || null,
+            hangerCount: Number(lo.hangerCount) || 0,
+            itemCountNotes: lo.itemCountNotes || null,
+            specialNotes: lo.specialNotes || null,
+            status: lo.status || 'COMPLETED',
+            subtotal: Number(lo.subtotal) || 0,
+            speedSurcharge: Number(lo.speedSurcharge) || 0,
+            discount: Number(lo.discount) || 0,
+            totalAmount: Number(lo.totalAmount) || 0,
+            paidAmount: Number(lo.paidAmount) || 0,
+            paymentStatus: lo.paymentStatus || 'PAID',
+            paymentMethod: lo.paymentMethod || 'CASH',
+            estimatedDoneAt: lo.estimatedDoneAt ? new Date(lo.estimatedDoneAt) : null,
+            readyAt: lo.readyAt ? new Date(lo.readyAt) : null,
+            completedAt: lo.completedAt ? new Date(lo.completedAt) : null,
+            createdAt: lo.createdAt ? new Date(lo.createdAt) : new Date()
+          }
+        });
+        restoredLaundryOrdersCount++;
+
+        if (Array.isArray(data.laundryOrderItems)) {
+          const items = data.laundryOrderItems.filter((it: any) => it.orderId === lo.id);
+          for (const it of items) {
+            await tx.laundryOrderItem.create({
+              data: {
+                orderId: createdLo.id,
+                serviceName: it.serviceName || 'Layanan Laundry',
+                unitType: it.unitType || 'KG',
+                qty: Number(it.qty) || 1,
+                pricePerUnit: Number(it.pricePerUnit) || 0,
+                subtotal: Number(it.subtotal) || 0,
+                notes: it.notes || null
+              }
+            });
+          }
+        }
+      }
+    }
+
     return {
       categoriesCount: categoryMap.size,
       ingredientsCount: ingredientMap.size,
@@ -1546,7 +1901,14 @@ export async function executeTenantRestoreTransaction(
       customersCount: restoredCustomersCount,
       ordersCount: restoredOrdersCount,
       cashFlowsCount: restoredCashFlowsCount,
-      shiftsCount: restoredShiftsCount
+      shiftsCount: restoredShiftsCount,
+      // Multi-Vertical stats:
+      workOrdersCount: restoredWorkOrdersCount,
+      vehiclesCount: restoredVehiclesCount,
+      serviceTypesCount: restoredServiceTypesCount,
+      productUomsCount: restoredProductUomsCount,
+      deliveryOrdersCount: restoredDeliveryOrdersCount,
+      laundryOrdersCount: restoredLaundryOrdersCount
     };
   }, {
     maxWait: 20000,

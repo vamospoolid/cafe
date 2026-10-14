@@ -47,9 +47,13 @@ import {
   Wrench,
   Lock,
   LogOut,
-  Key
+  Key,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import ActivationModal from './ActivationModal';
+import OfflineStatusBar from './OfflineStatusBar';
+import OfflineSyncPanel from './OfflineSyncPanel';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -61,6 +65,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [globalShiftModalMode, setGlobalShiftModalMode] = useState<'open' | 'close'>('open');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
+  const [isOfflinePanelOpen, setIsOfflinePanelOpen] = useState(false);
 
   // Periksa status aktivasi lisensi hardware saat booting (Electron Standalone)
   useEffect(() => {
@@ -549,6 +554,25 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                   <span>Cabang &amp; Tenant Hub</span>
                   {renderPlanBadge('multi_outlet', 'BUSINESS')}
                 </NavLink>
+
+                {/* Direct Shortcut to Offline & Sync Hub */}
+                <button
+                  type="button"
+                  onClick={() => setIsOfflinePanelOpen(true)}
+                  title="Pusat Mode Offline & Sinkronisasi"
+                  className="nav-item text-amber-300 hover:text-amber-200 w-full text-left flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <Wifi size={20} className="shrink-0 text-amber-400" />
+                    <span>Mode Offline &amp; Sync</span>
+                  </div>
+                  {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
+                      {posContext?.offlineQueueCount}
+                    </span>
+                  )}
+                </button>
+
                 {Boolean((posContext?.user as any)?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user?.role === 'OWNER' && (posContext?.user?.username === 'admin' || posContext?.user?.username === 'ahmad')) || posContext?.user?.username === 'admin') && (
                   <NavLink to="/platform-admin" title="Master SaaS Console" className={({isActive}) => `nav-item ${isActive ? 'active' : ''} text-indigo-400 hover:text-indigo-300 font-bold`}>
                     <Sliders size={20} className="shrink-0 text-indigo-400" />
@@ -639,18 +663,34 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </button>
             )}
 
-            {/* Indikator Status Koneksi */}
-            {posContext?.isOnline ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full select-none shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                {!isMobile && <span>Online</span>}
+            {/* Indikator Status Koneksi (Klik untuk buka Pusat Mode Offline & Sinkronisasi) */}
+            <button
+              type="button"
+              onClick={() => setIsOfflinePanelOpen(true)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-full select-none shadow-xs transition-all active:scale-95 cursor-pointer ${
+                posContext?.isOnline
+                  ? (posContext?.offlineQueueCount && posContext.offlineQueueCount > 0)
+                    ? 'text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300'
+                    : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+                  : 'text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 animate-pulse'
+              }`}
+              title="Status Jaringan & Antrean Transaksi - Klik untuk buka Pusat Sinkronisasi Offline"
+            >
+              <span className={`w-2 h-2 rounded-full ${
+                posContext?.isOnline
+                  ? (posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) ? 'bg-amber-500' : 'bg-emerald-500'
+                  : 'bg-rose-500'
+              }`} />
+              <span className="flex items-center gap-1">
+                {posContext?.isOnline ? (
+                  posContext?.offlineQueueCount && posContext.offlineQueueCount > 0
+                    ? <span>Online ({posContext.offlineQueueCount} Sync)</span>
+                    : (!isMobile ? <span>Online</span> : null)
+                ) : (
+                  <span>Mode Offline{posContext?.offlineQueueCount ? ` (${posContext.offlineQueueCount})` : ''}</span>
+                )}
               </span>
-            ) : (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-full select-none shadow-sm animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                {!isMobile && <span>Mode Offline</span>}
-              </span>
-            )}
+            </button>
             
             <NotificationBell />
 
@@ -709,6 +749,20 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </button>
                 <button 
                   type="button"
+                  onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); setIsOfflinePanelOpen(true); }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-amber-700 hover:bg-amber-50 font-bold transition-colors border-b border-slate-100 flex items-center justify-between cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Wifi size={16} className="text-amber-600" /> Mode Offline &amp; Sync
+                  </div>
+                  {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500 text-slate-950">
+                      {posContext?.offlineQueueCount}
+                    </span>
+                  )}
+                </button>
+                <button 
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); setIsUserMenuOpen(false); setIsActivationModalOpen(true); }}
                   className="w-full text-left px-4 py-2.5 text-xs text-purple-700 hover:bg-purple-50 font-bold transition-colors border-b border-slate-100 flex items-center gap-2.5 cursor-pointer"
                 >
@@ -726,6 +780,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
         
+        <OfflineStatusBar />
+
         <div className={`page-content flex-1 min-h-0 w-full flex flex-col ${
           isPOSPage ? 'overflow-hidden pb-[62px] md:pb-0' : 'overflow-y-auto overflow-x-hidden pb-24 md:pb-0'
         }`} style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -865,9 +921,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               )}
             </NavLink>
 
-            {/* 2. Meja / Kanban / Produk */}
+            {/* 2. Meja / Kanban / Rak / Produk */}
             <NavLink
-              to={profile.enableTables ? "/meja" : (isRental ? "/rental-kanban" : "/produk")}
+              to={profile.enableTables ? "/meja" : (isRental ? "/rental-kanban" : (isLaundry ? "/laundry-kanban" : "/produk"))}
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 ${
                   isActive
@@ -885,13 +941,15 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                       <Grid size={22} strokeWidth={isActive ? 2.5 : 2} />
                     ) : isRental ? (
                       <Layers size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-amber-700' : ''} />
+                    ) : isLaundry ? (
+                      <Layers size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-cyan-700' : ''} />
                     ) : (
                       <Package size={22} strokeWidth={isActive ? 2.5 : 2} />
                     )}
                   </div>
                   <span className={`text-[11px] leading-none transition-all ${
                     isActive ? 'font-bold' : 'font-medium'
-                  }`}>{profile.enableTables ? (isLaundry ? 'Rak' : 'Meja') : (isRental ? 'Kanban' : 'Produk')}</span>
+                  }`}>{profile.enableTables ? 'Meja' : (isRental ? 'Kanban' : (isLaundry ? 'Rak Cucian' : 'Produk'))}</span>
                 </>
               )}
             </NavLink>
@@ -1211,6 +1269,22 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </NavLink>
               )}
 
+              <button
+                type="button"
+                onClick={() => { setIsMoreMenuOpen(false); setIsOfflinePanelOpen(true); }}
+                className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm"
+              >
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center relative">
+                  <Wifi size={20} className="text-amber-600" />
+                  {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+                      {posContext?.offlineQueueCount}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] font-bold text-slate-700 leading-tight">Offline &amp; Sync</span>
+              </button>
+
               {checkAccess(['Admin']) && (
                 <NavLink to="/pengaturan" onClick={() => setIsMoreMenuOpen(false)}
                   className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
@@ -1257,6 +1331,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         onClose={() => setIsActivationModalOpen(false)}
         onSuccess={() => setIsActivationModalOpen(false)}
       />
+
+      {/* Global Offline Hub & Sync Monitoring Panel */}
+      {isOfflinePanelOpen && (
+        <OfflineSyncPanel onClose={() => setIsOfflinePanelOpen(false)} />
+      )}
     </div>
   );
 };

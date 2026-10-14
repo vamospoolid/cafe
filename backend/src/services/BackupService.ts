@@ -236,8 +236,12 @@ export class BackupService {
       workOrders, workOrderParts, workOrderServices, workOrderInvoices,
       vehicles, serviceTypes, mechanicProfiles, commissionPayouts, partRequests,
       supplierInvoices, supplierInvoiceItems, supplierInvoicePayments,
+      // Retail vertical entities
+      productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
       // Laundry vertical entities
-      laundryOrders, laundryOrderItems
+      laundryOrders, laundryOrderItems,
+      // WhatsApp CRM entities
+      whatsAppConfigs, whatsAppTemplates, whatsAppLogs
     ] = await Promise.all([
       scope === 'FULL' ? prisma.tenant.findMany() : prisma.tenant.findMany({ where: { id: tenantId! } }),
       prisma.outlet.findMany({ where: whereTenant }),
@@ -305,12 +309,25 @@ export class BackupService {
         where: scope === 'FULL' ? {} : { invoice: { tenantId: tenantId! } }
       }),
       prisma.supplierInvoicePayment.findMany({ where: whereTenant }),
+      // Retail vertical entities
+      prisma.productUOM.findMany({ where: whereTenant }),
+      prisma.productPriceTier.findMany({ where: whereTenant }),
+      prisma.deliveryOrder.findMany({ where: whereTenant }),
+      prisma.deliveryOrderItem.findMany({
+        where: scope === 'FULL' ? {} : { deliveryOrder: { tenantId: tenantId! } }
+      }),
       // Laundry queries
       prisma.laundryOrder.findMany({ where: whereTenant }),
       prisma.laundryOrderItem.findMany({
         where: scope === 'FULL' ? {} : { order: { tenantId: tenantId! } }
-      })
+      }),
+      // WhatsApp CRM entities
+      prisma.tenantWhatsAppConfig.findMany({ where: whereTenant }),
+      prisma.whatsAppTemplate.findMany({ where: whereTenant }),
+      prisma.whatsAppLog.findMany({ where: whereTenant })
     ]);
+
+    const targetBusinessType = (tenants && tenants[0]?.businessType) || 'CAFE';
 
     const backupData = {
       tenants, outlets, users, memberships,
@@ -324,8 +341,12 @@ export class BackupService {
       workOrders, workOrderParts, workOrderServices, workOrderInvoices,
       vehicles, serviceTypes, mechanicProfiles, commissionPayouts, partRequests,
       supplierInvoices, supplierInvoiceItems, supplierInvoicePayments,
+      // Retail vertical entities
+      productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
       // Laundry vertical entities
-      laundryOrders, laundryOrderItems
+      laundryOrders, laundryOrderItems,
+      // WhatsApp CRM entities
+      whatsAppConfigs, whatsAppTemplates, whatsAppLogs
     };
 
     const entityCounts: Record<string, number> = {};
@@ -338,6 +359,7 @@ export class BackupService {
         platform: 'CodePOS SaaS Multi-Tenant Engine',
         version: '2026.3',
         scope,
+        businessType: targetBusinessType,
         tenantId: tenantId || (scope === 'FULL' ? 'PLATFORM' : null),
         exportedAt: timestamp,
         entityCounts
@@ -1230,8 +1252,8 @@ export class BackupService {
               brand: v.brand,
               model: v.model,
               year: v.year ? Number(v.year) : null,
-              color: v.color,
-              customerPhone: v.customerPhone,
+              color: v.color || null,
+              notes: v.notes || null,
               customerId: v.customerId || null
             },
             create: {
@@ -1241,8 +1263,8 @@ export class BackupService {
               brand: v.brand,
               model: v.model,
               year: v.year ? Number(v.year) : null,
-              color: v.color,
-              customerPhone: v.customerPhone,
+              color: v.color || null,
+              notes: v.notes || null,
               customerId: v.customerId || null
             }
           });
@@ -1260,23 +1282,23 @@ export class BackupService {
             update: {
               tenantId: st.tenantId,
               name: st.name,
-              category: st.category,
+              description: st.description || null,
               priceRetail: Number(st.priceRetail) || 0,
-              priceMitra: Number(st.priceMitra) || 0,
-              priceGrosir: Number(st.priceGrosir) || 0,
-              defaultCommission: Number(st.defaultCommission) || 0,
-              vehicleType: st.vehicleType || 'MOTOR'
+              priceMitra: st.priceMitra ? Number(st.priceMitra) : null,
+              priceGrosir: st.priceGrosir ? Number(st.priceGrosir) : null,
+              vehicleType: st.vehicleType || 'MOTOR',
+              isActive: st.isActive !== false
             },
             create: {
               id: st.id,
               tenantId: st.tenantId,
               name: st.name,
-              category: st.category,
+              description: st.description || null,
               priceRetail: Number(st.priceRetail) || 0,
-              priceMitra: Number(st.priceMitra) || 0,
-              priceGrosir: Number(st.priceGrosir) || 0,
-              defaultCommission: Number(st.defaultCommission) || 0,
-              vehicleType: st.vehicleType || 'MOTOR'
+              priceMitra: st.priceMitra ? Number(st.priceMitra) : null,
+              priceGrosir: st.priceGrosir ? Number(st.priceGrosir) : null,
+              vehicleType: st.vehicleType || 'MOTOR',
+              isActive: st.isActive !== false
             }
           });
           count++;
@@ -1322,32 +1344,40 @@ export class BackupService {
             update: {
               tenantId: wo.tenantId,
               spkNumber: wo.spkNumber,
-              vehicleId: wo.vehicleId,
+              vehicleId: wo.vehicleId || null,
+              customerId: wo.customerId || null,
               mechanicId: wo.mechanicId || null,
+              mechanicName: wo.mechanicName || null,
               status: wo.status || 'PENDING',
-              pricingTier: wo.pricingTier || 'RETAIL',
+              priceTier: wo.priceTier || wo.pricingTier || 'UMUM',
               complaint: wo.complaint || null,
-              kmIn: wo.kmIn ? Number(wo.kmIn) : null,
-              kmOut: wo.kmOut ? Number(wo.kmOut) : null,
+              diagnosis: wo.diagnosis || null,
+              notes: wo.notes || null,
+              odometer: wo.odometer ? Number(wo.odometer) : null,
               totalServices: Number(wo.totalServices) || 0,
               totalParts: Number(wo.totalParts) || 0,
-              grandTotal: Number(wo.grandTotal) || 0,
+              totalAmount: Number(wo.totalAmount || wo.grandTotal) || 0,
+              paidAmount: Number(wo.paidAmount) || 0,
               createdAt: wo.createdAt ? new Date(wo.createdAt) : new Date()
             },
             create: {
               id: wo.id,
               tenantId: wo.tenantId,
               spkNumber: wo.spkNumber,
-              vehicleId: wo.vehicleId,
+              vehicleId: wo.vehicleId || null,
+              customerId: wo.customerId || null,
               mechanicId: wo.mechanicId || null,
+              mechanicName: wo.mechanicName || null,
               status: wo.status || 'PENDING',
-              pricingTier: wo.pricingTier || 'RETAIL',
+              priceTier: wo.priceTier || wo.pricingTier || 'UMUM',
               complaint: wo.complaint || null,
-              kmIn: wo.kmIn ? Number(wo.kmIn) : null,
-              kmOut: wo.kmOut ? Number(wo.kmOut) : null,
+              diagnosis: wo.diagnosis || null,
+              notes: wo.notes || null,
+              odometer: wo.odometer ? Number(wo.odometer) : null,
               totalServices: Number(wo.totalServices) || 0,
               totalParts: Number(wo.totalParts) || 0,
-              grandTotal: Number(wo.grandTotal) || 0,
+              totalAmount: Number(wo.totalAmount || wo.grandTotal) || 0,
+              paidAmount: Number(wo.paidAmount) || 0,
               createdAt: wo.createdAt ? new Date(wo.createdAt) : new Date()
             }
           });
@@ -1386,6 +1416,79 @@ export class BackupService {
           count++;
         }
         restoredCounts.productUoms = count;
+      }
+
+      // 7j. Retail Vertical (Product Price Tiers)
+      if (Array.isArray(data.productPriceTiers)) {
+        let count = 0;
+        for (const pt of data.productPriceTiers) {
+          if (targetTenantId && pt.tenantId !== targetTenantId) continue;
+          const prodExists = await tx.product.findUnique({ where: { id: pt.productId } });
+          if (!prodExists) continue;
+
+          await tx.productPriceTier.upsert({
+            where: { id: pt.id },
+            update: {
+              tenantId: pt.tenantId,
+              productId: pt.productId,
+              minQty: Number(pt.minQty) || 1,
+              tierName: pt.tierName || 'Grosir',
+              unitPrice: Number(pt.unitPrice) || 0,
+              customerCategory: pt.customerCategory || null
+            },
+            create: {
+              id: pt.id,
+              tenantId: pt.tenantId,
+              productId: pt.productId,
+              minQty: Number(pt.minQty) || 1,
+              tierName: pt.tierName || 'Grosir',
+              unitPrice: Number(pt.unitPrice) || 0,
+              customerCategory: pt.customerCategory || null
+            }
+          });
+          count++;
+        }
+        restoredCounts.productPriceTiers = count;
+      }
+
+      // 7k. Retail Vertical (Delivery Orders)
+      if (Array.isArray(data.deliveryOrders)) {
+        let count = 0;
+        for (const d of data.deliveryOrders) {
+          if (targetTenantId && d.tenantId !== targetTenantId) continue;
+          await tx.deliveryOrder.upsert({
+            where: { id: d.id },
+            update: {
+              tenantId: d.tenantId,
+              doNumber: d.doNumber,
+              orderId: d.orderId || null,
+              customerId: d.customerId || null,
+              driverName: d.driverName || null,
+              vehiclePlate: d.vehiclePlate || null,
+              shippingAddress: d.shippingAddress || '-',
+              status: d.status || 'PENDING',
+              recipientName: d.recipientName || null,
+              deliveredAt: d.deliveredAt ? new Date(d.deliveredAt) : null,
+              notes: d.notes || null
+            },
+            create: {
+              id: d.id,
+              tenantId: d.tenantId,
+              doNumber: d.doNumber,
+              orderId: d.orderId || null,
+              customerId: d.customerId || null,
+              driverName: d.driverName || null,
+              vehiclePlate: d.vehiclePlate || null,
+              shippingAddress: d.shippingAddress || '-',
+              status: d.status || 'PENDING',
+              recipientName: d.recipientName || null,
+              deliveredAt: d.deliveredAt ? new Date(d.deliveredAt) : null,
+              notes: d.notes || null
+            }
+          });
+          count++;
+        }
+        restoredCounts.deliveryOrders = count;
       }
 
       // 8. Laundry Orders

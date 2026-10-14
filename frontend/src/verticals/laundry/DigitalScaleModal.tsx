@@ -152,11 +152,11 @@ export const DigitalScaleModal: React.FC<DigitalScaleModalProps> = ({
         </div>
 
         {/* Tab Navigator */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1.5 border-b border-slate-200 text-xs font-semibold">
+        <div className="flex items-center gap-1 bg-slate-100 p-1.5 border-b border-slate-200 text-xs font-semibold overflow-x-auto no-scrollbar">
           {[
-            { id: 'monitor', label: 'Serial Monitor & Live Data', icon: Terminal },
-            { id: 'config', label: 'Pengaturan Port & Protokol', icon: Settings2 },
-            { id: 'simulator', label: 'Virtual Simulator (Testing)', icon: Zap }
+            { id: 'monitor', label: 'Monitor', fullLabel: 'Serial Monitor & Live Data', icon: Terminal },
+            { id: 'config', label: 'Pengaturan', fullLabel: 'Pengaturan Port & Protokol', icon: Settings2 },
+            { id: 'simulator', label: 'Simulator', fullLabel: 'Virtual Simulator (Testing)', icon: Zap }
           ].map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -164,21 +164,22 @@ export const DigitalScaleModal: React.FC<DigitalScaleModalProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 py-2 px-3 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-2 px-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all whitespace-nowrap ${
                   active
                     ? 'bg-white text-cyan-700 shadow-xs font-bold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <Icon size={15} />
-                <span>{tab.label}</span>
+                <span className="sm:hidden">{tab.label}</span>
+                <span className="hidden sm:inline">{tab.fullLabel}</span>
               </button>
             );
           })}
         </div>
 
         {/* Content Body */}
-        <div className="p-5 flex-1 overflow-y-auto">
+        <div className="p-4 sm:p-5 flex-1 overflow-y-auto">
           {/* TAB 1: SERIAL MONITOR & LIVE READOUT */}
           {activeTab === 'monitor' && (
             <div className="space-y-4">
@@ -201,20 +202,20 @@ export const DigitalScaleModal: React.FC<DigitalScaleModalProps> = ({
                 </div>
 
                 <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-black font-mono text-cyan-400 drop-shadow-[0_0_12px_rgba(34,211,238,0.6)]">
+                  <span className="text-4xl sm:text-5xl font-black font-mono text-cyan-400 drop-shadow-[0_0_12px_rgba(34,211,238,0.6)]">
                     {currentReading ? currentReading.weight.toFixed(2) : '0.00'}
                   </span>
-                  <span className="text-lg font-black text-cyan-300 font-mono">KG</span>
+                  <span className="text-base sm:text-lg font-black text-cyan-300 font-mono">KG</span>
                 </div>
               </div>
 
               {/* Action Bar */}
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2">
                   {status === 'CONNECTED' ? (
                     <button
                       onClick={handleDisconnect}
-                      className="px-4 py-2 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center gap-2 transition-all"
+                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
                     >
                       <Square size={14} />
                       <span>Putuskan Port</span>
@@ -222,7 +223,7 @@ export const DigitalScaleModal: React.FC<DigitalScaleModalProps> = ({
                   ) : (
                     <button
                       onClick={handleConnect}
-                      className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-sm"
+                      className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95"
                     >
                       <Usb size={15} />
                       <span>Hubungkan Timbangan USB</span>
@@ -231,7 +232,7 @@ export const DigitalScaleModal: React.FC<DigitalScaleModalProps> = ({
 
                   <button
                     onClick={handleTestBeep}
-                    className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
+                    className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all active:scale-95 shrink-0"
                     title="Uji Suara Beep Konfirmasi"
                   >
                     <Volume2 size={16} />
@@ -244,7 +245,7 @@ export const DigitalScaleModal: React.FC<DigitalScaleModalProps> = ({
                       onApplyWeight(currentReading.weight);
                       onClose();
                     }}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-sm"
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95"
                   >
                     <CheckCircle2 size={15} />
                     <span>Gunakan Bobot ({currentReading.weight.toFixed(2)} Kg)</span>

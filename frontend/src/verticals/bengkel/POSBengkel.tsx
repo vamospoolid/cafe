@@ -14,6 +14,7 @@ import OpenShiftModal from '../../components/OpenShiftModal';
 import { initHardwareBarcodeListener, playScannerBeep } from '../../utils/hardwareBarcodeListener';
 import { PartRequestModal } from './PartRequestModal';
 import { ClipboardList } from 'lucide-react';
+import { offlineDb } from '../../db/offlineDb';
 
 interface CartItem {
   type: 'SERVICE' | 'PART';
@@ -130,7 +131,23 @@ export const POSBengkel: React.FC = () => {
         }
       }
     } catch (err) {
-      console.error('Failed to load catalogs:', err);
+      console.warn('Gagal memuat katalog bengkel online, membaca dari cache offline IndexedDB:', err);
+      try {
+        const cached = await offlineDb.getCachedProducts(user?.tenantId);
+        if (cached && cached.length > 0) {
+          setProducts(cached);
+          const catMap = new Map<string, any>();
+          cached.forEach((p: any) => {
+            const catName = p.categoryName || (p.category && p.category.name);
+            if (catName) {
+              catMap.set(catName, { id: p.categoryId, name: catName });
+            }
+          });
+          setCategories(Array.from(catMap.values()));
+        }
+      } catch (cacheErr) {
+        console.error('Gagal membaca cache lokal bengkel:', cacheErr);
+      }
     }
   };
 

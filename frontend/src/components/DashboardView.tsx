@@ -29,12 +29,19 @@ import {
   ShieldCheck,
   Database,
   ArrowUpRight,
-  Layers
+  Layers,
+  Wifi,
+  WifiOff,
+  HardDrive,
+  Download
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { POSContext } from '../context/POSContext';
 import { useVertical } from '../context/VerticalContext';
 import OpenShiftModal from './OpenShiftModal';
+import OfflineSyncPanel from './OfflineSyncPanel';
+import { seedLocalCatalogCache } from '../utils/catalogCacheSeeder';
+import { toast } from '../utils/alert';
 import useSocket from '../hooks/useSocket';
 
 const BengkelDashboardStats = lazy(() => import('../verticals/bengkel/BengkelDashboardStats').then(m => ({ default: m.BengkelDashboardStats })));
@@ -85,9 +92,24 @@ const DashboardView = () => {
   const [chartMode, setChartMode] = useState<'hourly' | 'weekly' | 'monthly'>('hourly');
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
   const [shiftModalMode, setShiftModalMode] = useState<'open' | 'close'>('open');
+  const [isOfflinePanelOpen, setIsOfflinePanelOpen] = useState(false);
+  const [isPreCaching, setIsPreCaching] = useState(false);
 
   const posContext = useContext(POSContext);
   const socket = useSocket();
+
+  const handleQuickPreCache = async () => {
+    if (!posContext?.token) return;
+    setIsPreCaching(true);
+    try {
+      await seedLocalCatalogCache(posContext.token);
+      toast('Katalog & master data berhasil diunduh ke cache memori lokal browser!', 'success');
+    } catch (err: any) {
+      toast('Gagal pre-cache katalog: ' + (err.message || 'Koneksi bermasalah'), 'error');
+    } finally {
+      setIsPreCaching(false);
+    }
+  };
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
@@ -303,6 +325,64 @@ const DashboardView = () => {
             title="Muat ulang data terbaru"
           >
             <RefreshCw size={13} /> <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── OFFLINE READINESS & SYNC HUB CARD ───────────────────────────── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border shadow-inner ${
+            posContext?.isOnline 
+              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+              : 'bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse'
+          }`}>
+            {posContext?.isOnline ? <Wifi size={22} /> : <WifiOff size={22} />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
+                Kesiapan Mode Offline &amp; Sinkronisasi
+              </h3>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${
+                posContext?.isOnline 
+                  ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' 
+                  : 'bg-rose-500/30 text-rose-300 border border-rose-500/40 animate-pulse'
+              }`}>
+                {posContext?.isOnline ? '🌐 Cloud SaaS Aktif' : '⚠️ Mode Offline (Lokal)'}
+              </span>
+              {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-400 text-slate-950 animate-bounce">
+                  {posContext?.offlineQueueCount} Transaksi Menunggu Sync
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+              Sistem kasir tetap dapat memproses penjualan &amp; cetak struk tanpa internet dengan database <strong>IndexedDB lokal</strong>. Data otomatis tersinkron saat internet pulih.
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+          <button
+            type="button"
+            onClick={handleQuickPreCache}
+            disabled={!posContext?.isOnline || isPreCaching}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
+            title="Unduh seluruh produk, kategori, dan meja ke cache browser lokal"
+          >
+            <Download size={14} className={isPreCaching ? 'animate-spin' : ''} />
+            <span>{isPreCaching ? 'Mengunduh...' : 'Pre-Cache Katalog'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsOfflinePanelOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all active:scale-95 cursor-pointer shadow-xs"
+          >
+            <HardDrive size={14} />
+            <span>Buka Hub Offline</span>
           </button>
         </div>
       </div>
@@ -1292,6 +1372,11 @@ const DashboardView = () => {
           fetchAnalytics();
         }}
       />
+
+      {/* Global Offline Hub & Sync Monitoring Modal */}
+      {isOfflinePanelOpen && (
+        <OfflineSyncPanel onClose={() => setIsOfflinePanelOpen(false)} />
+      )}
 
     </div>
   );

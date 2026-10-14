@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
+import { offlineDb } from '../../db/offlineDb';
 import { RetailCustomerPicker, type CustomerData } from './RetailCustomerPicker';
 import { RetailCheckoutModal } from './RetailCheckoutModal';
 import { RetailReceiptPrinter } from './RetailReceiptPrinter';
@@ -173,7 +174,21 @@ export const POSRetail: React.FC = () => {
         setCategories(cats);
       }
     } catch (err) {
-      console.error('Failed to load retail catalog:', err);
+      console.warn('Gagal memuat katalog toko online, membaca dari cache offline IndexedDB:', err);
+      try {
+        const [cachedProds, cachedCats] = await Promise.all([
+          offlineDb.getCachedProducts(user?.tenantId),
+          offlineDb.getCachedCategories(user?.tenantId)
+        ]);
+        if (cachedProds && cachedProds.length > 0) {
+          setProducts(cachedProds as any);
+        }
+        if (cachedCats && cachedCats.length > 0) {
+          setCategories(cachedCats as any);
+        }
+      } catch (cacheErr) {
+        console.error('Gagal membaca cache lokal toko:', cacheErr);
+      }
     } finally {
       setLoading(false);
     }

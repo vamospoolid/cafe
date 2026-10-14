@@ -30,6 +30,7 @@ interface RestoreSummary {
   isValid: boolean;
   storeName: string;
   sourceTenantId?: string | null;
+  businessType?: 'CAFE' | 'BENGKEL' | 'RETAIL' | 'LAUNDRY' | string;
   isCrossTenant?: boolean;
   isTargetPaid?: boolean;
   crossTenantWarning?: string | null;
@@ -45,6 +46,13 @@ interface RestoreSummary {
     suppliers: number;
     orders: number;
     customers: number;
+    workOrders?: number;
+    vehicles?: number;
+    serviceTypes?: number;
+    mechanics?: number;
+    productUoms?: number;
+    deliveryOrders?: number;
+    laundryOrders?: number;
   };
 }
 
@@ -626,9 +634,25 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
                         Waktu Backup: {restoreSummary.exportedAt ? new Date(restoreSummary.exportedAt).toLocaleString('id-ID') : 'Tidak diketahui'}
                       </span>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold">
-                      v{restoreSummary.schemaVersion}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {/* Vertical Indicator Badge */}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                        restoreSummary.businessType === 'BENGKEL'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300 border border-blue-200 dark:border-blue-700'
+                          : restoreSummary.businessType === 'LAUNDRY'
+                          ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/60 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-700'
+                          : restoreSummary.businessType === 'RETAIL'
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/60 dark:text-purple-300 border border-purple-200 dark:border-purple-700'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-200 dark:border-amber-700'
+                      }`}>
+                        {restoreSummary.businessType === 'BENGKEL' ? '🛠️ Bengkel' :
+                         restoreSummary.businessType === 'LAUNDRY' ? '🧺 Laundry' :
+                         restoreSummary.businessType === 'RETAIL' ? '🛒 Retail' : '☕ Kafe & Resto'}
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold">
+                        v{restoreSummary.schemaVersion}
+                      </span>
+                    </div>
                   </div>
 
                   {restoreSummary.crossTenantWarning && (
@@ -641,24 +665,107 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
                     </div>
                   )}
 
-                  {/* Badges Grid */}
-                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 block font-semibold">Produk</span>
-                      <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.products}</strong>
+                  {/* Dynamic Multi-Vertical Badges Grid */}
+                  {restoreSummary.businessType === 'BENGKEL' || (restoreSummary.counts.workOrders ?? 0) > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Work Order (SPK)</span>
+                        <strong className="text-sm font-black text-blue-600 dark:text-blue-400">{restoreSummary.counts.workOrders ?? 0}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Kendaraan</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.vehicles ?? 0}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Sparepart & Oli</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.products}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Jasa & Mekanik</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{(restoreSummary.counts.serviceTypes ?? 0) + (restoreSummary.counts.mechanics ?? 0)}</strong>
+                      </div>
                     </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 block font-semibold">Bahan Baku</span>
-                      <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.ingredients}</strong>
+                  ) : restoreSummary.businessType === 'LAUNDRY' || (restoreSummary.counts.laundryOrders ?? 0) > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Pesanan Laundry</span>
+                        <strong className="text-sm font-black text-cyan-600 dark:text-cyan-400">{restoreSummary.counts.laundryOrders ?? 0}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Pelanggan</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.customers}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Layanan & Pewangi</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.products}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Kategori Paket</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.categories}</strong>
+                      </div>
                     </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 block font-semibold">Kategori</span>
-                      <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.categories}</strong>
+                  ) : restoreSummary.businessType === 'RETAIL' || (restoreSummary.counts.productUoms ?? 0) > 0 || (restoreSummary.counts.deliveryOrders ?? 0) > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Produk Barang</span>
+                        <strong className="text-sm font-black text-purple-600 dark:text-purple-400">{restoreSummary.counts.products}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Multi-Satuan UOM</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.productUoms ?? 0}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Surat Jalan (DO)</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.deliveryOrders ?? 0}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Penjualan Kasir</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.orders}</strong>
+                      </div>
                     </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 block font-semibold">Pesanan</span>
-                      <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.orders}</strong>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Menu Produk</span>
+                        <strong className="text-sm font-black text-emerald-600 dark:text-emerald-400">{restoreSummary.counts.products}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Bahan Baku</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.ingredients}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Kategori</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.categories}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shadow-xs">
+                        <span className="text-[10px] text-slate-400 block font-semibold">Pesanan Kasir</span>
+                        <strong className="text-sm font-black text-slate-800 dark:text-white">{restoreSummary.counts.orders}</strong>
+                      </div>
                     </div>
+                  )}
+
+                  {/* Supplementary Entity Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-slate-600 dark:text-slate-300">
+                    {restoreSummary.counts.tables > 0 && (
+                      <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 font-medium border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        🪑 {restoreSummary.counts.tables} Meja
+                      </span>
+                    )}
+                    {restoreSummary.counts.recipeItems > 0 && (
+                      <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 font-medium border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        📖 {restoreSummary.counts.recipeItems} Resep BOM
+                      </span>
+                    )}
+                    {restoreSummary.counts.suppliers > 0 && (
+                      <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 font-medium border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        🚚 {restoreSummary.counts.suppliers} Supplier
+                      </span>
+                    )}
+                    {restoreSummary.counts.customers > 0 && (
+                      <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 font-medium border border-slate-200 dark:border-slate-700 shadow-2xs">
+                        👥 {restoreSummary.counts.customers} Pelanggan
+                      </span>
+                    )}
                   </div>
 
                   {/* Mode Selector */}

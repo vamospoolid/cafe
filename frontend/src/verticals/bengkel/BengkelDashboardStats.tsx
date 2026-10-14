@@ -15,9 +15,11 @@ import {
   ShoppingCart,
   Sparkles,
   Timer,
+  Wifi
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { POSContext } from '../../context/POSContext';
+import OfflineSyncPanel from '../../components/OfflineSyncPanel';
 
 import { BengkelAlertBanner } from './BengkelAlertBanner';
 import { BengkelSpkPipeline } from './BengkelSpkPipeline';
@@ -150,6 +152,7 @@ export const BengkelDashboardStats: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [isOfflinePanelOpen, setIsOfflinePanelOpen] = useState(false);
 
   const fetchChartData = useCallback(async (days: number) => {
     if (!posContext?.token) return;
@@ -356,10 +359,32 @@ export const BengkelDashboardStats: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
           <span className="text-[11px] text-slate-400 hidden md:inline">
             Update: {lastRefreshed.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
           </span>
+
+          <button
+            type="button"
+            onClick={() => setIsOfflinePanelOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95 cursor-pointer shadow-xs ${
+              posContext?.isOnline
+                ? (posContext?.offlineQueueCount && posContext.offlineQueueCount > 0)
+                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
+            }`}
+            title="Pusat Sinkronisasi & Mode Offline"
+          >
+            <Wifi size={13} className={posContext?.isOnline ? 'text-emerald-600' : 'text-rose-600'} />
+            <span className="hidden sm:inline">Offline &amp; Sync</span>
+            {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
+                {posContext?.offlineQueueCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={() => fetchAllData(false)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-50 hover:bg-white text-slate-700 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-xl font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
@@ -646,6 +671,11 @@ export const BengkelDashboardStats: React.FC = () => {
         onClose={() => setShowPartRequestModal(false)}
         onSuccess={() => fetchAllData(true)}
       />
+
+      {/* Global Offline Hub & Sync Monitoring Panel */}
+      {isOfflinePanelOpen && (
+        <OfflineSyncPanel onClose={() => setIsOfflinePanelOpen(false)} />
+      )}
     </div>
   );
 };

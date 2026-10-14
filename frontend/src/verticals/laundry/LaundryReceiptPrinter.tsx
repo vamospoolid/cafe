@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Printer, X, Shirt, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Printer, X, Shirt, CheckCircle2, AlertCircle, MessageSquare } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 
 interface LaundryReceiptPrinterProps {
@@ -39,6 +39,49 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
     window.print();
   };
 
+  const totalAmount = Number(order?.totalAmount) || 0;
+  const paidAmount = Number(order?.paidAmount) || 0;
+  const remainingDue = Math.max(0, totalAmount - paidAmount);
+  const isPaidLunas = remainingDue === 0 && totalAmount > 0;
+
+  const handleSendWhatsApp = () => {
+    if (!order?.customerPhone) {
+      alert('Nomor WhatsApp pelanggan belum tercatat');
+      return;
+    }
+    const cleanPhone = order.customerPhone.replace(/[^0-9]/g, '');
+    const phone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+    const storeName = settings?.storeName || 'Laundry Kami';
+
+    const itemsText = (order.items || [])
+      .map((it: any) => `• ${it.qty} ${String(it.unitType || 'KG').toLowerCase()} ${it.serviceName} = Rp ${(it.subtotal || 0).toLocaleString('id-ID')}`)
+      .join('\n');
+
+    const msg =
+      `*NOTA ELEKTRONIK LAUNDRY*\n` +
+      `*${storeName.toUpperCase()}*\n` +
+      `--------------------------------\n` +
+      `No. Nota: *${order.orderNumber}*\n` +
+      `Pelanggan: *${order.customerName}*\n` +
+      `Waktu Terima: ${formatDate(order.createdAt)} ${formatTime(order.createdAt)}\n` +
+      `Kecepatan: ${order.serviceSpeed === 'EXPRESS_6H' ? 'Super Express (6 Jam)' : order.serviceSpeed === 'KILAT_24H' ? 'Kilat (24 Jam)' : 'Reguler (2-3 Hari)'}\n` +
+      `Parfum: ${order.perfumeVariant || 'Standard Fresh'}\n` +
+      (order.estimatedDoneAt ? `Est. Selesai: ${formatDate(order.estimatedDoneAt)} ${formatTime(order.estimatedDoneAt)}\n` : '') +
+      (order.rackLocation ? `Lokasi Rak: *${order.rackLocation}*\n` : '') +
+      `--------------------------------\n` +
+      `*Rincian Layanan:*\n` +
+      `${itemsText}\n` +
+      `--------------------------------\n` +
+      `Total Tagihan: *Rp ${totalAmount.toLocaleString('id-ID')}*\n` +
+      `Dibayar: *Rp ${paidAmount.toLocaleString('id-ID')}*\n` +
+      (remainingDue > 0 ? `Sisa Tagihan: *Rp ${remainingDue.toLocaleString('id-ID')}* (Pelunasan saat ambil cucian)\n` : `Status: *LUNAS*\n`) +
+      `--------------------------------\n` +
+      `Terima kasih telah mempercayakan cucian Anda kepada kami! 🙏✨`;
+
+    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
+  };
+
   useEffect(() => {
     if (autoPrint) {
       const timer = setTimeout(() => {
@@ -49,11 +92,6 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
   }, [autoPrint]);
 
   if (!order) return null;
-
-  const totalAmount = Number(order.totalAmount) || 0;
-  const paidAmount = Number(order.paidAmount) || 0;
-  const remainingDue = Math.max(0, totalAmount - paidAmount);
-  const isPaidLunas = remainingDue === 0 && totalAmount > 0;
 
   return (
     <div 
@@ -74,13 +112,24 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
         <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between print:hidden">
           <div className="flex items-center gap-2">
             <Printer size={16} className="text-cyan-400" />
-            <h3 className="font-bold text-xs">Nota Kasir Laundry (58/80mm)</h3>
+            <h3 className="font-bold text-xs truncate max-w-[120px] sm:max-w-none">Nota Kasir Laundry</h3>
           </div>
           <div className="flex items-center gap-1.5">
+            {order.customerPhone && (
+              <button
+                type="button"
+                onClick={handleSendWhatsApp}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs"
+                title="Kirim Nota ke WhatsApp Pelanggan"
+              >
+                <MessageSquare size={13} />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handlePrint}
-              className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+              className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs"
             >
               <Printer size={13} />
               <span>Cetak</span>
