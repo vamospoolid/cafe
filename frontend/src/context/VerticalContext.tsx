@@ -29,6 +29,7 @@ export interface VerticalProfile {
   enableMultiUom?: boolean;
   enableDeliveryOrders?: boolean;
   barcodeFirstUX?: boolean;
+  enableLaundryKanban?: boolean;
 }
 
 interface VerticalContextType {
@@ -102,7 +103,7 @@ const VERTICAL_PROFILES: Record<BusinessType, VerticalProfile> = {
     tableTerm: 'Rak Simpan / Keranjang',
     customerTerm: 'Pelanggan',
     enableKds: false,
-    enableTables: true,
+    enableTables: false,
     enableVehicles: false,
     enableMechanics: false,
     enableInvoices: false,
@@ -110,6 +111,7 @@ const VERTICAL_PROFILES: Record<BusinessType, VerticalProfile> = {
     enableMultiUom: false,
     enableDeliveryOrders: false,
     barcodeFirstUX: false,
+    enableLaundryKanban: true,
   },
   RENTAL: {
     businessType: 'RENTAL',

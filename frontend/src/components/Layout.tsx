@@ -438,7 +438,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <span>Reservasi</span>
               </NavLink>
             )}
-            {profile.enableTables && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+            {isLaundry && checkAccess(['Admin', 'Kasir']) && (
+              <NavLink to="/laundry-kanban" title="Papan Status Cucian & Rak" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Layers size={20} className="shrink-0 text-cyan-400" />
+                <span>Papan Status Cucian</span>
+              </NavLink>
+            )}
+            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
               <NavLink to="/meja" title={profile.tableTerm || 'Nomor Meja'} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Grid size={20} className="shrink-0" />
                 <span>{profile.tableTerm || 'Nomor Meja'}</span>
@@ -921,13 +927,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               )}
             </NavLink>
 
-            {/* 2. Meja / Kanban / Rak / Produk */}
+            {/* 2. Meja / Rak Cucian / Kanban / Produk */}
             <NavLink
-              to={profile.enableTables ? "/meja" : (isRental ? "/rental-kanban" : (isLaundry ? "/laundry-kanban" : "/produk"))}
+              to={isLaundry ? "/laundry-kanban" : (isRental ? "/rental-kanban" : (profile.enableTables && isCafe ? "/meja" : "/produk"))}
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center gap-0.5 py-1 px-1 rounded-2xl transition-all active:scale-90 ${
                   isActive
-                    ? 'text-emerald-700'
+                    ? (isLaundry ? 'text-cyan-700' : isRental ? 'text-amber-700' : 'text-emerald-700')
                     : 'text-slate-400'
                 }`
               }
@@ -935,21 +941,21 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               {({ isActive }) => (
                 <>
                   <div className={`flex items-center justify-center rounded-2xl transition-all ${
-                    isActive ? 'bg-emerald-100 px-4 py-1' : 'px-4 py-1'
+                    isActive ? (isLaundry ? 'bg-cyan-100 text-cyan-700 px-4 py-1' : isRental ? 'bg-amber-100 text-amber-700 px-4 py-1' : 'bg-emerald-100 px-4 py-1') : 'px-4 py-1'
                   }`}>
-                    {profile.enableTables ? (
-                      <Grid size={22} strokeWidth={isActive ? 2.5 : 2} />
+                    {isLaundry ? (
+                      <Layers size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-cyan-700' : ''} />
                     ) : isRental ? (
                       <Layers size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-amber-700' : ''} />
-                    ) : isLaundry ? (
-                      <Layers size={22} strokeWidth={isActive ? 2.5 : 2} className={isActive ? 'text-cyan-700' : ''} />
+                    ) : (profile.enableTables && isCafe) ? (
+                      <Grid size={22} strokeWidth={isActive ? 2.5 : 2} />
                     ) : (
                       <Package size={22} strokeWidth={isActive ? 2.5 : 2} />
                     )}
                   </div>
                   <span className={`text-[11px] leading-none transition-all ${
                     isActive ? 'font-bold' : 'font-medium'
-                  }`}>{profile.enableTables ? 'Meja' : (isRental ? 'Kanban' : (isLaundry ? 'Rak Cucian' : 'Produk'))}</span>
+                  }`}>{isLaundry ? 'Rak Cucian' : (isRental ? 'Kanban' : ((profile.enableTables && isCafe) ? 'Meja' : 'Produk'))}</span>
                 </>
               )}
             </NavLink>
@@ -1109,6 +1115,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     <span className="text-[10px] font-bold text-slate-700 leading-tight">Inventaris</span>
                   </NavLink>
                 </>
+              )}
+
+              {isLaundry && checkAccess(['Admin', 'Kasir']) && (
+                <NavLink to="/laundry-kanban" onClick={() => setIsMoreMenuOpen(false)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                  <div className="w-11 h-11 rounded-2xl bg-cyan-100 flex items-center justify-center">
+                    <Layers size={20} className="text-cyan-600" />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Rak Cucian</span>
+                </NavLink>
               )}
 
               {isRetail && checkAccess(['Admin', 'Kasir']) && (

@@ -336,9 +336,30 @@ const AppRoutes = () => {
                     }
                   />
                   <Route path="/kds" element={<FeatureGuard featureKey="pos.kds"><KDSView /></FeatureGuard>} />
-                  <Route path="/meja" element={<FeatureGuard featureKey="pos.tables"><TableView /></FeatureGuard>} />
-                  <Route path="/qrcode" element={<QRCodeView />} />
-                  <Route path="/reservasi" element={<FeatureGuard featureKey="pos.reservations"><ReservationView /></FeatureGuard>} />
+                  <Route
+                    path="/meja"
+                    element={
+                      <VerticalGuard allow="CAFE">
+                        <FeatureGuard featureKey="pos.tables"><TableView /></FeatureGuard>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
+                    path="/qrcode"
+                    element={
+                      <VerticalGuard allow="CAFE">
+                        <QRCodeView />
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
+                    path="/reservasi"
+                    element={
+                      <VerticalGuard allow="CAFE">
+                        <FeatureGuard featureKey="pos.reservations"><ReservationView /></FeatureGuard>
+                      </VerticalGuard>
+                    }
+                  />
                   <Route path="/produk" element={<ProductView />} />
                   <Route
                     path="/ai-menu-studio"
