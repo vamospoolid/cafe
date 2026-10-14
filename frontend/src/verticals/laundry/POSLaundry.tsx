@@ -464,8 +464,10 @@ export const POSLaundry: React.FC = () => {
           subtotal: it.subtotal,
           notes: it.notes
         })),
+        subtotal: subtotalCart,
         speedSurcharge,
         discount: discountAmount,
+        totalAmount: totalPayable,
         paidAmount,
         paymentStatus,
         paymentMethod: isPaidNow ? paymentMethod : undefined,

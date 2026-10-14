@@ -71,6 +71,30 @@ const STATUS_COLUMNS = [
   { id: 'COMPLETED', label: '6. Selesai Diambil', icon: CheckCircle2, color: 'text-emerald-600', border: 'border-emerald-200', bg: 'bg-emerald-50/70', badge: 'bg-emerald-100 text-emerald-800' }
 ] as const;
 
+function getEffectiveOrderAmounts(order: LaundryOrder | null) {
+  if (!order) return { totalAmount: 0, subtotal: 0, paidAmount: 0, unpaid: 0, isLunas: false };
+  const itemsSum = Array.isArray(order.items)
+    ? order.items.reduce((s, it) => s + (Number(it.subtotal) || (Number(it.qty) * Number(it.pricePerUnit)) || 0), 0)
+    : 0;
+  const surcharge = Number(order.speedSurcharge) || 0;
+  const disc = Number(order.discount) || 0;
+  const computedTotal = Math.max(0, itemsSum + surcharge - disc);
+
+  const effectiveTotal = Number(order.totalAmount) > 0 ? Number(order.totalAmount) : computedTotal;
+  const effectiveSubtotal = Number(order.subtotal) > 0 ? Number(order.subtotal) : itemsSum;
+  const paidAmount = Number(order.paidAmount) || 0;
+  const unpaid = Math.max(0, effectiveTotal - paidAmount);
+  const isLunas = unpaid === 0 && effectiveTotal > 0 && order.paymentStatus === 'PAID';
+
+  return {
+    totalAmount: effectiveTotal,
+    subtotal: effectiveSubtotal,
+    paidAmount,
+    unpaid,
+    isLunas
+  };
+}
+
 export const LaundryKanbanView: React.FC = () => {
   const navigate = useNavigate();
   const { token, user, settings, triggerHaptic } = usePOS();
@@ -180,7 +204,7 @@ export const LaundryKanbanView: React.FC = () => {
     // Jika menuju tahap 'COMPLETED', buka modal serah terima & kasir pelunasan
     if (nextStatus === 'COMPLETED') {
       setPickupModalOrder(order);
-      const unpaid = Math.max(0, order.totalAmount - order.paidAmount);
+      const { unpaid } = getEffectiveOrderAmounts(order);
       setPickupPayAmount(unpaid.toString());
       return;
     }
@@ -273,6 +297,7 @@ export const LaundryKanbanView: React.FC = () => {
         },
         body: JSON.stringify({
           payAmount,
+          paidAmountNow: payAmount,
           paymentMethod: payAmount > 0 ? pickupPaymentMethod : undefined
         })
       });
@@ -332,7 +357,7 @@ export const LaundryKanbanView: React.FC = () => {
 
   // Render individual Order Card
   const renderOrderCard = (order: LaundryOrder, colId: string) => {
-    const unpaid = Math.max(0, order.totalAmount - order.paidAmount);
+    const { totalAmount, unpaid, isLunas } = getEffectiveOrderAmounts(order);
 
     return (
       <div
@@ -424,10 +449,10 @@ export const LaundryKanbanView: React.FC = () => {
           <div>
             <div className="text-[10px] text-slate-400">Total Biaya:</div>
             <div className="font-black text-slate-900 text-xs">
-              Rp {order.totalAmount.toLocaleString('id-ID')}
+              Rp {totalAmount.toLocaleString('id-ID')}
             </div>
-            <div className={`text-[10px] font-bold ${order.paymentStatus === 'PAID' ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {order.paymentStatus === 'PAID' ? 'LUNAS' : `Sisa Rp ${unpaid.toLocaleString('id-ID')}`}
+            <div className={`text-[10px] font-bold ${isLunas ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {isLunas ? 'LUNAS' : `Sisa Rp ${unpaid.toLocaleString('id-ID')}`}
             </div>
           </div>
 
@@ -817,114 +842,119 @@ export const LaundryKanbanView: React.FC = () => {
               </button>
             </div>
 
-            <div className="py-4 space-y-3 text-xs">
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">No. Order:</span>
-                  <span className="font-mono font-bold text-slate-800">{pickupModalOrder.orderNumber}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Pelanggan:</span>
-                  <span className="font-bold text-slate-800">{pickupModalOrder.customerName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Lokasi Rak Simpan:</span>
-                  <span className="font-black text-cyan-800 bg-cyan-100 px-2 py-0.5 rounded-md">
-                    📍 {pickupModalOrder.rackLocation || 'Rak Simpan'}
-                  </span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-slate-200">
-                  <span className="text-slate-500">Total Biaya:</span>
-                  <span className="font-bold text-slate-800">Rp {pickupModalOrder.totalAmount.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between text-emerald-600">
-                  <span>Sudah Dibayar (Di Awal):</span>
-                  <span className="font-bold">Rp {pickupModalOrder.paidAmount.toLocaleString('id-ID')}</span>
-                </div>
-              </div>
-
-              {/* Sisa Tagihan & Kasir Bayar */}
-              {pickupModalOrder.totalAmount > pickupModalOrder.paidAmount ? (
-                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 space-y-2.5">
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-xs font-bold text-amber-900">Sisa yang Wajib Dibayar:</span>
-                    <span className="text-base font-black text-rose-600">
-                      Rp {(pickupModalOrder.totalAmount - pickupModalOrder.paidAmount).toLocaleString('id-ID')}
-                    </span>
+            {(() => {
+              const { totalAmount, paidAmount, unpaid, isLunas } = getEffectiveOrderAmounts(pickupModalOrder);
+              return (
+                <div className="py-4 space-y-3 text-xs">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">No. Order:</span>
+                      <span className="font-mono font-bold text-slate-800">{pickupModalOrder.orderNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Pelanggan:</span>
+                      <span className="font-bold text-slate-800">{pickupModalOrder.customerName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Lokasi Rak Simpan:</span>
+                      <span className="font-black text-cyan-800 bg-cyan-100 px-2 py-0.5 rounded-md">
+                        📍 {pickupModalOrder.rackLocation || 'Rak Simpan'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-slate-200">
+                      <span className="text-slate-500">Total Biaya:</span>
+                      <span className="font-bold text-slate-800">Rp {totalAmount.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600">
+                      <span>Sudah Dibayar (Di Awal):</span>
+                      <span className="font-bold">Rp {paidAmount.toLocaleString('id-ID')}</span>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
-                      Metode Pelunasan
-                    </label>
-                    <div className="grid grid-cols-3 gap-1.5 mb-2">
-                      {[
-                        { id: 'CASH', label: 'Tunai' },
-                        { id: 'QRIS', label: 'QRIS' },
-                        { id: 'TRANSFER', label: 'Transfer' }
-                      ].map(m => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => setPickupPaymentMethod(m.id as any)}
-                          className={`py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                            pickupPaymentMethod === m.id
-                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                              : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
-                          }`}
-                        >
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
-                      Uang Diterima Kasir (Rp)
-                    </label>
-                    <input
-                      type="number"
-                      value={pickupPayAmount}
-                      onChange={e => setPickupPayAmount(e.target.value)}
-                      placeholder="0"
-                      className="w-full text-base font-black px-3 py-2 rounded-xl border border-amber-300 bg-white text-slate-900 outline-none focus:ring-2 focus:ring-amber-500 mb-1.5"
-                    />
-
-                    {/* Quick Tender Pills */}
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {[
-                        { label: 'Uang Pas', val: (pickupModalOrder.totalAmount - pickupModalOrder.paidAmount).toString() },
-                        { label: '20k', val: '20000' },
-                        { label: '50k', val: '50000' },
-                        { label: '100k', val: '100000' }
-                      ].map((t, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setPickupPayAmount(t.val)}
-                          className="px-2.5 py-1 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-amber-900 text-xs font-bold border border-amber-300 transition active:scale-95"
-                        >
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Kembalian Tunai */}
-                    {pickupPaymentMethod === 'CASH' && parseFloat(pickupPayAmount) > (pickupModalOrder.totalAmount - pickupModalOrder.paidAmount) && (
-                      <div className="flex justify-between items-center text-xs font-bold text-emerald-800 bg-emerald-100/80 p-2.5 rounded-xl border border-emerald-300">
-                        <span>Kembalian Tunai:</span>
-                        <span className="text-sm font-black">
-                          Rp {(parseFloat(pickupPayAmount) - (pickupModalOrder.totalAmount - pickupModalOrder.paidAmount)).toLocaleString('id-ID')}
+                  {/* Sisa Tagihan & Kasir Bayar */}
+                  {!isLunas ? (
+                    <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 space-y-2.5">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-xs font-bold text-amber-900">Sisa yang Wajib Dibayar:</span>
+                        <span className="text-base font-black text-rose-600">
+                          Rp {unpaid.toLocaleString('id-ID')}
                         </span>
                       </div>
-                    )}
-                  </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
+                          Metode Pelunasan
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5 mb-2">
+                          {[
+                            { id: 'CASH', label: 'Tunai' },
+                            { id: 'QRIS', label: 'QRIS' },
+                            { id: 'TRANSFER', label: 'Transfer' }
+                          ].map(m => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => setPickupPaymentMethod(m.id as any)}
+                              className={`py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                                pickupPaymentMethod === m.id
+                                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <label className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
+                          Uang Diterima Kasir (Rp)
+                        </label>
+                        <input
+                          type="number"
+                          value={pickupPayAmount}
+                          onChange={e => setPickupPayAmount(e.target.value)}
+                          placeholder="0"
+                          className="w-full text-base font-black px-3 py-2 rounded-xl border border-amber-300 bg-white text-slate-900 outline-none focus:ring-2 focus:ring-amber-500 mb-1.5"
+                        />
+
+                        {/* Quick Tender Pills */}
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {[
+                            { label: 'Uang Pas', val: unpaid.toString() },
+                            { label: '20k', val: '20000' },
+                            { label: '50k', val: '50000' },
+                            { label: '100k', val: '100000' }
+                          ].map((t, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setPickupPayAmount(t.val)}
+                              className="px-2.5 py-1 rounded-lg bg-amber-200/60 hover:bg-amber-200 text-amber-900 text-xs font-bold border border-amber-300 transition active:scale-95"
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Kembalian Tunai */}
+                        {pickupPaymentMethod === 'CASH' && parseFloat(pickupPayAmount) > unpaid && (
+                          <div className="flex justify-between items-center text-xs font-bold text-emerald-800 bg-emerald-100/80 p-2.5 rounded-xl border border-emerald-300">
+                            <span>Kembalian Tunai:</span>
+                            <span className="text-sm font-black">
+                              Rp {(parseFloat(pickupPayAmount) - unpaid).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-center flex items-center justify-center gap-1.5">
+                      <CheckCircle2 size={16} /> Nota cucian ini sudah LUNAS!
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-center flex items-center justify-center gap-1.5">
-                  <CheckCircle2 size={16} /> Nota cucian ini sudah LUNAS!
-                </div>
-              )}
-            </div>
+              );
+            })()}
 
             <div className="pt-2 flex items-center gap-2">
               <button

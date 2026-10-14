@@ -39,7 +39,14 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
     window.print();
   };
 
-  const totalAmount = Number(order?.totalAmount) || 0;
+  const computedItemsSubtotal = Array.isArray(order?.items)
+    ? order.items.reduce((s: number, it: any) => s + (Number(it.subtotal) || (Number(it.qty) * Number(it.pricePerUnit)) || 0), 0)
+    : 0;
+  const surcharge = Number(order?.speedSurcharge) || 0;
+  const disc = Number(order?.discount) || 0;
+  const computedTotal = Math.max(0, computedItemsSubtotal + surcharge - disc);
+
+  const totalAmount = Number(order?.totalAmount) > 0 ? Number(order.totalAmount) : computedTotal;
   const paidAmount = Number(order?.paidAmount) || 0;
   const remainingDue = Math.max(0, totalAmount - paidAmount);
   const isPaidLunas = remainingDue === 0 && totalAmount > 0;

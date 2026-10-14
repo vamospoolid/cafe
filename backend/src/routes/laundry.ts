@@ -31,6 +31,46 @@ async function generateLaundryOrderNumber(tenantId: string): Promise<string> {
   return `${prefix}${String(seq).padStart(4, '0')}`;
 }
 
+// ─── HELPER: SELF-HEALING ZERO TOTAL LAUNDRY ORDERS ──────────────────────────
+async function healLaundryOrder(order: any, tenantId: string) {
+  if (!order) return order;
+  const currentTotal = Number(order.totalAmount) || 0;
+  if (currentTotal === 0 && Array.isArray(order.items) && order.items.length > 0) {
+    const computedSub = order.items.reduce((sum: number, it: any) => {
+      const lineSub = parseFloat(it.subtotal);
+      if (!isNaN(lineSub) && lineSub > 0) return sum + lineSub;
+      const q = parseFloat(it.qty) || 0;
+      const p = parseFloat(it.pricePerUnit) || 0;
+      return sum + (q * p);
+    }, 0);
+    const surcharge = Number(order.speedSurcharge) || 0;
+    const disc = Number(order.discount) || 0;
+    const computedTot = Math.max(0, computedSub + surcharge - disc);
+
+    if (computedTot > 0) {
+      const pAmount = Number(order.paidAmount) || 0;
+      const isPaid = pAmount >= computedTot && computedTot > 0;
+      const isPartial = pAmount > 0 && pAmount < computedTot;
+      const newStatus = isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID';
+
+      order.subtotal = computedSub;
+      order.totalAmount = computedTot;
+      order.paymentStatus = newStatus;
+
+      // Update asinkron di database agar tersimpan permanen
+      prisma.laundryOrder.update({
+        where: { id: order.id },
+        data: {
+          subtotal: computedSub,
+          totalAmount: computedTot,
+          paymentStatus: newStatus
+        }
+      }).catch(err => console.warn('[Laundry Self-Healing DB Update Error]:', err));
+    }
+  }
+  return order;
+}
+
 // ─── 1. GET /api/laundry/orders (List / Filter / Kanban) ─────────────────────
 router.get('/orders', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
@@ -97,6 +137,9 @@ router.get('/orders', authenticateToken, async (req: AuthRequest, res: Response)
       prisma.laundryOrder.count({ where })
     ]);
 
+    // Jalankan Self-Healing untuk data yang berpotensi totalAmount 0
+    await Promise.all(orders.map(ord => healLaundryOrder(ord, tenantId)));
+
     return res.json({ orders, total });
   } catch (error: any) {
     console.error('[Laundry API] Error listing orders:', error);
@@ -125,6 +168,8 @@ router.get('/orders/:id', authenticateToken, async (req: AuthRequest, res: Respo
     if (!order) {
       return res.status(404).json({ error: 'Nota cucian tidak ditemukan.' });
     }
+
+    await healLaundryOrder(order, tenantId);
 
     return res.json(order);
   } catch (error: any) {
@@ -170,9 +215,25 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res: Response
       return res.status(400).json({ error: 'Daftar item cucian tidak boleh kosong.' });
     }
 
+    // Kalkulasi subtotal dari items secara defensif
+    const computedItemsSubtotal = items.reduce((sum: number, it: any) => {
+      const lineSub = parseFloat(it.subtotal);
+      if (!isNaN(lineSub) && lineSub > 0) return sum + lineSub;
+      const q = parseFloat(it.qty) || 0;
+      const p = parseFloat(it.pricePerUnit) || 0;
+      return sum + (q * p);
+    }, 0);
+
+    const finalSubtotal = (parseFloat(subtotal) > 0) ? parseFloat(subtotal) : computedItemsSubtotal;
+    const finalSurcharge = parseFloat(speedSurcharge) || 0;
+    const finalDiscount = parseFloat(discount) || 0;
+    const computedTotal = Math.max(0, finalSubtotal + finalSurcharge - finalDiscount);
+    const finalTotalAmount = (parseFloat(totalAmount) > 0) ? parseFloat(totalAmount) : computedTotal;
+    const finalPaidAmount = parseFloat(paidAmount) || 0;
+
     // Determine payment status
-    const isPaid = Number(paidAmount) >= Number(totalAmount) && Number(totalAmount) > 0;
-    const isPartial = Number(paidAmount) > 0 && Number(paidAmount) < Number(totalAmount);
+    const isPaid = finalPaidAmount >= finalTotalAmount && finalTotalAmount > 0;
+    const isPartial = finalPaidAmount > 0 && finalPaidAmount < finalTotalAmount;
     const paymentStatus = isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID';
 
     // Auto-generate order number
@@ -201,13 +262,13 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res: Response
           itemCountNotes: itemCountNotes ? String(itemCountNotes).trim() : null,
           specialNotes: specialNotes ? String(specialNotes).trim() : null,
           status: 'RECEIVED',
-          subtotal: Number(subtotal) || 0,
-          speedSurcharge: Number(speedSurcharge) || 0,
-          discount: Number(discount) || 0,
-          totalAmount: Number(totalAmount) || 0,
-          paidAmount: Number(paidAmount) || 0,
+          subtotal: finalSubtotal,
+          speedSurcharge: finalSurcharge,
+          discount: finalDiscount,
+          totalAmount: finalTotalAmount,
+          paidAmount: finalPaidAmount,
           paymentStatus,
-          paymentMethod: Number(paidAmount) > 0 ? paymentMethod : null,
+          paymentMethod: finalPaidAmount > 0 ? paymentMethod : null,
           estimatedDoneAt: estimatedDoneAt ? new Date(estimatedDoneAt) : null,
           items: {
             create: items.map((it: any) => ({
@@ -636,20 +697,36 @@ router.post('/orders/:id/pickup', authenticateToken, async (req: AuthRequest, re
       return res.status(400).json({ error: 'Tenant context tidak tersedia.' });
     }
     const id = String(req.params.id);
-    const { paidAmountNow = 0, paymentMethod = 'CASH' } = req.body;
+    const { paidAmountNow, payAmount, paymentMethod = 'CASH' } = req.body;
 
     const order = await prisma.laundryOrder.findFirst({
-      where: { id, tenantId }
+      where: { id, tenantId },
+      include: { items: true }
     });
 
     if (!order) {
       return res.status(404).json({ error: 'Nota cucian tidak ditemukan.' });
     }
 
+    // Pastikan totalAmount valid (self-healing jika sebelumnya bernilai 0)
+    let realTotalAmount = Number(order.totalAmount) || 0;
+    let realSubtotal = Number(order.subtotal) || 0;
+    if (realTotalAmount === 0 && Array.isArray(order.items) && order.items.length > 0) {
+      realSubtotal = order.items.reduce((s: number, it: any) => {
+        const lineSub = parseFloat(it.subtotal);
+        if (!isNaN(lineSub) && lineSub > 0) return s + lineSub;
+        const q = parseFloat(it.qty) || 0;
+        const p = parseFloat(it.pricePerUnit) || 0;
+        return s + (q * p);
+      }, 0);
+      realTotalAmount = Math.max(0, realSubtotal + (Number(order.speedSurcharge) || 0) - (Number(order.discount) || 0));
+    }
+
     const currentPaid = Number(order.paidAmount) || 0;
-    const additionalPaid = Number(paidAmountNow) || 0;
+    // Mendukung baik paidAmountNow maupun payAmount dari payload frontend
+    const additionalPaid = Number(paidAmountNow ?? payAmount ?? 0);
     const newTotalPaid = currentPaid + additionalPaid;
-    const isNowLunas = newTotalPaid >= order.totalAmount;
+    const isNowLunas = newTotalPaid >= realTotalAmount && realTotalAmount > 0;
 
     const outlet = await prisma.outlet.findFirst({
       where: { tenantId, status: 'ACTIVE' },
@@ -661,12 +738,14 @@ router.post('/orders/:id/pickup', authenticateToken, async (req: AuthRequest, re
       const updated = await tx.laundryOrder.update({
         where: { id },
         data: {
+          subtotal: realSubtotal > 0 ? realSubtotal : order.subtotal,
+          totalAmount: realTotalAmount > 0 ? realTotalAmount : order.totalAmount,
           status: 'COMPLETED',
           completedAt: new Date(),
           pickupByUserId: userId ? Number(userId) : null,
           paidAmount: newTotalPaid,
           paymentStatus: isNowLunas ? 'PAID' : (newTotalPaid > 0 ? 'PARTIAL' : order.paymentStatus),
-          paymentMethod: additionalPaid > 0 ? paymentMethod : order.paymentMethod
+          paymentMethod: additionalPaid > 0 ? paymentMethod : (order.paymentMethod || paymentMethod)
         },
         include: { items: true }
       });
