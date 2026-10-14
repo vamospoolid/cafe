@@ -748,7 +748,7 @@ export const POSLaundry: React.FC = () => {
       </div>
 
       {/* Footer Finansial & Checkout Dock */}
-      <div className="p-3.5 bg-white border-t border-slate-200 space-y-2.5 shrink-0 shadow-lg">
+      <div className={`p-3.5 bg-white border-t border-slate-200 space-y-2.5 shrink-0 shadow-lg ${isDrawerMode ? 'pb-8 sm:pb-5' : ''}`}>
         <div className="space-y-1 text-xs text-slate-600">
           <div className="flex justify-between">
             <span>Subtotal Layanan</span>
@@ -897,7 +897,7 @@ export const POSLaundry: React.FC = () => {
     <div className="pos-layout h-full w-full overflow-hidden flex flex-col lg:flex-row bg-slate-100 text-slate-800 font-sans relative" style={{ height: '100%' }}>
       
       {/* ─── KIRI (100% LEBAR DI MOBILE / DESKTOP UTAMA): DECK OPERASIONAL TIMBANGAN DIGITAL & KATALOG ─── */}
-      <div className="pos-main w-full flex-1 flex flex-col h-full overflow-y-auto p-3 sm:p-4 gap-3 bg-slate-50 border-r border-slate-200 pb-28 lg:pb-4">
+      <div className="pos-main w-full flex-1 flex flex-col h-full overflow-y-auto p-3 sm:p-4 gap-3 bg-slate-50 border-r border-slate-200 pb-44 lg:pb-4">
         
         {/* Top Header Desktop (Hanya Tampil di Layar Besar) */}
         <div className="hidden lg:flex bg-white p-3.5 rounded-2xl border border-slate-200 items-center justify-between gap-3 shadow-xs shrink-0">
@@ -1275,40 +1275,19 @@ export const POSLaundry: React.FC = () => {
           }))}
         </div>
 
-        {/* Mobile Quick Summary Pill (Hanya tampil di mobile ketika kasir berada di katalog) */}
-        <div className="lg:hidden flex items-center justify-between p-3 bg-cyan-50/80 border border-cyan-200/90 rounded-2xl text-xs text-cyan-900 mt-2 shadow-2xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-cyan-600 text-white flex items-center justify-center shrink-0">
-              <User size={13} />
-            </div>
-            <div className="truncate">
-              <span className="font-bold">{customerName || 'Pelanggan Umum'}</span>
-              <span className="text-cyan-400 mx-1.5">•</span>
-              <span className="text-cyan-700 font-medium">{perfumeVariant}</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => { triggerHaptic?.(10); setIsCustomerQuickModalOpen(true); }}
-            className="text-[11px] font-bold bg-white text-cyan-700 border border-cyan-300 px-2.5 py-1 rounded-xl shrink-0 shadow-2xs hover:bg-cyan-100 transition cursor-pointer"
-          >
-            Ubah
-          </button>
-        </div>
-
       </div>
 
-      {/* ─── FLOATING BOTTOM CART BAR (MOBILE ONLY / APK) ─── */}
-      <div className="lg:hidden fixed bottom-3 left-3 right-3 z-30 pointer-events-none">
-        {cart.length > 0 && (
+      {/* ─── FLOATING BOTTOM CHECKOUT DOCK (MOBILE ONLY / APK - SELALU TERLIHAT DI ATAS BOTTOM NAV) ─── */}
+      <div className="lg:hidden fixed bottom-[74px] sm:bottom-[78px] left-3 right-3 z-40">
+        {cart.length > 0 ? (
           <div 
             onClick={() => { triggerHaptic?.(20); setIsCartDrawerOpen(true); }}
-            className="pointer-events-auto bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-950 text-white p-3 sm:p-3.5 rounded-2xl shadow-2xl border border-cyan-500/40 flex items-center justify-between cursor-pointer animate-in slide-in-from-bottom-3 duration-200 active:scale-[0.99] transition-transform"
+            className="bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 text-white p-3 rounded-2xl shadow-[0_10px_25px_rgba(8,145,178,0.4)] border border-cyan-400/60 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
           >
             <div className="flex items-center gap-3 min-w-0">
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-cyan-500 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shrink-0">
-                  <Receipt size={18} />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-500 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shrink-0">
+                  <Receipt size={19} className="text-white" />
                 </div>
                 <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-xs border-2 border-slate-900">
                   {cart.length}
@@ -1316,14 +1295,14 @@ export const POSLaundry: React.FC = () => {
               </div>
               <div className="min-w-0">
                 <div className="text-xs text-slate-300 font-medium truncate flex items-center gap-1.5">
-                  <span>{customerName ? customerName : 'Pelanggan Walk-in'}</span>
+                  <span className="font-bold text-white">{customerName || 'Pelanggan Walk-in'}</span>
                   <span>•</span>
                   <span className="text-cyan-300">{speedDetails.label}</span>
                 </div>
-                <div className="text-sm font-black text-white font-mono flex items-center gap-1">
-                  <span>Rp {totalPayable.toLocaleString('id-ID')}</span>
+                <div className="text-sm font-black text-white font-mono flex items-center gap-1.5">
+                  <span className="text-cyan-300 font-black">Rp {totalPayable.toLocaleString('id-ID')}</span>
                   {totalKiloQty > 0 && (
-                    <span className="text-[10px] text-cyan-400 font-normal">({totalKiloQty.toFixed(2)} Kg)</span>
+                    <span className="text-[10.5px] text-slate-300 font-normal">({totalKiloQty.toFixed(2)} Kg)</span>
                   )}
                 </div>
               </div>
@@ -1331,10 +1310,32 @@ export const POSLaundry: React.FC = () => {
             
             <button
               type="button"
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-cyan-500 hover:from-cyan-300 hover:to-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shrink-0"
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 hover:from-cyan-300 hover:to-emerald-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shrink-0 active:scale-95 transition-transform"
             >
-              <span>Buka Nota</span>
+              <span>Bayar & Buka Nota</span>
               <ArrowRight size={14} />
+            </button>
+          </div>
+        ) : (
+          <div 
+            onClick={() => { triggerHaptic?.(10); setIsCartDrawerOpen(true); }}
+            className="bg-white/95 backdrop-blur-md text-slate-800 p-2.5 px-3.5 rounded-2xl shadow-lg border border-slate-200/90 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0">
+                <Receipt size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-slate-800 truncate">Keranjang Nota Kosong (0 Item)</div>
+                <div className="text-[10.5px] text-slate-400 truncate">Timbang atau pilih layanan di atas</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="px-3.5 py-1.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-800 font-bold text-xs border border-cyan-200 flex items-center gap-1 shrink-0 active:scale-95"
+            >
+              <span>Buka Nota (Rp 0)</span>
+              <ChevronRight size={14} />
             </button>
           </div>
         )}
