@@ -184,6 +184,26 @@ app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
   fallthrough: false
 }));
 
+// ─── Public Downloads Route for Compiled Standalone APK / EXE ───────────────
+const releaseDir = path.resolve(process.cwd(), '..', 'release');
+if (!fs.existsSync(releaseDir)) {
+  fs.mkdirSync(releaseDir, { recursive: true });
+}
+app.use('/downloads', (req: Request, res: Response, next: NextFunction) => {
+  const normalizedPath = path.normalize(req.path);
+  if (normalizedPath.includes('..') || normalizedPath.includes('\0')) {
+    return res.status(400).json({ error: 'Invalid file path.' });
+  }
+  const ext = path.extname(normalizedPath).toLowerCase();
+  if (ext !== '.apk' && ext !== '.exe') {
+    return res.status(403).json({ error: 'Hanya file aplikasi (.apk / .exe) yang dapat diunduh.' });
+  }
+  next();
+}, express.static(releaseDir, {
+  dotfiles: 'ignore',
+  fallthrough: false
+}));
+
 // Routes
 import categoryRoutes from './routes/categories';
 import productRoutes from './routes/products';

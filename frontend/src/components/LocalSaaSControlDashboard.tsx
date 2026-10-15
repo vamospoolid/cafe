@@ -21,7 +21,14 @@ import {
   Activity,
   Layers,
   Clock,
-  HardDrive
+  HardDrive,
+  Smartphone,
+  Download,
+  QrCode,
+  X,
+  Copy,
+  Check,
+  Hammer
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -59,6 +66,68 @@ export const LocalSaaSControlDashboard: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedVertical, setSelectedVertical] = useState<string>('ALL');
   const [searchFilter, setSearchFilter] = useState<string>('');
+
+  // ─── Modal Export APK ────────────────────────────────────────────────────────
+  const [apkModalTenant, setApkModalTenant] = useState<LocalTenantItem | null>(null);
+  const [apkStatus, setApkStatus] = useState<any>(null);
+  const [apkLoading, setApkLoading] = useState<boolean>(false);
+  const [apkBuilding, setApkBuilding] = useState<boolean>(false);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+
+  const fetchApkStatus = async (tenantId: string) => {
+    setApkLoading(true);
+    try {
+      const res = await fetch(`/api/platform-admin/tenants/${tenantId}/apk-status`, {
+        headers: { Authorization: `Bearer ${posContext?.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApkStatus(data);
+      }
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setApkLoading(false);
+    }
+  };
+
+  const handleOpenApkModal = (tenant: LocalTenantItem) => {
+    setApkModalTenant(tenant);
+    setApkStatus(null);
+    setCopiedLink(false);
+    fetchApkStatus(tenant.id);
+  };
+
+  const handleBuildApk = async (target: string = 'cashier') => {
+    if (!apkModalTenant) return;
+    setApkBuilding(true);
+    try {
+      const res = await fetch(`/api/platform-admin/tenants/${apkModalTenant.id}/build-apk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify({ target, env: 'prod' })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`⚙️ ${data.message || 'Proses kompilasi APK dimulai di latar belakang...'}`, 'info');
+        let counter = 0;
+        const interval = setInterval(async () => {
+          counter++;
+          await fetchApkStatus(apkModalTenant.id);
+          if (counter >= 15) clearInterval(interval);
+        }, 4000);
+      } else {
+        toast(data.error || 'Gagal memulai build APK', 'error');
+      }
+    } catch (err: any) {
+      toast(err.message || 'Terjadi gangguan jaringan', 'error');
+    } finally {
+      setTimeout(() => setApkBuilding(false), 3000);
+    }
+  };
 
   const fetchLocalStatus = async () => {
     setLoading(true);
@@ -657,6 +726,16 @@ export const LocalSaaSControlDashboard: React.FC = () => {
                           <span>Masuk POS</span>
                         </button>
 
+                        {/* 📱 Export & Unduh APK Android */}
+                        <button
+                          onClick={() => handleOpenApkModal(t)}
+                          className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 font-bold text-[11px] flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
+                          title="Export / Unduh APK Android (Uji Coba Offline di HP)"
+                        >
+                          <Smartphone size={13} />
+                          <span>APK</span>
+                        </button>
+
                         {/* Switch Vertical Dropdown */}
                         <select
                           value={(t.businessType || 'CAFE').toUpperCase()}
@@ -714,6 +793,170 @@ export const LocalSaaSControlDashboard: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* ─── MODAL EXPORT APK ANDROID NATIVE & OFFLINE ───────────────── */}
+      {apkModalTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white">
+                  <Smartphone size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-white">{apkModalTenant.name}</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-500/30 text-purple-200 border border-purple-400/30">
+                      {apkModalTenant.businessType}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 font-mono mt-0.5">
+                    {apkModalTenant.slug}.codenusa.id • Android APK &amp; Offline Mode
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setApkModalTenant(null)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 text-xs">
+              {(() => {
+                const cleanSlug = apkModalTenant.slug.replace(/[^a-z0-9]/g, '');
+                const directUrl = `${window.location.origin}/downloads/${cleanSlug}-pos-cashier.apk`;
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(directUrl)}`;
+                const isReady = apkStatus?.cashier?.exists;
+
+                return (
+                  <div className="space-y-4">
+                    {/* Status & Download Action */}
+                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-900 text-sm">{apkModalTenant.name} POS Kasir</span>
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              isReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {isReady ? `✓ Siap Diunduh (${apkStatus?.cashier?.sizeMb || '65.8'} MB)` : 'Belum Terkompilasi'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                            File: {cleanSlug}-pos-cashier.apk
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/downloads/${cleanSlug}-pos-cashier.apk`}
+                            download
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                          >
+                            <Download size={14} />
+                            <span>Unduh APK</span>
+                          </a>
+
+                          <button
+                            onClick={() => handleBuildApk('cashier')}
+                            disabled={apkBuilding}
+                            className="px-3 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                            title="Kompilasi ulang APK dengan perubahan kode terbaru"
+                          >
+                            <Hammer size={14} className={apkBuilding ? 'animate-spin' : ''} />
+                            <span>{apkBuilding ? 'Memproses...' : 'Re-Build'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Download link copy & QR Code */}
+                      <div className="pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                        <div className="sm:col-span-1 flex flex-col items-center p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                          <img
+                            src={qrUrl}
+                            alt="Scan QR untuk download APK ke HP"
+                            className="w-28 h-28 object-contain rounded-lg"
+                          />
+                          <span className="text-[10px] text-slate-500 font-bold mt-1 text-center">
+                            Scan kamera HP untuk unduh
+                          </span>
+                        </div>
+
+                        <div className="sm:col-span-2 space-y-2">
+                          <label className="text-[11px] font-bold text-slate-700 block">
+                            Direct Link Download di Smartphone:
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={directUrl}
+                              className="w-full font-mono text-[11px] bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-slate-700 select-all"
+                            />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(directUrl);
+                                setCopiedLink(true);
+                                toast('Link unduhan disalin ke clipboard!', 'success');
+                                setTimeout(() => setCopiedLink(false), 2000);
+                              }}
+                              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 cursor-pointer"
+                              title="Salin Link"
+                            >
+                              {copiedLink ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-400">
+                            Buka link di browser Chrome HP Android Anda untuk mengunduh dan menginstal aplikasi secara instan.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step-by-Step Offline Testing Guide */}
+                    <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-2.5">
+                      <h4 className="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-indigo-600" /> Cara Menguji Mode Offline di HP:
+                      </h4>
+                      <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-indigo-900 leading-relaxed font-medium">
+                        <li>
+                          <strong>Install File APK:</strong> Buka file hasil unduhan di HP Android (izinkan <em>"Install unknown apps"</em> jika diminta).
+                        </li>
+                        <li>
+                          <strong>Login Sekali:</strong> Buka aplikasi saat HP masih terhubung internet/WiFi, login kasir. Katalog &amp; produk otomatis dicache ke memori lokal HP (IndexedDB).
+                        </li>
+                        <li>
+                          <strong>Aktifkan Mode Pesawat:</strong> Nyalakan <em>Airplane Mode</em> (putus total internet HP).
+                        </li>
+                        <li>
+                          <strong>Uji Transaksi Offline:</strong> Tambahkan item ke keranjang kasir lalu klik <strong>Bayar</strong>. Pesanan tersimpan aman di antrean offline lokal.
+                        </li>
+                        <li>
+                          <strong>Auto Sinkronisasi:</strong> Matikan Mode Pesawat. Begitu internet kembali terhubung, antrean transaksi offline otomatis disinkronkan ke server pusat tanpa ada data yang hilang!
+                        </li>
+                      </ol>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setApkModalTenant(null)}
+                className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
