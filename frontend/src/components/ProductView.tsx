@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import ProductModal from "./ProductModal";
 import { CategoryModal } from "./CategoryModal";
+import { BarcodeLabelPrintModal } from "./BarcodeLabelPrintModal";
 import { POSContext } from "../context/POSContext";
 import { useVertical } from "../context/VerticalContext";
 import { toast, confirmAlert } from "../utils/alert";
@@ -16,6 +17,8 @@ type ViewMode = "ringkas" | "tabel" | "grid";
 const ProductView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeSelectedProducts, setBarcodeSelectedProducts] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -149,8 +152,15 @@ const ProductView = () => {
           <button className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold bg-gradient-to-r from-amber-400 to-orange-500 text-white shadow-sm active:scale-95 transition-all">
             <Sparkles size={12} /> AI Profit Advisor
           </button>
-          <button className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-600 shadow-sm active:scale-95 transition-all">
-            <Barcode size={12} /> Cetak Barcode
+          <button
+            onClick={() => {
+              setBarcodeSelectedProducts(filteredProducts.length > 0 ? filteredProducts : products);
+              setIsBarcodeModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-[11px] font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm active:scale-95 transition-all cursor-pointer"
+            title="Cetak label stiker barcode produk/sparepart"
+          >
+            <Barcode size={12} className="text-purple-600" /> Cetak Barcode
           </button>
           <button
             onClick={() => setIsCategoryModalOpen(true)}
@@ -376,8 +386,12 @@ const ProductView = () => {
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
                       <div className="flex items-center gap-1">
                         <button
-                          className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 active:bg-violet-100 transition-colors"
-                          title="Barcode"
+                          className="w-7 h-7 rounded-lg bg-violet-50 hover:bg-violet-100 flex items-center justify-center text-violet-600 active:scale-95 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setBarcodeSelectedProducts([prod]);
+                            setIsBarcodeModalOpen(true);
+                          }}
+                          title="Cetak Barcode Label"
                         >
                           <Barcode size={13} />
                         </button>
@@ -538,6 +552,7 @@ const ProductView = () => {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-1.5">
+                            <button className="w-7 h-7 rounded-lg bg-violet-50 hover:bg-violet-100 flex items-center justify-center text-violet-600 transition-colors cursor-pointer" onClick={() => { setBarcodeSelectedProducts([prod]); setIsBarcodeModalOpen(true); }} title="Cetak Barcode"><Barcode size={13} /></button>
                             <button className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center text-violet-500 hover:bg-violet-100 transition-colors" onClick={() => openEditModal(prod)} title="Edit"><Edit size={13} /></button>
                             <button className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 hover:bg-rose-100 transition-colors" onClick={() => handleDelete(prod.id)} title="Hapus"><Trash2 size={13} /></button>
                           </div>
@@ -565,6 +580,13 @@ const ProductView = () => {
         isOpen={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
         onCategoriesUpdated={() => { fetchCategories(); fetchProducts(); }}
+      />
+      <BarcodeLabelPrintModal
+        isOpen={isBarcodeModalOpen}
+        onClose={() => setIsBarcodeModalOpen(false)}
+        allProducts={products}
+        initialSelectedProducts={barcodeSelectedProducts}
+        onProductsUpdated={fetchProducts}
       />
     </div>
   );

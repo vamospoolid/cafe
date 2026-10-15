@@ -10,10 +10,11 @@ import { toast } from '../../utils/alert';
 import { WorkOrderReceiptPrinter } from './WorkOrderReceiptPrinter';
 import { BengkelCheckoutModal } from './BengkelCheckoutModal';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
+import { BarcodeLabelPrintModal } from '../../components/BarcodeLabelPrintModal';
 import OpenShiftModal from '../../components/OpenShiftModal';
 import { initHardwareBarcodeListener, playScannerBeep } from '../../utils/hardwareBarcodeListener';
 import { PartRequestModal } from './PartRequestModal';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Barcode } from 'lucide-react';
 import { offlineDb } from '../../db/offlineDb';
 
 interface CartItem {
@@ -61,6 +62,7 @@ export const POSBengkel: React.FC = () => {
   const [selectedVehicleTypeFilter, setSelectedVehicleTypeFilter] = useState<'ALL' | 'MOTOR' | 'MOBIL'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+  const [isBarcodePrintOpen, setIsBarcodePrintOpen] = useState<boolean>(false);
   const scannerInputRef = useRef<HTMLInputElement>(null);
 
   // View Mode: Compact List vs Grid Card (Persisted)
@@ -888,6 +890,16 @@ export const POSBengkel: React.FC = () => {
               >
                 <Camera size={16} />
                 <span className="hidden sm:inline">Kamera Scan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBarcodePrintOpen(true)}
+                className="px-3 sm:px-3.5 py-2 sm:py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+                title="Cetak Label Barcode Suku Cadang & Oli"
+              >
+                <Barcode size={16} className="text-purple-600" />
+                <span className="hidden sm:inline">Cetak Label</span>
               </button>
 
               {/* View Switcher: List vs Grid */}
@@ -1739,6 +1751,15 @@ export const POSBengkel: React.FC = () => {
           onClose={() => setIsScannerOpen(false)}
         />
       )}
+
+      {/* ─── MODAL: CETAK LABEL BARCODE SUKU CADANG ───────────────────────────── */}
+      <BarcodeLabelPrintModal
+        isOpen={isBarcodePrintOpen}
+        onClose={() => setIsBarcodePrintOpen(false)}
+        allProducts={products}
+        initialSelectedProducts={products.slice(0, 10)}
+        onProductsUpdated={loadCatalogs}
+      />
 
       {/* ─── MODAL: CHECKOUT & PEMBAYARAN KASIR MULTI-METODE (PERSIS GAMBAR 2) ─── */}
       <BengkelCheckoutModal

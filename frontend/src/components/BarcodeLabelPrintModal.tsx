@@ -243,7 +243,7 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
   const headerSubtitle = items.length === 1 
     ? items[0].name 
     : items.length > 1 
-    ? `${items.length} Sparepart Bengkel Terpilih (${totalLabels} Lembar)`
+    ? `${items.length} Barang/Suku Cadang Terpilih (${totalLabels} Lembar)`
     : 'Pilih produk untuk dicetak';
 
   // Stepper Qty
@@ -669,11 +669,11 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                 )}
               </div>
 
-              {/* Toggle Nama Bengkel */}
+              {/* Toggle Nama Toko / Bengkel */}
               <div className="flex items-center justify-between bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
                 <div>
-                  <span className="font-bold text-xs text-slate-800 block">Nama Bengkel</span>
-                  <span className="text-[10px] text-slate-400 truncate max-w-[140px] block">{settings?.storeName || 'BENGKEL'}</span>
+                  <span className="font-bold text-xs text-slate-800 block">Nama Toko / Bengkel</span>
+                  <span className="text-[10px] text-slate-400 truncate max-w-[140px] block">{settings?.storeName || 'TOKO / BENGKEL'}</span>
                 </div>
                 <button
                   type="button"
@@ -754,12 +754,26 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                           <div>
                             {showStoreName && (
                               <div className="font-black text-[8px] uppercase tracking-wider text-purple-900 truncate">
-                                {settings?.storeName || 'BENGKEL RESMI'}
+                                {settings?.storeName || 'TOKO / BENGKEL'}
                               </div>
                             )}
                             <div className="font-black text-slate-900 uppercase tracking-tight line-clamp-2 mt-0.5 leading-snug text-[10.5px]">
                               {prod.name}
                             </div>
+                            {((prod as any).brand || (prod as any).storageLocation) && (
+                              <div className="flex items-center gap-1 text-[8px] font-bold text-slate-500 mt-0.5 flex-wrap">
+                                {(prod as any).brand && (
+                                  <span className="bg-slate-100 text-slate-700 px-1 py-0.2 rounded border border-slate-200 font-semibold truncate max-w-[80px]">
+                                    {(prod as any).brand}
+                                  </span>
+                                )}
+                                {(prod as any).storageLocation && (
+                                  <span className="text-purple-700 font-black">
+                                    📍 {(prod as any).storageLocation}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {showPrice && priceVal > 0 && (
@@ -806,7 +820,7 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                         {/* Header Store Name */}
                         {showStoreName && (
                           <div className="font-black text-[9px] uppercase tracking-tight text-slate-900 truncate w-full">
-                            {settings?.storeName || 'BENGKEL RESMI'}
+                            {settings?.storeName || 'TOKO / BENGKEL'}
                           </div>
                         )}
 
@@ -814,6 +828,14 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                         <div className={`font-black text-slate-900 uppercase tracking-tight line-clamp-1 w-full mt-0.5 ${currentPreset.fontSizeName}`}>
                           {prod.name}
                         </div>
+
+                        {/* Brand & Lokasi Rak */}
+                        {((prod as any).brand || (prod as any).storageLocation) && (
+                          <div className="flex items-center justify-center gap-1 text-[8px] text-slate-600 font-bold truncate max-w-full">
+                            {(prod as any).brand && <span>{(prod as any).brand}</span>}
+                            {(prod as any).storageLocation && <span>• 📍 {(prod as any).storageLocation}</span>}
+                          </div>
+                        )}
 
                         {/* SVG Barcode Vector */}
                         <div 
@@ -956,12 +978,18 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                     <div>
                       {showStoreName && (
                         <div style={{ fontSize: '6.5pt', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1 }}>
-                          {settings?.storeName || 'BENGKEL'}
+                          {settings?.storeName || 'TOKO / BENGKEL'}
                         </div>
                       )}
                       <div style={{ fontSize: '7.5pt', fontWeight: 800, textTransform: 'uppercase', lineHeight: 1.15, marginTop: '0.6mm', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {prod.name}
                       </div>
+                      {((prod as any).brand || (prod as any).storageLocation) && (
+                        <div style={{ fontSize: '6pt', fontWeight: 700, color: '#333', marginTop: '0.4mm', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                          {(prod as any).brand ? `${(prod as any).brand} ` : ''}
+                          {(prod as any).storageLocation ? `• 📍 ${(prod as any).storageLocation}` : ''}
+                        </div>
+                      )}
                     </div>
                     {showPrice && priceVal > 0 && (
                       <div style={{ fontSize: '8.5pt', fontWeight: 900, marginTop: '0.6mm', lineHeight: 1 }}>
@@ -991,13 +1019,20 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                 <div key={idx} className="barcode-label-box style-stacked">
                   {showStoreName && (
                     <div style={{ fontSize: '7pt', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.1 }}>
-                      {settings?.storeName || 'BENGKEL'}
+                      {settings?.storeName || 'TOKO / BENGKEL'}
                     </div>
                   )}
 
                   <div style={{ fontSize: '7.5pt', fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '100%', lineHeight: 1.1, marginTop: '0.8mm' }}>
                     {prod.name}
                   </div>
+
+                  {((prod as any).brand || (prod as any).storageLocation) && (
+                    <div style={{ fontSize: '6pt', fontWeight: 700, color: '#333', marginTop: '0.4mm', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      {(prod as any).brand ? `${(prod as any).brand} ` : ''}
+                      {(prod as any).storageLocation ? `• 📍 ${(prod as any).storageLocation}` : ''}
+                    </div>
+                  )}
 
                   <div 
                     style={{ width: '100%', margin: '0.8mm 0', display: 'flex', justifyContent: 'center' }}

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Camera, ZapOff, ImageUp, CheckCircle, Scan, Keyboard, Flashlight, ArrowRight } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { X, Camera, ZapOff, ImageUp, CheckCircle, Scan, Keyboard, Flashlight, ArrowRight, SwitchCamera } from 'lucide-react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface BarcodeScannerProps {
   onDetected: (code: string) => void;
@@ -25,6 +25,9 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
   const [torchOn, setTorchOn] = useState(false);
   const [continuousMode, setContinuousMode] = useState<boolean>(false);
   const [scannedCount, setScannedCount] = useState<number>(0);
+  const [availableCameras, setAvailableCameras] = useState<Array<{ id: string; label: string }>>([]);
+  const [activeCamIndex, setActiveCamIndex] = useState<number>(-1);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const lastScanTimeRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,29 +86,31 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
       }
 
       // 2. Deteksi kamera fisik yang tersedia
-      let selectedCamera: string | { facingMode: string } = { facingMode: 'environment' };
+      let selectedCamera: any = { facingMode: { ideal: facingMode } };
       try {
         const devices = await Html5Qrcode.getCameras();
         if (devices && devices.length > 0) {
-          // Cari kamera belakang jika ada (untuk HP / tablet)
-          const backCam = devices.find(d => /back|rear|belakang|environment/i.test(d.label));
-          if (backCam) {
-            selectedCamera = backCam.id;
+          setAvailableCameras(devices);
+          
+          if (activeCamIndex >= 0 && activeCamIndex < devices.length) {
+            selectedCamera = devices[activeCamIndex].id;
           } else {
-            // Jika di laptop/PC atau kamera tunggal, gunakan kamera pertama
-            selectedCamera = devices[0].id;
+            // Cari kamera belakang jika ada (untuk HP / tablet)
+            const backCam = devices.find(d => /back|rear|belakang|environment/i.test(d.label));
+            if (backCam) {
+              selectedCamera = backCam.id;
+              const idx = devices.findIndex(d => d.id === backCam.id);
+              if (idx >= 0) setActiveCamIndex(idx);
+            } else {
+              // Jika label kosong (sebelum permission) atau tidak ada kata back,
+              // gunakan { facingMode: { ideal: facingMode } } agar browser HP otomatis mengarahkan ke kamera belakang!
+              selectedCamera = { facingMode: { ideal: facingMode } };
+            }
           }
-        } else {
-          if (!mounted) return;
-          setCameraError(
-            'Kamera tidak ditemukan di perangkat ini (tidak ada webcam/kamera terpasang).\n\nSilakan gunakan opsi "Scan dari Foto" atau "Input Manual".'
-          );
-          setIsStarting(false);
-          return;
         }
       } catch {
-        // Jika getCameras() gagal sebelum izin diberikan, gunakan standar facingMode string
-        selectedCamera = { facingMode: 'environment' };
+        // Fallback jika getCameras() gagal
+        selectedCamera = { facingMode: { ideal: facingMode } };
       }
 
       // 3. Pastikan elemen container live ada dan bersih
@@ -113,13 +118,29 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
       if (el) el.innerHTML = '';
 
       try {
-        const scanner = new Html5Qrcode(SCANNER_DIV_ID, { verbose: false });
+        const scanner = new Html5Qrcode(SCANNER_DIV_ID, {
+          verbose: false,
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE
+          ]
+        });
         scannerRef.current = scanner;
 
         const scanConfig = {
-          fps: 15,
-          qrbox: { width: 260, height: 140 },
-          aspectRatio: 1.7,
+          fps: 20,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const width = Math.min(viewfinderWidth * 0.88, 340);
+            const height = Math.min(minEdge * 0.65, 170);
+            return { width, height };
+          },
+          aspectRatio: 1.777778,
         };
 
         const onScanSuccess = (decodedText: string) => {
@@ -143,11 +164,13 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
         try {
           await scanner.start(selectedCamera, scanConfig, onScanSuccess, () => {});
         } catch (firstErr: any) {
-          // Fallback jika facingMode environment ditolak browser laptop (hanya ada front webcam)
-          if (typeof selectedCamera === 'object' && selectedCamera.facingMode === 'environment') {
-            await scanner.start({ facingMode: 'user' }, scanConfig, onScanSuccess, () => {});
-          } else {
-            throw firstErr;
+          // Fallback 1: Coba constraint langsung facingMode
+          try {
+            await scanner.start({ facingMode: facingMode }, scanConfig, onScanSuccess, () => {});
+          } catch {
+            // Fallback 2: Coba kamera sebaliknya jika target facingMode gagal
+            const altFacing = facingMode === 'environment' ? 'user' : 'environment';
+            await scanner.start({ facingMode: altFacing }, scanConfig, onScanSuccess, () => {});
           }
         }
 
@@ -206,7 +229,17 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
       mounted = false;
       stopCurrentScanner();
     };
-  }, [mode]);
+  }, [mode, activeCamIndex, facingMode]);
+
+  // Ganti kamera depan / belakang / multi-lensa
+  const handleSwitchCamera = async () => {
+    await stopCurrentScanner();
+    if (availableCameras.length > 1) {
+      setActiveCamIndex(prev => (prev + 1) % availableCameras.length);
+    } else {
+      setFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
+    }
+  };
 
   // Toggle senter / torch HP
   const toggleTorch = async () => {
@@ -322,6 +355,18 @@ const BarcodeScannerModal: React.FC<BarcodeScannerProps> = ({ onDetected, onClos
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Switch camera flip (depan / belakang) */}
+          {mode === 'camera' && (
+            <button
+              type="button"
+              onClick={handleSwitchCamera}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center text-white transition-colors"
+              title="Ganti / Balik Kamera (Belakang / Depan)"
+            >
+              <SwitchCamera size={16} />
+            </button>
+          )}
+
           {/* Torch toggle jika supported */}
           {mode === 'camera' && hasTorch && (
             <button

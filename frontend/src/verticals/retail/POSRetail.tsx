@@ -35,6 +35,7 @@ import { RetailReceiptPrinter } from './RetailReceiptPrinter';
 import { HeldCartsModal, type HeldCartItem } from './HeldCartsModal';
 import { RetailDebtPaymentModal } from './RetailDebtPaymentModal';
 import { ShelfTagPrinterModal } from './ShelfTagPrinterModal';
+import BarcodeLabelPrintModal from '../../components/BarcodeLabelPrintModal';
 import BarcodeScannerModal from '../../components/BarcodeScannerModal';
 import { initHardwareBarcodeListener, playScannerBeep } from '../../utils/hardwareBarcodeListener';
 
@@ -144,6 +145,7 @@ export const POSRetail: React.FC = () => {
   const [isDebtPaymentOpen, setIsDebtPaymentOpen] = useState<boolean>(false);
   const [debtPaymentCustomer, setDebtPaymentCustomer] = useState<any | null>(null);
   const [isShelfTagPrinterOpen, setIsShelfTagPrinterOpen] = useState<boolean>(false);
+  const [isBarcodeLabelModalOpen, setIsBarcodeLabelModalOpen] = useState<boolean>(false);
 
   const scannerInputRef = useRef<HTMLInputElement>(null);
 
@@ -719,6 +721,17 @@ export const POSRetail: React.FC = () => {
             >
               <Boxes size={14} />
               <span>Parkir: {heldCarts.length}</span>
+            </button>
+
+            {/* Tombol Cetak Stiker Barcode Produk */}
+            <button
+              type="button"
+              onClick={() => setIsBarcodeLabelModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-purple-700/60 hover:bg-purple-600 border border-purple-400/40 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              title="Cetak stiker barcode produk untuk ditempel ke kemasan repack / sembako"
+            >
+              <Barcode size={14} />
+              <span className="hidden sm:inline">Stiker Barcode</span>
             </button>
 
             {/* Tombol Cetak Label Rak */}
@@ -1660,6 +1673,14 @@ export const POSRetail: React.FC = () => {
         onClose={() => setIsShelfTagPrinterOpen(false)}
         products={products}
         categories={categories}
+      />
+
+      {/* 8. Modal Cetak Stiker Barcode Produk */}
+      <BarcodeLabelPrintModal
+        isOpen={isBarcodeLabelModalOpen}
+        onClose={() => setIsBarcodeLabelModalOpen(false)}
+        allProducts={products}
+        onProductsUpdated={loadCatalogs}
       />
     </div>
   );

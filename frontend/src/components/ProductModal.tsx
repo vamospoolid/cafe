@@ -52,7 +52,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
   const [recipeItems, setRecipeItems] = useState<any[]>([]);
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [newRecipe, setNewRecipe] = useState({ ingredientId: '', qty: '' });
-  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [barcodeScannerTarget, setBarcodeScannerTarget] = useState<'product' | 'uom' | null>(null);
 
   // Multi-Satuan (ProductUOM) State
   const [uomItems, setUomItems] = useState<any[]>([]);
@@ -258,9 +258,14 @@ const ProductModal: React.FC<ProductModalProps> = ({
   };
 
   const handleBarcodeDetected = (code: string) => {
-    setFormData(prev => ({ ...prev, barcode: code }));
-    setShowBarcodeScanner(false);
-    toast(`✅ Barcode terdeteksi: ${code}`, 'success');
+    if (barcodeScannerTarget === 'uom') {
+      setNewUom(prev => ({ ...prev, barcode: code }));
+      toast(`✅ Barcode Kemasan terdeteksi: ${code}`, 'success');
+    } else {
+      setFormData(prev => ({ ...prev, barcode: code }));
+      toast(`✅ Barcode Produk terdeteksi: ${code}`, 'success');
+    }
+    setBarcodeScannerTarget(null);
     if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
   };
 
@@ -451,10 +456,10 @@ const ProductModal: React.FC<ProductModalProps> = ({
   return (
     <>
       {/* Barcode Scanner Overlay */}
-      {showBarcodeScanner && (
+      {barcodeScannerTarget && (
         <BarcodeScannerModal
           onDetected={handleBarcodeDetected}
-          onClose={() => setShowBarcodeScanner(false)}
+          onClose={() => setBarcodeScannerTarget(null)}
         />
       )}
 
@@ -640,9 +645,9 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         {/* Scan via kamera */}
                         <button
                           type="button"
-                          onClick={() => setShowBarcodeScanner(true)}
+                          onClick={() => setBarcodeScannerTarget('product')}
                           className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white transition-all shadow-md shadow-emerald-500/20"
-                          title="Scan Barcode via Kamera"
+                          title="Scan Barcode via Kamera HP"
                         >
                           <QrCode size={16} />
                         </button>
@@ -1357,13 +1362,23 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                           Barcode Kemasan <span className="text-[10px] font-normal text-slate-400">(Opsional)</span>
                         </label>
-                        <input
-                          type="text"
-                          placeholder="Scan barcode dus..."
-                          className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-purple-500"
-                          value={newUom.barcode}
-                          onChange={e => setNewUom(p => ({ ...p, barcode: e.target.value }))}
-                        />
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Scan barcode dus..."
+                            className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 outline-none focus:border-purple-500"
+                            value={newUom.barcode}
+                            onChange={e => setNewUom(p => ({ ...p, barcode: e.target.value }))}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setBarcodeScannerTarget('uom')}
+                            className="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white transition-all shadow-md shadow-emerald-500/20"
+                            title="Scan Barcode Dus via Kamera HP"
+                          >
+                            <QrCode size={16} />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Harga Jual Satuan */}
