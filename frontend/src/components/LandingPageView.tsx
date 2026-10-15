@@ -43,7 +43,8 @@ import {
   Split,
   ChevronDown,
   Shirt,
-  Wrench
+  Wrench,
+  Phone
 } from 'lucide-react';
 import { TenantRegisterWizard } from './TenantRegisterWizard';
 import { POSContext } from '../context/POSContext';
@@ -80,6 +81,54 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoTarget, setDemoTarget] = useState<string | null>(null);
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
+
+  // Facebook Ads & Hero Quick Lead State
+  const [heroStoreName, setHeroStoreName] = useState('');
+  const [heroPhone, setHeroPhone] = useState('');
+
+  // Capture UTM parameters for Meta Ads tracking
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const utmSource = sp.get('utm_source');
+      const utmCampaign = sp.get('utm_campaign');
+      const utmMedium = sp.get('utm_medium');
+      const fbclid = sp.get('fbclid');
+
+      if (utmSource) localStorage.setItem('cp_utm_source', utmSource);
+      if (utmCampaign) localStorage.setItem('cp_utm_campaign', utmCampaign);
+      if (utmMedium) localStorage.setItem('cp_utm_medium', utmMedium);
+      if (fbclid) localStorage.setItem('cp_fbclid', fbclid);
+
+      // Meta Pixel Lead PageView tracking
+      try {
+        if ((window as any).fbq) {
+          (window as any).fbq('track', 'PageView');
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  const handleHeroQuickSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!heroStoreName.trim()) {
+      toast('Mohon masukkan nama toko / usaha Anda', 'warning');
+      return;
+    }
+    // Track Lead Attempt in Facebook Pixel
+    try {
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        (window as any).fbq('track', 'Lead', {
+          content_name: heroStoreName,
+          currency: 'IDR',
+          value: 0
+        });
+      }
+    } catch (e) {}
+    setSelectedVerticalForRegister(currentVertical.wizardType);
+    setSelectedPlanCode('GROWTH');
+    setIsRegisterOpen(true);
+  };
 
   // Multi-Vertical Landing State
   const getInitialVertical = (): VerticalId => {
@@ -539,6 +588,93 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
                   <Zap size={15} className="text-emerald-400 fill-emerald-400" />
                   <span>{currentVertical.offlineStatus}</span>
                 </div>
+              </div>
+
+              {/* ─── Hero Quick Lead Form (High-Conversion Facebook Ads Optimization) ─── */}
+              <div className="bg-slate-900/80 border border-slate-700/80 backdrop-blur-xl rounded-2xl p-4 sm:p-5 shadow-2xl mb-6 text-left max-w-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-emerald-400">
+                      Pendaftaran Cepat — Siap Pakai 14 Hari
+                    </span>
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium">100% Gratis</span>
+                </div>
+
+                <form onSubmit={handleHeroQuickSubmit} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Nama Toko / Usaha *
+                      </label>
+                      <div className="relative">
+                        <Store size={15} className="absolute left-3 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          required
+                          placeholder={
+                            activeVertical === 'bengkel' ? "Contoh: Bengkel Jaya Motor" :
+                            activeVertical === 'retail' ? "Contoh: Toko Grosir Berkah" :
+                            activeVertical === 'laundry' ? "Contoh: Berkah Laundry" :
+                            activeVertical === 'rental' ? "Contoh: Sanggar Baju Bodo" :
+                            "Contoh: Kafe Senja Bahagia"
+                          }
+                          value={heroStoreName}
+                          onChange={(e) => setHeroStoreName(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs font-semibold text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Nomor WhatsApp Aktif *
+                      </label>
+                      <div className="relative">
+                        <Phone size={15} className="absolute left-3 top-3 text-emerald-400" />
+                        <input
+                          type="tel"
+                          required
+                          placeholder="0812-xxxx-xxxx"
+                          value={heroPhone}
+                          onChange={(e) => setHeroPhone(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs font-semibold text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+                    <button
+                      type="submit"
+                      className={`w-full sm:flex-1 py-3 px-5 rounded-xl font-black text-xs sm:text-sm text-white shadow-lg transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-2 bg-gradient-to-r ${currentVertical.theme.btnGradient}`}
+                    >
+                      <span>Mulai Coba Gratis Sekarang</span>
+                      <ArrowRight size={16} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRegisterWithVertical(currentVertical.wizardType)}
+                      className="w-full sm:w-auto py-3 px-4 rounded-xl font-bold text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-all text-center whitespace-nowrap"
+                    >
+                      Form Lengkap &rarr;
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 size={12} className="text-emerald-400" /> Tanpa kartu kredit
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 size={12} className="text-emerald-400" /> Langsung aktif 30 detik
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 size={12} className="text-emerald-400" /> Support CS WA
+                    </span>
+                  </div>
+                </form>
               </div>
 
               {/* Action Buttons */}
@@ -1660,6 +1796,8 @@ export const LandingPageView: React.FC<LandingPageProps> = ({
         onClose={() => setIsRegisterOpen(false)}
         initialPlan={selectedPlanCode}
         initialBusinessType={selectedVerticalForRegister}
+        initialStoreName={heroStoreName}
+        initialPhone={heroPhone}
         onSuccess={() => {
           setIsRegisterOpen(false);
         }}

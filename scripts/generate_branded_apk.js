@@ -225,11 +225,23 @@ async function main() {
     console.log(`🆔 Application ID: ${target.appId}`);
     console.log(`----------------------------------------------------------------`);
 
+    // Helper escape XML characters for Android resources
+    const escapeXml = (str) => {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;');
+    };
+
     // 1. Update strings.xml dengan nama brand toko
+    const safeAppName = escapeXml(target.appName);
     const stringsContent = `<?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">${target.appName}</string>
-    <string name="title_activity_main">${target.appName}</string>
+    <string name="app_name">${safeAppName}</string>
+    <string name="title_activity_main">${safeAppName}</string>
     <string name="package_name">${target.appId}</string>
     <string name="custom_url_scheme">${target.appId}</string>
 </resources>`;

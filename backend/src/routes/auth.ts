@@ -558,56 +558,91 @@ router.get('/check-slug', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/register-tenant - Pendaftaran mandiri tenant baru (Onboarding Wizard)
+// POST /api/auth/register-tenant - Pendaftaran mandiri tenant baru (Onboarding Wizard & Facebook Ads Lead)
 router.post('/register-tenant', async (req: Request, res: Response) => {
   try {
     const {
       businessName,
-      slug,
+      slug: rawSlug,
       planCode,
       outletName,
       outletCode,
-      ownerName,
-      ownerUsername,
-      ownerPassword,
+      ownerName: rawOwnerName,
+      ownerUsername: rawOwnerUsername,
+      ownerPassword: rawOwnerPassword,
       ownerPin,
-      businessType: rawBusinessType
+      businessType: rawBusinessType,
+      phone: rawPhone,
+      address: rawAddress,
+      city: rawCity,
+      utmSource,
+      utmCampaign,
+      utmMedium,
+      fbclid
     } = req.body;
 
     const normalizedType = String(rawBusinessType || 'CAFE').toUpperCase();
     const businessType = ['RETAIL', 'BENGKEL', 'LAUNDRY', 'RENTAL', 'CAFE'].includes(normalizedType) ? normalizedType : 'CAFE';
 
-    if (!businessName || !slug || !ownerName || !ownerUsername || !ownerPassword) {
+    if (!businessName || !businessName.trim()) {
       return res.status(400).json({
-        error: 'Mohon lengkapi seluruh field wajib: Nama Usaha, Subdomain Slug, Nama Owner, Username, dan Password.'
+        error: 'Mohon masukkan Nama Usaha / Toko Anda.'
       });
     }
 
-    // 1. Validasi keunikan Slug & Reserved Slugs
-    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    // Bersihkan & validasi No. Telepon / WhatsApp
+    const cleanPhone = String(rawPhone || '').replace(/[^0-9]/g, '');
+    if (cleanPhone && cleanPhone.length < 8) {
+      return res.status(400).json({ error: 'Nomor WhatsApp / HP tidak valid (minimal 8 digit).' });
+    }
+
+    // 1. Validasi / Auto-generate Slug Subdomain
+    let cleanSlug = String(rawSlug || '').toLowerCase().replace(/[^a-z0-9-]/g, '').trim();
+    if (!cleanSlug) {
+      cleanSlug = businessName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+      if (cleanSlug.length < 3) {
+        cleanSlug = `toko${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+      const existingCheck = await prisma.tenant.findUnique({ where: { slug: cleanSlug } });
+      if (existingCheck) {
+        cleanSlug = `${cleanSlug}${Math.floor(100 + Math.random() * 900)}`;
+      }
+    }
+
     const reservedSlugs = ['admin', 'api', 'app', 'www', 'mail', 'blog', 'demo', 'test', 'dev', 'staging', 'platform', 'pos', 'cafe', 'codenusa', 'bengkel', 'bengkel-motor', 'posbengkel', 'bengkel-app'];
     if (reservedSlugs.includes(cleanSlug)) {
-      return res.status(400).json({ error: `Subdomain slug '${cleanSlug}' adalah nama reserved sistem dan tidak dapat didaftarkan.` });
+      cleanSlug = `${cleanSlug}${Math.floor(100 + Math.random() * 900)}`;
     }
+
     const existingTenant = await prisma.tenant.findUnique({ where: { slug: cleanSlug } });
     if (existingTenant) {
-      return res.status(400).json({ error: `Subdomain slug '${cleanSlug}' sudah digunakan oleh bisnis lain.` });
+      return res.status(400).json({ error: `Subdomain slug '${cleanSlug}' sudah digunakan. Silakan gunakan nama lain.` });
     }
 
-    // 2. Validasi keunikan Username (global uniqueness)
-    const existingUser = await prisma.user.findFirst({ where: { username: ownerUsername.toLowerCase() } });
+    // 2. Validasi / Auto-generate Owner Username
+    let ownerUsername = String(rawOwnerUsername || '').toLowerCase().trim().replace(/[^a-z0-9_]/g, '');
+    if (!ownerUsername) {
+      ownerUsername = cleanPhone ? cleanPhone : `${cleanSlug}_owner`;
+    }
+
+    const existingUser = await prisma.user.findFirst({ where: { username: ownerUsername } });
     if (existingUser) {
-      return res.status(400).json({ error: `Username '${ownerUsername}' sudah terdaftar. Silakan gunakan username lain.` });
+      ownerUsername = `${ownerUsername}_${Math.floor(10 + Math.random() * 90)}`;
     }
 
-    // 3. Tentukan Plan
-    const targetPlan = await prisma.plan.findUnique({ where: { code: planCode || 'STARTER' } })
-      || await prisma.plan.findFirst({ where: { code: 'STARTER' } });
-
+    // 3. Owner Name & Password
+    const ownerName = rawOwnerName && rawOwnerName.trim() ? rawOwnerName.trim() : (businessName ? `Owner ${businessName}` : 'Owner');
+    const ownerPassword = rawOwnerPassword && rawOwnerPassword.trim() ? rawOwnerPassword.trim() : '123456';
     const passwordHash = await bcrypt.hash(ownerPassword, 10);
     const pin = ownerPin || '123456';
 
-    // 4. Eksekusi Pendaftaran Transaksional
+    const fullAddress = [rawAddress, rawCity].filter(Boolean).map(s => String(s).trim()).filter(Boolean).join(', ');
+
+    // 4. Tentukan Plan
+    const targetPlan = await prisma.plan.findUnique({ where: { code: planCode || 'STARTER' } })
+      || await prisma.plan.findFirst({ where: { code: 'STARTER' } });
+
+    // 5. Eksekusi Pendaftaran Transaksional
     const trialDays = 14;
     const trialEndsAt = new Date();
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
@@ -616,11 +651,22 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       // Pastikan RLS bypass untuk provisioning tenant baru
       await tx.$executeRawUnsafe("SET LOCAL app.current_tenant_id = 'PLATFORM_SUPERADMIN';").catch(() => {});
 
-      // a. Buat Tenant
+      // a. Buat Tenant (Simpan phone & metadata Facebook Ads / UTM di notes)
       const tenant = await tx.tenant.create({
         data: {
           name: businessName,
           slug: cleanSlug,
+          phone: cleanPhone || null,
+          notes: JSON.stringify({
+            address: rawAddress || '',
+            city: rawCity || '',
+            utmSource: utmSource || null,
+            utmCampaign: utmCampaign || null,
+            utmMedium: utmMedium || null,
+            fbclid: fbclid || null,
+            registeredVia: 'FACEBOOK_ADS_LANDING_QUICK_ONBOARDING',
+            registeredAt: new Date().toISOString()
+          }),
           planId: targetPlan?.id,
           businessType,
           status: 'ACTIVE',
@@ -628,12 +674,14 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
         }
       });
 
-      // b. Buat Outlet Utama
+      // b. Buat Outlet Utama (Simpan alamat & phone)
       const primaryOutlet = await tx.outlet.create({
         data: {
           tenantId: tenant.id,
           name: outletName || `${businessName} (Pusat)`,
           code: outletCode || 'OUT-01',
+          phone: cleanPhone || null,
+          address: fullAddress || null,
           status: 'ACTIVE'
         }
       });
@@ -642,7 +690,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       const user = await tx.user.create({
         data: {
           name: ownerName,
-          username: ownerUsername.toLowerCase().trim(),
+          username: ownerUsername,
           passwordHash,
           pin,
           tenantId: tenant.id,
@@ -701,6 +749,8 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
           tenant: { connect: { id: tenant.id } },
           outlet: { connect: { id: primaryOutlet.id } },
           storeName: businessName,
+          phone: cleanPhone || '',
+          address: fullAddress || '',
           receiptHeader: businessType === 'RETAIL'
             ? `TOKO GROSIR & RETAIL\n${businessName}`
             : (businessType === 'BENGKEL'
@@ -839,7 +889,17 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
 
     return res.status(201).json({
       message: `🎉 Selamat! Akun bisnis '${result.tenant.name}' berhasil dibuat. Selamat datang di Codenusa SaaS POS!`,
-      ...authData
+      ...authData,
+      credentials: {
+        businessName: result.tenant.name,
+        slug: cleanSlug,
+        phone: cleanPhone,
+        username: result.user.username,
+        password: ownerPassword,
+        role: result.user.role,
+        subdomainUrl: `https://${cleanSlug}.codenusa.id/pos`,
+        posUrl: '/pos'
+      }
     });
   } catch (error: any) {
     console.error('Register Tenant Error:', error);
