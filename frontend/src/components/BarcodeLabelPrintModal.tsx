@@ -198,6 +198,18 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
   // Preview Column Count
   const effectivePreviewColumns = previewColumnsOverride === 'auto' ? currentPreset.columns : previewColumnsOverride;
 
+  // Flattened array for printing & live preview (ALWAYS RUN HOOK AT TOP LEVEL)
+  const flattenedLabels = useMemo(() => {
+    const list: BarcodeProductItem[] = [];
+    items.forEach(item => {
+      const qty = Math.max(1, item.qtyToPrint || 1);
+      for (let i = 0; i < qty; i++) {
+        list.push(item);
+      }
+    });
+    return list;
+  }, [items]);
+
   // Initialize queue when opened
   useEffect(() => {
     if (!isOpen) return;
@@ -219,25 +231,11 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
     }
   }, [isOpen, initialSelectedProducts, allProducts]);
 
-  if (!isOpen) return null;
-
   // Total labels to print
   const totalLabels = items.reduce((sum, item) => sum + (item.qtyToPrint || 0), 0);
 
   // Missing barcodes count
   const missingBarcodeItems = items.filter(i => !i.barcode || i.barcode.trim() === '');
-
-  // Flattened array for printing & live preview
-  const flattenedLabels = useMemo(() => {
-    const list: BarcodeProductItem[] = [];
-    items.forEach(item => {
-      const qty = Math.max(1, item.qtyToPrint || 1);
-      for (let i = 0; i < qty; i++) {
-        list.push(item);
-      }
-    });
-    return list;
-  }, [items]);
 
   // Subtitle Product Name preview
   const headerSubtitle = items.length === 1 
@@ -352,6 +350,8 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
         )
         .slice(0, 5)
     : [];
+
+  if (!isOpen) return null;
 
   return (
     <div 
