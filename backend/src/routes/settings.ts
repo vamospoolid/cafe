@@ -221,6 +221,14 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.autoPrintKitchen !== undefined) updateData.autoPrintKitchen = Boolean(updateData.autoPrintKitchen);
     if (updateData.autoPrintBar !== undefined) updateData.autoPrintBar = Boolean(updateData.autoPrintBar);
 
+    // Konfigurasi Printer Barcode & Label Stiker
+    if (updateData.barcodeLabelPreset !== undefined) updateData.barcodeLabelPreset = String(updateData.barcodeLabelPreset);
+    if (updateData.barcodeLabelDesign !== undefined) updateData.barcodeLabelDesign = String(updateData.barcodeLabelDesign);
+    if (updateData.barcodeLabelShowPrice !== undefined) updateData.barcodeLabelShowPrice = Boolean(updateData.barcodeLabelShowPrice);
+    if (updateData.barcodeLabelShowStore !== undefined) updateData.barcodeLabelShowStore = Boolean(updateData.barcodeLabelShowStore);
+    if (updateData.barcodeLabelShowBrandRak !== undefined) updateData.barcodeLabelShowBrandRak = Boolean(updateData.barcodeLabelShowBrandRak);
+    if (updateData.barcodeLabelPriceTier !== undefined) updateData.barcodeLabelPriceTier = String(updateData.barcodeLabelPriceTier);
+
     if (updateData.receiptShowCashier !== undefined) updateData.receiptShowCashier = Boolean(updateData.receiptShowCashier);
     if (updateData.receiptShowTable !== undefined) updateData.receiptShowTable = Boolean(updateData.receiptShowTable);
 

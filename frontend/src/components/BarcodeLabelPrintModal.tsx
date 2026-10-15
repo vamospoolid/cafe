@@ -29,7 +29,7 @@ interface BarcodeLabelPrintModalProps {
 }
 
 // 9 Preset Ukuran Standard Bengkel & Retail Indonesia
-interface LabelPreset {
+export interface LabelPreset {
   id: string;
   name: string;
   dimension: string;
@@ -43,7 +43,7 @@ interface LabelPreset {
   fontSizePrice: string;
 }
 
-const LABEL_PRESETS: LabelPreset[] = [
+export const LABEL_PRESETS: LabelPreset[] = [
   {
     id: 'small',
     name: 'Small',
@@ -172,14 +172,37 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
 }) => {
   const { settings, token } = usePOS();
 
-  // Selected Preset (Default: Medium 60x30mm)
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('medium');
+  // Selected Preset (Default from Settings / localStorage / Medium)
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(() => {
+    return localStorage.getItem('barcode_label_preset') || settings?.barcodeLabelPreset || 'medium';
+  });
   
   // Customization Toggles
-  const [showPrice, setShowPrice] = useState<boolean>(true);
-  const [showStoreName, setShowStoreName] = useState<boolean>(true);
-  const [labelDesignStyle, setLabelDesignStyle] = useState<'landscape_split' | 'stacked'>('landscape_split');
-  const [priceTier, setPriceTier] = useState<'retail' | 'mitra' | 'grosir'>('retail');
+  const [showPrice, setShowPrice] = useState<boolean>(() => {
+    const local = localStorage.getItem('barcode_label_show_price');
+    if (local !== null) return local !== 'false';
+    return settings?.barcodeLabelShowPrice !== false;
+  });
+
+  const [showStoreName, setShowStoreName] = useState<boolean>(() => {
+    const local = localStorage.getItem('barcode_label_show_store');
+    if (local !== null) return local !== 'false';
+    return settings?.barcodeLabelShowStore !== false;
+  });
+
+  const [showBrandRak, setShowBrandRak] = useState<boolean>(() => {
+    const local = localStorage.getItem('barcode_label_show_brand_rak');
+    if (local !== null) return local !== 'false';
+    return settings?.barcodeLabelShowBrandRak !== false;
+  });
+
+  const [labelDesignStyle, setLabelDesignStyle] = useState<'landscape_split' | 'stacked'>(() => {
+    return (localStorage.getItem('barcode_label_design') as any) || (settings?.barcodeLabelDesign as any) || 'landscape_split';
+  });
+
+  const [priceTier, setPriceTier] = useState<'retail' | 'mitra' | 'grosir'>(() => {
+    return (localStorage.getItem('barcode_label_price_tier') as any) || (settings?.barcodeLabelPriceTier as any) || 'retail';
+  });
 
   // Preview Columns Override (1, 2, 3 or auto)
   const [previewColumnsOverride, setPreviewColumnsOverride] = useState<number | 'auto'>('auto');
@@ -210,9 +233,33 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
     return list;
   }, [items]);
 
-  // Initialize queue when opened
+  // Initialize queue and sync defaults when opened
   useEffect(() => {
     if (!isOpen) return;
+
+    const prefPreset = localStorage.getItem('barcode_label_preset') || settings?.barcodeLabelPreset || 'medium';
+    setSelectedPresetId(prefPreset);
+
+    const prefDesign = (localStorage.getItem('barcode_label_design') as any) || (settings?.barcodeLabelDesign as any) || 'landscape_split';
+    setLabelDesignStyle(prefDesign);
+
+    const prefPrice = localStorage.getItem('barcode_label_show_price') !== null
+      ? localStorage.getItem('barcode_label_show_price') !== 'false'
+      : (settings?.barcodeLabelShowPrice !== false);
+    setShowPrice(prefPrice);
+
+    const prefStore = localStorage.getItem('barcode_label_show_store') !== null
+      ? localStorage.getItem('barcode_label_show_store') !== 'false'
+      : (settings?.barcodeLabelShowStore !== false);
+    setShowStoreName(prefStore);
+
+    const prefBrandRak = localStorage.getItem('barcode_label_show_brand_rak') !== null
+      ? localStorage.getItem('barcode_label_show_brand_rak') !== 'false'
+      : (settings?.barcodeLabelShowBrandRak !== false);
+    setShowBrandRak(prefBrandRak);
+
+    const prefTier = (localStorage.getItem('barcode_label_price_tier') as any) || (settings?.barcodeLabelPriceTier as any) || 'retail';
+    setPriceTier(prefTier);
 
     if (initialSelectedProducts && initialSelectedProducts.length > 0) {
       setItems(
@@ -229,7 +276,7 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
         }))
       );
     }
-  }, [isOpen, initialSelectedProducts, allProducts]);
+  }, [isOpen, initialSelectedProducts, allProducts, settings?.barcodeLabelPreset, settings?.barcodeLabelDesign, settings?.barcodeLabelShowPrice, settings?.barcodeLabelShowStore, settings?.barcodeLabelShowBrandRak, settings?.barcodeLabelPriceTier]);
 
   // Total labels to print
   const totalLabels = items.reduce((sum, item) => sum + (item.qtyToPrint || 0), 0);
@@ -677,9 +724,34 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowStoreName(!showStoreName)}
+                  onClick={() => {
+                    const next = !showStoreName;
+                    setShowStoreName(next);
+                    localStorage.setItem('barcode_label_show_store', String(next));
+                  }}
                   className={`w-11 h-6 flex items-center rounded-full p-1 transition cursor-pointer ${
                     showStoreName ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
+                  }`}
+                >
+                  <div className="w-4 h-4 rounded-full bg-white shadow-md transform transition" />
+                </button>
+              </div>
+
+              {/* Toggle Brand & Lokasi Rak Simpan */}
+              <div className="flex items-center justify-between bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
+                <div>
+                  <span className="font-bold text-xs text-slate-800 block">Brand &amp; Lokasi Rak</span>
+                  <span className="text-[10px] text-slate-400">Cetak merk part &amp; nomor rak gudang</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !showBrandRak;
+                    setShowBrandRak(next);
+                    localStorage.setItem('barcode_label_show_brand_rak', String(next));
+                  }}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition cursor-pointer ${
+                    showBrandRak ? 'bg-purple-600 justify-end' : 'bg-slate-300 justify-start'
                   }`}
                 >
                   <div className="w-4 h-4 rounded-full bg-white shadow-md transform transition" />
@@ -760,7 +832,7 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                             <div className="font-black text-slate-900 uppercase tracking-tight line-clamp-2 mt-0.5 leading-snug text-[10.5px]">
                               {prod.name}
                             </div>
-                            {((prod as any).brand || (prod as any).storageLocation) && (
+                            {showBrandRak && ((prod as any).brand || (prod as any).storageLocation) && (
                               <div className="flex items-center gap-1 text-[8px] font-bold text-slate-500 mt-0.5 flex-wrap">
                                 {(prod as any).brand && (
                                   <span className="bg-slate-100 text-slate-700 px-1 py-0.2 rounded border border-slate-200 font-semibold truncate max-w-[80px]">
@@ -830,7 +902,7 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                         </div>
 
                         {/* Brand & Lokasi Rak */}
-                        {((prod as any).brand || (prod as any).storageLocation) && (
+                        {showBrandRak && ((prod as any).brand || (prod as any).storageLocation) && (
                           <div className="flex items-center justify-center gap-1 text-[8px] text-slate-600 font-bold truncate max-w-full">
                             {(prod as any).brand && <span>{(prod as any).brand}</span>}
                             {(prod as any).storageLocation && <span>• 📍 {(prod as any).storageLocation}</span>}
@@ -984,7 +1056,7 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                       <div style={{ fontSize: '7.5pt', fontWeight: 800, textTransform: 'uppercase', lineHeight: 1.15, marginTop: '0.6mm', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {prod.name}
                       </div>
-                      {((prod as any).brand || (prod as any).storageLocation) && (
+                      {showBrandRak && ((prod as any).brand || (prod as any).storageLocation) && (
                         <div style={{ fontSize: '6pt', fontWeight: 700, color: '#333', marginTop: '0.4mm', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                           {(prod as any).brand ? `${(prod as any).brand} ` : ''}
                           {(prod as any).storageLocation ? `• 📍 ${(prod as any).storageLocation}` : ''}
@@ -1027,7 +1099,7 @@ export const BarcodeLabelPrintModal: React.FC<BarcodeLabelPrintModalProps> = ({
                     {prod.name}
                   </div>
 
-                  {((prod as any).brand || (prod as any).storageLocation) && (
+                  {showBrandRak && ((prod as any).brand || (prod as any).storageLocation) && (
                     <div style={{ fontSize: '6pt', fontWeight: 700, color: '#333', marginTop: '0.4mm', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                       {(prod as any).brand ? `${(prod as any).brand} ` : ''}
                       {(prod as any).storageLocation ? `• 📍 ${(prod as any).storageLocation}` : ''}

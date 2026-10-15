@@ -944,6 +944,12 @@ model Settings {
   faviconUrl           String?
   hidePlatformBranding Boolean @default(false)
   enableTieredPricing  Boolean @default(true)
+  barcodeLabelPreset       String  @default("medium")
+  barcodeLabelDesign       String  @default("landscape_split")
+  barcodeLabelShowPrice    Boolean @default(true)
+  barcodeLabelShowStore    Boolean @default(true)
+  barcodeLabelShowBrandRak Boolean @default(true)
+  barcodeLabelPriceTier    String  @default("retail")
 
   @@index([tenantId])
   @@index([outletId])

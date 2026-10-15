@@ -99,6 +99,7 @@ if (target === 'backend') {
     cd backend
     npm install
     npx prisma generate
+    node scripts/migrate_barcode_settings.js
     npx tsc
     pm2 restart ${pm2Service}
     

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Download, RotateCcw, Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Shirt, AlertCircle, Wrench } from 'lucide-react';
+import { Download, RotateCcw, Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Shirt, AlertCircle, Wrench, Barcode } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
 import { useSearchParams } from 'react-router-dom';
 import SettingsBluetoothPrinter from './settings/SettingsBluetoothPrinter';
+import SettingsBarcodePrinter from './settings/SettingsBarcodePrinter';
 import TenantResetModal from './TenantResetModal';
 import RecycleBinModal from './RecycleBinModal';
 import TenantPWASection from './TenantPWASection';
@@ -201,6 +202,13 @@ const SettingsView = () => {
     barPrinterIp: '',
     barPrinterPort: 9100,
     autoPrintBar: false,
+    // Printer Barcode & Label Stiker
+    barcodeLabelPreset: 'medium',
+    barcodeLabelDesign: 'landscape_split',
+    barcodeLabelShowPrice: true,
+    barcodeLabelShowStore: true,
+    barcodeLabelShowBrandRak: true,
+    barcodeLabelPriceTier: 'retail',
     // KDS
     enableKDS: true,
     autoCompleteKDSOnPay: true,
@@ -586,6 +594,14 @@ const SettingsView = () => {
       label: 'Printer Bluetooth', 
       desc: 'Koneksi printer thermal mobile Android & Web Bluetooth', 
       icon: Printer, 
+      category: 'pos', 
+      show: true 
+    },
+    { 
+      id: 'printer_barcode', 
+      label: 'Printer Barcode & Label', 
+      desc: 'Ukuran kertas stiker default, gaya desain 2-kolom, & data tercetak', 
+      icon: Barcode, 
       category: 'pos', 
       show: true 
     },
@@ -3291,6 +3307,30 @@ const SettingsView = () => {
               </div>
               
               <SettingsBluetoothPrinter />
+            </div>
+          )}
+
+          {/* ─── Tab Printer Barcode & Label Stiker ─── */}
+          {activeTab === 'printer_barcode' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-700">
+                  <Barcode size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Pengaturan Printer Barcode &amp; Label Stiker</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Konfigurasi hardware printer barcode (USB / Bluetooth), preset ukuran kertas stiker default, dan susunan data.
+                  </p>
+                </div>
+              </div>
+              
+              <SettingsBarcodePrinter 
+                formData={formData} 
+                setFormData={setFormData} 
+                handleSave={handleSave} 
+                token={posContext?.token} 
+              />
             </div>
           )}
 
