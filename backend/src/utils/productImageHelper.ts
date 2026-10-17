@@ -47,10 +47,10 @@ export const CURATED_FOOD_IMAGES: Record<string, string[]> = {
     'https://images.unsplash.com/photo-1558030006-450675393462?w=500&auto=format&fit=crop'
   ],
   snack_bites: [
-    'https://images.unsplash.com/photo-1576107232684-1279f3908594?w=500&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?w=500&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1496116218417-1a781b1c416c?w=500&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1615361200141-f45040f367be?w=500&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=500&auto=format&fit=crop'
+    'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=500&auto=format&fit=crop'
   ],
   pastry_dessert: [
     'https://images.unsplash.com/photo-1555507036-ab1f4038808a?w=500&auto=format&fit=crop',
