@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import { 
   X, Image as ImageIcon, RefreshCw, ScanBarcode, Package, Tag, Layers, 
   Beaker, Plus, Trash2, Info, AlertTriangle, Check, UploadCloud,
-  Search, ChevronDown, CheckCircle2, Sparkles, Filter 
+  Search, ChevronDown, CheckCircle2, Sparkles, Filter, Camera
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -74,6 +74,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -122,6 +123,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 
@@ -344,7 +346,14 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 {/* Kolom Kiri: Foto & Barcode */}
                 <div className="md:col-span-1 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Foto Produk</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Foto Produk</label>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Camera size={11} /> Support Kamera HP
+                      </span>
+                    </div>
+
+                    {/* Hidden inputs: 1 for gallery, 1 for mobile camera capture */}
                     <input 
                       type="file" 
                       ref={fileInputRef} 
@@ -352,14 +361,23 @@ const ProductModal: React.FC<ProductModalProps> = ({
                       onChange={handleFileChange} 
                       className="hidden" 
                     />
+                    <input 
+                      type="file" 
+                      ref={cameraInputRef} 
+                      accept="image/*" 
+                      capture="environment" 
+                      onChange={handleFileChange} 
+                      className="hidden" 
+                    />
+
+                    {/* Photo Box Container */}
                     <div 
-                      onClick={() => !uploading && fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-2xl bg-slate-50 h-44 flex flex-col items-center justify-center text-center cursor-pointer transition-all relative overflow-hidden group"
+                      className="border-2 border-dashed border-slate-200 hover:border-indigo-500 rounded-2xl bg-slate-50 h-44 flex flex-col items-center justify-center text-center transition-all relative overflow-hidden group shadow-2xs"
                     >
                       {uploading ? (
                         <div className="flex flex-col items-center justify-center p-4">
-                          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mb-2"></div>
-                          <span className="text-xs font-bold text-slate-600">Mengunggah foto...</span>
+                          <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+                          <span className="text-xs font-bold text-slate-700">Mengompres & Menyimpan Foto...</span>
                         </div>
                       ) : formData.imageUrl ? (
                         <>
@@ -372,30 +390,91 @@ const ProductModal: React.FC<ProductModalProps> = ({
                               (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
                             }}
                           />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <span className="text-white text-xs font-bold bg-black/60 px-3 py-1.5 rounded-xl backdrop-blur-sm shadow">Ganti Foto</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setFormData(prev => ({ ...prev, imageUrl: '' }));
-                              }}
-                              className="text-white text-xs font-bold bg-rose-600/90 hover:bg-rose-700 px-3 py-1.5 rounded-xl backdrop-blur-sm shadow flex items-center gap-1"
-                            >
-                              <Trash2 size={13} /> Hapus
-                            </button>
+                          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity p-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => cameraInputRef.current?.click()}
+                                className="text-white text-xs font-bold bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-xl backdrop-blur-sm shadow flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
+                              >
+                                <Camera size={13} /> Potret
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="text-white text-xs font-bold bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-xl backdrop-blur-sm shadow flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
+                              >
+                                <UploadCloud size={13} /> Galeri
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setFormData(prev => ({ ...prev, imageUrl: '' }))}
+                                className="text-white text-xs font-bold bg-rose-600 hover:bg-rose-700 px-2.5 py-1.5 rounded-xl backdrop-blur-sm shadow flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
+                                title="Hapus foto"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
                           </div>
                         </>
                       ) : (
-                        <div className="p-4">
-                          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600 mx-auto mb-2">
-                            <UploadCloud size={20} />
+                        <div className="p-4 flex flex-col items-center justify-center">
+                          <div className="flex items-center gap-2.5 mb-2.5">
+                            <button
+                              type="button"
+                              onClick={() => cameraInputRef.current?.click()}
+                              className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center shadow-xs transition-transform active:scale-95 cursor-pointer"
+                              title="Buka Kamera HP"
+                            >
+                              <Camera size={22} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 flex items-center justify-center shadow-xs transition-transform active:scale-95 cursor-pointer"
+                              title="Buka Galeri File"
+                            >
+                              <UploadCloud size={22} />
+                            </button>
                           </div>
-                          <span className="text-xs font-bold text-slate-700 block">Pilih Foto Produk</span>
-                          <span className="text-[10px] text-slate-400 mt-0.5 block">JPG, PNG, WEBP (Max 10MB)</span>
+                          <span className="text-xs font-bold text-slate-800 block">Ambil Foto atau Pilih Gambar</span>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">Format JPG, PNG, WEBP (Max 15MB)</span>
                         </div>
                       )}
                     </div>
+
+                    {/* Dedicated Action Buttons for Touch / Mobile View */}
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => !uploading && cameraInputRef.current?.click()}
+                        disabled={uploading}
+                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs shadow-sm shadow-emerald-600/20 flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                      >
+                        <Camera size={15} />
+                        <span>{formData.imageUrl ? 'Potret Ulang' : 'Potret Kamera'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => !uploading && fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                      >
+                        <ImageIcon size={15} />
+                        <span>Pilih Galeri</span>
+                      </button>
+                    </div>
+
+                    {formData.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, imageUrl: '' }))}
+                        className="w-full mt-1.5 py-1.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <Trash2 size={12} /> Hapus Foto Produk
+                      </button>
+                    )}
                   </div>
 
                   <div>
