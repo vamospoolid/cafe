@@ -222,6 +222,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       if (ru === 'KASIR' && (roleUpper === 'KASIR' || roleUpper === 'CASHIER' || roleUpper === 'OWNER' || roleUpper === 'ADMIN')) return true;
       if (ru === 'DAPUR' && (roleUpper === 'DAPUR' || roleUpper === 'KITCHEN' || roleUpper === 'OWNER' || roleUpper === 'ADMIN')) return true;
       if (ru === 'GUDANG' && (roleUpper === 'GUDANG' || roleUpper === 'WAREHOUSE' || roleUpper === 'OWNER' || roleUpper === 'ADMIN')) return true;
+      if (ru === 'WAITERS' && (roleUpper === 'WAITERS' || roleUpper === 'WAITER' || roleUpper === 'PRAMUSAJI' || roleUpper === 'PELAYAN' || roleUpper === 'OWNER' || roleUpper === 'ADMIN')) return true;
       return ru === roleUpper;
     });
   };
@@ -267,7 +268,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <span>Dashboard</span>
               </NavLink>
             )}
-            {checkAccess(['Admin', 'Kasir']) && (
+            {checkAccess(['Admin', 'Kasir', 'Waiters']) && (
               <NavLink to="/pos" title={profile.orderTerm || "POS / Penjualan"} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <ShoppingCart size={20} className="shrink-0" />
                 <span>{profile.orderTerm || 'POS / Penjualan'}</span>
@@ -314,7 +315,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </NavLink>
             )}
 
-            {isKDSEnabled && checkAccess(['Admin', 'Dapur']) && (
+            {isKDSEnabled && checkAccess(['Admin', 'Dapur', 'Waiters']) && (
               <NavLink to="/kds" title="Dapur (KDS)" className={({isActive}) => `nav-item relative ${isActive ? 'active' : ''}`}>
                 <ChefHat size={20} className="shrink-0" />
                 <span>Dapur (KDS)</span>
@@ -345,13 +346,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <span>{profile.itemTerm || 'Produk'}</span>
               </NavLink>
             )}
-            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir']) && (
+            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir', 'Waiters']) && (
               <NavLink to="/reservasi" title="Reservasi" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Calendar size={20} className="shrink-0" />
                 <span>Reservasi</span>
               </NavLink>
             )}
-            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir', 'Dapur']) && (
+            {profile.enableTables && isCafe && checkAccess(['Admin', 'Kasir', 'Dapur', 'Waiters']) && (
               <NavLink to="/meja" title={profile.tableTerm || 'Nomor Meja'} className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <Grid size={20} className="shrink-0" />
                 <span>{profile.tableTerm || 'Nomor Meja'}</span>
@@ -399,9 +400,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </>
             )}
 
-            <div className="sidebar-section-title">
-              <span>SDM</span>
-            </div>
+            {checkAccess(['Admin', 'Kasir']) && (
+              <div className="sidebar-section-title">
+                <span>SDM</span>
+              </div>
+            )}
 
             {checkAccess(['Admin']) && (
               <NavLink to="/karyawan" title="Pengguna & Karyawan" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
@@ -452,6 +455,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 <NavLink to="/audit-log" title="Audit Trail Log" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <ShieldAlert size={20} className="shrink-0" />
                   <span>Audit Trail Log</span>
+                </NavLink>
+                <NavLink to="/draft-menu" title="Upload Draft Menu" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Sparkles size={20} className="shrink-0 text-amber-400" />
+                  <span>Upload Draft Menu</span>
                 </NavLink>
                 <NavLink to="/pengaturan" title="Pengaturan Sistem" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Settings size={20} className="shrink-0" />

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { POSContext } from '../../context/POSContext';
 import { toast } from '../../utils/alert';
-import { offlineDB } from '../../utils/offlineDb';
+import { offlineDb } from '../../db/offlineDb';
 
 interface ResetStandaloneModalProps {
   isOpen: boolean;
@@ -125,7 +125,7 @@ export const ResetStandaloneModal: React.FC<ResetStandaloneModalProps> = ({
       // Step 3.3: Clear offline client cache (IndexedDB)
       setActiveStepText('Membersihkan cache lokal peramban (IndexedDB)...');
       try {
-        await offlineDB.clearOperationalCache();
+        await offlineDb.clearCatalogCache(posContext?.user?.tenantId);
       } catch (cacheErr) {
         console.warn('Gagal membersihkan cache offline:', cacheErr);
       }

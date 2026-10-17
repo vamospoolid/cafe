@@ -97,6 +97,43 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       }
     }
 
+    // Merge custom special permissions dari userExists.permissions
+    let customPerms: any = {};
+    try {
+      if (userExists.permissions) {
+        customPerms = typeof userExists.permissions === 'string' ? JSON.parse(userExists.permissions) : userExists.permissions;
+        if (customPerms.canVoid === false) {
+          permissionsArray = permissionsArray.filter(k => k !== 'pos.void');
+        } else if (customPerms.canVoid === true && !permissionsArray.includes('pos.void')) {
+          permissionsArray.push('pos.void');
+        }
+
+        if (customPerms.canDiscount === false) {
+          permissionsArray = permissionsArray.filter(k => k !== 'pos.discount');
+        } else if (customPerms.canDiscount === true && !permissionsArray.includes('pos.discount')) {
+          permissionsArray.push('pos.discount');
+        }
+
+        if (customPerms.canEditMenu === false) {
+          permissionsArray = permissionsArray.filter(k => k !== 'products.manage');
+        } else if (customPerms.canEditMenu === true && !permissionsArray.includes('products.manage')) {
+          permissionsArray.push('products.manage');
+        }
+
+        if (customPerms.canViewReports === false) {
+          permissionsArray = permissionsArray.filter(k => k !== 'reports.view');
+        } else if (customPerms.canViewReports === true && !permissionsArray.includes('reports.view')) {
+          permissionsArray.push('reports.view');
+        }
+
+        if (customPerms.canManageStaff === false) {
+          permissionsArray = permissionsArray.filter(k => k !== 'employees.manage');
+        } else if (customPerms.canManageStaff === true && !permissionsArray.includes('employees.manage')) {
+          permissionsArray.push('employees.manage');
+        }
+      }
+    } catch (_) {}
+
     // Fallback untuk legacy legacy boolean object permissions jika belum terisi
     if (permissionsArray.length === 0 && verified.permissions && typeof verified.permissions === 'object') {
       if (verified.permissions.canVoid) permissionsArray.push('pos.void');

@@ -61,19 +61,49 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
     permissionKeys = activeMembership.role.permissions.map(rp => rp.permission.key);
   }
 
+  // Parse custom special permissions dari user.permissions
+  let customPerms: any = {};
+  try {
+    if (user.permissions) {
+      customPerms = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions;
+    }
+  } catch (e) {}
+
+  // Apply custom privileges: if explicitly false, remove from permissionKeys!
+  if (customPerms.canVoid === false) {
+    permissionKeys = permissionKeys.filter(k => k !== 'pos.void');
+  } else if (customPerms.canVoid === true && !permissionKeys.includes('pos.void')) {
+    permissionKeys.push('pos.void');
+  }
+
+  if (customPerms.canDiscount === false) {
+    permissionKeys = permissionKeys.filter(k => k !== 'pos.discount');
+  } else if (customPerms.canDiscount === true && !permissionKeys.includes('pos.discount')) {
+    permissionKeys.push('pos.discount');
+  }
+
+  if (customPerms.canEditMenu === false) {
+    permissionKeys = permissionKeys.filter(k => k !== 'products.manage');
+  } else if (customPerms.canEditMenu === true && !permissionKeys.includes('products.manage')) {
+    permissionKeys.push('products.manage');
+  }
+
+  if (customPerms.canViewReports === false) {
+    permissionKeys = permissionKeys.filter(k => k !== 'reports.view');
+  } else if (customPerms.canViewReports === true && !permissionKeys.includes('reports.view')) {
+    permissionKeys.push('reports.view');
+  }
+
+  if (customPerms.canManageStaff === false) {
+    permissionKeys = permissionKeys.filter(k => k !== 'employees.manage');
+  } else if (customPerms.canManageStaff === true && !permissionKeys.includes('employees.manage')) {
+    permissionKeys.push('employees.manage');
+  }
+
   // Fallback default permissions jika belum ada role mapping
   if (permissionKeys.length === 0) {
-    try {
-      const parsedLegacy = JSON.parse(user.permissions || '{}');
-      if (parsedLegacy.canVoid) permissionKeys.push('pos.void');
-      if (parsedLegacy.canDiscount) permissionKeys.push('pos.discount');
-      if (parsedLegacy.canEditMenu) permissionKeys.push('products.manage');
-      if (parsedLegacy.canViewReports) permissionKeys.push('reports.view');
-      if (parsedLegacy.canManageStaff) permissionKeys.push('employees.manage');
-    } catch (e) {}
-
     const userRoleUpper = String(activeRoleName || user.role || '').toUpperCase();
-    if (['ADMIN', 'OWNER', 'SUPERADMIN'].includes(userRoleUpper)) {
+    if (['ADMIN', 'OWNER', 'SUPERADMIN', 'MANAGER'].includes(userRoleUpper)) {
       permissionKeys.push(
         'pos.view', 'pos.create', 'pos.discount', 'pos.void', 'pos.reprint',
         'tables.view', 'tables.manage', 'reservations.view', 'reservations.manage',
@@ -90,11 +120,11 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
   // Backward-compatible boolean object untuk frontend legacy
   const isPrivilegedRole = ['OWNER', 'ADMIN', 'SUPERADMIN'].includes(String(activeRoleName || user.role || '').toUpperCase()) || Boolean(user.isPlatformAdmin);
   const legacyPermissions = {
-    canVoid: permissionKeys.includes('pos.void') || isPrivilegedRole,
-    canDiscount: permissionKeys.includes('pos.discount') || isPrivilegedRole,
-    canEditMenu: permissionKeys.includes('products.manage') || isPrivilegedRole,
-    canViewReports: permissionKeys.includes('reports.view') || isPrivilegedRole,
-    canManageStaff: permissionKeys.includes('employees.manage') || isPrivilegedRole
+    canVoid: isPrivilegedRole || (customPerms.canVoid !== undefined ? Boolean(customPerms.canVoid) : permissionKeys.includes('pos.void')),
+    canDiscount: isPrivilegedRole || (customPerms.canDiscount !== undefined ? Boolean(customPerms.canDiscount) : permissionKeys.includes('pos.discount')),
+    canEditMenu: isPrivilegedRole || (customPerms.canEditMenu !== undefined ? Boolean(customPerms.canEditMenu) : permissionKeys.includes('products.manage')),
+    canViewReports: isPrivilegedRole || (customPerms.canViewReports !== undefined ? Boolean(customPerms.canViewReports) : permissionKeys.includes('reports.view')),
+    canManageStaff: isPrivilegedRole || (customPerms.canManageStaff !== undefined ? Boolean(customPerms.canManageStaff) : permissionKeys.includes('employees.manage'))
   };
 
   const tokenPayload = {

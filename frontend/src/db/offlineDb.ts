@@ -169,50 +169,54 @@ export class CodenusaOfflineDatabase extends Dexie {
     const activeTenantId = params.settings?.tenantId || this.getActiveTenantId();
 
     return this.transaction('rw', [this.cachedProducts, this.cachedCategories, this.cachedTables, this.cachedSettings], async () => {
-      if (params.products && params.products.length > 0) {
-        const normalized = params.products.map(p => {
-          const val = Number(p.sellPrice ?? p.price ?? 0);
-          return {
-            ...p,
-            tenantId: p.tenantId || activeTenantId,
-            price: val,
-            sellPrice: val
-          };
-        });
-
-        // Partisi penghapusan: jika ada activeTenantId, bersihkan hanya katalog tenant bersangkutan
+      if (Array.isArray(params.products)) {
         if (activeTenantId) {
           await this.cachedProducts.where('tenantId').equals(activeTenantId).delete();
         } else {
           await this.cachedProducts.clear();
         }
-        await this.cachedProducts.bulkPut(normalized);
+        if (params.products.length > 0) {
+          const normalized = params.products.map(p => {
+            const val = Number(p.sellPrice ?? p.price ?? 0);
+            return {
+              ...p,
+              tenantId: p.tenantId || activeTenantId,
+              price: val,
+              sellPrice: val
+            };
+          });
+          await this.cachedProducts.bulkPut(normalized);
+        }
       }
 
-      if (params.categories && params.categories.length > 0) {
-        const normalizedCats = params.categories.map(c => ({
-          ...c,
-          tenantId: c.tenantId || activeTenantId
-        }));
+      if (Array.isArray(params.categories)) {
         if (activeTenantId) {
           await this.cachedCategories.where('tenantId').equals(activeTenantId).delete();
         } else {
           await this.cachedCategories.clear();
         }
-        await this.cachedCategories.bulkPut(normalizedCats);
+        if (params.categories.length > 0) {
+          const normalizedCats = params.categories.map(c => ({
+            ...c,
+            tenantId: c.tenantId || activeTenantId
+          }));
+          await this.cachedCategories.bulkPut(normalizedCats);
+        }
       }
 
-      if (params.tables && params.tables.length > 0) {
-        const normalizedTables = params.tables.map(t => ({
-          ...t,
-          tenantId: t.tenantId || activeTenantId
-        }));
+      if (Array.isArray(params.tables)) {
         if (activeTenantId) {
           await this.cachedTables.where('tenantId').equals(activeTenantId).delete();
         } else {
           await this.cachedTables.clear();
         }
-        await this.cachedTables.bulkPut(normalizedTables);
+        if (params.tables.length > 0) {
+          const normalizedTables = params.tables.map(t => ({
+            ...t,
+            tenantId: t.tenantId || activeTenantId
+          }));
+          await this.cachedTables.bulkPut(normalizedTables);
+        }
       }
 
       if (params.settings) {

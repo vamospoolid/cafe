@@ -415,12 +415,37 @@ export const StaffPWAView: React.FC = () => {
     fetchSettingsAndShifts();
   }, [token, user?.tenantId]);
 
-  // Synchronize SOP checklist to vertical preset dynamically
-  useEffect(() => {
+  // Helper to load dynamic SOP from settings or fallback to vertical preset
+  const getDynamicSopList = (type: 'OPENING' | 'CLOSING') => {
+    if (settings?.dailySopChecklist) {
+      try {
+        const raw = settings.dailySopChecklist;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const filtered = parsed
+            .filter((item: any) => item.type === type)
+            .map((item: any) => ({
+              id: item.id || `sop_${Math.random()}`,
+              text: item.text,
+              checked: false,
+              category: item.category || 'bar',
+              targetRole: item.targetRole
+            }));
+          if (filtered.length > 0) return filtered;
+        }
+      } catch (e) {
+        console.error('Error parsing dynamic dailySopChecklist in StaffPWA:', e);
+      }
+    }
     const bType = (settings?.businessType || user?.tenant?.businessType || 'CAFE').toUpperCase();
     const preset = VERTICAL_SOP_PRESETS[bType] || VERTICAL_SOP_PRESETS.CAFE;
-    setSopList(sopType === 'OPENING' ? preset.opening : preset.closing);
-  }, [settings?.businessType, sopType]);
+    return type === 'OPENING' ? preset.opening : preset.closing;
+  };
+
+  // Synchronize SOP checklist dynamically from settings.dailySopChecklist or vertical preset fallback
+  useEffect(() => {
+    setSopList(getDynamicSopList(sopType));
+  }, [settings?.dailySopChecklist, settings?.businessType, sopType]);
 
   // Request GPS Location
   const requestGpsLocation = () => {
@@ -2111,8 +2136,7 @@ export const StaffPWAView: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setSopType('OPENING');
-                          const preset = VERTICAL_SOP_PRESETS[businessType] || VERTICAL_SOP_PRESETS.CAFE;
-                          setSopList(preset.opening);
+                          setSopList(getDynamicSopList('OPENING'));
                         }}
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
                           sopType === 'OPENING' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-500'
@@ -2124,8 +2148,7 @@ export const StaffPWAView: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setSopType('CLOSING');
-                          const preset = VERTICAL_SOP_PRESETS[businessType] || VERTICAL_SOP_PRESETS.CAFE;
-                          setSopList(preset.closing);
+                          setSopList(getDynamicSopList('CLOSING'));
                         }}
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
                           sopType === 'CLOSING' ? 'bg-[#7C3AED] text-white shadow-sm' : 'text-slate-500'

@@ -48,11 +48,11 @@ router.get('/roles-permissions', authenticateToken, requirePermission('employees
       const roleName = r.name.toUpperCase();
       if (businessType === 'BENGKEL') {
         // Bengkel tidak memiliki dapur / barista / waiter
-        return roleName !== 'KITCHEN' && roleName !== 'WAITER';
+        return roleName !== 'KITCHEN' && roleName !== 'WAITER' && roleName !== 'WAITERS';
       }
       if (businessType === 'RETAIL') {
         // Retail tidak memiliki dapur dan mekanik servis
-        return roleName !== 'KITCHEN' && roleName !== 'WAITER' && roleName !== 'MEKANIK';
+        return roleName !== 'KITCHEN' && roleName !== 'WAITER' && roleName !== 'WAITERS' && roleName !== 'MEKANIK';
       }
       // Kafe / Resto tidak memiliki mekanik
       return roleName !== 'MEKANIK';
@@ -78,6 +78,11 @@ router.get('/roles-permissions', authenticateToken, requirePermission('employees
         else if (roleName === 'CASHIER') customDesc = 'Kasir Toko';
         else if (roleName === 'WAREHOUSE') customDesc = 'Staf Gudang & Logistik';
         else if (roleName === 'HR') customDesc = 'Personalia';
+      } else {
+        // Profile F&B / CAFE / RESTO
+        if (roleName === 'WAITERS' || roleName === 'WAITER') {
+          customDesc = 'Pramusaji / Waiters - Melayani pesanan meja & customer';
+        }
       }
 
       return {
@@ -227,11 +232,15 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
 
-    // Cari user yang tergabung dalam membership tenant aktif
+    // Cari user yang tergabung dalam membership tenant aktif (abaikan yang DELETED)
     const memberships = await prisma.tenantMembership.findMany({
       where: {
         tenantId,
-        user: { tenantId }
+        status: { not: 'DELETED' },
+        user: {
+          tenantId,
+          status: { not: 'DELETED' }
+        }
       },
       include: {
         user: {
@@ -243,6 +252,7 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
             employmentType: true,
             pin: true,
             status: true,
+            permissions: true,
             createdAt: true,
             mechanicProfile: true
           }
@@ -273,6 +283,7 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
           if (legacyUpper === 'ADMIN') resolvedRole = 'ADMIN';
           else if (legacyUpper === 'OWNER') resolvedRole = 'OWNER';
           else if (legacyUpper === 'KASIR' || legacyUpper === 'CASHIER') resolvedRole = 'CASHIER';
+          else if (legacyUpper === 'WAITER' || legacyUpper === 'WAITERS') resolvedRole = 'WAITERS';
           else if (legacyUpper === 'STAFF') resolvedRole = m.user.mechanicProfile ? 'MEKANIK' : 'STAFF';
           else resolvedRole = legacyUpper;
         }
@@ -280,6 +291,52 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
         resolvedRole = 'MEKANIK';
       }
       if (!resolvedRole) resolvedRole = 'CASHIER';
+
+      // Parse custom special permissions dari user record
+      let customPerms: any = {};
+      try {
+        if (m.user.permissions) {
+          customPerms = typeof m.user.permissions === 'string' ? JSON.parse(m.user.permissions) : m.user.permissions;
+        }
+      } catch (_) {}
+
+      const isPrivileged = resolvedRole === 'OWNER' || resolvedRole === 'ADMIN' || resolvedRole === 'SUPERADMIN';
+      const canVoid = isPrivileged || (customPerms.canVoid !== undefined ? Boolean(customPerms.canVoid) : permissionKeys.includes('pos.void'));
+      const canDiscount = isPrivileged || (customPerms.canDiscount !== undefined ? Boolean(customPerms.canDiscount) : permissionKeys.includes('pos.discount'));
+      const canEditMenu = isPrivileged || (customPerms.canEditMenu !== undefined ? Boolean(customPerms.canEditMenu) : permissionKeys.includes('products.manage'));
+      const canViewReports = isPrivileged || (customPerms.canViewReports !== undefined ? Boolean(customPerms.canViewReports) : permissionKeys.includes('reports.view'));
+      const canManageStaff = isPrivileged || (customPerms.canManageStaff !== undefined ? Boolean(customPerms.canManageStaff) : permissionKeys.includes('employees.manage'));
+
+      let effectivePermissionKeys = [...permissionKeys];
+      if (canVoid) {
+        if (!effectivePermissionKeys.includes('pos.void')) effectivePermissionKeys.push('pos.void');
+      } else {
+        effectivePermissionKeys = effectivePermissionKeys.filter(k => k !== 'pos.void');
+      }
+
+      if (canDiscount) {
+        if (!effectivePermissionKeys.includes('pos.discount')) effectivePermissionKeys.push('pos.discount');
+      } else {
+        effectivePermissionKeys = effectivePermissionKeys.filter(k => k !== 'pos.discount');
+      }
+
+      if (canEditMenu) {
+        if (!effectivePermissionKeys.includes('products.manage')) effectivePermissionKeys.push('products.manage');
+      } else {
+        effectivePermissionKeys = effectivePermissionKeys.filter(k => k !== 'products.manage');
+      }
+
+      if (canViewReports) {
+        if (!effectivePermissionKeys.includes('reports.view')) effectivePermissionKeys.push('reports.view');
+      } else {
+        effectivePermissionKeys = effectivePermissionKeys.filter(k => k !== 'reports.view');
+      }
+
+      if (canManageStaff) {
+        if (!effectivePermissionKeys.includes('employees.manage')) effectivePermissionKeys.push('employees.manage');
+      } else {
+        effectivePermissionKeys = effectivePermissionKeys.filter(k => k !== 'employees.manage');
+      }
 
       return {
         id: m.user.id,
@@ -290,13 +347,13 @@ router.get('/', authenticateToken, requirePermission('employees.view'), async (r
         employmentType: m.employmentType || m.user.employmentType || 'FULL_TIME',
         pin: m.pin || m.user.pin,
         status: m.status === 'ACTIVE' ? 'Aktif' : 'Nonaktif',
-        permissionKeys,
+        permissionKeys: effectivePermissionKeys,
         permissions: {
-          canVoid: permissionKeys.includes('pos.void') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
-          canDiscount: permissionKeys.includes('pos.discount') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
-          canEditMenu: permissionKeys.includes('products.manage') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
-          canViewReports: permissionKeys.includes('reports.view') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN',
-          canManageStaff: permissionKeys.includes('employees.manage') || resolvedRole === 'OWNER' || resolvedRole === 'ADMIN'
+          canVoid,
+          canDiscount,
+          canEditMenu,
+          canViewReports,
+          canManageStaff
         },
         createdAt: m.user.createdAt
       };
@@ -489,6 +546,9 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
     if (employmentType) {
       updateUserData.employmentType = employmentType;
     }
+    if (permissions !== undefined) {
+      updateUserData.permissions = typeof permissions === 'string' ? permissions : JSON.stringify(permissions);
+    }
 
     const updatedUser = Object.keys(updateUserData).length > 0
       ? await prisma.user.update({
@@ -568,7 +628,7 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
   }
 });
 
-// DELETE /api/users/:id - Nonaktifkan staf dari tenant (Soft delete)
+// DELETE /api/users/:id - Hapus akun staf dari tenant (Safe delete & Audit safe)
 router.delete('/:id', authenticateToken, requirePermission('employees.manage'), async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenantId;
@@ -576,12 +636,17 @@ router.delete('/:id', authenticateToken, requirePermission('employees.manage'), 
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
     const { id } = req.params;
+    const numericId = Number(id);
+
+    if (isNaN(numericId)) {
+      return res.status(400).json({ error: 'ID karyawan tidak valid' });
+    }
 
     // USR-003: Strict membership validation
     const targetMembership = await prisma.tenantMembership.findUnique({
       where: {
         userId_tenantId: {
-          userId: Number(id),
+          userId: numericId,
           tenantId
         }
       },
@@ -596,31 +661,91 @@ router.delete('/:id', authenticateToken, requirePermission('employees.manage'), 
     if (!targetUser) return res.status(404).json({ error: 'User tidak ditemukan' });
 
     if (targetUser.id === req.user?.id) {
-      return res.status(400).json({ error: 'Tidak dapat menonaktifkan akun sendiri.' });
+      return res.status(400).json({ error: 'Tidak dapat menghapus akun sendiri yang sedang aktif digunakan.' });
     }
 
-    // Suspend membership di tenant ini
-    await prisma.tenantMembership.updateMany({
-      where: { userId: Number(id), tenantId },
-      data: { status: 'SUSPENDED' }
-    });
+    // Periksa riwayat transaksi / finansial yang terikat dengan foreign key
+    const [orderCount, cashCount, attCount, shiftCount, poCount, ingCount, loanCount] = await Promise.all([
+      prisma.order.count({ where: { userId: numericId } }),
+      prisma.cashFlow.count({ where: { userId: numericId } }),
+      prisma.attendance.count({ where: { userId: numericId } }),
+      prisma.shift.count({ where: { userId: numericId } }),
+      prisma.purchaseOrder.count({ where: { userId: numericId } }),
+      prisma.ingredientLog.count({ where: { userId: numericId } }),
+      prisma.employeeLoan.count({ where: { userId: numericId } })
+    ]);
+    const totalTransactions = orderCount + cashCount + attCount + shiftCount + poCount + ingCount + loanCount;
 
-    // Audit Log: User Suspend
-    await AuditLogger.log({
-      tenantId,
-      action: 'USER_SUSPEND',
-      resource: 'USER',
-      resourceId: String(id),
-      description: `Menonaktifkan akses staf "${targetUser.name}" (@${targetUser.username}).`,
-      oldValue: { status: 'ACTIVE' },
-      newValue: { status: 'SUSPENDED' },
-      severity: 'WARNING'
-    }, req);
+    if (totalTransactions === 0) {
+      // 1. Akun bersih tanpa riwayat transaksi: Lakukan Hard Delete sepenuhnya
+      await prisma.tenantMembership.deleteMany({
+        where: { userId: numericId, tenantId }
+      });
+      await prisma.userSession.deleteMany({
+        where: { userId: numericId }
+      });
+      const remainingMemberships = await prisma.tenantMembership.count({
+        where: { userId: numericId }
+      });
+      if (remainingMemberships === 0) {
+        await prisma.user.delete({
+          where: { id: numericId }
+        });
+      }
 
-    res.json({ message: 'Status karyawan berhasil dinonaktifkan dari outlet ini.' });
+      await AuditLogger.log({
+        tenantId,
+        action: 'USER_DELETE',
+        resource: 'USER',
+        resourceId: String(numericId),
+        description: `Menghapus akun staf "${targetUser.name}" (@${targetUser.username}) secara permanen (tanpa riwayat transaksi).`,
+        oldValue: { name: targetUser.name, username: targetUser.username },
+        severity: 'WARNING'
+      }, req);
+
+      return res.json({
+        success: true,
+        message: `Akun staf "${targetUser.name}" berhasil dihapus permanen dari sistem.`
+      });
+    } else {
+      // 2. Akun memiliki riwayat transaksi/finansial:
+      // Lepaskan membership dari tenant dan lakukan soft-delete + anonymize username
+      // agar username asli dapat didaftarkan kembali untuk karyawan baru
+      await prisma.tenantMembership.deleteMany({
+        where: { userId: numericId, tenantId }
+      });
+      await prisma.userSession.deleteMany({
+        where: { userId: numericId }
+      });
+
+      const deletedUsername = `${targetUser.username}__del_${Date.now()}`;
+      await prisma.user.update({
+        where: { id: numericId },
+        data: {
+          status: 'DELETED',
+          username: deletedUsername
+        }
+      });
+
+      await AuditLogger.log({
+        tenantId,
+        action: 'USER_DELETE',
+        resource: 'USER',
+        resourceId: String(numericId),
+        description: `Menghapus staf "${targetUser.name}" (@${targetUser.username}) dari outlet. Riwayat ${totalTransactions} transaksi masa lalu tetap diarsipkan untuk integritas laporan finansial.`,
+        oldValue: { name: targetUser.name, username: targetUser.username, status: targetUser.status },
+        newValue: { status: 'DELETED', username: deletedUsername },
+        severity: 'WARNING'
+      }, req);
+
+      return res.json({
+        success: true,
+        message: `Akun staf "${targetUser.name}" berhasil dihapus dari outlet Anda. Riwayat ${totalTransactions} transaksi masa lalu tetap tersimpan rapi untuk laporan keuangan.`
+      });
+    }
   } catch (error) {
     console.error('Delete employee error:', error);
-    res.status(500).json({ error: 'Gagal menonaktifkan akun karyawan' });
+    res.status(500).json({ error: 'Gagal menghapus akun karyawan' });
   }
 });
 

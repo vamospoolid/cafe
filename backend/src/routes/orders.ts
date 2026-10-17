@@ -167,23 +167,49 @@ export const generateOrderNumber = async (tenantId?: string | null, tzOffset?: n
   }
   const prefix = `ORD-${tenantCode}-${dateString}`;
 
-  // Query hanya order milik tenant ini hari ini untuk sequence yang benar
-  const lastOrder = await prisma.order.findFirst({
+  // Ambil semua orderNumber hari ini untuk tenant ini guna menemukan sequence tertinggi yang sebenarnya
+  const existingOrders = await prisma.order.findMany({
     where: {
       orderNumber: { startsWith: prefix },
       ...(tenantId ? { tenantId } : {})
     },
-    orderBy: { id: 'desc' }
+    select: { orderNumber: true }
   });
 
-  if (lastOrder) {
-    const parts = lastOrder.orderNumber.split('-');
-    const lastSequence = parseInt(parts[parts.length - 1]) || 0;
-    const newSequence = (lastSequence + 1).toString().padStart(3, '0');
-    return `${prefix}-${newSequence}`;
+  let maxSequence = 0;
+  for (const o of existingOrders) {
+    const parts = o.orderNumber.split('-');
+    const seq = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(seq) && seq > maxSequence) {
+      maxSequence = seq;
+    }
   }
 
-  return `${prefix}-001`;
+  let nextSeq = maxSequence + 1;
+  let candidate = `${prefix}-${nextSeq.toString().padStart(3, '0')}`;
+
+  // Collision guard cadangan jika ada sequence yang terlewat
+  let exists = await prisma.order.findFirst({
+    where: {
+      orderNumber: candidate,
+      ...(tenantId ? { tenantId } : {})
+    },
+    select: { id: true }
+  });
+
+  while (exists) {
+    nextSeq++;
+    candidate = `${prefix}-${nextSeq.toString().padStart(3, '0')}`;
+    exists = await prisma.order.findFirst({
+      where: {
+        orderNumber: candidate,
+        ...(tenantId ? { tenantId } : {})
+      },
+      select: { id: true }
+    });
+  }
+
+  return candidate;
 };
 
 // GET all orders (Riwayat Transaksi)
@@ -906,6 +932,20 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Keranjang belanja kosong' });
     }
 
+    // Proteksi Otorisasi Diskon Manual (pos.discount)
+    const discountVal = Number(discount) || 0;
+    if (discountVal > 0) {
+      const isPrivileged = ['OWNER', 'ADMIN', 'SUPERADMIN'].includes(String(user?.role || '').toUpperCase()) || Boolean(user?.isPlatformAdmin);
+      const userPermKeys = Array.isArray(user?.permissions) ? user.permissions : [];
+      const hasDiscountPerm = isPrivileged || userPermKeys.includes('pos.discount');
+      if (!hasDiscountPerm) {
+        return res.status(403).json({ 
+          error: 'Akun Anda tidak memiliki izin untuk memberikan diskon harga (pos.discount). Harap hubungi Supervisor atau Admin.',
+          code: 'FORBIDDEN_DISCOUNT'
+        });
+      }
+    }
+
     // Proteksi Shift Kasir Wajib Aktif untuk transaksi langsung POS yang berstatus Lunas
     if (isPaid) {
       const activeShift = await prisma.shift.findFirst({
@@ -1277,6 +1317,19 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
 
     const passedTotal = total !== undefined ? Number(total) : undefined;
     const passedDiscount = discount !== undefined ? Number(discount) : 0;
+
+    // Proteksi Otorisasi Diskon Manual (pos.discount) pada pelunasan pembayaran
+    if (passedDiscount > 0) {
+      const isPrivileged = ['OWNER', 'ADMIN', 'SUPERADMIN'].includes(String(user?.role || '').toUpperCase()) || Boolean(user?.isPlatformAdmin);
+      const userPermKeys = Array.isArray(user?.permissions) ? user.permissions : [];
+      const hasDiscountPerm = isPrivileged || userPermKeys.includes('pos.discount');
+      if (!hasDiscountPerm) {
+        return res.status(403).json({ 
+          error: 'Akun Anda tidak memiliki izin untuk memberikan diskon harga (pos.discount). Harap hubungi Supervisor atau Admin.',
+          code: 'FORBIDDEN_DISCOUNT'
+        });
+      }
+    }
 
     // Jalankan dalam $transaction agar konsisten (atomic)
     const result = await prisma.$transaction(async (tx) => {

@@ -4,6 +4,9 @@ import path from 'path';
 import crypto from 'crypto';
 import zlib from 'zlib';
 import { AuditLogger } from './AuditLogger';
+import { invalidateTenantCache } from '../middlewares/tenantResolver';
+import { cacheService } from './CacheService';
+import { emitToTenant } from '../index';
 
 const JWT_SECRET = process.env.BACKUP_ENCRYPTION_KEY || process.env.JWT_SECRET || 'super_secret_pooos_key';
 const BACKUP_DIR = path.resolve(process.cwd(), 'backups', 'db');
@@ -1492,6 +1495,21 @@ export class BackupService {
     const durationMs = Date.now() - startTime;
     const msg = `Restorasi disaster recovery dari ${path.basename(fullPath)} selesai dalam ${durationMs} ms (RTO compliant).`;
     console.log(`[BackupService] ${msg}`, restoredCounts);
+
+    if (targetTenantId) {
+      try {
+        invalidateTenantCache(targetTenantId);
+        await cacheService.invalidateTenant(targetTenantId);
+        await cacheService.bumpTenantCatalogVersion(targetTenantId);
+        emitToTenant(targetTenantId, 'TENANT_CATALOG_SYNC', {
+          tenantId: targetTenantId,
+          timestamp: new Date().toISOString(),
+          message: 'Database berhasil dipulihkan dari cadangan.'
+        });
+      } catch (cacheErr) {
+        console.warn('[BackupService] Cache invalidation warning:', cacheErr);
+      }
+    }
 
     await AuditLogger.log({
       tenantId: targetTenantId || null,

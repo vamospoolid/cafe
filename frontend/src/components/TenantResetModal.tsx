@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
+import { offlineDb } from '../db/offlineDb';
 
 interface TenantResetModalProps {
   isOpen: boolean;
@@ -200,6 +201,14 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal menerapkan template');
 
+      if (wipeExistingBeforeTemplate) {
+        try {
+          await offlineDb.clearCatalogCache(posContext?.user?.tenantId);
+        } catch (e) {
+          console.warn('Failed clearing offline catalog cache:', e);
+        }
+      }
+
       toast(data.message || 'Template berhasil diterapkan!', 'success');
       onSuccess?.();
       onClose();
@@ -308,6 +317,12 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal melakukan Factory Reset');
 
+      try {
+        await offlineDb.clearCatalogCache(posContext?.user?.tenantId);
+      } catch (e) {
+        console.warn('Failed clearing offline catalog cache:', e);
+      }
+
       toast(data.message || 'Factory Reset berhasil! Ruang kerja bersih 100%.', 'success');
       onSuccess?.();
       onClose();
@@ -362,6 +377,12 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal memulihkan data');
+
+      try {
+        await offlineDb.clearCatalogCache(posContext?.user?.tenantId);
+      } catch (e) {
+        console.warn('Failed clearing offline catalog cache:', e);
+      }
 
       toast(data.message || 'Pemulihan data cadangan berhasil!', 'success');
       onSuccess?.();
@@ -768,6 +789,15 @@ export const TenantResetModal: React.FC<TenantResetModalProps> = ({ isOpen, onCl
                 <div className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
                   <span className="font-semibold block mb-0.5">Pembersihan Riwayat Transaksi Uji Coba (Pre-Launch):</span>
                   Fitur ini digunakan setelah kasir/staf selesai melakukan simulasi penjualan sebelum toko resmi buka (Grand Opening).
+                </div>
+              </div>
+
+              {/* Explanatory Banner for Owners */}
+              <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-start gap-3">
+                <HelpCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed">
+                  <strong className="font-bold block text-blue-800 dark:text-blue-300 mb-0.5">💡 Catatan Penting: Menu Produk Tidak Dihapus di Sini</strong>
+                  Opsi ini <u>hanya membersihkan transaksi kasir</u>. Daftar Menu, Resep, dan Bahan Baku Anda <strong>SENGAJA TETAP DIPERTAHANKAN</strong> agar tidak perlu input ulang. Jika Anda berniat <strong>MENGHAPUS SEMUA MENU &amp; BAHAN BAKU</strong> untuk mulai dari lembar kosong (nol), silakan gunakan tab <strong>"Factory Reset"</strong> di tab paling kanan.
                 </div>
               </div>
 

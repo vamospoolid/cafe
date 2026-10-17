@@ -113,16 +113,25 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const hasPermission = (permissionKey: string): boolean => {
     if (!user) return false;
     const roleLower = (user.role || '').toLowerCase();
-    if (roleLower === 'owner' || roleLower === 'admin' || roleLower === 'superadmin' || roleLower === 'manager') return true;
+    if (roleLower === 'owner' || roleLower === 'admin' || roleLower === 'superadmin') return true;
+
+    // Check explicit negative override in user.permissions first
+    if (permissionKey === 'pos.void' && user.permissions?.canVoid === false) return false;
+    if (permissionKey === 'pos.discount' && user.permissions?.canDiscount === false) return false;
+    if (permissionKey === 'products.manage' && user.permissions?.canEditMenu === false) return false;
+    if (permissionKey === 'reports.view' && user.permissions?.canViewReports === false) return false;
+    if (permissionKey === 'employees.manage' && user.permissions?.canManageStaff === false) return false;
+
+    // Check positive override in user.permissions
+    if (permissionKey === 'pos.void' && user.permissions?.canVoid === true) return true;
+    if (permissionKey === 'pos.discount' && user.permissions?.canDiscount === true) return true;
+    if (permissionKey === 'products.manage' && user.permissions?.canEditMenu === true) return true;
+    if (permissionKey === 'reports.view' && user.permissions?.canViewReports === true) return true;
+    if (permissionKey === 'employees.manage' && user.permissions?.canManageStaff === true) return true;
+
     if (user.permissionKeys && Array.isArray(user.permissionKeys)) {
       return user.permissionKeys.includes(permissionKey);
     }
-    // Fallback checking legacy boolean keys
-    if (permissionKey === 'pos.void') return !!user.permissions?.canVoid;
-    if (permissionKey === 'pos.discount') return !!user.permissions?.canDiscount;
-    if (permissionKey === 'products.manage') return !!user.permissions?.canEditMenu;
-    if (permissionKey === 'reports.view') return !!user.permissions?.canViewReports;
-    if (permissionKey === 'employees.manage') return !!user.permissions?.canManageStaff;
     return false;
   };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, PackageCheck, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Trash2, AlertTriangle, Download, RotateCcw } from 'lucide-react';
+import { Settings, Store, Receipt, Percent, CreditCard, Image as ImageIcon, Save, UploadCloud, Phone, MapPin, Sparkles, Check, Info, ShieldAlert, Award, PackageSearch, Coffee, Smartphone, Sliders, Package, PackageCheck, Layers, Printer, Database, RefreshCw, Utensils, ChefHat, Clock, X, Boxes, Flame, EyeOff, ShieldCheck, ExternalLink, Compass, Headphones, MessageSquare, Trash2, AlertTriangle, Download, RotateCcw, ListChecks, Plus, CheckCheck, ClipboardList } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 
 import { toast, confirmAlert, errorAlert } from '../utils/alert';
@@ -10,6 +10,7 @@ import RecycleBinModal from './RecycleBinModal';
 import TenantPWASection from './TenantPWASection';
 import SettingsWhatsAppGateway from './settings/SettingsWhatsAppGateway';
 import ResetStandaloneModal from './settings/ResetStandaloneModal';
+import { offlineDb } from '../db/offlineDb';
 
 const SettingsView = () => {
   const [searchParams] = useSearchParams();
@@ -220,6 +221,13 @@ const SettingsView = () => {
     // Bonus Harian Omzet Karyawan
     enableDailyOmzetBonus: true,
     dailyOmzetTiers: '',
+    // Manajemen Jam Operasional Toko & Kontrol Kasir
+    operatingHours: '',
+    earlyOpenBufferMinutes: 45,
+    closingGraceMinutes: 45,
+    enforceOperatingHours: false,
+    allowOrdersAfterClose: false,
+    dailySopChecklist: '',
   });
 
   const [dailyTiersList, setDailyTiersList] = useState<Array<{ minOmzet: number; bonus: number; label?: string }>>([
@@ -239,6 +247,61 @@ const SettingsView = () => {
 
   const [newShift, setNewShift] = useState({ name: '', start: '08:00', end: '16:00', lateTolerance: 15 });
 
+  // Jam Operasional Outlet & Kontrol Shift Kasir State
+  const [isAll24Hours, setIsAll24Hours] = useState(false);
+  const [defaultOpenTime, setDefaultOpenTime] = useState('08:00');
+  const [defaultCloseTime, setDefaultCloseTime] = useState('22:00');
+  const [showDayScheduleDetail, setShowDayScheduleDetail] = useState(false);
+  const [operatingSchedules, setOperatingSchedules] = useState<Array<{
+    day: number;
+    dayName: string;
+    isOpen: boolean;
+    openTime: string;
+    closeTime: string;
+    is24Hours: boolean;
+  }>>([
+    { day: 1, dayName: 'Senin', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 2, dayName: 'Selasa', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 3, dayName: 'Rabu', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 4, dayName: 'Kamis', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+    { day: 5, dayName: 'Jumat', isOpen: true, openTime: '08:00', closeTime: '23:00', is24Hours: false },
+    { day: 6, dayName: 'Sabtu', isOpen: true, openTime: '08:00', closeTime: '23:00', is24Hours: false },
+    { day: 0, dayName: 'Minggu', isOpen: true, openTime: '08:00', closeTime: '22:00', is24Hours: false },
+  ]);
+
+  // Daily SOP Checklist Manager State
+  interface SOPItem {
+    id: string;
+    text: string;
+    type: 'OPENING' | 'CLOSING';
+    category: 'bar' | 'clean' | 'cash' | 'chiller';
+    targetRole?: string;
+  }
+
+  const DEFAULT_RAMEN_SOP: SOPItem[] = [
+    { id: 'sop_op_1', text: 'Cek Suhu Chiller Chashu & Telur Ajitama (< 4°C)', type: 'OPENING', category: 'chiller', targetRole: 'DAPUR' },
+    { id: 'sop_op_2', text: 'Nyalakan Pemanas Kaldu / Broth Ramen & Cek Suhu (> 85°C)', type: 'OPENING', category: 'bar', targetRole: 'DAPUR' },
+    { id: 'sop_op_3', text: 'Kesiapan Noodle Boiler / Pemasak Mie & Air Bersih', type: 'OPENING', category: 'bar', targetRole: 'DAPUR' },
+    { id: 'sop_op_4', text: 'Cek Stok Tare, Minyak Aromatik & Topping (Nori, Daun Bawang)', type: 'OPENING', category: 'bar', targetRole: 'DAPUR' },
+    { id: 'sop_op_5', text: 'Sanitasi & Tata Meja Dine-In, Sumpit, Sendok & Tempat Bumbu', type: 'OPENING', category: 'clean', targetRole: 'WAITERS' },
+    { id: 'sop_op_6', text: 'Hitung Kas Awal / Modal Uang Kembalian di Laci Kasir', type: 'OPENING', category: 'cash', targetRole: 'KASIR' },
+    { id: 'sop_op_7', text: 'Nyalakan POS & Pastikan Kertas Thermal Struk & KDS Siap', type: 'OPENING', category: 'cash', targetRole: 'KASIR' },
+    { id: 'sop_cl_1', text: 'Saring Sisa Kaldu & Simpan ke Chiller Setelah Dingin', type: 'CLOSING', category: 'chiller', targetRole: 'DAPUR' },
+    { id: 'sop_cl_2', text: 'Kuras & Bersihkan Tangki Noodle Boiler & Area Kompor', type: 'CLOSING', category: 'clean', targetRole: 'DAPUR' },
+    { id: 'sop_cl_3', text: 'Simpan Seluruh Bahan Topping Basah ke Kulkas/Chiller', type: 'CLOSING', category: 'chiller', targetRole: 'DAPUR' },
+    { id: 'sop_cl_4', text: 'Cuci Seluruh Mangkok Ramen, Sendok, Gelas & Keringkan', type: 'CLOSING', category: 'clean', targetRole: 'WAITERS' },
+    { id: 'sop_cl_5', text: 'Sapu, Pel Lantai Dining & Buang Sampah ke Penampungan Luar', type: 'CLOSING', category: 'clean', targetRole: 'WAITERS' },
+    { id: 'sop_cl_6', text: 'Rekonsiliasi Kas Laci (Tutup Shift Kasir) & Cetak Summary Kas', type: 'CLOSING', category: 'cash', targetRole: 'KASIR' },
+    { id: 'sop_cl_7', text: 'Pastikan Kompor Gas, Exhaust, AC & Lampu Padam, Kunci Pintu', type: 'CLOSING', category: 'clean', targetRole: 'ALL' },
+  ];
+
+  const [sopItems, setSopItems] = useState<SOPItem[]>(DEFAULT_RAMEN_SOP);
+  const [sopActiveTab, setSopActiveTab] = useState<'OPENING' | 'CLOSING'>('OPENING');
+  const [newSopText, setNewSopText] = useState('');
+  const [newSopCategory, setNewSopCategory] = useState<'bar' | 'clean' | 'cash' | 'chiller'>('bar');
+  const [newSopTargetRole, setNewSopTargetRole] = useState<string>('ALL');
+  const [newSopType, setNewSopType] = useState<'OPENING' | 'CLOSING'>('OPENING');
+
   useEffect(() => {
     if (posContext?.settings) {
       setFormData({
@@ -256,6 +319,28 @@ const SettingsView = () => {
           const parsedTiers = JSON.parse(posContext.settings.dailyOmzetTiers);
           if (Array.isArray(parsedTiers) && parsedTiers.length > 0) setDailyTiersList(parsedTiers);
         } catch {}
+      }
+      if (posContext.settings.operatingHours) {
+        try {
+          const raw = posContext.settings.operatingHours;
+          const parsedHours = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (Array.isArray(parsedHours) && parsedHours.length > 0) {
+            setOperatingSchedules(parsedHours);
+            const all24 = parsedHours.every((d: any) => Boolean(d.is24Hours || (d.openTime === '00:00' && (d.closeTime === '23:59' || d.closeTime === '24:00' || d.closeTime === '00:00'))));
+            setIsAll24Hours(all24);
+          }
+        } catch (e) {
+          console.error('Error parsing operatingHours in settings:', e);
+        }
+      }
+      if (posContext.settings.dailySopChecklist) {
+        try {
+          const raw = posContext.settings.dailySopChecklist;
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (Array.isArray(parsed) && parsed.length > 0) setSopItems(parsed);
+        } catch (e) {
+          console.error('Error parsing dailySopChecklist:', e);
+        }
       }
     }
   }, [posContext?.settings]);
@@ -388,6 +473,81 @@ const SettingsView = () => {
     toast('Shift berhasil dihapus', 'info');
   };
 
+  const handleToggleAll24Hours = (enabled: boolean) => {
+    setIsAll24Hours(enabled);
+    const updated = operatingSchedules.map(d => ({
+      ...d,
+      is24Hours: enabled,
+      openTime: enabled ? '00:00' : (d.openTime === '00:00' ? '08:00' : d.openTime),
+      closeTime: enabled ? '23:59' : (d.closeTime === '23:59' ? '22:00' : d.closeTime)
+    }));
+    setOperatingSchedules(updated);
+    setFormData(prev => ({ ...prev, operatingHours: JSON.stringify(updated) }));
+  };
+
+  const handleApplyDefaultHours = () => {
+    const updated = operatingSchedules.map(d => ({
+      ...d,
+      openTime: defaultOpenTime,
+      closeTime: defaultCloseTime,
+      is24Hours: false
+    }));
+    setOperatingSchedules(updated);
+    setIsAll24Hours(false);
+    setFormData(prev => ({ ...prev, operatingHours: JSON.stringify(updated) }));
+    toast(`Jam operasional seragam (${defaultOpenTime} - ${defaultCloseTime}) diterapkan ke seluruh hari!`, 'success');
+  };
+
+  const handleUpdateDaySchedule = (dayIndex: number, field: string, value: any) => {
+    const updated = [...operatingSchedules];
+    updated[dayIndex] = {
+      ...updated[dayIndex],
+      [field]: value
+    };
+    setOperatingSchedules(updated);
+    setFormData(prev => ({ ...prev, operatingHours: JSON.stringify(updated) }));
+  };
+
+  const handleApply3ShiftsTemplate = () => {
+    const defaultShifts = [
+      { id: 'shift_pagi', name: 'Shift Pagi (Opening)', start: '08:00', end: '16:00', lateTolerance: 15 },
+      { id: 'shift_siang', name: 'Shift Sore / Malam (Closing)', start: '15:00', end: '23:00', lateTolerance: 15 },
+      { id: 'shift_full', name: 'Shift Full Day', start: '10:00', end: '22:00', lateTolerance: 15 }
+    ];
+    setShiftsList(defaultShifts);
+    setFormData(prev => ({ ...prev, workShifts: JSON.stringify(defaultShifts) }));
+    toast('Template 3 Shift operasional F&B Muki Ramen berhasil diterapkan!', 'success');
+  };
+
+  const handleAddSopItem = () => {
+    if (!newSopText.trim()) return toast('Isi teks tugas SOP terlebih dahulu', 'warning');
+    const newItem: SOPItem = {
+      id: 'sop_' + Date.now(),
+      text: newSopText.trim(),
+      type: newSopType,
+      category: newSopCategory,
+      targetRole: newSopTargetRole
+    };
+    const updated = [...sopItems, newItem];
+    setSopItems(updated);
+    setFormData(prev => ({ ...prev, dailySopChecklist: JSON.stringify(updated) }));
+    setNewSopText('');
+    toast('Item SOP berhasil ditambahkan!', 'success');
+  };
+
+  const handleDeleteSopItem = (id: string) => {
+    const updated = sopItems.filter(item => item.id !== id);
+    setSopItems(updated);
+    setFormData(prev => ({ ...prev, dailySopChecklist: JSON.stringify(updated) }));
+    toast('Item SOP dihapus', 'info');
+  };
+
+  const handleResetSopToPreset = () => {
+    setSopItems(DEFAULT_RAMEN_SOP);
+    setFormData(prev => ({ ...prev, dailySopChecklist: JSON.stringify(DEFAULT_RAMEN_SOP) }));
+    toast('Daftar SOP dikembalikan ke Standar Muki Ramen F&B!', 'success');
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
     const checked = (e.target as HTMLInputElement).checked;
@@ -403,6 +563,9 @@ const SettingsView = () => {
     setLoading(true);
     try {
       const payload: any = { ...formData };
+      payload.workShifts = JSON.stringify(shiftsList);
+      payload.operatingHours = JSON.stringify(operatingSchedules);
+      payload.dailySopChecklist = JSON.stringify(sopItems);
       if (payload.storeLatitude !== undefined && payload.storeLatitude !== null) {
         const parsed = typeof payload.storeLatitude === 'string'
           ? parseFloat(String(payload.storeLatitude).replace(',', '.'))
@@ -418,6 +581,12 @@ const SettingsView = () => {
       if (payload.gpsRadiusMeters !== undefined && payload.gpsRadiusMeters !== null) {
         const parsed = Number(payload.gpsRadiusMeters);
         if (!isNaN(parsed)) payload.gpsRadiusMeters = parsed;
+      }
+      if (payload.earlyOpenBufferMinutes !== undefined) {
+        payload.earlyOpenBufferMinutes = Number(payload.earlyOpenBufferMinutes) || 0;
+      }
+      if (payload.closingGraceMinutes !== undefined) {
+        payload.closingGraceMinutes = Number(payload.closingGraceMinutes) || 0;
       }
 
       const res = await fetch('/api/settings', {
@@ -875,6 +1044,552 @@ const SettingsView = () => {
                       </>
                     )}
                   </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'jam_operasional' && (
+            <div className="space-y-8 animate-fade-in">
+              <div className="border-b border-slate-100 pb-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Clock size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-800">Jam Operasional Outlet, Shift & SOP Harian</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Jadwal buka-tutup restoran, kontrol shift kasir, toleransi presensi, dan standar SOP operasional Muki Ramen.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 1: MODE BUKA TOKO & JADWAL 7 HARI */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                      <Store size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800">Jadwal Buka Toko (Mingguan)</h4>
+                      <p className="text-xs text-slate-400">Atur jam buka dan tutup restoran setiap hari atau aktifkan mode 24 jam</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200/60 self-start sm:self-auto">
+                    <span className="text-xs font-bold text-slate-700">Mode 24 Jam Non-Stop</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAll24Hours(!isAll24Hours)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        isAll24Hours ? 'bg-indigo-600' : 'bg-slate-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          isAll24Hours ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {!isAll24Hours && (
+                  <div className="space-y-4">
+                    {/* Terapkan Jam Seragam */}
+                    <div className="flex flex-wrap items-center gap-3 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 text-xs">
+                      <span className="font-bold text-indigo-900">Set Jam Seragam:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-600">Buka:</span>
+                        <input
+                          type="time"
+                          value={defaultOpenTime}
+                          onChange={e => setDefaultOpenTime(e.target.value)}
+                          className="form-control text-xs px-2.5 py-1.5 rounded-lg border-slate-200 w-28 bg-white"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-600">Tutup:</span>
+                        <input
+                          type="time"
+                          value={defaultCloseTime}
+                          onChange={e => setDefaultCloseTime(e.target.value)}
+                          className="form-control text-xs px-2.5 py-1.5 rounded-lg border-slate-200 w-28 bg-white"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyDefaultHours}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition-all shadow-sm"
+                      >
+                        Terapkan ke Semua Hari
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowDayScheduleDetail(!showDayScheduleDetail)}
+                        className="ml-auto text-xs text-indigo-600 hover:text-indigo-800 font-bold underline"
+                      >
+                        {showDayScheduleDetail ? 'Tutup Rincian Harian' : 'Sesuaikan Jam Khusus Per Hari (Detail)'}
+                      </button>
+                    </div>
+
+                    {/* Rincian 7 Hari Table / Grid */}
+                    {showDayScheduleDetail && (
+                      <div className="overflow-x-auto rounded-xl border border-slate-100">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-100">
+                            <tr>
+                              <th className="py-2.5 px-3">Hari</th>
+                              <th className="py-2.5 px-3">Status</th>
+                              <th className="py-2.5 px-3">Jam Buka</th>
+                              <th className="py-2.5 px-3">Jam Tutup</th>
+                              <th className="py-2.5 px-3">24 Jam</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {operatingSchedules.map((schedule, idx) => (
+                              <tr key={schedule.day} className="hover:bg-slate-50/50">
+                                <td className="py-2 px-3 font-bold text-slate-700">{schedule.dayName}</td>
+                                <td className="py-2 px-3">
+                                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={schedule.isOpen}
+                                      onChange={e => handleUpdateDaySchedule(idx, 'isOpen', e.target.checked)}
+                                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className={`text-[11px] font-bold ${schedule.isOpen ? 'text-emerald-600' : 'text-rose-500'}`}>
+                                      {schedule.isOpen ? 'Buka' : 'Tutup'}
+                                    </span>
+                                  </label>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="time"
+                                    disabled={!schedule.isOpen || schedule.is24Hours}
+                                    value={schedule.openTime}
+                                    onChange={e => handleUpdateDaySchedule(idx, 'openTime', e.target.value)}
+                                    className="form-control text-xs px-2 py-1 rounded border-slate-200 w-24 disabled:bg-slate-100"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="time"
+                                    disabled={!schedule.isOpen || schedule.is24Hours}
+                                    value={schedule.closeTime}
+                                    onChange={e => handleUpdateDaySchedule(idx, 'closeTime', e.target.value)}
+                                    className="form-control text-xs px-2 py-1 rounded border-slate-200 w-24 disabled:bg-slate-100"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      disabled={!schedule.isOpen}
+                                      checked={schedule.is24Hours}
+                                      onChange={e => handleUpdateDaySchedule(idx, 'is24Hours', e.target.checked)}
+                                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
+                                    />
+                                    <span className="text-[11px] text-slate-500">24 Jam</span>
+                                  </label>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* CARD 2: KONTROL OPERASIONAL KASIR & BUFFER */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-5">
+                <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-800">Kontrol Operasional & Toleransi Kasir</h4>
+                    <p className="text-xs text-slate-400">Atur batasan transaksi di luar jam buka dan batas waktu penutupan laci kasir</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-3">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="enforceOperatingHours"
+                        checked={Boolean(formData.enforceOperatingHours)}
+                        onChange={handleChange}
+                        className="mt-1 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Kunci Transaksi di Luar Jam Buka (Strict Mode)</span>
+                        <span className="text-[11px] text-slate-500 leading-relaxed block mt-0.5">
+                          Mencegah staf membuat pesanan baru saat restoran belum resmi buka atau sudah lewat jam tutup.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer pt-2 border-t border-slate-200/60">
+                      <input
+                        type="checkbox"
+                        name="allowOrdersAfterClose"
+                        checked={Boolean(formData.allowOrdersAfterClose)}
+                        onChange={handleChange}
+                        className="mt-1 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 block">Izinkan Kasir Melayani Pesanan Terakhir (Grace Period)</span>
+                        <span className="text-[11px] text-slate-500 leading-relaxed block mt-0.5">
+                          Memberikan fleksibilitas bagi kasir menyelesaikan tagihan meja yang masih makan saat jam tutup tiba.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Early Open Buffer (Menit)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          name="earlyOpenBufferMinutes"
+                          value={formData.earlyOpenBufferMinutes ?? 45}
+                          onChange={handleChange}
+                          className="form-control text-xs px-3 py-1.5 rounded-lg border-slate-200 w-28 bg-white"
+                          min="0"
+                          max="180"
+                        />
+                        <span className="text-xs text-slate-500">menit sebelum jam buka</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Staf diperbolehkan buka laci & hitung modal awal sebelum resto buka.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Closing Grace Period (Menit)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          name="closingGraceMinutes"
+                          value={formData.closingGraceMinutes ?? 45}
+                          onChange={handleChange}
+                          className="form-control text-xs px-3 py-1.5 rounded-lg border-slate-200 w-28 bg-white"
+                          min="0"
+                          max="240"
+                        />
+                        <span className="text-xs text-slate-500">menit setelah jam tutup</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Batas waktu staf merekonsiliasi kas fisik sebelum shift dikunci otomatis.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 3: MASTER SHIFT KARYAWAN */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                      <Clock size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800">Master Shift Karyawan</h4>
+                      <p className="text-xs text-slate-400">Daftar shift kerja yang dipilih staf saat absensi dan buka kasir di PWA Staff</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleApply3ShiftsTemplate}
+                    className="px-3.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1.5 border border-indigo-200/60 transition-all self-start sm:self-auto"
+                  >
+                    <Sparkles size={14} /> Gunakan Template 3 Shift Ramen
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* List Shift Aktif */}
+                  <div className="lg:col-span-2 space-y-2.5">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Shift Aktif ({shiftsList.length})</div>
+                    {shiftsList.map(shift => (
+                      <div
+                        key={shift.id}
+                        className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-100/60 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                            {shift.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-bold text-xs text-slate-800">{shift.name}</div>
+                            <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                              <span className="font-semibold text-indigo-600">{shift.start} - {shift.end}</span>
+                              <span className="text-slate-300">•</span>
+                              <span>Toleransi telat: {shift.lateTolerance} menit</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteShift(shift.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                          title="Hapus Shift"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Form Tambah Shift */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-3">
+                    <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Plus size={14} className="text-indigo-600" /> Tambah Shift Baru
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Nama Shift</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Shift Siang / Closing"
+                        value={newShift.name}
+                        onChange={e => setNewShift({ ...newShift, name: e.target.value })}
+                        className="form-control text-xs px-3 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Mulai</label>
+                        <input
+                          type="time"
+                          value={newShift.start}
+                          onChange={e => setNewShift({ ...newShift, start: e.target.value })}
+                          className="form-control text-xs px-2.5 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Selesai</label>
+                        <input
+                          type="time"
+                          value={newShift.end}
+                          onChange={e => setNewShift({ ...newShift, end: e.target.value })}
+                          className="form-control text-xs px-2.5 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Toleransi Telat (Menit)</label>
+                      <input
+                        type="number"
+                        value={newShift.lateTolerance}
+                        onChange={e => setNewShift({ ...newShift, lateTolerance: Number(e.target.value) || 0 })}
+                        className="form-control text-xs px-3 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                        min="0"
+                        max="60"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddShift}
+                      className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 mt-2"
+                    >
+                      <Plus size={14} /> Simpan Shift
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 4: DAILY SOP CHECKLIST MANAGER (POIN 4) */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                      <ListChecks size={18} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-sm text-slate-800">Daily SOP Checklist Karyawan</h4>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {sopItems.length} Checklist Terdaftar
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">Checklist tugas harian yang muncul dan wajib dicentang karyawan di PWA Staff sebelum mulai/tutup shift</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleResetSopToPreset}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-all self-start sm:self-auto"
+                  >
+                    <RotateCcw size={14} /> Reset ke Standar Muki Ramen
+                  </button>
+                </div>
+
+                {/* Sub-tab Pill: Opening vs Closing */}
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setSopActiveTab('OPENING')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                      sopActiveTab === 'OPENING'
+                        ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>Opening Checklist</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${sopActiveTab === 'OPENING' ? 'bg-white/30 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                      {sopItems.filter(i => i.type === 'OPENING').length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSopActiveTab('CLOSING')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                      sopActiveTab === 'CLOSING'
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>Closing Checklist</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${sopActiveTab === 'CLOSING' ? 'bg-white/30 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                      {sopItems.filter(i => i.type === 'CLOSING').length}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* List Item SOP Aktif */}
+                  <div className="lg:col-span-2 space-y-2.5">
+                    {sopItems.filter(item => item.type === sopActiveTab).length === 0 ? (
+                      <div className="p-8 text-center rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs">
+                        Belum ada tugas {sopActiveTab === 'OPENING' ? 'Opening' : 'Closing'}. Tambahkan tugas baru dari form di samping.
+                      </div>
+                    ) : (
+                      sopItems
+                        .filter(item => item.type === sopActiveTab)
+                        .map((item, idx) => {
+                          const categoryBadges: Record<string, { label: string; color: string }> = {
+                            bar: { label: 'Bar / Dapur', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+                            clean: { label: 'Kebersihan', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+                            cash: { label: 'Kasir & Kas', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                            chiller: { label: 'Chiller / Kaldu', color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+                          };
+                          const catInfo = categoryBadges[item.category] || { label: item.category, color: 'bg-slate-100 text-slate-700 border-slate-200' };
+
+                          return (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200 hover:shadow-sm transition-all"
+                            >
+                              <div className="flex items-start gap-3 min-w-0 pr-2">
+                                <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-500 shrink-0 mt-0.5">
+                                  {idx + 1}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-slate-800 leading-snug break-words">{item.text}</div>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${catInfo.color}`}>
+                                      {catInfo.label}
+                                    </span>
+                                    {item.targetRole && item.targetRole !== 'ALL' && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        Role: {item.targetRole}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSopItem(item.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all shrink-0"
+                                title="Hapus Tugas SOP"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+
+                  {/* Form Tambah Item SOP */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-3 self-start">
+                    <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Plus size={14} className="text-indigo-600" /> Tambah Tugas SOP
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Teks Tugas / Instruksi</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Contoh: Cek Kesiapan Noodle Boiler & Suhu Broth (>85°C)"
+                        value={newSopText}
+                        onChange={e => setNewSopText(e.target.value)}
+                        className="form-control text-xs px-3 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Tipe</label>
+                        <select
+                          value={newSopType}
+                          onChange={e => setNewSopType(e.target.value as any)}
+                          className="form-control text-xs px-2 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                        >
+                          <option value="OPENING">Opening</option>
+                          <option value="CLOSING">Closing</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Kategori</label>
+                        <select
+                          value={newSopCategory}
+                          onChange={e => setNewSopCategory(e.target.value as any)}
+                          className="form-control text-xs px-2 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                        >
+                          <option value="bar">Bar / Dapur</option>
+                          <option value="chiller">Chiller / Broth</option>
+                          <option value="clean">Kebersihan</option>
+                          <option value="cash">Kasir & Laci</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">Target Jabatan / Role</label>
+                      <select
+                        value={newSopTargetRole}
+                        onChange={e => setNewSopTargetRole(e.target.value)}
+                        className="form-control text-xs px-2 py-1.5 rounded-lg border-slate-200 w-full bg-white"
+                      >
+                        <option value="ALL">Semua Karyawan (Umum)</option>
+                        <option value="KASIR">Kasir</option>
+                        <option value="DAPUR">Dapur / Kitchen</option>
+                        <option value="WAITERS">Waiters / Pramusaji</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleAddSopItem}
+                      className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 mt-2"
+                    >
+                      <Plus size={14} /> Tambah ke Checklist
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2802,7 +3517,7 @@ const SettingsView = () => {
           )}
 
           {/* Bottom Save Action for settings tabs */}
-          {['profil', 'struk', 'pajak', 'bayar', 'fitur', 'bagi_hasil', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
+          {['profil', 'jam_operasional', 'struk', 'pajak', 'bayar', 'fitur', 'bagi_hasil', 'crm', 'inventaris', 'absensi_gps'].includes(activeTab) && (
             <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-end">
               <button 
                 type="button"
@@ -3063,6 +3778,12 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Gagal memulihkan database');
+
+      try {
+        await offlineDb.clearCatalogCache();
+      } catch (cacheErr) {
+        console.warn('Failed clearing Dexie cache after restore:', cacheErr);
+      }
 
       toast(`✅ Pemulihan database berhasil! (${data.durationMs} ms)`, 'success');
       fetchHealthAndBackups();

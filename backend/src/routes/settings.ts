@@ -245,6 +245,9 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
     if (updateData.workShifts !== undefined && typeof updateData.workShifts !== 'string') {
       updateData.workShifts = JSON.stringify(updateData.workShifts);
     }
+    if (updateData.dailySopChecklist !== undefined && typeof updateData.dailySopChecklist !== 'string') {
+      updateData.dailySopChecklist = JSON.stringify(updateData.dailySopChecklist);
+    }
 
     // Jam Operasional Outlet & Kontrol Shift Kasir
     if (updateData.operatingHours !== undefined && typeof updateData.operatingHours !== 'string') {
@@ -329,7 +332,7 @@ router.put('/', authenticateToken, requirePermission('settings.manage'), async (
       'printerIp', 'printerPort', 'windowsPrinterName', 'autoPrintKDS', 'autoPrintReceipt',
       'kitchenPrinterIp', 'kitchenPrinterPort', 'autoPrintKitchen', 'barPrinterIp', 'barPrinterPort',
       'autoPrintBar', 'enableKDS', 'autoCompleteKDSOnPay', 'storeLatitude', 'storeLongitude',
-      'gpsRadiusMeters', 'enableGpsValidation', 'enableCameraPhoto', 'googleMapsUrl', 'workShifts', 'enableZeroLateBonus',
+      'gpsRadiusMeters', 'enableGpsValidation', 'enableCameraPhoto', 'googleMapsUrl', 'workShifts', 'dailySopChecklist', 'enableZeroLateBonus',
       'zeroLateBonusAmount', 'zeroLateMinAttendance', 'zeroLateMaxLateAllowed', 'enableLatePenalty',
       'latePenaltyType', 'latePenaltyAmount', 'enableAlphaPenalty', 'alphaPenaltyAmount',
       'warehouseTransferPricing', 'warehouseMarkupPercent', 'enableProfitSharing',
@@ -688,8 +691,23 @@ router.post('/reset-standalone', authenticateToken, async (req: Request, res: Re
       await tx.auditLog.deleteMany({ where: { tenantId } });
       await tx.whatsAppLog.deleteMany({ where: { tenantId } });
       await tx.pointLog.deleteMany({ where: { tenantId } });
-      await tx.wasteLog.deleteMany({ where: { tenantId } });
-      await tx.ingredientLog.deleteMany({ where: { tenantId } });
+      await tx.wasteLog.deleteMany({
+        where: {
+          OR: [
+            { tenantId },
+            { product: { tenantId } },
+            { ingredient: { tenantId } }
+          ]
+        }
+      });
+      await tx.ingredientLog.deleteMany({
+        where: {
+          OR: [
+            { tenantId },
+            { ingredient: { tenantId } }
+          ]
+        }
+      });
 
       // 2. Financials & Debts
       await tx.debtPayment.deleteMany({ where: { tenantId } });
@@ -700,18 +718,18 @@ router.post('/reset-standalone', authenticateToken, async (req: Request, res: Re
       const cashFlowCount = await tx.cashFlow.deleteMany({ where: { tenantId } });
 
       // 3. Warehouse / Gudang Pusat
-      await tx.warehouseSaleItem.deleteMany({ where: { OR: [{ tenantId }, { sale: { tenantId } }] } });
+      await tx.warehouseSaleItem.deleteMany({ where: { OR: [{ tenantId }, { sale: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
       await tx.warehouseSale.deleteMany({ where: { tenantId } });
-      await tx.warehouseRequisitionItem.deleteMany({ where: { OR: [{ tenantId }, { requisition: { tenantId } }] } });
+      await tx.warehouseRequisitionItem.deleteMany({ where: { OR: [{ tenantId }, { requisition: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
       await tx.warehouseRequisition.deleteMany({ where: { tenantId } });
-      await tx.warehouseInboundItem.deleteMany({ where: { OR: [{ tenantId }, { inbound: { tenantId } }] } });
+      await tx.warehouseInboundItem.deleteMany({ where: { OR: [{ tenantId }, { inbound: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
       await tx.warehouseInbound.deleteMany({ where: { tenantId } });
 
       // 4. Purchases & Suppliers
-      await tx.purchaseOrderItem.deleteMany({ where: { OR: [{ tenantId }, { po: { tenantId } }] } });
+      await tx.purchaseOrderItem.deleteMany({ where: { OR: [{ tenantId }, { po: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
       const poCount = await tx.purchaseOrder.deleteMany({ where: { tenantId } });
       await tx.supplierInvoicePayment.deleteMany({ where: { tenantId } });
-      await tx.supplierInvoiceItem.deleteMany({ where: { invoice: { tenantId } } });
+      await tx.supplierInvoiceItem.deleteMany({ where: { OR: [{ invoice: { tenantId } }, { product: { tenantId } }] } });
       await tx.supplierInvoice.deleteMany({ where: { tenantId } });
       const supplierCount = await tx.supplier.deleteMany({ where: { tenantId } });
 
@@ -724,18 +742,18 @@ router.post('/reset-standalone', authenticateToken, async (req: Request, res: Re
       // 6. Bengkel modules (if any)
       await tx.workOrderReturnItem.deleteMany({ where: { return: { tenantId } } });
       await tx.workOrderReturn.deleteMany({ where: { tenantId } });
-      await tx.workOrderPart.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
+      await tx.workOrderPart.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }, { product: { tenantId } }] } });
       await tx.workOrderService.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
       await tx.workOrderInvoice.deleteMany({ where: { tenantId } });
       await tx.commissionPayout.deleteMany({ where: { tenantId } });
-      await tx.partRequest.deleteMany({ where: { tenantId } });
+      await tx.partRequest.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }] } });
       await tx.workOrder.deleteMany({ where: { tenantId } });
       await tx.serviceType.deleteMany({ where: { tenantId } });
       await tx.vehicle.deleteMany({ where: { tenantId } });
       await tx.mechanicProfile.deleteMany({ where: { tenantId } });
 
       // 7. Orders & Items
-      await tx.orderItem.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }] } });
+      await tx.orderItem.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }, { product: { tenantId } }] } });
       const orderCount = await tx.order.deleteMany({ where: { tenantId } });
 
       // 8. Recipes, Products & Categories

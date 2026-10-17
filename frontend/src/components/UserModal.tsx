@@ -65,12 +65,12 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
         roleId: initialData.roleId || '',
         employmentType: initialData.employmentType || 'FULL_TIME',
         status: initialData.status || 'Aktif',
-        permissions: initialData.permissions || {
-          canVoid: false,
-          canDiscount: false,
-          canEditMenu: false,
-          canViewReports: false,
-          canManageStaff: false
+        permissions: {
+          canVoid: Boolean(initialData.permissions?.canVoid),
+          canDiscount: Boolean(initialData.permissions?.canDiscount),
+          canEditMenu: Boolean(initialData.permissions?.canEditMenu),
+          canViewReports: Boolean(initialData.permissions?.canViewReports),
+          canManageStaff: Boolean(initialData.permissions?.canManageStaff)
         }
       });
     } else {
@@ -102,15 +102,16 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
       const permKeys = selectedRoleObj?.permissions || [];
       
       const isOwnerOrAdmin = value === 'OWNER' || value === 'ADMIN' || value === 'Admin';
+      const isManager = value === 'MANAGER' || value === 'Manager';
       setFormData(prev => ({
         ...prev,
         role: value,
         roleId: selectedRoleObj?.id || prev.roleId,
         permissions: {
-          canVoid: isOwnerOrAdmin || permKeys.includes('pos.void'),
-          canDiscount: isOwnerOrAdmin || permKeys.includes('pos.discount'),
-          canEditMenu: isOwnerOrAdmin || permKeys.includes('products.manage'),
-          canViewReports: isOwnerOrAdmin || permKeys.includes('reports.view'),
+          canVoid: isOwnerOrAdmin || isManager || permKeys.includes('pos.void'),
+          canDiscount: isOwnerOrAdmin || isManager || permKeys.includes('pos.discount'),
+          canEditMenu: isOwnerOrAdmin || isManager || permKeys.includes('products.manage'),
+          canViewReports: isOwnerOrAdmin || isManager || permKeys.includes('reports.view'),
           canManageStaff: isOwnerOrAdmin || permKeys.includes('employees.manage')
         }
       }));
@@ -244,6 +245,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                   ) : (
                     <>
                       <option value="CASHIER">CASHIER (Kasir)</option>
+                      <option value="WAITERS">WAITERS (Pramusaji / Waiters)</option>
                       <option value="MEKANIK">MEKANIK (Mekanik / Teknisi Bengkel)</option>
                       <option value="KITCHEN">KITCHEN (Dapur)</option>
                       <option value="MANAGER">MANAGER (Manager Outlet)</option>

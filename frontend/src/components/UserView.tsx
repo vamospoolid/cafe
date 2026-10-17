@@ -45,22 +45,26 @@ const UserView = () => {
   }, [posContext?.token, canViewEmployees]);
 
   const handleDelete = async (id: number, name: string) => {
-    const confirmResult = await confirmAlert('Konfirmasi', `Apakah Anda yakin ingin menonaktifkan akun staf "${name}"?`);
+    const confirmResult = await confirmAlert(
+      'Hapus Akun Staf',
+      `Apakah Anda yakin ingin menghapus akun staf "${name}" dari outlet ini? Jika staf sudah memiliki riwayat transaksi finansial, riwayat transaksi masa lalu tetap tersimpan aman untuk laporan keuangan.`
+    );
     if (!confirmResult.isConfirmed) return;
     try {
       const res = await fetch(`/api/users/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${posContext?.token}` }
       });
+      const data = await res.json();
       if (res.ok) {
-        toast(`Akun staf "${name}" dinonaktifkan.`, 'success');
+        toast(data.message || `Akun staf "${name}" berhasil dihapus.`, 'success');
         fetchUsers();
       } else {
-        const err = await res.json();
-        toast(err.error || 'Gagal menonaktifkan user', 'error');
+        toast(data.error || 'Gagal menghapus user', 'error');
       }
     } catch (err) {
       console.error(err);
+      toast('Terjadi kesalahan jaringan', 'error');
     }
   };
 
@@ -77,7 +81,8 @@ const UserView = () => {
       case 'WAREHOUSE':
       case 'GUDANG': return 'bg-teal-100 text-teal-700 border-teal-200';
       case 'HR': return 'bg-pink-100 text-pink-700 border-pink-200';
-      case 'WAITER': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'WAITER':
+      case 'WAITERS': return 'bg-emerald-100 text-emerald-700 border-emerald-200 font-bold';
       default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
@@ -346,7 +351,7 @@ const UserView = () => {
                                 <button
                                   onClick={() => handleDelete(u.id, u.name)}
                                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                  title="Nonaktifkan"
+                                  title="Hapus Karyawan"
                                 >
                                   <Trash2 size={16} />
                                 </button>

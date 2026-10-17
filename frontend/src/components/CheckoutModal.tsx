@@ -86,12 +86,14 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const customerPoints = currentCustomer?.points || 0;
   const maxPointDiscount = customerPoints * loyaltyPointValue;
 
+  const canUserDiscount = Boolean(posContext?.hasPermission('pos.discount'));
+  const effectiveManualDiscount = canUserDiscount ? manualDiscount : 0;
   const voucherDiscount = appliedVoucher ? (appliedVoucher.discountAmount || 0) : 0;
   const pointsDiscount = redeemPoints 
-    ? Math.min(maxPointDiscount, Math.max(0, subtotal - voucherDiscount - manualDiscount))
+    ? Math.min(maxPointDiscount, Math.max(0, subtotal - voucherDiscount - effectiveManualDiscount))
     : (currentCustomer?.discountAmount || 0);
 
-  const totalDiscount = manualDiscount + voucherDiscount + pointsDiscount;
+  const totalDiscount = effectiveManualDiscount + voucherDiscount + pointsDiscount;
   const finalTotal = Math.max(0, subtotal - totalDiscount + tax + serviceCharge);
 
   const handleSendWhatsAppReceipt = () => {
@@ -523,7 +525,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${posContext?.token}` },
           body: JSON.stringify({ 
             paymentMethod: pmString, 
-            discount: (currentCustomer?.discountAmount || 0) + manualDiscount, 
+            discount: (currentCustomer?.discountAmount || 0) + effectiveManualDiscount, 
             total: finalTotal,
             customerId: currentCustomer?.id || null,
             customerName: currentCustomer?.name,
@@ -547,7 +549,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             joinedTableIds: customer?.joinedTableIds || undefined,
             items: cart.map((item: any) => ({ productId: item.product.id, qty: item.qty, price: item.product.sellPrice, notes: item.notes || '' })),
             subtotal,
-            discount: (currentCustomer?.discountAmount || 0) + manualDiscount,
+            discount: (currentCustomer?.discountAmount || 0) + effectiveManualDiscount,
             pointsUsed: currentCustomer?.pointsUsed || 0,
             tax, serviceCharge, total: finalTotal, paymentMethod: pmString, isPaid: true,
             dueDate: paymentMethod === 'piutang' ? dueDate : undefined,
@@ -815,10 +817,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <span>-{fmt(pointsDiscount)}</span>
                 </div>
               )}
-              {manualDiscount > 0 && (
+              {effectiveManualDiscount > 0 && (
                 <div className="flex justify-between text-rose-600 font-semibold px-2 py-0.5">
                   <span>Diskon Khusus</span>
-                  <span>-{fmt(manualDiscount)}</span>
+                  <span>-{fmt(effectiveManualDiscount)}</span>
                 </div>
               )}
             </div>
@@ -912,22 +914,33 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
 
             {/* Quick Manual Discount Input */}
-            <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2 shadow-sm">
-              <Tag size={14} className="text-slate-400 shrink-0" />
-              <span className="text-xs font-medium text-slate-500 shrink-0">Diskon Manual:</span>
-              <input
-                type="number"
-                placeholder="0"
-                max={Math.max(0, subtotal - voucherDiscount - pointsDiscount)}
-                value={manualDiscount || ''}
-                onChange={e => {
-                  const maxAllowed = Math.max(0, subtotal - voucherDiscount - pointsDiscount);
-                  const val = Number(e.target.value) || 0;
-                  setManualDiscount(Math.max(0, Math.min(val, maxAllowed)));
-                }}
-                className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
-              />
-            </div>
+            {canUserDiscount ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-2 flex items-center gap-2 shadow-sm">
+                <Tag size={14} className="text-slate-400 shrink-0" />
+                <span className="text-xs font-medium text-slate-500 shrink-0">Diskon Manual:</span>
+                <input
+                  type="number"
+                  placeholder="0"
+                  max={Math.max(0, subtotal - voucherDiscount - pointsDiscount)}
+                  value={manualDiscount || ''}
+                  onChange={e => {
+                    const maxAllowed = Math.max(0, subtotal - voucherDiscount - pointsDiscount);
+                    const val = Number(e.target.value) || 0;
+                    setManualDiscount(Math.max(0, Math.min(val, maxAllowed)));
+                  }}
+                  className="w-full text-right font-bold text-xs text-rose-600 outline-none bg-transparent"
+                />
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-2.5 flex items-center justify-between text-xs text-slate-400">
+                <span className="flex items-center gap-1.5 font-medium text-slate-500">
+                  <Tag size={13} className="text-slate-400" /> Diskon Manual
+                </span>
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded-md flex items-center gap-1">
+                  🔒 Terkunci (Izin Nonaktif)
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Member Loyalty / Guest Card */}

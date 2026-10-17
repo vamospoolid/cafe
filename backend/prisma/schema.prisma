@@ -899,6 +899,7 @@ model Settings {
   enableCameraPhoto   Boolean @default(true)
   googleMapsUrl       String? @default("")
   workShifts          String? // JSON list shift kerja
+  dailySopChecklist   String? // JSON list checklist SOP harian: [{ id, text, type, category, targetRole }]
 
   // Reward & Punishment Karyawan
   enableZeroLateBonus    Boolean @default(true)

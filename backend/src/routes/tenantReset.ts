@@ -5,8 +5,34 @@ import crypto from 'crypto';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
 import { invalidateTenantCache } from '../middlewares/tenantResolver';
+import { cacheService } from '../services/CacheService';
+import { emitToTenant } from '../index';
 
 const router = Router();
+
+/**
+ * Helper to invalidate multi-layer tenant cache and broadcast real-time socket notification
+ */
+async function clearTenantCacheAndBroadcast(tenantId: string, eventType: string, message: string) {
+  try {
+    invalidateTenantCache(tenantId);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { slug: true, customDomain: true }
+    });
+    if (tenant) {
+      await cacheService.invalidateTenant(tenantId, tenant.slug, tenant.customDomain || undefined);
+    }
+    await cacheService.bumpTenantCatalogVersion(tenantId);
+    emitToTenant(tenantId, eventType, {
+      tenantId,
+      timestamp: new Date().toISOString(),
+      message
+    });
+  } catch (err) {
+    console.warn(`[Reset/Restore] Warning while invalidating tenant cache for ${tenantId}:`, err);
+  }
+}
 
 export interface StarterTemplate {
   id: string;
@@ -513,17 +539,24 @@ router.post('/transactions', authenticateToken, async (req: AuthRequest, res: Re
       const orderIds = orders.map(o => o.id);
 
       // Delete Order Items & Payments
-      let deletedOrderItems = 0;
-      if (orderIds.length > 0) {
-        const itemRes = await tx.orderItem.deleteMany({
-          where: { orderId: { in: orderIds } }
-        });
-        deletedOrderItems = itemRes.count;
+      const itemRes = await tx.orderItem.deleteMany({
+        where: {
+          OR: [
+            { tenantId },
+            ...(orderIds.length > 0 ? [{ orderId: { in: orderIds } }] : [])
+          ]
+        }
+      });
+      const deletedOrderItems = itemRes.count;
 
-        await tx.paymentTransaction.deleteMany({
-          where: { orderId: { in: orderIds } }
-        });
-      }
+      await tx.paymentTransaction.deleteMany({
+        where: {
+          OR: [
+            { tenantId },
+            ...(orderIds.length > 0 ? [{ orderId: { in: orderIds } }] : [])
+          ]
+        }
+      });
 
       // Delete Orders
       const deletedOrders = await tx.order.deleteMany({ where: tenantCondition });
@@ -542,10 +575,13 @@ router.post('/transactions', authenticateToken, async (req: AuthRequest, res: Re
       await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
       await tx.shiftHandover.deleteMany({ where: tenantCondition });
 
-      // Reset ingredient stock logs that are from production / sales
+      // Reset ingredient stock logs that are from production / sales / loss
       await tx.ingredientLog.deleteMany({
         where: {
-          tenantId,
+          OR: [
+            { tenantId },
+            { ingredient: { tenantId } }
+          ],
           type: { in: ['Produksi', 'Penjualan', 'Loss', 'Rusak'] }
         }
       });
@@ -555,8 +591,8 @@ router.post('/transactions', authenticateToken, async (req: AuthRequest, res: Re
       await tx.workOrderInvoice.deleteMany({ where: tenantCondition });
       await tx.workOrderReturnItem.deleteMany({ where: { return: { tenantId } } });
       await tx.workOrderReturn.deleteMany({ where: tenantCondition });
-      await tx.workOrderPart.deleteMany({ where: tenantCondition });
-      await tx.workOrderService.deleteMany({ where: tenantCondition });
+      await tx.workOrderPart.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
+      await tx.workOrderService.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
       const deletedWorkOrders = await tx.workOrder.deleteMany({ where: tenantCondition });
       await tx.partRequest.deleteMany({ where: tenantCondition });
       await tx.supplierInvoicePayment.deleteMany({ where: tenantCondition });
@@ -589,6 +625,8 @@ router.post('/transactions', authenticateToken, async (req: AuthRequest, res: Re
         laundryOrdersCount: deletedLaundryOrders.count
       };
     });
+
+    await clearTenantCacheAndBroadcast(tenantId, 'system:transactions_reset', 'Riwayat transaksi kasir simulasi berhasil dibersihkan.');
 
     await AuditLogger.log({
       tenantId,
@@ -650,74 +688,80 @@ router.post('/full', authenticateToken, async (req: AuthRequest, res: Response) 
 
     // Execute atomic factory reset for tenant
     const stats = await prisma.$transaction(async (tx) => {
-      // 1. Transaction records (Kafe + Bengkel)
-      const orders = await tx.order.findMany({ where: tenantCondition, select: { id: true } });
-      const orderIds = orders.map(o => o.id);
-      if (orderIds.length > 0) {
-        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-        await tx.paymentTransaction.deleteMany({ where: { orderId: { in: orderIds } } });
-      }
-      await tx.order.deleteMany({ where: tenantCondition });
-      await tx.cashFlow.deleteMany({ where: tenantCondition });
-      await tx.shift.deleteMany({ where: tenantCondition });
-      await tx.attendance.deleteMany({ where: tenantCondition });
-      await tx.reservation.deleteMany({ where: tenantCondition });
-      await tx.debtPayment.deleteMany({ where: tenantCondition });
-      await tx.debt.deleteMany({ where: tenantCondition });
-      await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
-      await tx.shiftHandover.deleteMany({ where: tenantCondition });
+      // 1. Logs & Communications
+      await tx.auditLog.deleteMany({ where: { tenantId } });
+      await tx.whatsAppLog.deleteMany({ where: { tenantId } });
+      await tx.pointLog.deleteMany({ where: { tenantId } });
+      await tx.wasteLog.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.ingredientLog.deleteMany({ where: { OR: [{ tenantId }, { ingredient: { tenantId } }] } });
 
-      // Bengkel vertical transactions deletion
-      await tx.commissionPayout.deleteMany({ where: tenantCondition });
-      await tx.workOrderInvoice.deleteMany({ where: tenantCondition });
-      await tx.workOrderReturnItem.deleteMany({ where: { return: { tenantId } } });
-      await tx.workOrderReturn.deleteMany({ where: tenantCondition });
-      await tx.workOrderPart.deleteMany({ where: tenantCondition });
-      await tx.workOrderService.deleteMany({ where: tenantCondition });
-      const deletedWorkOrders = await tx.workOrder.deleteMany({ where: tenantCondition });
+      // 2. Financials & Debts
+      await tx.debtPayment.deleteMany({ where: { tenantId } });
+      await tx.debt.deleteMany({ where: { tenantId } });
+      await tx.paymentTransaction.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }] } });
+      await tx.ownerFundTransaction.deleteMany({ where: { tenantId } });
+      await tx.employeeLoan.deleteMany({ where: { tenantId } });
+      const deletedCashFlows = await tx.cashFlow.deleteMany({ where: tenantCondition });
 
-      // Retail vertical transactions deletion
+      // 3. Central Warehouse (Gudang Pusat)
+      await tx.warehouseSaleItem.deleteMany({ where: { OR: [{ tenantId }, { sale: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseSale.deleteMany({ where: { tenantId } });
+      await tx.warehouseRequisitionItem.deleteMany({ where: { OR: [{ tenantId }, { requisition: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseRequisition.deleteMany({ where: { tenantId } });
+      await tx.warehouseInboundItem.deleteMany({ where: { OR: [{ tenantId }, { inbound: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseInbound.deleteMany({ where: { tenantId } });
+
+      // 4. Purchases & Suppliers
+      await tx.purchaseOrderItem.deleteMany({ where: { OR: [{ tenantId }, { po: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      const poCount = await tx.purchaseOrder.deleteMany({ where: tenantCondition });
+      await tx.supplierInvoicePayment.deleteMany({ where: { tenantId } });
+      await tx.supplierInvoiceItem.deleteMany({ where: { OR: [{ invoice: { tenantId } }, { product: { tenantId } }] } });
+      await tx.supplierInvoice.deleteMany({ where: tenantCondition });
+
+      // 5. Retail Delivery Orders & Laundry
       await tx.deliveryOrderItem.deleteMany({ where: { deliveryOrder: { tenantId } } });
       const deletedDeliveryOrders = await tx.deliveryOrder.deleteMany({ where: tenantCondition });
-
-      // Laundry vertical transactions deletion
       await tx.laundryOrderItem.deleteMany({ where: { order: { tenantId } } });
       const deletedLaundryOrders = await tx.laundryOrder.deleteMany({ where: tenantCondition });
 
-      // Bengkel master entities deletion (before products/categories)
+      // 6. Bengkel vertical modules
+      await tx.workOrderReturnItem.deleteMany({ where: { return: { tenantId } } });
+      await tx.workOrderReturn.deleteMany({ where: tenantCondition });
+      await tx.workOrderPart.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }, { product: { tenantId } }] } });
+      await tx.workOrderService.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
+      await tx.workOrderInvoice.deleteMany({ where: tenantCondition });
+      await tx.commissionPayout.deleteMany({ where: tenantCondition });
+      await tx.partRequest.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }] } });
+      const deletedWorkOrders = await tx.workOrder.deleteMany({ where: tenantCondition });
       const deletedVehicles = await tx.vehicle.deleteMany({ where: tenantCondition });
       const deletedServiceTypes = await tx.serviceType.deleteMany({ where: tenantCondition });
       const deletedMechanics = await tx.mechanicProfile.deleteMany({ where: tenantCondition });
-      await tx.partRequest.deleteMany({ where: tenantCondition });
-      await tx.supplierInvoicePayment.deleteMany({ where: tenantCondition });
-      await tx.supplierInvoiceItem.deleteMany({ where: { invoice: { tenantId } } });
-      await tx.supplierInvoice.deleteMany({ where: tenantCondition });
 
-      // Retail master entities deletion
-      await tx.productUOM.deleteMany({ where: tenantCondition });
-      await tx.productPriceTier.deleteMany({ where: tenantCondition });
+      // 7. Orders & Items
+      await tx.orderItem.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }, { product: { tenantId } }] } });
+      const deletedOrders = await tx.order.deleteMany({ where: tenantCondition });
 
-      // 2. Inventory & Purchase Orders
-      await tx.wasteLog.deleteMany({ where: tenantCondition });
-      await tx.ingredientLog.deleteMany({ where: tenantCondition });
-      await tx.warehouseInboundItem.deleteMany({ where: { ingredient: { tenantId } } });
-      await tx.warehouseRequisitionItem.deleteMany({ where: { ingredient: { tenantId } } });
-      await tx.warehouseSaleItem.deleteMany({ where: { ingredient: { tenantId } } });
-      
-      const pos = await tx.purchaseOrder.findMany({ where: tenantCondition, select: { id: true } });
-      const poIds = pos.map(p => p.id);
-      if (poIds.length > 0) {
-        await tx.purchaseOrderItem.deleteMany({ where: { poId: { in: poIds } } });
-      }
-      await tx.purchaseOrder.deleteMany({ where: tenantCondition });
-
-      // 3. Catalog (Recipes, Products, Categories, Ingredients, Tables, Suppliers)
-      const deletedRecipes = await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
+      // 8. Catalog (Recipes, Products, Categories, Ingredients, Tables, Suppliers)
+      const deletedRecipes = await tx.recipeItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.productPriceTier.deleteMany({ where: { tenantId } });
+      await tx.productUOM.deleteMany({ where: { tenantId } });
       const deletedProducts = await tx.product.deleteMany({ where: tenantCondition });
+      // Delete child categories first to prevent self-referential foreign key constraint crash
+      await tx.category.deleteMany({ where: { tenantId, parentId: { not: null } } });
       const deletedCategories = await tx.category.deleteMany({ where: tenantCondition });
       const deletedIngredients = await tx.ingredient.deleteMany({ where: tenantCondition });
       const deletedTables = await tx.table.deleteMany({ where: tenantCondition });
       const deletedSuppliers = await tx.supplier.deleteMany({ where: tenantCondition });
+
+      // 9. Shifts, Checklists, Reservations, Vouchers, Attendances, Customers
+      await tx.shiftHandover.deleteMany({ where: tenantCondition });
+      await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
+      await tx.reservation.deleteMany({ where: tenantCondition });
+      await tx.voucher.deleteMany({ where: tenantCondition });
+      await tx.leaveRequest.deleteMany({ where: tenantCondition });
+      await tx.attendance.deleteMany({ where: tenantCondition });
+      const deletedShifts = await tx.shift.deleteMany({ where: tenantCondition });
+      const deletedCustomers = await tx.customer.deleteMany({ where: tenantCondition });
 
       return {
         productsCount: deletedProducts.count,
@@ -726,12 +770,18 @@ router.post('/full', authenticateToken, async (req: AuthRequest, res: Response) 
         recipesCount: deletedRecipes.count,
         tablesCount: deletedTables.count,
         suppliersCount: deletedSuppliers.count,
+        ordersCount: deletedOrders.count,
+        shiftsCount: deletedShifts.count,
+        customersCount: deletedCustomers.count,
+        cashFlowsCount: deletedCashFlows.count,
         workOrdersCount: deletedWorkOrders.count,
         vehiclesCount: deletedVehicles.count,
         serviceTypesCount: deletedServiceTypes.count,
         mechanicsCount: deletedMechanics.count
       };
-    });
+    }, { timeout: 90000 });
+
+    await clearTenantCacheAndBroadcast(tenantId, 'system:database_reset', 'Factory Reset berhasil dijalankan oleh Owner. Terminal siap untuk data baru.');
 
     await AuditLogger.log({
       tenantId,
@@ -793,16 +843,27 @@ router.post('/apply-template', authenticateToken, async (req: AuthRequest, res: 
     const createdStats = await prisma.$transaction(async (tx) => {
       // 1. Opsional: Bersihkan katalog lama jika dicentang
       if (wipeExistingFirst) {
-        await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
-        await tx.wasteLog.deleteMany({ where: { product: { tenantId } } });
-        await tx.ingredientLog.deleteMany({ where: { tenantId } });
-        await tx.purchaseOrderItem.updateMany({ where: { product: { tenantId } }, data: { productId: null } });
-        
-        // Bersihkan part bengkel jika ada relasi ke produk
-        await tx.workOrderPart.updateMany({ where: { tenantId }, data: { productId: null } });
+        await tx.recipeItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+        await tx.wasteLog.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+        await tx.ingredientLog.deleteMany({ where: { OR: [{ tenantId }, { ingredient: { tenantId } }] } });
+        await tx.purchaseOrderItem.deleteMany({ where: { OR: [{ tenantId }, { po: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+        await tx.warehouseInboundItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+        await tx.warehouseRequisitionItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+        await tx.warehouseSaleItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+        await tx.supplierInvoiceItem.deleteMany({ where: { OR: [{ invoice: { tenantId } }, { product: { tenantId } }] } });
+        await tx.deliveryOrderItem.deleteMany({ where: { deliveryOrder: { tenantId } } });
+        await tx.workOrderPart.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }, { product: { tenantId } }] } });
+        await tx.partRequest.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }] } });
+        await tx.productPriceTier.deleteMany({ where: { tenantId } });
+        await tx.productUOM.deleteMany({ where: { tenantId } });
         await tx.serviceType.deleteMany({ where: { tenantId } });
 
+        // Dissociate or delete existing orders to allow clean product wipe
+        await tx.orderItem.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }, { product: { tenantId } }] } });
+        await tx.order.deleteMany({ where: { tenantId } });
+
         await tx.product.deleteMany({ where: { tenantId } });
+        await tx.category.deleteMany({ where: { tenantId, parentId: { not: null } } });
         await tx.category.deleteMany({ where: { tenantId } });
         await tx.ingredient.deleteMany({ where: { tenantId } });
       }
@@ -966,6 +1027,8 @@ router.post('/apply-template', authenticateToken, async (req: AuthRequest, res: 
       severity: 'INFO'
     }, req);
 
+    await clearTenantCacheAndBroadcast(tenantId, 'system:template_applied', `Template "${template.name}" berhasil diterapkan ke toko Anda.`);
+
     res.json({
       success: true,
       message: `Template "${template.name}" berhasil diterapkan ke toko Anda!`,
@@ -987,33 +1050,51 @@ async function captureTenantStateSnapshot(tenantId: string) {
   const whereTenant = { tenantId };
 
   const [
-    categories, products, tables, reservations, customers, pointLogs,
+    categories, products, productUoms, productPriceTiers, tables, reservations, customers, pointLogs,
     orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
     ingredients, recipeItems, ingredientLogs, purchaseOrders,
-    debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists
+    debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists, vouchers
   ] = await Promise.all([
     prisma.category.findMany({ where: whereTenant }),
     prisma.product.findMany({ where: whereTenant }),
+    prisma.productUOM.findMany({ where: whereTenant }),
+    prisma.productPriceTier.findMany({ where: whereTenant }),
     prisma.table.findMany({ where: whereTenant }),
     prisma.reservation.findMany({ where: whereTenant }),
     prisma.customer.findMany({ where: whereTenant }),
     prisma.pointLog.findMany({ where: whereTenant }),
     prisma.order.findMany({ where: whereTenant }),
-    prisma.orderItem.findMany({ where: { order: { tenantId } } }),
+    prisma.orderItem.findMany({
+      where: {
+        OR: [
+          { tenantId },
+          { order: { tenantId } }
+        ]
+      }
+    }),
     prisma.cashFlow.findMany({ where: whereTenant }),
     prisma.attendance.findMany({ where: whereTenant }),
     prisma.settings.findMany({ where: whereTenant }),
     prisma.shift.findMany({ where: whereTenant }),
     prisma.supplier.findMany({ where: whereTenant }),
     prisma.ingredient.findMany({ where: whereTenant }),
-    prisma.recipeItem.findMany({ where: { product: { tenantId } } }),
+    prisma.recipeItem.findMany({
+      where: {
+        OR: [
+          { tenantId },
+          { product: { tenantId } },
+          { ingredient: { tenantId } }
+        ]
+      }
+    }),
     prisma.ingredientLog.findMany({ where: whereTenant }),
     prisma.purchaseOrder.findMany({ where: whereTenant }),
     prisma.debt.findMany({ where: whereTenant }),
     prisma.debtPayment.findMany({ where: whereTenant }),
     prisma.leaveRequest.findMany({ where: whereTenant }),
     prisma.shiftHandover.findMany({ where: whereTenant }),
-    prisma.kitchenChecklist.findMany({ where: whereTenant })
+    prisma.kitchenChecklist.findMany({ where: whereTenant }),
+    prisma.voucher.findMany({ where: whereTenant })
   ]);
 
   const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
@@ -1033,10 +1114,10 @@ async function captureTenantStateSnapshot(tenantId: string) {
       isPreRestoreEmergency: true
     },
     data: {
-      categories, products, tables, reservations, customers, pointLogs,
+      categories, products, productUoms, productPriceTiers, tables, reservations, customers, pointLogs,
       orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
       ingredients, recipeItems, ingredientLogs, purchaseOrders,
-      debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists
+      debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists, vouchers
     }
   };
 }
@@ -1184,6 +1265,9 @@ router.post('/restore/execute', authenticateToken, async (req: AuthRequest, res:
     // 5. Atomic Transacted Restore
     const restoredStats = await executeTenantRestoreTransaction(tenantId, userId, data, mode);
 
+    // Invalidate caches and broadcast catalog sync
+    await clearTenantCacheAndBroadcast(tenantId, 'TENANT_CATALOG_SYNC', 'Pemulihan data cadangan berhasil disinkronkan ke terminal.');
+
     await AuditLogger.log({
       tenantId,
       action: 'DATA_RESTORE',
@@ -1218,40 +1302,112 @@ export async function executeTenantRestoreTransaction(
   return await prisma.$transaction(async (tx) => {
     // a. Wipe current data based on mode
     if (mode === 'FULL_OVERWRITE') {
-      const orders = await tx.order.findMany({ where: tenantCondition, select: { id: true } });
-      const orderIds = orders.map(o => o.id);
-      if (orderIds.length > 0) {
-        await tx.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
-        await tx.paymentTransaction.deleteMany({ where: { orderId: { in: orderIds } } });
-      }
-      await tx.order.deleteMany({ where: tenantCondition });
-      await tx.cashFlow.deleteMany({ where: tenantCondition });
-      await tx.shift.deleteMany({ where: tenantCondition });
-      await tx.attendance.deleteMany({ where: tenantCondition });
-      await tx.reservation.deleteMany({ where: tenantCondition });
-      await tx.debtPayment.deleteMany({ where: tenantCondition });
-      await tx.debt.deleteMany({ where: tenantCondition });
-      await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
-      await tx.shiftHandover.deleteMany({ where: tenantCondition });
+      // 1. Logs & Communications
+      await tx.auditLog.deleteMany({ where: { tenantId } });
+      await tx.whatsAppLog.deleteMany({ where: { tenantId } });
+      await tx.pointLog.deleteMany({ where: { tenantId } });
+      await tx.wasteLog.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.ingredientLog.deleteMany({ where: { OR: [{ tenantId }, { ingredient: { tenantId } }] } });
 
-      // Retail vertical deletion
+      // 2. Financials & Debts
+      await tx.debtPayment.deleteMany({ where: { tenantId } });
+      await tx.debt.deleteMany({ where: { tenantId } });
+      await tx.paymentTransaction.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }] } });
+      await tx.ownerFundTransaction.deleteMany({ where: { tenantId } });
+      await tx.employeeLoan.deleteMany({ where: { tenantId } });
+      await tx.cashFlow.deleteMany({ where: tenantCondition });
+
+      // 3. Central Warehouse
+      await tx.warehouseSaleItem.deleteMany({ where: { OR: [{ tenantId }, { sale: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseSale.deleteMany({ where: { tenantId } });
+      await tx.warehouseRequisitionItem.deleteMany({ where: { OR: [{ tenantId }, { requisition: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseRequisition.deleteMany({ where: { tenantId } });
+      await tx.warehouseInboundItem.deleteMany({ where: { OR: [{ tenantId }, { inbound: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseInbound.deleteMany({ where: { tenantId } });
+
+      // 4. Purchases & Suppliers
+      await tx.purchaseOrderItem.deleteMany({ where: { OR: [{ tenantId }, { po: { tenantId } }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.purchaseOrder.deleteMany({ where: tenantCondition });
+      await tx.supplierInvoicePayment.deleteMany({ where: { tenantId } });
+      await tx.supplierInvoiceItem.deleteMany({ where: { OR: [{ invoice: { tenantId } }, { product: { tenantId } }] } });
+      await tx.supplierInvoice.deleteMany({ where: tenantCondition });
+
+      // 5. Retail Delivery Orders & Laundry
       await tx.deliveryOrderItem.deleteMany({ where: { deliveryOrder: { tenantId } } });
       await tx.deliveryOrder.deleteMany({ where: tenantCondition });
-      await tx.productUOM.deleteMany({ where: tenantCondition });
-      await tx.productPriceTier.deleteMany({ where: tenantCondition });
+      await tx.laundryOrderItem.deleteMany({ where: { order: { tenantId } } });
+      await tx.laundryOrder.deleteMany({ where: tenantCondition });
 
-      await tx.wasteLog.deleteMany({ where: tenantCondition });
-      await tx.ingredientLog.deleteMany({ where: tenantCondition });
-      await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
+      // 6. Bengkel vertical modules
+      await tx.workOrderReturnItem.deleteMany({ where: { return: { tenantId } } });
+      await tx.workOrderReturn.deleteMany({ where: tenantCondition });
+      await tx.workOrderPart.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }, { product: { tenantId } }] } });
+      await tx.workOrderService.deleteMany({ where: { OR: [{ tenantId }, { workOrder: { tenantId } }] } });
+      await tx.workOrderInvoice.deleteMany({ where: tenantCondition });
+      await tx.commissionPayout.deleteMany({ where: tenantCondition });
+      await tx.partRequest.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }] } });
+      await tx.workOrder.deleteMany({ where: tenantCondition });
+      await tx.vehicle.deleteMany({ where: tenantCondition });
+      await tx.serviceType.deleteMany({ where: tenantCondition });
+      await tx.mechanicProfile.deleteMany({ where: tenantCondition });
+
+      // 7. Orders & Items
+      await tx.orderItem.deleteMany({ where: { OR: [{ tenantId }, { order: { tenantId } }, { product: { tenantId } }] } });
+      await tx.order.deleteMany({ where: tenantCondition });
+
+      // 8. Catalog (Recipes, Products, Categories, Ingredients, Tables, Suppliers)
+      await tx.recipeItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.productPriceTier.deleteMany({ where: { tenantId } });
+      await tx.productUOM.deleteMany({ where: { tenantId } });
       await tx.product.deleteMany({ where: tenantCondition });
+      // Delete child categories first to prevent foreign key error
+      await tx.category.deleteMany({ where: { tenantId, parentId: { not: null } } });
       await tx.category.deleteMany({ where: tenantCondition });
       await tx.ingredient.deleteMany({ where: tenantCondition });
       await tx.table.deleteMany({ where: tenantCondition });
       await tx.supplier.deleteMany({ where: tenantCondition });
+
+      // 9. Shifts, Checklists, Reservations, Vouchers, Attendances, Customers
+      await tx.shiftHandover.deleteMany({ where: tenantCondition });
+      await tx.kitchenChecklist.deleteMany({ where: tenantCondition });
+      await tx.reservation.deleteMany({ where: tenantCondition });
+      await tx.voucher.deleteMany({ where: tenantCondition });
+      await tx.leaveRequest.deleteMany({ where: tenantCondition });
+      await tx.attendance.deleteMany({ where: tenantCondition });
+      await tx.shift.deleteMany({ where: tenantCondition });
+      await tx.customer.deleteMany({ where: tenantCondition });
     } else if (mode === 'CATALOG_ONLY') {
-      await tx.recipeItem.deleteMany({ where: { product: { tenantId } } });
-      await tx.wasteLog.deleteMany({ where: { product: { tenantId } } });
-      await tx.product.deleteMany({ where: tenantCondition });
+      // In CATALOG_ONLY mode: orders and transactions are kept intact.
+      await tx.recipeItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.wasteLog.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.ingredientLog.deleteMany({ where: { OR: [{ tenantId }, { ingredient: { tenantId } }] } });
+      await tx.warehouseInboundItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseRequisitionItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.warehouseSaleItem.deleteMany({ where: { OR: [{ tenantId }, { product: { tenantId } }, { ingredient: { tenantId } }] } });
+      await tx.productPriceTier.deleteMany({ where: { tenantId } });
+      await tx.productUOM.deleteMany({ where: { tenantId } });
+
+      // For products that are referenced in existing OrderItems: soft-delete them so historical orders remain valid
+      const existingOrderedProductIds = await tx.orderItem.findMany({
+        where: { OR: [{ tenantId }, { order: { tenantId } }] },
+        select: { productId: true },
+        distinct: ['productId']
+      });
+      const lockedProductIds = existingOrderedProductIds.map(o => o.productId);
+
+      if (lockedProductIds.length > 0) {
+        await tx.product.updateMany({
+          where: { tenantId, id: { in: lockedProductIds } },
+          data: { deletedAt: new Date(), status: 'Nonaktif' }
+        });
+        await tx.product.deleteMany({
+          where: { tenantId, id: { notIn: lockedProductIds } }
+        });
+      } else {
+        await tx.product.deleteMany({ where: tenantCondition });
+      }
+
+      await tx.category.deleteMany({ where: { tenantId, parentId: { not: null } } });
       await tx.category.deleteMany({ where: tenantCondition });
       await tx.ingredient.deleteMany({ where: tenantCondition });
     }
@@ -1360,10 +1516,57 @@ export async function executeTenantRestoreTransaction(
             stock: Number(prod.stock) || 0,
             minStock: Number(prod.minStock) || 1,
             imageUrl: prod.imageUrl || null,
-            status: prod.status || 'Aktif'
+            status: prod.status || 'Aktif',
+            sellPriceRetail: prod.sellPriceRetail ? Number(prod.sellPriceRetail) : null,
+            sellPriceMitra: prod.sellPriceMitra ? Number(prod.sellPriceMitra) : null,
+            sellPriceGrosir: prod.sellPriceGrosir ? Number(prod.sellPriceGrosir) : null,
+            minQtyGrosir: prod.minQtyGrosir ? Number(prod.minQtyGrosir) : null,
+            brand: prod.brand || null,
+            vehicleType: prod.vehicleType || null,
+            storageLocation: prod.storageLocation || null,
+            baseUom: prod.baseUom || 'PCS'
           }
         });
         productMap.set(prod.id, created.id);
+      }
+    }
+
+    // e2. Restore Product UOMs
+    if (Array.isArray(data.productUoms)) {
+      for (const u of data.productUoms) {
+        const newProdId = productMap.get(u.productId);
+        if (newProdId) {
+          await tx.productUOM.create({
+            data: {
+              tenantId,
+              productId: newProdId,
+              unitName: u.unitName || 'PCS',
+              conversionRatio: Number(u.conversionRatio) || 1,
+              barcode: u.barcode || null,
+              priceSell: Number(u.priceSell ?? u.sellPrice) || 0,
+              isDefaultSale: Boolean(u.isDefaultSale ?? u.isDefault)
+            }
+          });
+        }
+      }
+    }
+
+    // e3. Restore Product Price Tiers
+    if (Array.isArray(data.productPriceTiers)) {
+      for (const pt of data.productPriceTiers) {
+        const newProdId = productMap.get(pt.productId);
+        if (newProdId) {
+          await tx.productPriceTier.create({
+            data: {
+              tenantId,
+              productId: newProdId,
+              tierName: pt.tierName || 'UMUM',
+              minQty: Number(pt.minQty) || 1,
+              unitPrice: Number(pt.unitPrice ?? pt.price) || 0,
+              customerCategory: pt.customerCategory || null
+            }
+          });
+        }
       }
     }
 
@@ -1587,6 +1790,9 @@ router.post('/rollback', authenticateToken, async (req: AuthRequest, res: Respon
 
     const rollbackData = emergencyPayload.data || emergencyPayload;
     const restoredStats = await executeTenantRestoreTransaction(tenantId, userId, rollbackData, 'FULL_OVERWRITE');
+
+    // Invalidate caches and broadcast catalog sync
+    await clearTenantCacheAndBroadcast(tenantId, 'TENANT_CATALOG_SYNC', 'Rollback darurat ke kondisi sebelum restore berhasil.');
 
     await AuditLogger.log({
       tenantId,

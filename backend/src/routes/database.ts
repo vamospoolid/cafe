@@ -184,14 +184,17 @@ async function exportPrismaJsonBackup(
   const [
     categories, products, tables, reservations, customers, pointLogs,
     orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
-    ingredients, recipeItems, ingredientLogs, purchaseOrders,
-    debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists,
+    ingredients, recipeItems, ingredientLogs, wasteLogs, purchaseOrders,
+    debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists, vouchers,
     // Bengkel vertical entities
     workOrders, workOrderParts, workOrderServices, workOrderInvoices,
     vehicles, serviceTypes, mechanicProfiles, commissionPayouts, partRequests,
     supplierInvoices, supplierInvoiceItems, supplierInvoicePayments,
+    workOrderReturns, workOrderReturnItems,
     // Retail vertical entities
     productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
+    // Central Warehouse entities
+    warehouseInbounds, warehouseInboundItems, warehouseRequisitions, warehouseRequisitionItems, warehouseSales, warehouseSaleItems,
     // Laundry vertical entities
     laundryOrders, laundryOrderItems,
     // WhatsApp CRM entities
@@ -220,16 +223,22 @@ async function exportPrismaJsonBackup(
     prisma.ingredient.findMany({ where: whereTenant }),
     prisma.recipeItem.findMany({
       where: isPlatformAdmin ? {} : {
-        ingredient: { tenantId: tenantId! }
+        OR: [
+          { tenantId: tenantId! },
+          { product: { tenantId: tenantId! } },
+          { ingredient: { tenantId: tenantId! } }
+        ]
       }
     }),
     prisma.ingredientLog.findMany({ where: whereTenant }),
+    prisma.wasteLog.findMany({ where: whereTenant }),
     prisma.purchaseOrder.findMany({ where: whereTenant }),
     prisma.debt.findMany({ where: whereTenant }),
     prisma.debtPayment.findMany({ where: whereTenant }),
     prisma.leaveRequest.findMany({ where: whereTenant }),
     prisma.shiftHandover.findMany({ where: whereTenant }),
     prisma.kitchenChecklist.findMany({ where: whereTenant }),
+    prisma.voucher.findMany({ where: whereTenant }),
     // Bengkel queries
     prisma.workOrder.findMany({ where: whereTenant }),
     prisma.workOrderPart.findMany({ where: whereTenant }),
@@ -245,12 +254,29 @@ async function exportPrismaJsonBackup(
       where: isPlatformAdmin ? {} : { invoice: { tenantId: tenantId! } }
     }),
     prisma.supplierInvoicePayment.findMany({ where: whereTenant }),
+    prisma.workOrderReturn.findMany({ where: whereTenant }),
+    prisma.workOrderReturnItem.findMany({
+      where: isPlatformAdmin ? {} : { return: { tenantId: tenantId! } }
+    }),
     // Retail queries
     prisma.productUOM.findMany({ where: whereTenant }),
     prisma.productPriceTier.findMany({ where: whereTenant }),
     prisma.deliveryOrder.findMany({ where: whereTenant }),
     prisma.deliveryOrderItem.findMany({
       where: isPlatformAdmin ? {} : { deliveryOrder: { tenantId: tenantId! } }
+    }),
+    // Central Warehouse queries
+    prisma.warehouseInbound.findMany({ where: whereTenant }),
+    prisma.warehouseInboundItem.findMany({
+      where: isPlatformAdmin ? {} : { OR: [{ tenantId: tenantId! }, { inbound: { tenantId: tenantId! } }] }
+    }),
+    prisma.warehouseRequisition.findMany({ where: whereTenant }),
+    prisma.warehouseRequisitionItem.findMany({
+      where: isPlatformAdmin ? {} : { OR: [{ tenantId: tenantId! }, { requisition: { tenantId: tenantId! } }] }
+    }),
+    prisma.warehouseSale.findMany({ where: whereTenant }),
+    prisma.warehouseSaleItem.findMany({
+      where: isPlatformAdmin ? {} : { OR: [{ tenantId: tenantId! }, { sale: { tenantId: tenantId! } }] }
     }),
     // Laundry queries
     prisma.laundryOrder.findMany({ where: whereTenant }),
@@ -282,14 +308,17 @@ async function exportPrismaJsonBackup(
     data: {
       categories, products, tables, reservations, customers, pointLogs,
       orders, orderItems, cashFlows, attendances, settings, shifts, suppliers,
-      ingredients, recipeItems, ingredientLogs, purchaseOrders,
-      debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists,
+      ingredients, recipeItems, ingredientLogs, wasteLogs, purchaseOrders,
+      debts, debtPayments, leaveRequests, shiftHandovers, kitchenChecklists, vouchers,
       // Bengkel vertical entities
       workOrders, workOrderParts, workOrderServices, workOrderInvoices,
       vehicles, serviceTypes, mechanicProfiles, commissionPayouts, partRequests,
       supplierInvoices, supplierInvoiceItems, supplierInvoicePayments,
+      workOrderReturns, workOrderReturnItems,
       // Retail vertical entities
       productUoms, productPriceTiers, deliveryOrders, deliveryOrderItems,
+      // Central Warehouse entities
+      warehouseInbounds, warehouseInboundItems, warehouseRequisitions, warehouseRequisitionItems, warehouseSales, warehouseSaleItems,
       // Laundry vertical entities
       laundryOrders, laundryOrderItems,
       // WhatsApp CRM entities

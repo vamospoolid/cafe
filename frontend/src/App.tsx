@@ -50,6 +50,7 @@ const PlatformAdminLayout = React.lazy(() => import('./components/PlatformAdminL
 const SaaSPlatformAdminView = React.lazy(() => import('./components/SaaSPlatformAdminView'));
 const TenantOutletHubView = React.lazy(() => import('./components/TenantOutletHubView'));
 const PublicInvoiceView = React.lazy(() => import('./components/PublicInvoiceView'));
+const DraftMenuView = React.lazy(() => import('./components/DraftMenuView'));
 
 const RouteSuspenseFallback = () => (
   <div className="flex-1 flex flex-col items-center justify-center p-12 min-h-[350px] text-center bg-slate-50 gap-2.5">
@@ -103,6 +104,9 @@ const AppRoutes = () => {
   const isMukiAppDomain = hostname === 'app.mukiramen.id' || hostname.includes('mukiramen');
   const isTenantSubdomain = (hostname.endsWith('.codenusa.id') && hostname !== 'codenusa.id' && hostname !== 'www.codenusa.id') || isMukiAppDomain || isStaffDomain;
   const isPlatformLandingDomain = !isTenantSubdomain;
+
+  const userRole = (context?.user?.role || '').toUpperCase();
+  const isExecutive = userRole === 'OWNER' || userRole === 'ADMIN' || userRole === 'SUPERADMIN';
 
   // Sinkronisasi manifest PWA (Kasir vs Staf) & dynamic metadata toko
   useEffect(() => {
@@ -260,10 +264,10 @@ const AppRoutes = () => {
             <Layout>
               <Suspense fallback={<RouteSuspenseFallback />}>
                 <Routes>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardView />} />
-            <Route path="/pos" element={<POSViewAdaptive />} />
+                  <Route path="/" element={<Navigate to={isExecutive ? "/dashboard" : "/pos"} replace />} />
+                  <Route path="/login" element={<Navigate to={isExecutive ? "/dashboard" : "/pos"} replace />} />
+                  <Route path="/dashboard" element={isExecutive ? <DashboardView /> : <Navigate to="/pos" replace />} />
+                  <Route path="/pos" element={<POSViewAdaptive />} />
                   <Route
                     path="/bengkel/*"
                     element={
@@ -307,6 +311,7 @@ const AppRoutes = () => {
                   <Route path="/shift" element={<ShiftHistoryView />} />
                   <Route path="/laporan" element={<ReportViewAdaptive />} />
                   <Route path="/crm" element={<FeatureGuard featureKey="crm.loyalty"><CRMView /></FeatureGuard>} />
+                  <Route path="/draft-menu" element={<DraftMenuView />} />
                   <Route path="/pengaturan" element={<SettingsView />} />
                   <Route path="/bahan-baku" element={<FeatureGuard featureKey="inventory.advanced"><IngredientView /></FeatureGuard>} />
                   <Route path="/supplier" element={<SupplierView />} />
@@ -314,9 +319,9 @@ const AppRoutes = () => {
                   <Route path="/gudang" element={<FeatureGuard featureKey="warehouse.management"><WarehouseView /></FeatureGuard>} />
                   <Route path="/audit-log" element={<AuditLogView />} />
                   <Route path="/cabang" element={<TenantOutletHubView />} />
-                  <Route path="/activate-tablet" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/activate-tablet" element={<Navigate to={isExecutive ? "/dashboard" : "/pos"} replace />} />
 
-                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="*" element={<Navigate to={isExecutive ? "/dashboard" : "/pos"} replace />} />
                 </Routes>
               </Suspense>
             </Layout>
