@@ -85,7 +85,7 @@ export const generateProfessionalFoodImageUrl = (
   }
 
   const fullPrompt = encodeURIComponent(prompt + customExtra);
-  return `https://image.pollinations.ai/prompt/${fullPrompt}?width=512&height=512&seed=${seed}&nologo=true&enhance=true&model=flux`;
+  return `https://image.pollinations.ai/prompt/${fullPrompt}?width=400&height=400&seed=${seed}&nologo=true`;
 };
 
 /**
@@ -413,11 +413,13 @@ router.post('/commit', requirePermission('products.manage'), async (req: AuthReq
         });
 
         if (!category) {
+          const target = catData.printerTarget || 'KITCHEN';
           category = await tx.category.create({
             data: {
               name: categoryName,
               tenantId,
-              stationTarget: catData.printerTarget || 'KITCHEN'
+              printerTarget: target,
+              stationTarget: target
             }
           });
           createdCategoriesCount++;
@@ -431,15 +433,14 @@ router.post('/commit', requirePermission('products.manage'), async (req: AuthReq
 
           const sellPrice = Number(item.price) || 0;
           const buyPrice = Number(item.buyPrice) || 0;
-          const stock = Number(item.stock) || 100;
-          const minStock = Number(item.minStock) || 5;
+          const stock = Math.round(Number(item.stock) || 100);
+          const minStock = Math.round(Number(item.minStock) || 5);
           const imageUrl = item.imageUrl || null;
 
           // Buat produk baru
           await tx.product.create({
             data: {
               name: itemName,
-              price: sellPrice,
               sellPrice,
               buyPrice,
               stock,
