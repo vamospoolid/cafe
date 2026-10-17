@@ -24,7 +24,9 @@ import {
   Palette,
   Check,
   Eye,
-  Info
+  Info,
+  Key,
+  ExternalLink
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -80,6 +82,13 @@ export const DraftMenuView: React.FC = () => {
   const [commitMode, setCommitMode] = useState<'APPEND' | 'REPLACE'>('APPEND');
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitResult, setCommitResult] = useState<{ createdCategoriesCount: number; createdProductsCount: number } | null>(null);
+
+  // Gemini API Key management
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    return localStorage.getItem('code_pos_gemini_api_key') || '';
+  });
+  const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
+  const [tempApiKeyInput, setTempApiKeyInput] = useState<string>('');
 
   // Bulk HPP inputs per category: { [catId]: { amount: string; percent: string } }
   const [bulkHppState, setBulkHppState] = useState<Record<string, { amount: string; percent: string }>>({});
@@ -145,6 +154,7 @@ export const DraftMenuView: React.FC = () => {
     setStep('EXTRACTING');
 
     try {
+      const effectiveApiKey = (geminiApiKey || localStorage.getItem('code_pos_gemini_api_key') || '').trim();
       const res = await fetch('/api/draft-menu/extract-image', {
         method: 'POST',
         headers: {
@@ -154,13 +164,18 @@ export const DraftMenuView: React.FC = () => {
         body: JSON.stringify({
           images: uploadedImages,
           businessType,
-          photoStyle
+          photoStyle,
+          geminiApiKey: effectiveApiKey || undefined
         })
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.code === 'MISSING_GEMINI_KEY') {
+          setTempApiKeyInput(effectiveApiKey);
+          setShowApiKeyModal(true);
+        }
         throw new Error(data.error || 'Gagal mengekstrak menu dari foto.');
       }
 
@@ -440,11 +455,28 @@ export const DraftMenuView: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setTempApiKeyInput(geminiApiKey || localStorage.getItem('code_pos_gemini_api_key') || '');
+                setShowApiKeyModal(true);
+              }}
+              className={`px-3.5 py-2.5 rounded-xl text-xs font-bold backdrop-blur-md transition-all flex items-center gap-2 border cursor-pointer ${
+                geminiApiKey
+                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border-emerald-400/30'
+                  : 'bg-amber-500/25 hover:bg-amber-500/35 text-amber-200 border-amber-400/40 animate-pulse'
+              }`}
+              title="Atur Kunci API Google Gemini"
+            >
+              <Key size={15} className={geminiApiKey ? 'text-emerald-300' : 'text-amber-300'} />
+              {geminiApiKey ? 'API Key AI Terpasang' : 'Atur API Key Gemini'}
+            </button>
+
             <button
               type="button"
               onClick={() => navigate('/produk')}
-              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold backdrop-blur-md transition-all flex items-center gap-2 border border-white/10"
+              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold backdrop-blur-md transition-all flex items-center gap-2 border border-white/10 cursor-pointer"
             >
               <ShoppingBag size={16} /> Ke Daftar Produk
             </button>
@@ -1279,6 +1311,131 @@ export const DraftMenuView: React.FC = () => {
                 className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 transition-all cursor-pointer"
               >
                 Gunakan Foto Ini
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ─── Gemini API Key Settings Modal ─── */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100 space-y-6 animate-scale-up">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <Key size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Setting Kunci API Gemini</h3>
+                  <p className="text-xs text-slate-500">Google Gemini 1.5 Flash Vision AI</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApiKeyModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl text-indigo-900 space-y-1.5">
+                <div className="font-extrabold flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-indigo-600" />
+                  Mengapa Butuh API Key?
+                </div>
+                <p>
+                  API Key digunakan oleh sistem POS untuk membaca teks menu, kategori, dan harga dari foto lembaran menu fisik secara otomatis dan cepat.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block font-extrabold text-slate-700">
+                  Masukkan Gemini API Key (AIzaSy...):
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    placeholder="AIzaSy..."
+                    value={tempApiKeyInput}
+                    onChange={(e) => setTempApiKeyInput(e.target.value)}
+                    className="w-full text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  {tempApiKeyInput && (
+                    <button
+                      type="button"
+                      onClick={() => setTempApiKeyInput('')}
+                      className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
+                <div className="font-bold text-slate-700 flex items-center justify-between">
+                  <span>Cara Dapat API Key Gratis (100% Free):</span>
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-indigo-600 hover:underline font-extrabold"
+                  >
+                    Buka Google AI Studio <ExternalLink size={12} />
+                  </a>
+                </div>
+                <ol className="list-decimal pl-4 space-y-1 text-slate-500 text-[11px]">
+                  <li>Buka link di atas &amp; login dengan akun Google Anda.</li>
+                  <li>Klik tombol <strong className="text-slate-700">"Create API Key"</strong>.</li>
+                  <li>Salin kodenya lalu tempel di kolom input di atas.</li>
+                </ol>
+              </div>
+
+              <div className="text-[11px] text-slate-400">
+                💡 <strong>Untuk Administrator VPS:</strong> Anda juga dapat memasukkan kunci ini langsung di file server VPS <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">/var/www/poscafe/backend/.env</code> pada baris <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700 font-mono">GEMINI_API_KEY=AIzaSy...</code> agar aktif permanen untuk seluruh kasir.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              {geminiApiKey && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem('code_pos_gemini_api_key');
+                    setGeminiApiKey('');
+                    setTempApiKeyInput('');
+                    toast('API Key telah dihapus dari browser ini.', 'info');
+                  }}
+                  className="mr-auto px-3.5 py-2 rounded-xl text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Hapus Key
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowApiKeyModal(false)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const cleaned = tempApiKeyInput.trim();
+                  if (!cleaned) {
+                    toast('Silakan tempel atau masukkan API Key Anda terlebih dahulu.', 'warning');
+                    return;
+                  }
+                  localStorage.setItem('code_pos_gemini_api_key', cleaned);
+                  setGeminiApiKey(cleaned);
+                  setShowApiKeyModal(false);
+                  toast('✅ Kunci API Gemini berhasil disimpan di browser Anda!', 'success');
+                }}
+                className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 transition-all cursor-pointer"
+              >
+                Simpan API Key
               </button>
             </div>
           </div>

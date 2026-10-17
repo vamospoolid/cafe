@@ -490,7 +490,7 @@ router.post('/ai-extract-menu', authenticateToken, requirePlatformAdmin, async (
     const geminiApiKey = process.env.GEMINI_API_KEY;
     if (rawImagesList.length > 0 && geminiApiKey) {
       try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiApiKey}`;
         const prompt = `You are an expert F&B menu digitization assistant.
 Analyze these uploaded photos of the cafe/restaurant menu sheets (which may include separate pages/sheets for beverages/drinks, food/meals/rice, and desserts/pastries/snacks).
 Extract all menu categories, determine the appropriate kitchen/bar station routing, and extract all products/items.

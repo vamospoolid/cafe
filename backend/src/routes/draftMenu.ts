@@ -133,15 +133,16 @@ router.post('/extract-image', requirePermission('products.manage'), async (req: 
       return generateProfessionalFoodImageUrl(name, category, { style: photoStyle as FoodPhotoStyle, seed });
     };
 
-    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const geminiApiKey = (req.body.geminiApiKey as string)?.trim() || process.env.GEMINI_API_KEY;
 
     if (!geminiApiKey) {
-      return res.status(500).json({
-        error: 'Kunci API Gemini (GEMINI_API_KEY) belum dikonfigurasi di server. Harap hubungi administrator.'
+      return res.status(400).json({
+        error: 'Kunci API Gemini (GEMINI_API_KEY) belum diisi. Silakan masukkan Kunci API Gemini lewat tombol pengaturan di halaman ini atau tambahkan di file .env VPS.',
+        code: 'MISSING_GEMINI_KEY'
       });
     }
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiApiKey}`;
     const prompt = `You are an expert F&B and retail menu digitization assistant.
 Analyze these uploaded photos/images of the store's physical menu board, menu book, or price list sheets.
 Extract all menu categories, determine station routing, and extract all individual products/items.
@@ -216,9 +217,14 @@ Return ONLY strictly valid JSON with this exact structure:
       });
     }
 
+    let cleanJson = rawResponseText.trim();
+    if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '').trim();
+    }
+
     let parsed: any[] = [];
     try {
-      parsed = JSON.parse(rawResponseText);
+      parsed = JSON.parse(cleanJson);
     } catch (parseErr) {
       console.error('[DraftMenu] JSON parse error:', parseErr, rawResponseText);
       return res.status(422).json({ error: 'Gagal menguraikan struktur data menu dari foto.' });
