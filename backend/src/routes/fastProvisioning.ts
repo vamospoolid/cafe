@@ -4,6 +4,12 @@ import prisma from '../db';
 import { authenticateToken, requirePlatformAdmin, AuthRequest } from '../middlewares/authMiddleware';
 import { AuditLogger } from '../services/AuditLogger';
 import { ImageCacheService } from '../services/ImageCacheService';
+import {
+  generateProfessionalFoodImageUrl,
+  generateBengkelImageUrl as helperBengkel,
+  generateRetailImageUrl as helperRetail,
+  generateLaundryImageUrl as helperLaundry
+} from '../utils/productImageHelper';
 
 const router = Router();
 
@@ -277,54 +283,19 @@ const PRESET_TEMPLATES: Record<string, Array<{ category: string; printerTarget?:
 // linen napkin, soft 45° directional natural morning sunlight, creamy cafe bokeh, shot on 50mm f/1.8 macro lens.
 // Strictly no text, no watermark, no logos.
 export const generateFoodImageUrl = (productName: string, category: string): string => {
-  const cleanName = productName.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const cleanCat = category.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const catLower = (cleanCat + ' ' + cleanName).toLowerCase();
-
-  let promptText = '';
-
-  const isDrink = /\b(drink|drinks|kopi|coffee|latte|tea|teh|mocktail|beverage|beverages|espresso|cappuccino|matcha|chocolate|cokelat|juice|jus|ice|es)\b/i.test(catLower);
-
-  const isDessertOrPastry = /\b(pisang|croissant|pastry|bakery|cake|tart|roti|churros|toast|waffle|pancake|dessert|sweet|snack|cireng|fries|kentang|keju|meises|donut|donat)\b/i.test(catLower);
-
-  if (isDessertOrPastry && !catLower.includes('kopi') && !catLower.includes('coffee') && !catLower.includes('latte') && !catLower.includes('tea') && !catLower.includes('teh')) {
-    promptText = `commercial gourmet dessert photography of delicious ${cleanName}, artistically plated in the center of an off-white artisanal matte ceramic plate with raised rim, elegant artistic chocolate or caramel sauce swirl drizzle on the plate, garnished with fresh mint leaf, sliced strawberry and delicate whipped cream dollop, scattered delicate crumbs on a light blonde oak wooden table with subtle vertical wood grain, a neatly folded beige textured linen napkin near the corner of the frame, soft warm directional morning window sunlight from 45-degree angle, gentle soft shadows, creamy blurred cafe background, shot on 50mm f/1.8 macro lens, appetizing culinary textures, ultra photorealistic 8k, strictly no text, no watermark, no logos, no typography, clean image`;
-  } else if (isDrink) {
-    promptText = `commercial aesthetic cafe beverage photography of refreshing ${cleanName}, served in an elegant clear artisan glass tumbler with ice cubes and condensation water droplets, garnished with fresh mint sprig and delicate citrus slice, sitting on a matching small ceramic coaster on a light blonde oak wooden table with subtle vertical wood grain, a neatly folded beige textured linen napkin beside the glass, soft warm morning window daylight from 45-degree angle, gentle soft shadows, cozy blurred modern cafe background, 50mm f/1.8 macro lens, award-winning food photography, ultra photorealistic 8k resolution, strictly no text, no watermark, no logos, no typography, clean image`;
-  } else {
-    // Main course, savory dishes, rice, noodles, soup, etc.
-    promptText = `commercial gourmet culinary photography of appetizing ${cleanName}, beautifully presented in an off-white artisanal matte ceramic plate with raised rim, elegant artistic sauce drizzle on the plate, garnished with fresh microgreens and delicate herbs, glossy appetizing food texture with subtle gentle steam, sitting on a light blonde oak wooden table with subtle vertical wood grain, a neatly folded beige textured linen napkin near the corner of the frame, soft directional natural morning window daylight from 45-degree angle, gentle soft shadows, cozy blurred cafe background, 50mm f/1.8 macro food photography, ultra photorealistic 8k, strictly no text, no watermark, no logos, no typography, clean image`;
-  }
-
-  const prompt = encodeURIComponent(promptText);
-  return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&enhance=true`;
+  return generateProfessionalFoodImageUrl(productName, category);
 };
 
-// ─── Helper: Generate AI Automotive & Workshop Product Photography URL ────────
 export const generateBengkelImageUrl = (productName: string, category: string): string => {
-  const cleanName = productName.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const cleanCat = category.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const promptText = `professional commercial automotive workshop photography of ${cleanName}, category ${cleanCat}, automotive spare parts and tools, clean metallic mechanical aesthetic, organized modern garage workbench background with precision tools, studio rim lighting, ultra photorealistic 4k, strictly no text, no watermark, no logos`;
-  const prompt = encodeURIComponent(promptText);
-  return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&enhance=true`;
+  return helperBengkel(productName, category);
 };
 
-// ─── Helper: Generate AI Retail & FMCG Product Photography URL ────────────────
 export const generateRetailImageUrl = (productName: string, category: string): string => {
-  const cleanName = productName.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const cleanCat = category.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const promptText = `commercial retail studio product photography of ${cleanName}, consumer packaged goods, category ${cleanCat}, neatly displayed on a clean illuminated modern supermarket shelf, crisp commercial studio lighting, vibrant packaging colors, ultra photorealistic 4k, strictly no watermark, no extraneous text`;
-  const prompt = encodeURIComponent(promptText);
-  return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&enhance=true`;
+  return helperRetail(productName, category);
 };
 
-// ─── Helper: Generate AI Laundry Service & Care Product Photography URL ────────
 export const generateLaundryImageUrl = (productName: string, category: string): string => {
-  const cleanName = productName.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const cleanCat = category.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const promptText = `commercial professional laundry service photography of ${cleanName}, category ${cleanCat}, crisp freshly laundered and neatly folded textiles, bright clean pastel modern laundry room with modern washing machines and soft natural daylight, ultra photorealistic 4k, clean hygienic atmosphere, strictly no text, no watermark, no logos`;
-  const prompt = encodeURIComponent(promptText);
-  return `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&nologo=true&enhance=true`;
+  return helperLaundry(productName, category);
 };
 
 // ─── 1. POST /resolve-gmaps ────────────────────────────────────────────────

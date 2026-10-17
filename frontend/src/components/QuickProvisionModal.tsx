@@ -407,7 +407,7 @@ export const QuickProvisionModal: React.FC<QuickProvisionModalProps> = ({
       name: defaultItemName,
       price: defaultPrice,
       buyPrice: defaultBuyPrice,
-      imageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?width=512&height=512&nologo=true&enhance=true`
+      imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop'
     });
     setMenuCategories(next);
   };

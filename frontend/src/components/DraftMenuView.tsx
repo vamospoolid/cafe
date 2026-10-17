@@ -365,7 +365,7 @@ export const DraftMenuView: React.FC = () => {
               name: defaultName,
               price: defaultPrice,
               buyPrice: defaultBuyPrice,
-              imageUrl: `https://image.pollinations.ai/prompt/${encodeURIComponent(defaultName)}?width=512&height=512&nologo=true&enhance=true&model=flux`,
+              imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop',
               stock: 100,
               minStock: 5,
               status: 'Aktif'

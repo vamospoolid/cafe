@@ -8,10 +8,12 @@ import { invalidateTenantCache } from '../middlewares/tenantResolver';
 import { emitToTenant } from '../index';
 import { ImageCacheService } from '../services/ImageCacheService';
 import {
+  FoodPhotoStyle,
+  generateProfessionalFoodImageUrl,
   generateBengkelImageUrl,
   generateRetailImageUrl,
   generateLaundryImageUrl
-} from './fastProvisioning';
+} from '../utils/productImageHelper';
 
 const router = Router();
 
@@ -26,67 +28,6 @@ router.use((req: Request, res: Response, next) => {
   (req as any).tenantId = tenantId;
   next();
 });
-
-export type FoodPhotoStyle = 'CAFE_WARM' | 'GOURMET_STUDIO' | 'COMMERCIAL_VIBRANT' | 'TRADITIONAL_RUSTIC';
-
-/**
- * Professional Studio Food Photography Prompt Builder
- * Menghasilkan URL foto beresolusi tinggi dengan simulasi pencahayaan studio,
- * lensa macro 50mm f/1.8, dan plating mewah standar Michelin / Commercial Menu.
- */
-export const generateProfessionalFoodImageUrl = (
-  productName: string,
-  category: string,
-  options?: {
-    style?: FoodPhotoStyle;
-    seed?: number;
-    customInstruction?: string;
-  }
-): string => {
-  const cleanName = productName.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const cleanCat = category.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-  const catLower = (cleanCat + ' ' + cleanName).toLowerCase();
-  const style = options?.style || 'CAFE_WARM';
-  const seed = options?.seed ?? Math.floor(Math.random() * 1000000);
-  const customExtra = options?.customInstruction ? `, ${options.customInstruction.trim()}` : '';
-
-  const isDrink = /\b(drink|drinks|kopi|coffee|latte|tea|teh|mocktail|beverage|beverages|espresso|cappuccino|matcha|chocolate|cokelat|juice|jus|ice|es|soda|boba)\b/i.test(catLower);
-  const isDessertOrPastry = /\b(pisang|croissant|pastry|bakery|cake|tart|roti|churros|toast|waffle|pancake|dessert|sweet|snack|cireng|fries|kentang|keju|meises|donut|donat)\b/i.test(catLower);
-
-  let prompt = '';
-
-  if (style === 'GOURMET_STUDIO') {
-    if (isDrink) {
-      prompt = `award-winning commercial mixology cocktail photography of ${cleanName}, served in an artisanal crystal cut glassware with clear sculpted ice block, sophisticated botanical garnish, subtle mist condensation, dark matte slate tabletop, moody luxury lounge studio rim lighting, 85mm f/1.4 lens, 8k hyperrealistic, clean commercial ad`;
-    } else {
-      prompt = `Michelin-star culinary gourmet photography of ${cleanName}, artistically plated on a handcrafted dark matte ceramic dish, delicate organic microgreens and edible flower garnish, glossy reduction glaze sauce drizzle, dramatic directional softbox studio rim lighting, shallow depth of field, 50mm f/1.2 macro lens, mouthwatering textures, 8k hyperrealistic, no text, no watermark`;
-    }
-  } else if (style === 'COMMERCIAL_VIBRANT') {
-    if (isDrink) {
-      prompt = `vibrant commercial advertising photography of refreshing iced ${cleanName}, vibrant saturated colors, glistening ice cubes, crisp water splash droplets, bright clean modern studio lighting, punchy high contrast, perfect for food delivery app menu, photorealistic 8k, ultra sharp`;
-    } else {
-      prompt = `vibrant commercial food catalog photography of appetizing ${cleanName}, beautifully arranged, bright clean studio tabletop, vivid appetizing colors, golden hour fill light, crisp commercial advertising shot, ultra detailed food styling, 8k photorealistic, no text, no watermark`;
-    }
-  } else if (style === 'TRADITIONAL_RUSTIC') {
-    if (isDrink) {
-      prompt = `artisanal heritage cafe photography of authentic ${cleanName}, vintage ceramic cup on woven rattan coaster, authentic rustic Indonesian warung aesthetic, warm amber lantern glow, gentle steam, 8k ultra realistic`;
-    } else {
-      prompt = `authentic artisanal Indonesian culinary photography of ${cleanName}, served in traditional terracotta clay plate lined with fresh banana leaf, crispy golden fried shallot garnish, fresh red chili accent, subtle natural steam rising, rustic dark wooden table background, warm directional golden morning sunlight, 8k realistic`;
-    }
-  } else {
-    // CAFE_WARM (Default Signature Aesthetic - Kayu Sutera)
-    if (isDrink) {
-      prompt = `commercial aesthetic cafe beverage photography of refreshing ${cleanName}, served in an elegant clear artisan glass tumbler with crystal clear ice cubes and cold condensation droplets, garnished with fresh mint sprig and citrus slice, matching ceramic coaster on light blonde oak wooden table, neatly folded linen napkin, soft warm 45-degree morning sunlight, creamy blurred cafe background, 50mm f/1.8 macro lens, 8k photorealistic, no text, no watermark`;
-    } else if (isDessertOrPastry) {
-      prompt = `commercial gourmet pastry photography of delicious ${cleanName}, plated on an off-white artisanal matte ceramic plate with raised rim, artistic chocolate sauce drizzle, fresh mint leaf and strawberry slice garnish, light blonde oak table, beige linen napkin, soft warm directional morning daylight, 50mm f/1.8 macro, 8k photorealistic, no text, no watermark`;
-    } else {
-      prompt = `commercial gourmet culinary photography of appetizing ${cleanName}, beautifully presented in an off-white artisanal matte ceramic plate with raised rim, artistic sauce drizzle, fresh herb garnish, appetizing culinary texture with gentle steam, light blonde oak wooden table, folded beige linen napkin, soft directional morning sunlight, 50mm f/1.8 macro, 8k photorealistic, no text, no watermark`;
-    }
-  }
-
-  const fullPrompt = encodeURIComponent(prompt + customExtra);
-  return `https://image.pollinations.ai/prompt/${fullPrompt}?width=400&height=400&seed=${seed}&nologo=true`;
-};
 
 /**
  * POST /api/draft-menu/extract-image
