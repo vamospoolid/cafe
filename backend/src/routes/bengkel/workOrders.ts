@@ -869,6 +869,21 @@ router.post('/:id/pay', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'SPK ini sudah dibayar sebelumnya' });
     }
 
+    // Proteksi Shift Kasir Wajib Aktif untuk transaksi pembayaran kasir Bengkel
+    const activeShift = await prisma.shift.findFirst({
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...(tenantId ? { tenantId } : {})
+      }
+    });
+
+    if (!activeShift) {
+      return res.status(400).json({
+        error: 'Shift kasir belum dibuka. Harap buka shift kasir dan masukkan modal awal laci terlebih dahulu sebelum melayani pembayaran.',
+        shiftRequired: true
+      });
+    }
+
     const rawDiscount = discountAmount != null ? discountAmount : discount;
     const parsedDiscount = rawDiscount != null ? parseFloat(rawDiscount) : wo.discount;
     const effectiveTotal = Math.max(0, wo.totalServices + wo.totalParts - parsedDiscount);

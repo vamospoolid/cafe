@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">CodePOS Cashier POS</string>
-    <string name="title_activity_main">CodePOS Cashier POS</string>
-    <string name="package_name">id.codenusa.mukiramen.pos</string>
-    <string name="custom_url_scheme">id.codenusa.mukiramen.pos</string>
+    <string name="app_name">Sabar Jaya Grosir &amp; Sembako POS</string>
+    <string name="title_activity_main">Sabar Jaya Grosir &amp; Sembako POS</string>
+    <string name="package_name">id.codenusa.sabarjaya.pos</string>
+    <string name="custom_url_scheme">id.codenusa.sabarjaya.pos</string>
 </resources>

@@ -32,6 +32,13 @@ const getNonCashPortion = (paymentMethod: string | null, total: number): number 
   return total;
 };
 
+// Helper identifikasi kategori penjualan layanan vertikal non-Order (Bengkel SPK & Laundry)
+const isVerticalSalesCategory = (category: string | null | undefined): boolean => {
+  if (!category) return false;
+  const c = category.toLowerCase();
+  return c.includes('penjualan_spk') || c.includes('penjualan spk') || c.includes('laundry');
+};
+
 // Get active shift for logged in user (or any active open shift in tenant)
 const handleGetActiveShift = async (req: Request, res: Response) => {
   try {
@@ -154,14 +161,22 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         return cat.includes('non-tunai') || cat.includes('transfer') || cat.includes('qris') || cat.includes('debit');
       };
 
+      // Pisahkan antara omzet penjualan kasir layanan (Bengkel/Laundry) dengan kas petty cash murni
+      const verticalCashSales = shiftCashFlows
+        .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isDrawerCashItem(cf))
+        .reduce((s, cf) => s + cf.amount, 0);
+      const verticalNonCashSales = shiftCashFlows
+        .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isElectronicInItem(cf))
+        .reduce((s, cf) => s + cf.amount, 0);
+
       const manualCashIn = shiftCashFlows
-        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isDrawerCashItem(cf))
+        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && !isVerticalSalesCategory(cf.category) && isDrawerCashItem(cf))
         .reduce((s, cf) => s + cf.amount, 0);
       const manualCashOut = shiftCashFlows
         .filter(cf => cf.type === 'Pengeluaran' && isDrawerCashItem(cf) && cf.status === 'APPROVED')
         .reduce((s, cf) => s + cf.amount, 0);
       const manualNonCashIn = shiftCashFlows
-        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isElectronicInItem(cf))
+        .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && !isVerticalSalesCategory(cf.category) && isElectronicInItem(cf))
         .reduce((s, cf) => s + cf.amount, 0);
 
       // Debt payments dalam shift ini
@@ -173,10 +188,13 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
         .filter(dp => dp.paymentMethod.toLowerCase() !== 'tunai' && dp.paymentMethod.toLowerCase() !== 'cash')
         .reduce((s, dp) => s + dp.amountPaid, 0);
 
+      const totalCashSales = cashSales + verticalCashSales;
+      const totalNonCashSales = nonCashSales + verticalNonCashSales;
+
       return {
         ...shift,
-        cashSales,
-        nonCashSales: nonCashSales + manualNonCashIn,
+        cashSales: totalCashSales,
+        nonCashSales: totalNonCashSales + manualNonCashIn,
         voidCount,
         voidCashTotal,
         voidNonCashTotal,
@@ -342,20 +360,30 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       return cat.includes('non-tunai') || cat.includes('transfer') || cat.includes('qris') || cat.includes('debit');
     };
 
+    // Pisahkan antara omzet penjualan kasir layanan (Bengkel/Laundry) dengan kas petty cash murni
+    const verticalCashSales = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isDrawerCash(cf))
+      .reduce((sum, cf) => sum + cf.amount, 0);
+    const verticalNonCashSales = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isElectronicIn(cf))
+      .reduce((sum, cf) => sum + cf.amount, 0);
+
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isDrawerCash(cf))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && !isVerticalSalesCategory(cf.category) && isDrawerCash(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
       .filter(cf => cf.type === 'Pengeluaran' && isDrawerCash(cf) && cf.status === 'APPROVED')
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualNonCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isElectronicIn(cf))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && !isVerticalSalesCategory(cf.category) && isElectronicIn(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
 
-    // Catatan: cashSalesIncome hanya menghitung pesanan berstatus 'Paid'.
-    // Pesanan 'Void' otomatis sudah tidak masuk ke cashSalesIncome, sehingga tidak dikurangkan ganda.
-    const expectedCash = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
-    const expectedNonCash = nonCashSalesIncome + nonCashDebtIncome + manualNonCashIn;
+    const totalCashSales = cashSalesIncome + verticalCashSales;
+    const totalNonCashSales = nonCashSalesIncome + verticalNonCashSales;
+
+    // Catatan: totalCashSales menghitung pesanan berstatus 'Paid' dan pembayaran SPK/Laundry tunai
+    const expectedCash = activeShift.saldoAwal + totalCashSales + cashDebtIncome + manualCashIn - manualCashOut;
+    const expectedNonCash = totalNonCashSales + nonCashDebtIncome + manualNonCashIn;
 
     // Periksa konfigurasi Blind Cash Drawer Count dari Settings
     const settings = await prisma.settings.findFirst({
@@ -387,8 +415,8 @@ router.get('/current-summary', authenticateToken, async (req: Request, res: Resp
       enableBlindClose,
       expectedCash,
       expectedNonCash,
-      cashSales: cashSalesIncome,
-      nonCashSales: nonCashSalesIncome,
+      cashSales: totalCashSales,
+      nonCashSales: totalNonCashSales,
       voidCount: voidOrders.length,
       voidCashTotal,
       voidNonCashTotal,
@@ -518,15 +546,26 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       return cat.includes('non-tunai') || cat.includes('transfer') || cat.includes('qris') || cat.includes('debit');
     };
 
+    // Pisahkan antara omzet penjualan kasir layanan (Bengkel/Laundry) dengan kas petty cash murni
+    const verticalCashSales = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isDrawerCash(cf))
+      .reduce((sum, cf) => sum + cf.amount, 0);
+    const verticalNonCashSales = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isElectronicIn(cf))
+      .reduce((sum, cf) => sum + cf.amount, 0);
+
     const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isDrawerCash(cf))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && !isVerticalSalesCategory(cf.category) && isDrawerCash(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualCashOut = cashFlows
       .filter(cf => cf.type === 'Pengeluaran' && isDrawerCash(cf) && cf.status === 'APPROVED')
       .reduce((sum, cf) => sum + cf.amount, 0);
     const manualNonCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && isElectronicIn(cf))
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && !isVerticalSalesCategory(cf.category) && isElectronicIn(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
+
+    const totalCashSales = cashSalesIncome + verticalCashSales;
+    const totalNonCashSales = nonCashSalesIncome + verticalNonCashSales;
 
     // Periksa setting Blind Count
     const settings = await prisma.settings.findFirst({
@@ -537,8 +576,8 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     const isBlindMode = enableBlindClose && userRole === 'kasir';
 
     // Saldo sistem kas dihitung dari kas masuk bersih yang sah (Void otomatis sudah tidak masuk di cashSalesIncome)
-    const saldoSistem = activeShift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
-    const saldoElektronik = nonCashSalesIncome + nonCashDebtIncome + manualNonCashIn;
+    const saldoSistem = activeShift.saldoAwal + totalCashSales + cashDebtIncome + manualCashIn - manualCashOut;
+    const saldoElektronik = totalNonCashSales + nonCashDebtIncome + manualNonCashIn;
     const fisikLaci = Number(saldoFisikLaci) || 0;
     const selisih = Math.round((fisikLaci - saldoSistem) * 100) / 100;
 
@@ -848,15 +887,28 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
       .filter(dp => dp.paymentMethod.toLowerCase() === 'tunai' || dp.paymentMethod.toLowerCase() === 'cash')
       .reduce((sum, dp) => sum + dp.amountPaid, 0);
 
-    const manualCashIn = cashFlows
-      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket))
+    const isDrawerItem = (cf: any) => cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket;
+    const isElectronicItem = (cf: any) => cf.cashPocket === 'BANK_ACCOUNT' || !isDrawerItem(cf);
+
+    const verticalCashSales = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isDrawerItem(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
-    const manualCashOut = cashFlows
-      .filter(cf => cf.type === 'Pengeluaran' && (cf.cashPocket === 'LACI_KASIR' || (cf as any).pocket === 'DRAWER' || !cf.cashPocket) && cf.status === 'APPROVED')
+    const verticalNonCashSales = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && isVerticalSalesCategory(cf.category) && isElectronicItem(cf))
       .reduce((sum, cf) => sum + cf.amount, 0);
 
-    const expectedCash = shift.saldoAwal + cashSalesIncome + cashDebtIncome + manualCashIn - manualCashOut;
-    const expectedNonCash = nonCashSalesIncome;
+    const manualCashIn = cashFlows
+      .filter(cf => cf.type === 'Pemasukan' && cf.category !== 'Pembayaran Piutang' && !isVerticalSalesCategory(cf.category) && isDrawerItem(cf))
+      .reduce((sum, cf) => sum + cf.amount, 0);
+    const manualCashOut = cashFlows
+      .filter(cf => cf.type === 'Pengeluaran' && isDrawerItem(cf) && cf.status === 'APPROVED')
+      .reduce((sum, cf) => sum + cf.amount, 0);
+
+    const totalCashSales = cashSalesIncome + verticalCashSales;
+    const totalNonCashSales = nonCashSalesIncome + verticalNonCashSales;
+
+    const expectedCash = shift.saldoAwal + totalCashSales + cashDebtIncome + manualCashIn - manualCashOut;
+    const expectedNonCash = totalNonCashSales;
 
     const actualCash = Number(saldoFisikLaci);
     const selisih = actualCash - expectedCash;

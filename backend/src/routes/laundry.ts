@@ -236,6 +236,22 @@ router.post('/orders', authenticateToken, async (req: AuthRequest, res: Response
     const isPartial = finalPaidAmount > 0 && finalPaidAmount < finalTotalAmount;
     const paymentStatus = isPaid ? 'PAID' : isPartial ? 'PARTIAL' : 'UNPAID';
 
+    // Proteksi Shift Kasir Wajib Aktif jika ada penerimaan pembayaran tunai/non-tunai di muka
+    if (finalPaidAmount > 0) {
+      const activeShift = await prisma.shift.findFirst({
+        where: {
+          status: { in: ['Open', 'OPEN'] },
+          ...(tenantId ? { tenantId } : {})
+        }
+      });
+      if (!activeShift) {
+        return res.status(400).json({
+          error: 'Shift kasir belum dibuka. Harap buka shift kasir dan masukkan modal awal laci terlebih dahulu sebelum melayani pembayaran.',
+          shiftRequired: true
+        });
+      }
+    }
+
     // Auto-generate order number
     const orderNumber = await generateLaundryOrderNumber(tenantId);
 
@@ -727,6 +743,22 @@ router.post('/orders/:id/pickup', authenticateToken, async (req: AuthRequest, re
     const additionalPaid = Number(paidAmountNow ?? payAmount ?? 0);
     const newTotalPaid = currentPaid + additionalPaid;
     const isNowLunas = newTotalPaid >= realTotalAmount && realTotalAmount > 0;
+
+    // Proteksi Shift Kasir Wajib Aktif jika ada pembayaran saat serah terima pakaian
+    if (additionalPaid > 0) {
+      const activeShift = await prisma.shift.findFirst({
+        where: {
+          status: { in: ['Open', 'OPEN'] },
+          ...(tenantId ? { tenantId } : {})
+        }
+      });
+      if (!activeShift) {
+        return res.status(400).json({
+          error: 'Shift kasir belum dibuka. Harap buka shift kasir dan masukkan modal awal laci terlebih dahulu sebelum memproses pelunasan cucian.',
+          shiftRequired: true
+        });
+      }
+    }
 
     const outlet = await prisma.outlet.findFirst({
       where: { tenantId, status: 'ACTIVE' },

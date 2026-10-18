@@ -97,7 +97,7 @@ interface CartItem {
 }
 
 export const POSRetail: React.FC = () => {
-  const { token, settings, user } = usePOS();
+  const { token, settings, user, activeShift } = usePOS();
 
   // Active Transaction Details
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerData | null>(null);
@@ -303,7 +303,13 @@ export const POSRetail: React.FC = () => {
         if (cart.length > 0) handleQuickCash();
       } else if (e.key === 'F10' || (e.code === 'Space' && e.target === document.body)) {
         e.preventDefault();
-        if (cart.length > 0) setIsCheckoutOpen(true);
+        if (cart.length > 0) {
+          if (!activeShift) {
+            toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
+            return;
+          }
+          setIsCheckoutOpen(true);
+        }
       }
     };
 
@@ -555,6 +561,10 @@ export const POSRetail: React.FC = () => {
   // Quick Cash (F9)
   const handleQuickCash = async () => {
     if (cart.length === 0) return;
+    if (!activeShift) {
+      toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
+      return;
+    }
     const totalAmount = cart.reduce((sum, i) => sum + i.subtotal, 0);
 
     try {
@@ -1244,7 +1254,13 @@ export const POSRetail: React.FC = () => {
             <button
               type="button"
               disabled={cart.length === 0}
-              onClick={() => setIsCheckoutOpen(true)}
+              onClick={() => {
+                if (!activeShift) {
+                  toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
+                  return;
+                }
+                setIsCheckoutOpen(true);
+              }}
               className={`py-2.5 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer ${
                 cart.length > 0
                   ? 'bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 text-white shadow-indigo-600/25 active:scale-95'
@@ -1513,6 +1529,10 @@ export const POSRetail: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setIsMobileCartOpen(false);
+                    if (!activeShift) {
+                      toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
+                      return;
+                    }
                     setIsCheckoutOpen(true);
                   }}
                   className="py-3 px-3 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 text-white flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/25 cursor-pointer"

@@ -237,6 +237,11 @@ export const BengkelCheckoutModal: React.FC<BengkelCheckoutModalProps> = ({
 
       if (!payRes.ok) {
         const err = await payRes.json();
+        if (err.shiftRequired) {
+          toast(err.error || 'Shift kasir belum dibuka. Harap buka kasir terlebih dahulu.', 'warning');
+          onClose();
+          return;
+        }
         throw new Error(err.error || 'Gagal memproses pembayaran');
       }
 

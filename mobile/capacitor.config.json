@@ -1,9 +1,9 @@
 {
-  "appId": "id.codenusa.mukiramen.pos",
-  "appName": "CodePOS Cashier POS",
+  "appId": "id.codenusa.sabarjaya.pos",
+  "appName": "Sabar Jaya Grosir & Sembako POS",
   "webDir": "../frontend/dist",
   "server": {
-    "url": "https://mukiramen.codenusa.id/pos",
+    "url": "https://sabarjaya.codenusa.id/pos",
     "cleartext": true
   }
 }

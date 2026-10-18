@@ -186,6 +186,11 @@ export const RetailCheckoutModal: React.FC<RetailCheckoutModalProps> = ({
 
       const json = await res.json();
       if (!res.ok) {
+        if (json.shiftRequired) {
+          toast(json.error || 'Shift kasir belum dibuka. Harap buka shift kasir terlebih dahulu.', 'warning');
+          onClose();
+          return;
+        }
         throw new Error(json.error || 'Gagal memproses checkout.');
       }
 

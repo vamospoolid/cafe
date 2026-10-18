@@ -1506,7 +1506,7 @@ export const POSBengkel: React.FC = () => {
             </button>
             <button
               onClick={() => {
-                if (!activeShift && settings?.enableAttendance !== false) {
+                if (!activeShift) {
                   setIsOpenShiftOpen(true);
                   toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
                   return;
@@ -1714,7 +1714,7 @@ export const POSBengkel: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setIsMobileCartOpen(false);
-                    if (!activeShift && settings?.enableAttendance !== false) {
+                    if (!activeShift) {
                       setIsOpenShiftOpen(true);
                       toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu.', 'warning');
                       return;

@@ -27,7 +27,13 @@ import {
   CheckCircle,
   Clock,
   MessageSquare,
-  Store
+  Store,
+  Coffee,
+  Gift,
+  Layers,
+  Save,
+  Info,
+  Star
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast, confirmAlert } from '../utils/alert';
@@ -143,8 +149,70 @@ const CRMView = () => {
     }
   };
 
-  // Tab Switch: Members / Vouchers / WhatsApp Gateway
-  const [activeTab, setActiveTab] = useState<'members' | 'vouchers' | 'whatsapp'>('members');
+  // Tab Switch: Members / Vouchers / Loyalty Rules / WhatsApp Gateway
+  const [activeTab, setActiveTab] = useState<'members' | 'vouchers' | 'loyalty' | 'whatsapp'>('members');
+
+  // Loyalty Point Settings State
+  const [loyaltyForm, setLoyaltyForm] = useState({
+    loyaltyEnabled: true,
+    loyaltyEarnPerAmount: 10000,
+    loyaltyPointValue: 100,
+    loyaltySilverThreshold: 1000000,
+    loyaltyGoldThreshold: 3000000,
+    loyaltySilverMultiplier: 1.2,
+    loyaltyGoldMultiplier: 1.5,
+    loyaltyMaxRedeemPerOrder: 0,
+    loyaltyRedeemMinPoints: 1,
+    loyaltyMinOrderForEarn: 0
+  });
+  const [loyaltySaving, setLoyaltySaving] = useState(false);
+
+  useEffect(() => {
+    if (posContext?.settings) {
+      const s = posContext.settings;
+      setLoyaltyForm({
+        loyaltyEnabled: s.loyaltyEnabled !== false,
+        loyaltyEarnPerAmount: s.loyaltyEarnPerAmount ?? 10000,
+        loyaltyPointValue: s.loyaltyPointValue ?? 100,
+        loyaltySilverThreshold: s.loyaltySilverThreshold ?? 1000000,
+        loyaltyGoldThreshold: s.loyaltyGoldThreshold ?? 3000000,
+        loyaltySilverMultiplier: s.loyaltySilverMultiplier ?? 1.2,
+        loyaltyGoldMultiplier: s.loyaltyGoldMultiplier ?? 1.5,
+        loyaltyMaxRedeemPerOrder: s.loyaltyMaxRedeemPerOrder ?? 0,
+        loyaltyRedeemMinPoints: s.loyaltyRedeemMinPoints ?? 1,
+        loyaltyMinOrderForEarn: s.loyaltyMinOrderForEarn ?? 0
+      });
+    }
+  }, [posContext?.settings]);
+
+  const handleSaveLoyaltySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoyaltySaving(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${posContext?.token}`
+        },
+        body: JSON.stringify(loyaltyForm)
+      });
+      if (res.ok) {
+        toast('✅ Aturan poin & loyalitas berhasil diperbarui!', 'success');
+        if (posContext?.fetchSettings) {
+          await posContext.fetchSettings();
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast(data.error || 'Gagal menyimpan aturan loyalitas', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Terjadi gangguan koneksi saat menyimpan pengaturan loyalitas', 'error');
+    } finally {
+      setLoyaltySaving(false);
+    }
+  };
 
   // Voucher State
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -477,6 +545,20 @@ const CRMView = () => {
           )}
         </button>
         )}
+        <button
+          type="button"
+          onClick={() => setActiveTab('loyalty')}
+          className={`pb-3 text-sm font-black flex items-center gap-2 border-b-2 transition-all ${
+            activeTab === 'loyalty'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          <Coins size={16} /> Aturan Poin &amp; Loyalitas
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+            1 Pts = Rp {loyaltyForm.loyaltyPointValue}
+          </span>
+        </button>
         <button
           type="button"
           onClick={() => setActiveTab('whatsapp')}
@@ -1006,6 +1088,390 @@ const CRMView = () => {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === 'loyalty' && (
+        <form onSubmit={handleSaveLoyaltySettings} className="flex-1 flex flex-col gap-4 animate-fade-in max-w-4xl">
+          {/* HEADER LOYALTY */}
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2.5 sm:gap-4 shrink-0 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center shrink-0 shadow-sm">
+                <Coins size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                    Aturan Poin &amp; Sistem Loyalitas CRM
+                  </h2>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    loyaltyForm.loyaltyEnabled 
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                      : 'bg-slate-100 text-slate-500 border border-slate-200'
+                  }`}>
+                    {loyaltyForm.loyaltyEnabled ? '✓ AKTIF' : 'NONAKTIF'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Atur rasio belanja per poin dan nilai tukar diskon nota / klaim menu gratis untuk pelanggan Anda
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loyaltySaving}
+              className="btn btn-primary shadow-md hover:shadow-lg flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50 shrink-0"
+            >
+              <Save size={15} />
+              <span>{loyaltySaving ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+            </button>
+          </div>
+
+          {/* SIMULASI VAMOSMOBILE BANNER */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-indigo-50 border border-amber-200/80 shadow-sm">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-200">
+                <Coffee size={20} />
+              </div>
+              <div className="flex-1 space-y-1.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-black text-sm text-amber-950 flex items-center gap-1.5">
+                    <Gift size={15} className="text-amber-600" />
+                    Simulasi: Tukar 100 Poin = Kopi Susu Gratis (Ala Vamosmobile / Starbucks)
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                    Panduan Praktis
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900/90 leading-relaxed">
+                  Jika Anda ingin pelanggan bisa menukarkan <strong>100 Poin</strong> untuk mendapatkan <strong>1 Kopi Susu gratis (Harga Rp 10.000)</strong>:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/60">
+                    <div className="font-extrabold text-amber-800 text-[11px] mb-0.5">1. Set Nilai Potongan</div>
+                    <div className="text-slate-600 text-[11px]">
+                      Atur <strong>Nilai Potongan = Rp {loyaltyForm.loyaltyPointValue || 100} / Poin</strong> di bawah. Maka 100 poin bernilai diskon Rp {(100 * (Number(loyaltyForm.loyaltyPointValue) || 100)).toLocaleString('id-ID')}.
+                    </div>
+                  </div>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/60">
+                    <div className="font-extrabold text-amber-800 text-[11px] mb-0.5">2. Pelanggan Kumpul Poin</div>
+                    <div className="text-slate-600 text-[11px]">
+                      Tiap belanja <strong>Rp {(Number(loyaltyForm.loyaltyEarnPerAmount) || 10000).toLocaleString('id-ID')}</strong> dapat 1 poin. Belanja Rp 100.000 dapat 10 poin.
+                    </div>
+                  </div>
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200/60">
+                    <div className="font-extrabold text-amber-800 text-[11px] mb-0.5">3. Kasir Tukar di POS</div>
+                    <div className="text-slate-600 text-[11px]">
+                      Kasir pilih member, centang <strong>Tukar 100 Poin</strong>, tagihan Kopi Susu dipotong Rp 10.000 jadi <strong>Rp 0 (Gratis)</strong>!
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TOGGLE PROGRAM LOYALITAS */}
+          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+            <label className="flex items-start justify-between gap-4 cursor-pointer select-none">
+              <div className="space-y-1 flex-1 min-w-0 pr-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-sm text-slate-800">
+                    Aktifkan Program Poin Belanja &amp; Loyalitas Pelanggan
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Memberikan poin otomatis saat member berbelanja di kasir POS dan membolehkan penukaran poin sebagai potongan tagihan struk.
+                </p>
+              </div>
+
+              <div className="relative mt-1 shrink-0">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={loyaltyForm.loyaltyEnabled}
+                  onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyEnabled: e.target.checked })}
+                />
+                <div
+                  style={{
+                    width: 44, height: 24, borderRadius: 12, cursor: 'pointer',
+                    background: loyaltyForm.loyaltyEnabled ? '#4f46e5' : '#cbd5e1',
+                    transition: 'background 0.2s', position: 'relative',
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute', top: 3,
+                    left: loyaltyForm.loyaltyEnabled ? 23 : 3,
+                    width: 18, height: 18, borderRadius: '50%', background: 'white',
+                    transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }} />
+                </div>
+              </div>
+            </label>
+          </div>
+
+          {loyaltyForm.loyaltyEnabled && (
+            <>
+              {/* KONVERSI POIN & NILAI BELANJA */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <Sparkles size={17} className="text-indigo-600" />
+                  <h3 className="font-extrabold text-sm text-slate-900">
+                    Konversi Poin &amp; Nilai Belanja
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Kelipatan Belanja Per 1 Poin (Earn)
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        min={1}
+                        className="form-control pl-4 pr-28 font-bold text-slate-900 bg-slate-50/60 focus:bg-white text-sm" 
+                        value={loyaltyForm.loyaltyEarnPerAmount} 
+                        onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyEarnPerAmount: Number(e.target.value) })} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 font-bold text-xs text-slate-400">
+                        Rupiah belanja
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Contoh: Rp 10.000. Pelanggan belanja Rp 50.000 otomatis dapat 5 Poin.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Nilai Potongan Per 1 Poin (Redeem)
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        min={0}
+                        className="form-control pl-4 pr-28 font-bold text-slate-900 bg-slate-50/60 focus:bg-white text-sm" 
+                        value={loyaltyForm.loyaltyPointValue} 
+                        onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyPointValue: Number(e.target.value) })} 
+                      />
+                      <span className="absolute right-3.5 top-2.5 font-bold text-xs text-slate-400">
+                        Rupiah / Poin
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Contoh: Rp 100. Nilai diskon langsung saat 1 poin ditukarkan di kasir.
+                    </p>
+                  </div>
+                </div>
+
+                {/* LIVE PREVIEW PILLS */}
+                <div className="pt-2">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Simulasi Nilai Tukar Saat Ini:
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[10, 50, 100, 200, 500].map(pts => {
+                      const rupiahVal = pts * (Number(loyaltyForm.loyaltyPointValue) || 100);
+                      const is100 = pts === 100;
+                      return (
+                        <div 
+                          key={pts}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border flex items-center gap-1.5 ${
+                            is100
+                              ? 'bg-amber-50 text-amber-900 border-amber-300 ring-2 ring-amber-200/60'
+                              : 'bg-slate-50 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          <Coins size={13} className={is100 ? 'text-amber-600' : 'text-slate-400'} />
+                          <span>{pts} Poin</span>
+                          <span className="text-slate-400 font-normal">=</span>
+                          <span className={is100 ? 'text-amber-700 font-black' : 'text-indigo-600 font-black'}>
+                            Rp {rupiahVal.toLocaleString('id-ID')}
+                          </span>
+                          {is100 && (
+                            <span className="text-[10px] bg-amber-200/90 text-amber-900 px-1.5 py-0.2 rounded-md font-bold ml-0.5">
+                              Kopi Susu
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* BATASAN & SYARAT PENUKARAN */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <Gift size={17} className="text-emerald-600" />
+                  <h3 className="font-extrabold text-sm text-slate-900">
+                    Syarat &amp; Batasan Penukaran Poin
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Min. Poin untuk Tukar
+                    </label>
+                    <input 
+                      type="number" 
+                      min={1}
+                      className="form-control font-bold text-slate-900 bg-slate-50/60 focus:bg-white text-sm" 
+                      value={loyaltyForm.loyaltyRedeemMinPoints} 
+                      onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyRedeemMinPoints: Number(e.target.value) })} 
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Min. poin yang wajib dimiliki sebelum boleh tukar
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Maks. Poin per Transaksi
+                    </label>
+                    <input 
+                      type="number" 
+                      min={0}
+                      className="form-control font-bold text-slate-900 bg-slate-50/60 focus:bg-white text-sm" 
+                      value={loyaltyForm.loyaltyMaxRedeemPerOrder} 
+                      onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyMaxRedeemPerOrder: Number(e.target.value) })} 
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      0 = tanpa batas maksimal per transaksi
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                      Min. Belanja untuk Dapat Poin
+                    </label>
+                    <input 
+                      type="number" 
+                      min={0}
+                      className="form-control font-bold text-slate-900 bg-slate-50/60 focus:bg-white text-sm" 
+                      value={loyaltyForm.loyaltyMinOrderForEarn} 
+                      onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyMinOrderForEarn: Number(e.target.value) })} 
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      0 = belanja nominal berapa pun tetap dapat poin
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* TINGKAT KEANGGOTAAN (TIERING) */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <Layers size={17} className="text-purple-600" />
+                  <h3 className="font-extrabold text-sm text-slate-900">
+                    Tingkat Keanggotaan (Tiering) &amp; Bonus Multiplier
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  {/* Silver Tier */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/40 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-xs text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Award size={16} className="text-slate-500" />
+                        Level Silver
+                      </span>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                        {loyaltyForm.loyaltySilverMultiplier}x Poin
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                          Batas Belanja (Rp)
+                        </label>
+                        <input 
+                          type="number" 
+                          className="form-control font-bold text-xs bg-white" 
+                          value={loyaltyForm.loyaltySilverThreshold} 
+                          onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltySilverThreshold: Number(e.target.value) })} 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                          Multiplier Poin (x)
+                        </label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          min={1}
+                          className="form-control font-bold text-xs bg-white" 
+                          value={loyaltyForm.loyaltySilverMultiplier} 
+                          onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltySilverMultiplier: Number(e.target.value) })} 
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-tight">
+                      Pelanggan mencapai akumulasi belanja Rp {Number(loyaltyForm.loyaltySilverThreshold || 0).toLocaleString('id-ID')} otomatis naik ke Silver.
+                    </p>
+                  </div>
+
+                  {/* Gold Tier */}
+                  <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-xs text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Award size={16} className="text-amber-500" />
+                        Level Gold
+                      </span>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                        {loyaltyForm.loyaltyGoldMultiplier}x Poin
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                          Batas Belanja (Rp)
+                        </label>
+                        <input 
+                          type="number" 
+                          className="form-control font-bold text-xs bg-white" 
+                          value={loyaltyForm.loyaltyGoldThreshold} 
+                          onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyGoldThreshold: Number(e.target.value) })} 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">
+                          Multiplier Poin (x)
+                        </label>
+                        <input 
+                          type="number" 
+                          step="0.1" 
+                          min={1}
+                          className="form-control font-bold text-xs bg-white" 
+                          value={loyaltyForm.loyaltyGoldMultiplier} 
+                          onChange={e => setLoyaltyForm({ ...loyaltyForm, loyaltyGoldMultiplier: Number(e.target.value) })} 
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-tight">
+                      Member Gold mendapatkan bonus poin {Math.round(((Number(loyaltyForm.loyaltyGoldMultiplier) || 1.5) - 1) * 100)}% lebih banyak pada tiap transaksi.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* SAVE BUTTON FOOTER */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={loyaltySaving}
+                  className="btn btn-primary shadow-lg hover:shadow-xl flex items-center justify-center gap-2 py-3 px-6 rounded-xl text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Save size={16} />
+                  <span>{loyaltySaving ? 'Menyimpan Perubahan...' : 'Simpan Semua Aturan Loyalitas'}</span>
+                </button>
+              </div>
+            </>
+          )}
+        </form>
       )}
 
       {activeTab === 'whatsapp' && (

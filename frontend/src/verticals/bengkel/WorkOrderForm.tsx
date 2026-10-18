@@ -41,7 +41,7 @@ export const WorkOrderForm: React.FC = () => {
     parts?: any[];
     cartItems?: any[];
   } | undefined;
-  const { token } = usePOS();
+  const { token, activeShift } = usePOS();
   const isEditing = Boolean(id);
 
   const [currentWorkOrder, setCurrentWorkOrder] = useState<any | null>(null);
@@ -1265,7 +1265,13 @@ export const WorkOrderForm: React.FC = () => {
               {isEditing && status !== 'PAID' && status !== 'CANCELLED' && (
                 <button
                   type="button"
-                  onClick={() => setShowPayModal(true)}
+                  onClick={() => {
+                    if (!activeShift) {
+                      toast('Silakan buka shift kasir terlebih dahulu sebelum melayani pembayaran.', 'warning');
+                      return;
+                    }
+                    setShowPayModal(true);
+                  }}
                   className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-black text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xl shadow-emerald-950/40 transition active:scale-95 cursor-pointer"
                 >
                   <CreditCard size={19} />

@@ -61,6 +61,21 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
       return res.status(400).json({ error: 'Total transaksi tidak valid atau tidak boleh negatif.' });
     }
 
+    // Proteksi Shift Kasir Wajib Aktif untuk transaksi kasir Retail
+    const activeShift = await prisma.shift.findFirst({
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...(tenantId ? { tenantId } : {})
+      }
+    });
+
+    if (!activeShift) {
+      return res.status(400).json({
+        error: 'Shift kasir belum dibuka. Harap buka shift kasir dan masukkan modal awal laci terlebih dahulu sebelum melayani transaksi.',
+        shiftRequired: true
+      });
+    }
+
     // Ambil Outlet Aktif secara resilient (prioritas user.outletId -> ACTIVE -> outlet pertama)
     let outlet = null;
     if (user?.outletId) {
@@ -1143,6 +1158,21 @@ router.post('/customers/:id/pay-debt', authenticateToken, async (req: Request, r
     if (!tenantId) return res.status(400).json({ error: 'Tenant context wajib disertakan.' });
     if (!amountPaid || Number(amountPaid) <= 0) {
       return res.status(400).json({ error: 'Jumlah pembayaran harus lebih besar dari 0.' });
+    }
+
+    // Proteksi Shift Kasir Wajib Aktif untuk penerimaan pelunasan piutang kasir
+    const activeShift = await prisma.shift.findFirst({
+      where: {
+        status: { in: ['Open', 'OPEN'] },
+        ...(tenantId ? { tenantId } : {})
+      }
+    });
+
+    if (!activeShift) {
+      return res.status(400).json({
+        error: 'Shift kasir belum dibuka. Harap buka shift kasir terlebih dahulu sebelum menerima pembayaran piutang kasir.',
+        shiftRequired: true
+      });
     }
 
     const customer = await prisma.customer.findFirst({

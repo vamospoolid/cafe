@@ -97,7 +97,7 @@ function getEffectiveOrderAmounts(order: LaundryOrder | null) {
 
 export const LaundryKanbanView: React.FC = () => {
   const navigate = useNavigate();
-  const { token, user, settings, triggerHaptic } = usePOS();
+  const { token, user, settings, triggerHaptic, activeShift } = usePOS();
 
   const [orders, setOrders] = useState<LaundryOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -289,6 +289,11 @@ export const LaundryKanbanView: React.FC = () => {
     setIsUpdatingStatus(true);
     try {
       const payAmount = parseFloat(pickupPayAmount) || 0;
+      if (payAmount > 0 && !activeShift) {
+        toast('Silakan buka shift kasir terlebih dahulu sebelum memproses pelunasan cucian.', 'warning');
+        setIsUpdatingStatus(false);
+        return;
+      }
       const res = await fetch(`/api/laundry/orders/${pickupModalOrder.id}/pickup`, {
         method: 'POST',
         headers: {

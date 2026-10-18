@@ -88,7 +88,7 @@ const TREATMENT_TAGS = [
 
 export const POSLaundry: React.FC = () => {
   const navigate = useNavigate();
-  const { token, user, triggerHaptic } = usePOS();
+  const { token, user, triggerHaptic, activeShift } = usePOS();
 
   // State Pelanggan
   const [customerName, setCustomerName] = useState('');
@@ -439,6 +439,11 @@ export const POSLaundry: React.FC = () => {
     setIsSubmitting(true);
     try {
       const isPaidNow = paymentOption === 'PAY_NOW';
+      if (isPaidNow && !activeShift) {
+        toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu sebelum melayani pembayaran tunai/non-tunai.', 'warning');
+        setIsSubmitting(false);
+        return;
+      }
       const paidAmount = isPaidNow ? totalPayable : 0;
       const paymentStatus = isPaidNow ? 'PAID' : 'UNPAID';
 
