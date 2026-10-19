@@ -25,7 +25,11 @@ import {
   Layers,
   Sparkle,
   ArrowUpRight,
-  TrendingDown
+  TrendingDown,
+  Wifi,
+  WifiOff,
+  HardDrive,
+  Download
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
@@ -34,6 +38,8 @@ import { toast } from '../../utils/alert';
 import useSocket from '../../hooks/useSocket';
 import { RentalCronModal } from './RentalCronModal';
 import { RentalSendReminderModal, type RentalOrderReminderTarget } from './RentalSendReminderModal';
+import OfflineSyncPanel from '../../components/OfflineSyncPanel';
+import { seedLocalCatalogCache } from '../../utils/catalogCacheSeeder';
 
 interface RentalDashboardStatsProps {
   activeShift?: any;
@@ -124,6 +130,21 @@ export const RentalDashboardStats: React.FC<RentalDashboardStatsProps> = ({
   const [chartMetric, setChartMetric] = useState<'revenue' | 'orders'>('revenue');
   const [cronModalOpen, setCronModalOpen] = useState(false);
   const [selectedReminderOrder, setSelectedReminderOrder] = useState<RentalOrderReminderTarget | null>(null);
+  const [isOfflinePanelOpen, setIsOfflinePanelOpen] = useState(false);
+  const [isPreCaching, setIsPreCaching] = useState(false);
+
+  const handleQuickPreCache = async () => {
+    if (!posContext?.token) return;
+    setIsPreCaching(true);
+    try {
+      await seedLocalCatalogCache(posContext.token);
+      toast('Katalog rental busana & data operasional berhasil diunduh ke cache memori lokal!', 'success');
+    } catch (err: any) {
+      toast('Gagal pre-cache katalog: ' + (err.message || 'Koneksi bermasalah'), 'error');
+    } finally {
+      setIsPreCaching(false);
+    }
+  };
 
   const fmt = (v: number) => `Rp ${(v || 0).toLocaleString('id-ID')}`;
   const fmtDate = (s: string) => {
@@ -347,6 +368,32 @@ export const RentalDashboardStats: React.FC<RentalDashboardStatsProps> = ({
               </button>
             ))}
           </div>
+
+          {/* Minimalist Offline / Sync Pill */}
+          <button
+            type="button"
+            onClick={() => {
+              posContext?.triggerHaptic?.(10);
+              setIsOfflinePanelOpen(true);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 cursor-pointer shadow-xs ${
+              posContext?.isOnline
+                ? (posContext?.offlineQueueCount && posContext.offlineQueueCount > 0)
+                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse'
+            }`}
+            title="Pusat Sinkronisasi & Mode Offline"
+          >
+            <span className={`w-2 h-2 rounded-full ${posContext?.isOnline ? 'bg-emerald-500 animate-ping' : 'bg-rose-500'}`} />
+            <Wifi size={13} className={posContext?.isOnline ? 'text-emerald-600' : 'text-rose-600'} />
+            <span className="hidden sm:inline font-bold">{posContext?.isOnline ? 'Cloud' : 'Offline'}</span>
+            {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
+                {posContext?.offlineQueueCount}
+              </span>
+            )}
+          </button>
 
           <button
             onClick={() => {
@@ -1047,6 +1094,60 @@ export const RentalDashboardStats: React.FC<RentalDashboardStatsProps> = ({
         ))}
       </div>
 
+      {/* ─── BOTTOM OFFLINE READINESS & SYNC HUB CARD ─────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-4 sm:p-5 text-white shadow-lg border border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/15 shrink-0 text-amber-400">
+            {posContext?.isOnline ? <HardDrive size={22} /> : <WifiOff size={22} className="text-rose-400" />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-black text-white tracking-wide">
+                Kesiapan Mode Offline &amp; Sinkronisasi Data Sanggar
+              </h3>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black border ${
+                posContext?.isOnline 
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
+                  : 'bg-rose-500/20 text-rose-300 border-rose-500/30 animate-pulse'
+              }`}>
+                {posContext?.isOnline ? 'Online (Terhubung Cloud)' : 'Offline (Mode Lokal Aktif)'}
+              </span>
+              {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-400 text-slate-950 animate-bounce">
+                  {posContext?.offlineQueueCount} Transaksi Menunggu Sync
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+              Sistem kasir tetap dapat memproses sewa busana, fitting &amp; cetak nota tanpa internet dengan database <strong>IndexedDB lokal</strong>. Data otomatis tersinkron ke cloud server saat internet pulih.
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+          <button
+            type="button"
+            onClick={handleQuickPreCache}
+            disabled={!posContext?.isOnline || isPreCaching}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
+            title="Unduh seluruh koleksi busana, tarif sewa, dan data sanggar ke cache memori browser"
+          >
+            <Download size={14} className={isPreCaching ? 'animate-spin' : ''} />
+            <span>{isPreCaching ? 'Mengunduh...' : 'Pre-Cache Busana'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsOfflinePanelOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all active:scale-95 cursor-pointer shadow-xs"
+          >
+            <HardDrive size={14} />
+            <span>Buka Hub Offline</span>
+          </button>
+        </div>
+      </div>
+
       {/* ─── MODALS ───────────────────────────────────────────────────────── */}
       <RentalCronModal
         isOpen={cronModalOpen}
@@ -1060,6 +1161,11 @@ export const RentalDashboardStats: React.FC<RentalDashboardStatsProps> = ({
         order={selectedReminderOrder}
         onSuccess={fetchAll}
       />
+
+      {/* Global Offline Hub & Sync Monitoring Panel */}
+      {isOfflinePanelOpen && (
+        <OfflineSyncPanel onClose={() => setIsOfflinePanelOpen(false)} />
+      )}
 
     </div>
   );
