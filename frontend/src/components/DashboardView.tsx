@@ -33,7 +33,12 @@ import {
   Wifi,
   WifiOff,
   HardDrive,
-  Download
+  Download,
+  Store,
+  Shirt,
+  Coffee,
+  Wrench,
+  Calendar
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { POSContext } from '../context/POSContext';
@@ -270,21 +275,67 @@ const DashboardView = () => {
   const cashAmount = summary.cashBreakdown?.cash ?? (summary.paymentMethods?.Tunai || 0);
   const digitalAmount = summary.cashBreakdown?.digital ?? ((summary.revenue || 0) - cashAmount);
 
+  // ─── VERTICAL IDENTITY HELPERS ──────────────────────────────────────────
+  const dashboardTitle = isRetail 
+    ? 'Dashboard Toko & Grosir' 
+    : isLaundry 
+      ? 'Dashboard Laundry & Kiloan' 
+      : isRental 
+        ? 'Dashboard Sanggar & Rental' 
+        : isBengkel 
+          ? 'Dashboard Bengkel & Servis' 
+          : 'Dashboard Eksekutif Kafe';
+
+  const dashboardSubtitle = (() => {
+    const store = posContext?.settings?.storeName || 'Toko';
+    if (isRetail) return `Pusat kendali penjualan kasir, stok gudang, armada kirim & piutang ${store}`;
+    if (isLaundry) return `Pusat kendali antrean cuci, rak simpan pelanggan, timbangan & kasir ${store}`;
+    if (isRental) return `Pusat kendali kontrak sewa, fitting busana, perhiasan adat & kasir ${store}`;
+    if (isBengkel) return `Pusat kendali antrean SPK servis, sparepart gudang, mekanik & kasir ${store}`;
+    return `Pusat kendali operasional, finansial, dapur & kru ${store}`;
+  })();
+
+  const transactionUnit = isRetail ? 'Faktur' : isLaundry ? 'Nota Cuci' : isRental ? 'Sewa' : isBengkel ? 'SPK' : 'Struk';
+  const staffRoleFallback = isRetail ? 'Kru Toko' : isLaundry ? 'Kru Laundry' : isBengkel ? 'Mekanik / Staf' : isRental ? 'Kru Sanggar' : 'Kru Resto';
+
   return (
     <div className="p-3 sm:p-6 pb-28 sm:pb-16 w-full flex flex-col gap-5 sm:gap-6 max-w-[1600px] mx-auto">
       
       {/* ─── 1. TOP HEADER & SHIFT LIVE STATUS ────────────────────────────── */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-100 shrink-0">
-            <Activity size={22} />
+          <div className={`w-10 h-10 rounded-xl text-white flex items-center justify-center shadow-md shrink-0 ${
+            isRetail 
+              ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-emerald-100'
+              : isLaundry
+                ? 'bg-gradient-to-tr from-cyan-600 to-blue-500 shadow-cyan-100'
+                : isRental
+                  ? 'bg-gradient-to-tr from-amber-600 to-orange-500 shadow-amber-100'
+                  : isBengkel
+                    ? 'bg-gradient-to-tr from-violet-600 to-indigo-600 shadow-violet-100'
+                    : 'bg-gradient-to-tr from-indigo-600 to-indigo-500 shadow-indigo-100'
+          }`}>
+            {isRetail ? <Store size={22} /> : isLaundry ? <Sparkles size={22} /> : isRental ? <Layers size={22} /> : isBengkel ? <Wrench size={22} /> : <Activity size={22} />}
           </div>
           <div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              Dashboard Executive
-            </h2>
-            <p className="text-xs text-slate-500">
-              Pusat kendali operasional, finansial, dapur &amp; kru {posContext?.settings?.storeName || 'Toko'}
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                {dashboardTitle}
+              </h2>
+              <span className={`hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                isRetail 
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                  : isLaundry
+                    ? 'bg-cyan-50 text-cyan-700 border border-cyan-100'
+                    : isRental
+                      ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                      : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+              }`}>
+                {isRetail ? 'Retail & Grosir' : isLaundry ? 'Laundry POS' : isRental ? 'Rental POS' : 'F&B POS'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {dashboardSubtitle}
             </p>
           </div>
         </div>
@@ -319,70 +370,44 @@ const DashboardView = () => {
             </button>
           )}
 
+          {/* Toggle Kecil Notifikasi Offline di Atas (Sesuai Permintaan User - Tanpa Teks Panjang) */}
+          <button
+            type="button"
+            onClick={() => setIsOfflinePanelOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border shadow-xs transition-all active:scale-95 cursor-pointer ${
+              posContext?.isOnline
+                ? (posContext?.offlineQueueCount && posContext.offlineQueueCount > 0)
+                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200 animate-pulse'
+            }`}
+            title={posContext?.isOnline ? 'Cloud SaaS Online (Klik untuk Pengaturan Offline & Cache)' : 'Mode Offline Lokal Aktif (Klik untuk Sinkronisasi)'}
+          >
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                posContext?.isOnline ? 'bg-emerald-400' : 'bg-rose-400'
+              }`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                posContext?.isOnline ? 'bg-emerald-500' : 'bg-rose-500'
+              }`} />
+            </span>
+            {posContext?.isOnline ? <Wifi size={13} className="text-emerald-600" /> : <WifiOff size={13} className="text-rose-600" />}
+            <span className="font-extrabold text-[11px] hidden sm:inline">
+              {posContext?.isOnline ? 'Cloud' : 'Offline'}
+            </span>
+            {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-black bg-amber-400 text-slate-950 animate-bounce">
+                {posContext?.offlineQueueCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={fetchAnalytics}
             className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-white text-slate-700 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-xl font-bold text-xs shadow-xs transition-all active:scale-95 cursor-pointer"
             title="Muat ulang data terbaru"
           >
-            <RefreshCw size={13} /> <span>Refresh</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ─── OFFLINE READINESS & SYNC HUB CARD ───────────────────────────── */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-start sm:items-center gap-3.5">
-          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border shadow-inner ${
-            posContext?.isOnline 
-              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
-              : 'bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse'
-          }`}>
-            {posContext?.isOnline ? <Wifi size={22} /> : <WifiOff size={22} />}
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                Kesiapan Mode Offline &amp; Sinkronisasi
-              </h3>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${
-                posContext?.isOnline 
-                  ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' 
-                  : 'bg-rose-500/30 text-rose-300 border border-rose-500/40 animate-pulse'
-              }`}>
-                {posContext?.isOnline ? '🌐 Cloud SaaS Aktif' : '⚠️ Mode Offline (Lokal)'}
-              </span>
-              {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-400 text-slate-950 animate-bounce">
-                  {posContext?.offlineQueueCount} Transaksi Menunggu Sync
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Sistem kasir tetap dapat memproses penjualan &amp; cetak struk tanpa internet dengan database <strong>IndexedDB lokal</strong>. Data otomatis tersinkron saat internet pulih.
-            </p>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-          <button
-            type="button"
-            onClick={handleQuickPreCache}
-            disabled={!posContext?.isOnline || isPreCaching}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
-            title="Unduh seluruh produk, kategori, dan meja ke cache browser lokal"
-          >
-            <Download size={14} className={isPreCaching ? 'animate-spin' : ''} />
-            <span>{isPreCaching ? 'Mengunduh...' : 'Pre-Cache Katalog'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsOfflinePanelOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all active:scale-95 cursor-pointer shadow-xs"
-          >
-            <HardDrive size={14} />
-            <span>Buka Hub Offline</span>
+            <RefreshCw size={13} /> <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
@@ -400,14 +425,17 @@ const DashboardView = () => {
           {/* 1. Kasir POS */}
           <button
             type="button"
-            onClick={() => { posContext?.triggerHaptic(20); navigate('/pos'); }}
+            onClick={() => { 
+              posContext?.triggerHaptic(20); 
+              navigate(isLaundry ? '/laundry' : isBengkel ? '/bengkel' : isRental ? '/rental' : '/pos'); 
+            }}
             className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-indigo-50/60 hover:bg-indigo-100/60 border border-indigo-100/80 transition-all active:scale-95 cursor-pointer text-center group"
           >
             <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
               <ShoppingCart size={17} />
             </div>
             <span className="text-[10.5px] font-extrabold text-indigo-950 tracking-tight leading-tight line-clamp-1">
-              {isRetail ? 'Kasir Grosir' : 'Kasir POS'}
+              {isRetail ? 'Kasir Grosir' : isLaundry ? 'Kasir Laundry' : isBengkel ? 'Kasir Bengkel' : isRental ? 'Kasir Rental' : 'Kasir POS'}
             </span>
             <span className="text-[8.5px] font-semibold text-indigo-600/80 leading-none">Transaksi</span>
           </button>
@@ -433,7 +461,7 @@ const DashboardView = () => {
             </span>
           </button>
 
-          {/* 3. Vertikal Spesifik: Surat Jalan (Retail), Papan Cucian (Laundry), atau Meja (Cafe) */}
+          {/* 3. Vertikal Spesifik: Surat Jalan (Retail), Papan Cucian (Laundry), SPK (Bengkel), Sewa (Rental), Meja (Cafe) */}
           {isRetail ? (
             <button
               type="button"
@@ -462,6 +490,34 @@ const DashboardView = () => {
               </span>
               <span className="text-[8.5px] font-semibold text-cyan-600/80 leading-none">Status Kanban</span>
             </button>
+          ) : isRental ? (
+            <button
+              type="button"
+              onClick={() => { posContext?.triggerHaptic(15); navigate('/rental-kanban'); }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-amber-50/60 hover:bg-amber-100/60 border border-amber-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+                <Calendar size={17} />
+              </div>
+              <span className="text-[10.5px] font-extrabold text-amber-950 tracking-tight leading-tight line-clamp-1">
+                Papan Sewa
+              </span>
+              <span className="text-[8.5px] font-semibold text-amber-600/80 leading-none">Fitting &amp; Sewa</span>
+            </button>
+          ) : isBengkel ? (
+            <button
+              type="button"
+              onClick={() => { posContext?.triggerHaptic(15); navigate('/bengkel'); }}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-violet-50/60 hover:bg-violet-100/60 border border-violet-100/80 transition-all active:scale-95 cursor-pointer text-center group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
+                <Wrench size={17} />
+              </div>
+              <span className="text-[10.5px] font-extrabold text-violet-950 tracking-tight leading-tight line-clamp-1">
+                Papan SPK
+              </span>
+              <span className="text-[8.5px] font-semibold text-violet-600/80 leading-none">Antrean Servis</span>
+            </button>
           ) : (
             <button
               type="button"
@@ -485,12 +541,14 @@ const DashboardView = () => {
             className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-blue-50/60 hover:bg-blue-100/60 border border-blue-100/80 transition-all active:scale-95 cursor-pointer text-center group"
           >
             <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform mb-1">
-              <Package size={17} />
+              {isLaundry ? <Sparkles size={17} /> : isRental ? <Shirt size={17} /> : isCafe ? <Coffee size={17} /> : <Package size={17} />}
             </div>
             <span className="text-[10.5px] font-extrabold text-blue-950 tracking-tight leading-tight line-clamp-1">
-              Katalog Stok
+              {isRetail ? 'Katalog Stok' : isLaundry ? 'Layanan Cuci' : isRental ? 'Koleksi Busana' : isBengkel ? 'Katalog Part' : 'Daftar Menu'}
             </span>
-            <span className="text-[8.5px] font-semibold text-blue-600/80 leading-none">Data Barang</span>
+            <span className="text-[8.5px] font-semibold text-blue-600/80 leading-none">
+              {isRetail ? 'Data Barang' : isLaundry ? 'Tarif & Paket' : isRental ? 'Data Baju' : isBengkel ? 'Sparepart' : 'Menu & Resep'}
+            </span>
           </button>
 
           {/* 5. Arus Kas / Petty Cash */}
@@ -535,7 +593,7 @@ const DashboardView = () => {
               <DollarSign size={16} className="sm:w-5 sm:h-5" />
             </div>
             <span className="text-[9px] sm:text-[10px] font-bold text-indigo-700 bg-indigo-50/90 px-1.5 sm:px-2 py-0.5 rounded-full border border-indigo-100 truncate max-w-[90px]">
-              {summary.transactions} Struk
+              {summary.transactions} {transactionUnit}
             </span>
           </div>
           <div>
@@ -1192,7 +1250,7 @@ const DashboardView = () => {
                       <div>
                         <div className="font-bold text-slate-800">{att.user?.name || att.user?.username}</div>
                         <div className="text-[10px] text-slate-400 capitalize">
-                          {att.shiftName || att.user?.role || 'Kru Resto'} &bull; Masuk: {clockInTime}
+                          {att.shiftName || att.user?.role || staffRoleFallback} &bull; Masuk: {clockInTime}
                         </div>
                       </div>
                     </div>
@@ -1360,6 +1418,64 @@ const DashboardView = () => {
           </div>
         </div>
       )}
+
+      {/* ─── 7. OFFLINE READINESS & SYNC HUB (DISIMPAN DI BAGIAN PALING BAWAH) ─── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-5 rounded-3xl border border-slate-800/80 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border shadow-inner ${
+            posContext?.isOnline 
+              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' 
+              : 'bg-rose-500/20 text-rose-400 border-rose-500/40 animate-pulse'
+          }`}>
+            {posContext?.isOnline ? <Wifi size={22} /> : <WifiOff size={22} />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
+                Kesiapan Mode Offline &amp; Sinkronisasi Lokal
+              </h3>
+              <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
+                posContext?.isOnline 
+                  ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' 
+                  : 'bg-rose-500/30 text-rose-300 border border-rose-500/40 animate-pulse'
+              }`}>
+                {posContext?.isOnline ? '🌐 Cloud SaaS Aktif' : '⚠️ Mode Offline (Lokal)'}
+              </span>
+              {Boolean(posContext?.offlineQueueCount && posContext.offlineQueueCount > 0) && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-400 text-slate-950 animate-bounce">
+                  {posContext?.offlineQueueCount} Transaksi Menunggu Sync
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+              Sistem kasir tetap dapat memproses penjualan &amp; cetak struk tanpa internet dengan database <strong>IndexedDB lokal</strong>. Data otomatis tersinkron ke cloud server saat koneksi internet pulih.
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+          <button
+            type="button"
+            onClick={handleQuickPreCache}
+            disabled={!posContext?.isOnline || isPreCaching}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold transition-all active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
+            title="Unduh seluruh produk, kategori, dan master data ke cache memori browser"
+          >
+            <Download size={14} className={isPreCaching ? 'animate-spin' : ''} />
+            <span>{isPreCaching ? 'Mengunduh...' : 'Pre-Cache Katalog'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsOfflinePanelOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all active:scale-95 cursor-pointer shadow-xs"
+          >
+            <HardDrive size={14} />
+            <span>Buka Hub Offline</span>
+          </button>
+        </div>
+      </div>
 
       {/* Modal Buka/Tutup Shift Kasir */}
       <OpenShiftModal
