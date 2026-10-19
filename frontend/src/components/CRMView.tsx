@@ -1115,7 +1115,7 @@ const CRMView = () => {
             </button>
           </div>
 
-          {/* SIMULASI VAMOSMOBILE BANNER */}
+          {/* SIMULASI REWARD MEMBER BANNER */}
           <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-indigo-50 border border-amber-200/80 shadow-sm">
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-200">
@@ -1125,7 +1125,7 @@ const CRMView = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-black text-sm text-amber-950 flex items-center gap-1.5">
                     <Gift size={15} className="text-amber-600" />
-                    Simulasi: Tukar 100 Poin = Kopi Susu Gratis (Ala Vamosmobile / Starbucks)
+                    Simulasi: Tukar 100 Poin = Kopi Susu Gratis (Reward Member)
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
                     Panduan Praktis

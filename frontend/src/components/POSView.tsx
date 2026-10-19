@@ -1134,105 +1134,92 @@ export const POSView = () => {
 
       {/* Kanan: Keranjang - Hanya dirender pada layar Desktop */}
       {!isMobile && (
-        <div className="pos-sidebar">
-          <div className="cart-header">
-            <div className="cart-title">
-              <ShoppingCart size={20} /> Keranjang
+        <div className="pos-sidebar flex flex-col h-full overflow-hidden">
+          <div className="cart-header shrink-0">
+            <div className="cart-title flex items-center gap-2">
+              <ShoppingCart size={20} /> 
+              <span>Keranjang</span>
+              {cart.length > 0 && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-black">
+                  {cart.reduce((s, i) => s + i.qty, 0)} item
+                </span>
+              )}
             </div>
-            <button className="icon-btn text-danger" onClick={() => setCart([])} disabled={cart.length === 0}>
+            <button className="icon-btn text-danger hover:bg-rose-50" onClick={() => setCart([])} disabled={cart.length === 0} title="Kosongkan Keranjang">
               <Trash2 size={18} />
             </button>
           </div>
 
-          <div className="cart-body flex-1 overflow-y-auto">
-            {cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                <ShoppingCart size={48} className="mb-4 opacity-30" />
-                <p>Keranjang masih kosong</p>
-              </div>
-            ) : (
-              cart.map((item, idx) => (
-                <div key={idx} className="cart-item">
-                  <div className="cart-item-info">
-                    <div className="cart-item-name truncate max-w-[150px]">{item.product.name}</div>
-                    {item.notes && (
-                      <div className={`mt-1 leading-snug ${
-                        item.notes.includes('[Fisik Ada • Belum Restock]')
-                          ? 'text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80 inline-block'
-                          : 'text-[0.7rem] font-semibold text-indigo-600'
-                      }`}>
-                        {item.notes}
+          {/* Area Tengah Scrollable: Daftar Item + Pelanggan + Pilihan Meja + Ringkasan Biaya */}
+          <div className="flex-1 overflow-y-auto px-3.5 py-3 flex flex-col gap-3 min-h-0">
+            {/* Daftar Item Keranjang */}
+            <div className="space-y-2">
+              {cart.length === 0 ? (
+                <div className="py-8 flex flex-col items-center justify-center text-gray-400">
+                  <ShoppingCart size={42} className="mb-2 opacity-30 text-slate-400" />
+                  <p className="font-bold text-sm text-slate-600">Keranjang masih kosong</p>
+                  <span className="text-xs text-slate-400">Pilih menu di samping</span>
+                </div>
+              ) : (
+                cart.map((item, idx) => (
+                  <div key={idx} className="cart-item">
+                    <div className="cart-item-info">
+                      <div className="cart-item-name truncate max-w-[150px]">{item.product.name}</div>
+                      {item.notes && (
+                        <div className={`mt-1 leading-snug ${
+                          item.notes.includes('[Fisik Ada • Belum Restock]')
+                            ? 'text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80 inline-block'
+                            : 'text-[0.7rem] font-semibold text-indigo-600'
+                        }`}>
+                          {item.notes}
+                        </div>
+                      )}
+                      <div className="cart-item-price">{formatCurrency(item.product.sellPrice ?? item.product.price)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
+                      
+                      <div className="cart-item-controls mt-2">
+                        <button className="qty-btn" onClick={() => decreaseCartItemQty(idx)}><Minus size={14} /></button>
+                        <span className="qty-val">{item.qty}</span>
+                        <button className="qty-btn" onClick={() => increaseCartItemQty(idx)}><Plus size={14} /></button>
                       </div>
-                    )}
-                    <div className="cart-item-price">{formatCurrency(item.product.sellPrice ?? item.product.price)} <span className="text-muted" style={{fontSize: '12px', fontWeight: 'normal'}}>x {item.qty}</span></div>
-                    
-                    <div className="cart-item-controls mt-2">
-                      <button className="qty-btn" onClick={() => decreaseCartItemQty(idx)}><Minus size={14} /></button>
-                      <span className="qty-val">{item.qty}</span>
-                      <button className="qty-btn" onClick={() => increaseCartItemQty(idx)}><Plus size={14} /></button>
+                    </div>
+                    <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between'}}>
+                      <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeCartItem(idx)}><X size={16}/></button>
+                      <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
                     </div>
                   </div>
-                  <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between'}}>
-                    <button className="cart-item-remove text-gray-400 hover:text-red-500" onClick={() => removeCartItem(idx)}><X size={16}/></button>
-                    <div style={{fontWeight: 700, fontSize: '0.875rem'}}>{formatCurrency((item.product.sellPrice ?? item.product.price) * item.qty)}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+                ))
+              )}
+            </div>
 
-          <div className="cart-footer">
-            <div className="summary-row">
-              <span>Subtotal</span>
-              <span style={{fontWeight: 600, color: 'var(--text-main)'}}>{formatCurrency(subtotal)}</span>
-            </div>
-            <div className="summary-row">
-              <span>Diskon <span className="text-muted" style={{fontSize: '10px'}}>{customer?.pointsUsed ? `(Poin: ${customer.pointsUsed})` : ''}</span></span>
-              <span className="text-red-500">-{formatCurrency(discount)}</span>
-            </div>
-            <div className="summary-row">
-              <span>PPN <span className="text-muted" style={{fontSize: '10px'}}>({taxRate}%)</span></span>
-              <span>{formatCurrency(tax)}</span>
-            </div>
-            {serviceChargeRate > 0 && (
-              <div className="summary-row">
-                <span>Layanan <span className="text-muted" style={{fontSize: '10px'}}>({serviceChargeRate}%)</span></span>
-                <span>{formatCurrency(serviceCharge)}</span>
-              </div>
-            )}
-            <div className="summary-total border-t pt-3 mt-2 mb-3">
-              <span>Total</span>
-              <span className="text-xl font-black text-emerald-600">{formatCurrency(total)}</span>
-            </div>
-            
             {/* Customer Selection */}
             <div 
-              className="mb-2.5 px-3 py-2.5 border border-slate-200 rounded-xl flex items-center justify-between bg-white cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all group"
+              className="px-3 py-2.5 border border-slate-200 rounded-xl flex items-center justify-between bg-white cursor-pointer hover:border-indigo-300 hover:shadow-sm transition-all group shrink-0"
               onClick={() => setIsCustomerModalOpen(true)}
             >
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                  <User size={18} />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <User size={16} />
                 </div>
-                <div>
-                  <div className="font-bold text-sm text-slate-800 leading-tight">
+                <div className="min-w-0">
+                  <div className="font-bold text-xs text-slate-800 leading-tight truncate">
                     {customer ? customer.name : 'Pelanggan Umum'}
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
+                  <div className="text-[10px] text-slate-400 mt-0.5 truncate">
                     {customer?.points ? `Member (${customer.points} pts)` : 'Klik untuk pilih pelanggan'}
                   </div>
                 </div>
               </div>
-              <Edit2 size={15} className="text-slate-400 group-hover:text-indigo-500 shrink-0" />
+              <Edit2 size={14} className="text-slate-400 group-hover:text-indigo-500 shrink-0" />
             </div>
 
             {/* Table / Order Type Selection */}
-            <div className="mb-3 px-3 py-2.5 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-2.5">
+            <div className="px-3 py-2.5 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-2 shrink-0">
               <div className="flex gap-2">
                 <button 
-                  className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-all ${
+                  type="button"
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg border-2 transition-all ${
                     orderType === 'Take Away'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200/50'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                   }`}
                   onClick={() => { setOrderType('Take Away'); clearSelectedTables(); }}
@@ -1240,9 +1227,10 @@ export const POSView = () => {
                   🛍️ Take Away
                 </button>
                 <button 
-                  className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-all ${
+                  type="button"
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg border-2 transition-all ${
                     orderType === 'Dine In'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200/50'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                   }`}
                   onClick={() => setOrderType('Dine In')}
@@ -1252,8 +1240,8 @@ export const POSView = () => {
               </div>
               
               {orderType === 'Dine In' && (
-                <div className="space-y-2 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <div className="space-y-1.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                     <span>Pilih Meja ({tables.length})</span>
                     {selectedTableIds.length > 0 && (
                       <button 
@@ -1281,7 +1269,7 @@ export const POSView = () => {
                   )}
 
                   {tables.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50/80 rounded-xl border border-slate-200 scrollbar-none">
+                    <div className="grid grid-cols-4 gap-1.5 max-h-28 overflow-y-auto p-1 bg-slate-50/80 rounded-xl border border-slate-200 scrollbar-none">
                       {tables.map(t => {
                         const isSelected = selectedTableIds.includes(t.id);
                         const isOccupied = t.status === 'Terisi';
@@ -1322,43 +1310,81 @@ export const POSView = () => {
               )}
             </div>
 
-            {orderType === 'Dine In' && (
-              <button 
-                className={`w-full font-bold rounded-xl py-2.5 mb-2 flex items-center justify-center gap-2 border-2 bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 hover:text-sky-800 transition-all shadow-sm text-sm ${
-                  cart.length === 0 || selectedTableIds.length === 0 ? 'opacity-40 cursor-not-allowed' : ''
-                }`}
-                disabled={cart.length === 0 || selectedTableIds.length === 0}
-                onClick={handleSaveBill}
-              >
-                <Save size={17} /> Simpan Bill {selectedTableIds.length > 1 ? `(${selectedTableIds.length} Meja)` : ''}
-              </button>
-            )}
+            {/* Price Breakdown */}
+            <div className="pt-2 border-t border-slate-100 space-y-1 text-xs text-slate-500 shrink-0">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span className="font-semibold text-slate-700">{formatCurrency(subtotal)}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-rose-600">
+                  <span>Diskon {customer?.pointsUsed ? `(Poin: ${customer.pointsUsed})` : ''}</span>
+                  <span>-{formatCurrency(discount)}</span>
+                </div>
+              )}
+              {taxRate > 0 && (
+                <div className="flex justify-between">
+                  <span>PPN ({taxRate}%)</span>
+                  <span>{formatCurrency(tax)}</span>
+                </div>
+              )}
+              {serviceChargeRate > 0 && (
+                <div className="flex justify-between">
+                  <span>Layanan ({serviceChargeRate}%)</span>
+                  <span>{formatCurrency(serviceCharge)}</span>
+                </div>
+              )}
+            </div>
+          </div>
 
-            <button
-              className="w-full py-3.5 rounded-xl font-black text-base flex items-center justify-center gap-2.5 transition-all"
-              style={{
-                background: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
-                  ? '#e2e8f0'
-                  : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
-                  ? '#64748b'
-                  : 'white',
-                boxShadow: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
-                  ? 'none'
-                  : '0 6px 20px rgba(16, 185, 129, 0.35)',
-                cursor: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
-                  ? 'not-allowed'
-                  : 'pointer',
-                transform: 'none',
-                border: 'none',
-                letterSpacing: '0.01em',
-              }}
-              disabled={cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)}
-              onClick={() => setIsCheckoutOpen(true)}
-            >
-              <CreditCard size={20} />
-              Proses Pembayaran{selectedTableIds.length > 1 ? ` (${selectedTableIds.length} Meja)` : ''}
-            </button>
+          {/* Bottom Bar: Total & Action Buttons (PINNED TO BOTTOM - GUARANTEED NEVER TO DISAPPEAR) */}
+          <div className="p-3 bg-white border-t border-slate-200 shadow-xl shrink-0">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total</span>
+              <span className="text-xl font-black text-emerald-600">{formatCurrency(total)}</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {orderType === 'Dine In' && (
+                <button 
+                  className={`flex-1 font-bold rounded-xl py-3 flex items-center justify-center gap-1.5 border-2 bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 hover:text-sky-800 transition-all shadow-sm text-xs ${
+                    cart.length === 0 || selectedTableIds.length === 0 ? 'opacity-40 cursor-not-allowed' : ''
+                  }`}
+                  disabled={cart.length === 0 || selectedTableIds.length === 0}
+                  onClick={handleSaveBill}
+                  title={selectedTableIds.length > 1 ? `Simpan pesanan untuk ${selectedTableIds.length} meja` : 'Simpan bill'}
+                >
+                  <Save size={16} className="shrink-0" />
+                  <span className="truncate">Simpan Bill {selectedTableIds.length > 1 ? `(${selectedTableIds.length})` : ''}</span>
+                </button>
+              )}
+
+              <button
+                className={`${orderType === 'Dine In' ? 'flex-[1.4]' : 'w-full'} py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-md`}
+                style={{
+                  background: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                    ? '#e2e8f0'
+                    : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                    ? '#64748b'
+                    : 'white',
+                  boxShadow: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                    ? 'none'
+                    : '0 4px 14px rgba(16, 185, 129, 0.35)',
+                  cursor: cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)
+                    ? 'not-allowed'
+                    : 'pointer',
+                  transform: 'none',
+                  border: 'none',
+                  letterSpacing: '0.01em',
+                }}
+                disabled={cart.length === 0 || (orderType === 'Dine In' && selectedTableIds.length === 0)}
+                onClick={() => setIsCheckoutOpen(true)}
+              >
+                <CreditCard size={18} className="shrink-0" />
+                <span className="truncate">Bayar{selectedTableIds.length > 1 ? ` (${selectedTableIds.length} Meja)` : ''}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1657,6 +1683,12 @@ export const POSView = () => {
           tableId: orderType === 'Dine In' ? (selectedTableIds[0] || null) : null,
           tableName: orderType === 'Dine In' 
             ? (() => {
+                if (selectedTableIds.length > 1) {
+                  return tables
+                    .filter(t => selectedTableIds.includes(t.id))
+                    .map(t => formatTableTitle(t.tableNo))
+                    .join(' + ');
+                }
                 const sel = tables.find(t => t.id === selectedTableIds[0]);
                 return sel ? (sel.name || `Meja ${sel.tableNo}`) : (selectedTableIds[0] ? `Meja ${selectedTableIds[0]}` : null);
               })()
