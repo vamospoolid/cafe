@@ -85,7 +85,7 @@ router.get('/public', async (req: Request, res: Response) => {
       phone: settings?.phone || '',
       storeLatitude: settings?.storeLatitude ?? -3.4028794,
       storeLongitude: settings?.storeLongitude ?? 119.213115,
-      gpsRadiusMeters: settings?.gpsRadiusMeters ?? 300,
+      gpsRadiusMeters: settings?.gpsRadiusMeters ?? 200,
       enableGpsValidation: settings?.enableGpsValidation ?? true,
       primaryColor: settings?.primaryColor || '#4f46e5',
       accentColor: settings?.accentColor || '#f59e0b',

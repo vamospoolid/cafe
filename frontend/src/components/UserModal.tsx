@@ -78,7 +78,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
         name: '',
         username: '',
         password: '',
-        pin: '123456',
+        pin: String(Math.floor(100000 + Math.random() * 900000)),
         role: 'CASHIER',
         roleId: 'role-system-cashier',
         employmentType: 'FULL_TIME',
@@ -227,10 +227,19 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, initialData, onS
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  PIN Absensi &amp; Ganti Kasir {initialData && <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>}
-                </label>
-                <input type="password" name="pin" maxLength={8} className="form-control font-mono tracking-widest text-center" placeholder="123456" value={formData.pin} onChange={handleChange} required={!initialData} />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    PIN Absensi {initialData && <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setFormData((prev: any) => ({ ...prev, pin: String(Math.floor(100000 + Math.random() * 900000)) }))}
+                    className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline"
+                  >
+                    + Acak PIN
+                  </button>
+                </div>
+                <input type="password" name="pin" maxLength={8} className="form-control font-mono tracking-widest text-center" placeholder="6 Digit Angka" value={formData.pin} onChange={handleChange} required={!initialData} />
               </div>
             </div>
 

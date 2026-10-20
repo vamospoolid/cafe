@@ -185,10 +185,10 @@ router.put('/me/security', authenticateToken, async (req: AuthRequest, res: Resp
       select: { id: true, name: true, username: true, role: true, employmentType: true, pin: true }
     });
 
-    // Update PIN juga di TenantMembership
-    if (updateData.pin && req.user?.tenantId) {
+    // Update PIN juga di seluruh TenantMembership milik user
+    if (updateData.pin) {
       await prisma.tenantMembership.updateMany({
-        where: { userId, tenantId: req.user.tenantId },
+        where: { userId },
         data: { pin: updateData.pin }
       });
     }
@@ -418,8 +418,30 @@ router.post('/', authenticateToken, requirePermission('employees.manage'), requi
       targetRoleId = matchedRole?.id || 'role-system-cashier';
     }
 
-    const passwordHash = await bcrypt.hash(password || '123456', 10);
-    const staffPin = pin || '123456';
+    let staffPin = pin ? String(pin).trim() : '';
+    if (staffPin) {
+      // Periksa apakah PIN sudah dipakai oleh staf aktif lain di tenant ini
+      const duplicatePinUser = await prisma.user.findFirst({
+        where: {
+          status: 'Aktif',
+          pin: staffPin,
+          OR: [
+            { tenantId },
+            { memberships: { some: { tenantId, status: 'ACTIVE' } } }
+          ]
+        }
+      });
+      if (duplicatePinUser) {
+        return res.status(400).json({
+          error: `PIN ${staffPin} sudah digunakan oleh staf lain (${duplicatePinUser.name}). Harap gunakan PIN 6-digit yang berbeda.`
+        });
+      }
+    } else {
+      staffPin = String(Math.floor(100000 + Math.random() * 900000));
+    }
+
+    const effectivePassword = password ? String(password).trim() : staffPin;
+    const passwordHash = await bcrypt.hash(effectivePassword, 10);
 
     // Buat user baru terikat pada tenant aktif
     const newUser = await prisma.user.create({
@@ -535,7 +557,24 @@ router.put('/:id', authenticateToken, requirePermission('employees.manage'), asy
       updateUserData.passwordHash = await bcrypt.hash(password, 10);
     }
     if (pin) {
-      updateUserData.pin = pin;
+      const cleanPin = String(pin).trim();
+      const duplicatePinUser = await prisma.user.findFirst({
+        where: {
+          id: { not: Number(id) },
+          status: 'Aktif',
+          pin: cleanPin,
+          OR: [
+            { tenantId },
+            { memberships: { some: { tenantId, status: 'ACTIVE' } } }
+          ]
+        }
+      });
+      if (duplicatePinUser) {
+        return res.status(400).json({
+          error: `PIN ${cleanPin} sudah digunakan oleh staf lain (${duplicatePinUser.name}). Harap gunakan PIN 6-digit yang berbeda.`
+        });
+      }
+      updateUserData.pin = cleanPin;
     }
     if (status) {
       updateUserData.status = status;

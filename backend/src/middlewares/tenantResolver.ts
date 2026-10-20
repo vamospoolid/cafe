@@ -63,7 +63,7 @@ export async function resolveTenantFromRequest(req: Request): Promise<{ id: stri
     if (subdomain === 'cafe' || hostClean.includes('mukiramen')) {
       const data = await cacheService.remember(`cache:tenant:slug:cafe_default`, 600, async () => {
         const tenant = await prisma.tenant.findFirst({
-          where: { OR: [{ customDomain: hostClean }, { slug: 'mukiramen' }, { businessType: 'CAFE' }] }
+          where: { OR: [{ customDomain: hostClean }, { slug: 'mukiramen' }] }
         });
         return tenant ? { id: tenant.id, slug: tenant.slug, status: tenant.status } : null;
       });

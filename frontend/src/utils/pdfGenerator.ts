@@ -4240,7 +4240,8 @@ export const exportWarehouseInboundPDF = async (
 export const exportWarehouseSettlementPDF = async (
   financeData: any,
   settings: VenueSettings,
-  userName?: string
+  userName?: string,
+  periodText?: string
 ) => {
   let logoBase64 = '';
   const logoSrc = settings?.logoUrl || '';
@@ -4308,7 +4309,7 @@ export const exportWarehouseSettlementPDF = async (
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text('Rekapitulasi Pengadaan Bahan Baku & Pemisahan Arus Kas Outlet KAFE', margin + 4, 46);
+  doc.text(`Periode: ${periodText || 'Semua Waktu'}  •  Rekapitulasi Pengadaan Bahan Baku & Pemisahan Arus Kas`, margin + 4, 46);
 
   // 4 Financial Metric Cards
   const cardY = 54;
@@ -4438,6 +4439,532 @@ export const exportWarehouseSettlementPDF = async (
   }
 
   doc.save(`Laporan_Settlement_Modal_Owner_${Date.now()}.pdf`);
+};
+
+// 22. LAPORAN REKAPITULASI PENJUALAN GROSIR B2B (B2B SALES RECAP PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportWarehouseSalesPDF = async (
+  sales: any[],
+  settings: VenueSettings,
+  userName?: string,
+  periodText?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 12;
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+
+  const activeSales = sales.filter(s => !s.isVoided);
+  const totalAmount = activeSales.reduce((acc, s) => acc + (s.totalAmount || 0), 0);
+  const totalGrossProfit = activeSales.reduce((acc, s) => acc + (s.grossProfit || 0), 0);
+  const totalHpp = totalAmount - totalGrossProfit;
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    if (logoBase64) {
+      try {
+        pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 18, 18);
+      } catch (e) {}
+    }
+    const textStartX = logoBase64 ? margin + 22 : margin;
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(15, 23, 42);
+    pdfDoc.text(settings?.storeName || 'KAFE & RESTORAN', textStartX, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || '', textStartX, 19.5);
+    pdfDoc.text(`Telepon / WA: ${settings?.phone || '0812-9876-5432'} • Laporan Penjualan B2B & Wholesale`, textStartX, 23.5);
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 30, pageWidth - margin, 30);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPg: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(6.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')} • Operator: ${userName || 'Admin Gudang'}`, margin, pageHeight - 6.5);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPg}`, pageWidth - margin, pageHeight - 6.5, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  // Title Box
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, 33, pageWidth - margin * 2, 18, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(30, 41, 59);
+  doc.text('LAPORAN REKAPITULASI PENJUALAN GROSIR B2B GUDANG PUSAT', margin + 4, 39);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Periode: ${periodText || 'Semua Waktu'}  •  Total Faktur: ${sales.length} (${activeSales.length} Aktif)`, margin + 4, 46);
+
+  // 3 Metric Cards
+  const cardY = 54;
+  const cardW = (pageWidth - margin * 2 - 6) / 3;
+
+  // Card 1: Total Omzet B2B
+  doc.setFillColor(236, 253, 245);
+  doc.setDrawColor(167, 243, 208);
+  doc.roundedRect(margin, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(6, 95, 70);
+  doc.text('TOTAL OMZET PENJUALAN B2B', margin + 4, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(formatCurrency(totalAmount), margin + 4, cardY + 10.5);
+
+  // Card 2: Laba Kotor
+  doc.setFillColor(240, 253, 250);
+  doc.setDrawColor(153, 246, 228);
+  doc.roundedRect(margin + cardW + 3, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(15, 118, 110);
+  doc.text('ESTIMASI LABA KOTOR (GROSS)', margin + cardW + 7, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(formatCurrency(totalGrossProfit), margin + cardW + 7, cardY + 10.5);
+
+  // Card 3: Total HPP Modal
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin + (cardW + 3) * 2, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('TOTAL BEBAN HPP BAHAN', margin + (cardW + 3) * 2 + 4, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(formatCurrency(totalHpp), margin + (cardW + 3) * 2 + 4, cardY + 10.5);
+
+  const tableData = sales.map((s, idx) => {
+    const dStr = s.saleDate || s.createdAt ? new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+    const itemsSummary = (s.items || []).map((it: any) => `${it.itemName} (${it.saleQty} ${it.saleUnit})`).join(', ') || '-';
+    const statusStr = s.isVoided ? 'BATAL' : s.paymentStatus === 'PAID' ? 'LUNAS' : 'PENDING';
+
+    return [
+      (idx + 1).toString(),
+      s.invoiceNumber || '-',
+      dStr,
+      s.customerName || 'Pelanggan Umum',
+      itemsSummary,
+      statusStr,
+      s.isVoided ? 'Rp 0' : formatCurrency(s.totalAmount || 0),
+      s.isVoided ? 'Rp 0' : formatCurrency(s.grossProfit || 0)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 72,
+    margin: { left: margin, right: margin, bottom: 35 },
+    head: [['NO', 'NO. FAKTUR', 'TANGGAL', 'PELANGGAN / MITRA', 'ITEM PENJUALAN', 'STATUS', 'TOTAL OMZET', 'LABA KOTOR']],
+    body: tableData,
+    foot: [['TOTAL', '', '', '', '', '', formatCurrency(totalAmount), formatCurrency(totalGrossProfit)]],
+    headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 6.5 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold', cellWidth: 26 },
+      2: { halign: 'center', cellWidth: 20 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 46 },
+      5: { halign: 'center', cellWidth: 16 },
+      6: { halign: 'right', fontStyle: 'bold', cellWidth: 22 },
+      7: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 6, cellPadding: 1.8, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 8;
+  if (currentY + 30 > pageHeight - 12) {
+    doc.addPage();
+    currentY = 32;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 2;
+  const roles = [
+    { title: 'Petugas Gudang / Sales B2B', name: userName || 'Staf Gudang' },
+    { title: 'Pimpinan / Owner Outlet', name: `Owner ${storeName}` }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, currentY, { align: 'center' });
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, currentY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 20, currentY + 16, x + sigColWidth - 20, currentY + 16);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, currentY + 19.5, { align: 'center' });
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Penjualan_Grosir_B2B_${Date.now()}.pdf`);
+};
+
+// 23. LAPORAN REKAPITULASI MUTASI & TRANSFER BAHAN KE DAPUR (KITCHEN TRANSFERS RECAP PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportWarehouseTransfersPDF = async (
+  transfers: any[],
+  settings: VenueSettings,
+  userName?: string,
+  periodText?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 12;
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+
+  const totalCost = transfers.filter(t => t.status !== 'VOIDED').reduce((acc, t) => acc + (t.totalTransferCost || 0), 0);
+  const receivedCount = transfers.filter(t => t.status === 'RECEIVED').length;
+  const pendingCount = transfers.filter(t => t.status === 'PENDING' || t.status === 'APPROVED').length;
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    if (logoBase64) {
+      try {
+        pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 18, 18);
+      } catch (e) {}
+    }
+    const textStartX = logoBase64 ? margin + 22 : margin;
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(15, 23, 42);
+    pdfDoc.text(settings?.storeName || 'KAFE & RESTORAN', textStartX, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || '', textStartX, 19.5);
+    pdfDoc.text(`Telepon / WA: ${settings?.phone || '0812-9876-5432'} • Distribusi & Mutasi Bahan ke Dapur Cabang`, textStartX, 23.5);
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 30, pageWidth - margin, 30);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPg: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(6.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')} • Operator: ${userName || 'Admin Gudang'}`, margin, pageHeight - 6.5);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPg}`, pageWidth - margin, pageHeight - 6.5, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  // Title Box
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, 33, pageWidth - margin * 2, 18, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(30, 41, 59);
+  doc.text('LAPORAN REKAPITULASI DISTRIBUSI & TRANSFER BAHAN KE DAPUR', margin + 4, 39);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Periode: ${periodText || 'Semua Waktu'}  •  Total Requisition: ${transfers.length} (${receivedCount} Diterima Dapur)`, margin + 4, 46);
+
+  // 2 Metric Cards
+  const cardY = 54;
+  const cardW = (pageWidth - margin * 2 - 6) / 2;
+
+  // Card 1: Total Nilai Transfer HPP
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(margin, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(30, 64, 175);
+  doc.text('TOTAL ESTIMASI HPP BAHAN KELUAR KE DAPUR', margin + 4, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(formatCurrency(totalCost), margin + 4, cardY + 10.5);
+
+  // Card 2: Status Distribusi
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(187, 247, 208);
+  doc.roundedRect(margin + cardW + 6, cardY, cardW, 14, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(22, 101, 52);
+  doc.text('STATUS DITERIMA DAPUR VS PROSES', margin + cardW + 10, cardY + 4.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(`${receivedCount} Selesai Diterima  •  ${pendingCount} Dalam Proses`, margin + cardW + 10, cardY + 10.5);
+
+  const tableData = transfers.map((tr, idx) => {
+    const dStr = tr.createdAt ? new Date(tr.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+    const itemsSummary = tr.items?.map((it: any) => `${it.itemName || it.ingredient?.name} (${it.requestedQty} ${it.requestedUnit || it.ingredient?.unit})`).join(', ') || '-';
+    const statusStr = tr.status === 'RECEIVED' ? 'Diterima Dapur' : tr.status === 'APPROVED' ? 'Disetujui Gudang' : tr.status === 'VOIDED' ? 'Dibatalkan' : 'Pending';
+
+    return [
+      (idx + 1).toString(),
+      tr.reqNumber || '-',
+      dStr,
+      tr.requestedBy?.name || 'Staff Dapur',
+      itemsSummary,
+      statusStr,
+      tr.status === 'VOIDED' ? 'Rp 0' : formatCurrency(tr.totalTransferCost || 0)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 72,
+    margin: { left: margin, right: margin, bottom: 35 },
+    head: [['NO', 'NO. REQUISITION', 'TANGGAL', 'DIMINTA OLEH', 'RINCIAN BAHAN DITRANSFER', 'STATUS', 'TOTAL HPP TRANSFER']],
+    body: tableData,
+    foot: [['TOTAL', '', '', '', '', '', formatCurrency(totalCost)]],
+    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 6.5 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 8 },
+      1: { fontStyle: 'bold', cellWidth: 26 },
+      2: { halign: 'center', cellWidth: 20 },
+      3: { cellWidth: 26 },
+      4: { cellWidth: 62 },
+      5: { halign: 'center', cellWidth: 20 },
+      6: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 6, cellPadding: 1.8, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 8;
+  if (currentY + 30 > pageHeight - 12) {
+    doc.addPage();
+    currentY = 32;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 2;
+  const roles = [
+    { title: 'Petugas Pengeluaran Gudang', name: userName || 'Petugas Gudang' },
+    { title: 'Kepala Koki / Penanggung Jawab Dapur', name: 'Kitchen Head / Chef' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, currentY, { align: 'center' });
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, currentY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 20, currentY + 16, x + sigColWidth - 20, currentY + 16);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, currentY + 19.5, { align: 'center' });
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Laporan_Distribusi_Dapur_${Date.now()}.pdf`);
+};
+
+// 24. SURAT JALAN / BUKTI SERAH TERIMA BAHAN KE DAPUR (TRANSFER DELIVERY SLIP PDF)
+// ─────────────────────────────────────────────────────────────────────────────
+export const exportWarehouseTransferSlipPDF = async (
+  transfer: any,
+  settings: VenueSettings,
+  userName?: string
+) => {
+  let logoBase64 = '';
+  const logoSrc = settings?.logoUrl || '';
+  if (logoSrc) {
+    try {
+      logoBase64 = await getImageDataUrl(logoSrc);
+    } catch (e) {}
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.width || 210;
+  const pageHeight = doc.internal.pageSize.height || 297;
+  const margin = 12;
+  const storeName = settings?.storeName || 'KAFE & RESTORAN';
+
+  const addHeader = (pdfDoc: jsPDF) => {
+    if (logoBase64) {
+      try {
+        pdfDoc.addImage(logoBase64, 'PNG', margin, 10, 18, 18);
+      } catch (e) {}
+    }
+    const textStartX = logoBase64 ? margin + 22 : margin;
+    pdfDoc.setFont('helvetica', 'bold');
+    pdfDoc.setFontSize(14);
+    pdfDoc.setTextColor(15, 23, 42);
+    pdfDoc.text(settings?.storeName || 'KAFE & RESTORAN', textStartX, 15);
+
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(7.5);
+    pdfDoc.setTextColor(100, 116, 139);
+    pdfDoc.text(settings?.address || '', textStartX, 19.5);
+    pdfDoc.text(`Telepon / WA: ${settings?.phone || '0812-9876-5432'} • Dokumen Serah Terima Internal Gudang`, textStartX, 23.5);
+
+    pdfDoc.setDrawColor(226, 232, 240);
+    pdfDoc.setLineWidth(0.4);
+    pdfDoc.line(margin, 30, pageWidth - margin, 30);
+  };
+
+  const addFooter = (pdfDoc: jsPDF, pageNum: number, totalPg: number) => {
+    pdfDoc.setFont('helvetica', 'normal');
+    pdfDoc.setFontSize(6.5);
+    pdfDoc.setTextColor(148, 163, 184);
+    pdfDoc.line(margin, pageHeight - 10, pageWidth - margin, pageHeight - 10);
+    pdfDoc.text(`Dicetak: ${new Date().toLocaleString('id-ID')} • Operator: ${userName || 'Petugas Gudang'}`, margin, pageHeight - 6.5);
+    pdfDoc.text(`Halaman ${pageNum} dari ${totalPg}`, pageWidth - margin, pageHeight - 6.5, { align: 'right' });
+  };
+
+  addHeader(doc);
+
+  // Title Box
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, 33, pageWidth - margin * 2, 20, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(30, 41, 59);
+  doc.text('SURAT JALAN & BUKTI SERAH TERIMA MUTASI BAHAN', margin + 4, 40);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`No. Requisition: ${transfer.reqNumber || '-'}   •   Tanggal Pengajuan: ${transfer.createdAt ? new Date(transfer.createdAt).toLocaleString('id-ID') : '-'}`, margin + 4, 48);
+
+  // Meta Grid Box
+  const metaY = 56;
+  doc.setDrawColor(226, 232, 240);
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(margin, metaY, pageWidth - margin * 2, 22, 1.5, 1.5, 'D');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Unit Asal: Gudang Pusat (Central Stock)', margin + 4, metaY + 6);
+  doc.text(`Unit Tujuan: Dapur / Outlet ${storeName}`, margin + 4, metaY + 12);
+  doc.text(`Status Dokumen: ${transfer.status === 'RECEIVED' ? 'SUDAH DITERIMA DAPUR' : transfer.status === 'APPROVED' ? 'DISETUJUI GUDANG' : 'PENDING'}`, margin + 4, metaY + 18);
+
+  const col2X = margin + 95;
+  doc.text(`Diminta Oleh: ${transfer.requestedBy?.name || 'Staff Dapur'}`, col2X, metaY + 6);
+  doc.text(`Disetujui Oleh: ${transfer.approvedBy?.name || 'Gudang Pusat'}`, col2X, metaY + 12);
+  doc.text(`Catatan: ${transfer.notes || '-'}`, col2X, metaY + 18);
+
+  const tableData = (transfer.items || []).map((it: any, idx: number) => {
+    return [
+      (idx + 1).toString(),
+      it.itemName || it.ingredient?.name || '-',
+      `${it.requestedQty} ${it.requestedUnit || it.ingredient?.unit}`,
+      `${it.baseQty} ${it.ingredient?.unit || 'dasar'}`,
+      formatCurrency(it.transferPrice || 0),
+      formatCurrency(it.subtotal || 0)
+    ];
+  });
+
+  autoTable(doc, {
+    startY: metaY + 26,
+    margin: { left: margin, right: margin, bottom: 35 },
+    head: [['NO', 'NAMA BAHAN BAKU', 'JUMLAH DIMINTA', 'EKUIVALEN DASAR', 'HPP SATUAN', 'SUBTOTAL HPP']],
+    body: tableData,
+    foot: [['TOTAL NILAI SERAH TERIMA', '', '', '', '', formatCurrency(transfer.totalTransferCost || 0)]],
+    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7, halign: 'center' },
+    footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7 },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 10 },
+      1: { fontStyle: 'bold', cellWidth: 60 },
+      2: { halign: 'center', cellWidth: 32 },
+      3: { halign: 'center', cellWidth: 30 },
+      4: { halign: 'right', cellWidth: 26 },
+      5: { halign: 'right', fontStyle: 'bold', cellWidth: 'auto' }
+    },
+    styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.2 }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 12;
+  if (currentY + 35 > pageHeight - 12) {
+    doc.addPage();
+    currentY = 32;
+  }
+
+  const sigColWidth = (pageWidth - margin * 2) / 3;
+  const roles = [
+    { title: 'Petugas Penyerah (Gudang)', name: userName || 'Staf Gudang' },
+    { title: 'Pembawa / Driver (Mutasi)', name: 'Kurir / Driver' },
+    { title: 'Penerima Fisik (Dapur)', name: transfer.requestedBy?.name || 'Chef / Koki' }
+  ];
+
+  roles.forEach((r, i) => {
+    const x = margin + i * sigColWidth;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(r.title, x + sigColWidth / 2, currentY, { align: 'center' });
+    doc.text('Tanggal: ...................................', x + sigColWidth / 2, currentY + 4, { align: 'center' });
+
+    doc.setDrawColor(203, 213, 225);
+    doc.line(x + 12, currentY + 18, x + sigColWidth - 12, currentY + 18);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(30, 41, 59);
+    doc.text(`( ${r.name} )`, x + sigColWidth / 2, currentY + 22, { align: 'center' });
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) addHeader(doc);
+    addFooter(doc, i, totalPages);
+  }
+
+  doc.save(`Surat_Jalan_Transfer_${transfer.reqNumber || Date.now()}.pdf`);
 };
 
 export const exportYieldAuditPDF = async (

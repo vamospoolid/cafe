@@ -1614,10 +1614,10 @@ router.patch('/:id/void', authenticateToken, requirePermission('pos.void'), asyn
   try {
     const { id } = req.params;
     const user = (req as any).user;
-    const tenantId = (req as any).tenantId || user?.tenantId;
-
-    if (!tenantId && !user?.isPlatformAdmin) {
-      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    let tenantId = (req as any).tenantId || user?.tenantId;
+    if (!tenantId) {
+      const defaultTenant = await prisma.tenant.findFirst({ select: { id: true } });
+      tenantId = defaultTenant?.id;
     }
     
     const orderData = await prisma.order.findFirst({

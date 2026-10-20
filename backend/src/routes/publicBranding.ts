@@ -41,7 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
         const host = (req.headers['x-forwarded-host'] || req.headers.host || '').toString().toLowerCase();
         if (host.includes('cafe') || host.includes('mukiramen')) {
           tenant = await prisma.tenant.findFirst({
-            where: { OR: [{ slug: 'mukiramen' }, { customDomain: host }, { businessType: 'CAFE' }] },
+            where: { OR: [{ slug: 'mukiramen' }, { customDomain: host }] },
             include: { settings: true }
           });
         }
@@ -67,7 +67,7 @@ router.get('/', async (req: Request, res: Response) => {
       phone: settings?.phone || '',
       storeLatitude: settings?.storeLatitude ?? -3.4028794,
       storeLongitude: settings?.storeLongitude ?? 119.213115,
-      gpsRadiusMeters: settings?.gpsRadiusMeters ?? 300,
+      gpsRadiusMeters: settings?.gpsRadiusMeters ?? 200,
       enableGpsValidation: settings?.enableGpsValidation ?? true,
       primaryColor: settings?.primaryColor || '#4f46e5',
       accentColor: settings?.accentColor || '#f59e0b',

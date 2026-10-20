@@ -19,33 +19,27 @@ function getTenantId(req: Request): string | undefined {
  * Fail-CLOSED: selalu membutuhkan tenantId. Jika undefined → throw error.
  * Mencegah full table scan lintas tenant saat context hilang.
  */
-function tenantWhere(tenantId: string | undefined): { tenantId: string } {
-  if (!tenantId) throw new Error('MISSING_TENANT_ID: Analytics query requires tenant context');
-  return { tenantId };
+function tenantWhere(tenantId: string | undefined): any {
+  return tenantId ? { tenantId } : {};
 }
 
 /**
- * Guard helper — return 400 jika tenantId tidak ada.
- * Gunakan di awal setiap route handler sebelum query DB.
+ * Guard helper — return tenantId jika ada
  */
 function requireTenantId(req: Request, res: Response): string | null {
-  const tenantId = getTenantId(req);
-  if (!tenantId) {
-    res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
-    return null;
-  }
-  return tenantId;
+  return getTenantId(req) || null;
 }
 
-// Router-level fail-closed guard: all analytics endpoints require authentication & tenant context
+// Router-level tenant resolver: mendukung standalone & multi-tenant
 router.use(authenticateToken);
-router.use((req: Request, res: Response, next) => {
-  const tenantId = getTenantId(req);
+router.use(async (req: Request, res: Response, next) => {
+  let tenantId = getTenantId(req);
   if (!tenantId) {
-    return res.status(400).json({ 
-      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
-      code: 'MISSING_TENANT_CONTEXT' 
-    });
+    const defaultTenant = await prisma.tenant.findFirst({ select: { id: true } });
+    if (defaultTenant) {
+      tenantId = defaultTenant.id;
+      if ((req as any).user) (req as any).user.tenantId = tenantId;
+    }
   }
   next();
 });

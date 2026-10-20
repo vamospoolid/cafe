@@ -148,9 +148,9 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
 
   const membershipsList = (user.memberships || []).map(m => ({
     tenantId: m.tenantId,
-    tenantName: m.tenant?.name || 'Muki Ramen',
-    tenantSlug: m.tenant?.slug || 'muki-ramen',
-    businessType: m.tenant?.businessType || 'CAFE',
+    tenantName: m.tenant?.name || 'Cabang Bisnis',
+    tenantSlug: m.tenant?.slug || m.tenantId,
+    businessType: m.tenant?.businessType || 'RETAIL',
     roleName: m.role?.name || user.role,
     status: m.status
   }));
@@ -579,7 +579,7 @@ router.post('/register-tenant', async (req: Request, res: Response) => {
       || await prisma.plan.findFirst({ where: { code: 'STARTER' } });
 
     const passwordHash = await bcrypt.hash(ownerPassword, 10);
-    const pin = ownerPin || '123456';
+    const pin = ownerPin || String(Math.floor(100000 + Math.random() * 900000));
 
     // 4. Eksekusi Pendaftaran Transaksional
     const trialDays = 14;

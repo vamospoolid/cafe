@@ -20,27 +20,8 @@ export interface SupportTicket {
   updatedAt: string;
 }
 
-// In-memory persistent support ticket registry with audit logging
-const supportTicketsStore: SupportTicket[] = [
-  {
-    id: 'ticket-demo-01',
-    ticketNumber: 'TKT-2026-0001',
-    tenantId: 'tenant-default-muki',
-    tenantName: 'Muki Ramen',
-    outletName: 'Senopati Pusat',
-    contactName: 'Budi Manager',
-    contactPhone: '081298765432',
-    contactEmail: 'budi@mukiramen.com',
-    category: 'PRINTER_HARDWARE',
-    priority: 'MEDIUM',
-    subject: 'Panduan konfigurasi printer thermal Bluetooth 80mm di meja bar',
-    message: 'Halo tim support, bagaimana cara menghubungkan 2 printer sekaligus untuk kasir dan bar minuman?',
-    deviceInfo: 'Android 14 POS Tablet / Chrome 124',
-    status: 'RESOLVED',
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000 * 20).toISOString()
-  }
-];
+// In-memory support ticket registry with audit logging
+const supportTicketsStore: SupportTicket[] = [];
 
 export class SupportService {
   private static instance: SupportService;

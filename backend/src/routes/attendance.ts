@@ -1,9 +1,11 @@
 import prisma from '../db';
 import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { authenticateToken, AuthRequest } from '../middlewares/authMiddleware';
 import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_pooos_key';
 
 // Helper untuk multi-tenant scoping
 function getTenantId(req: Request): string | undefined {
@@ -32,6 +34,8 @@ function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2:
   return Math.round(R * c);
 }
 
+export const DEFAULT_GPS_RADIUS_METERS = 200;
+
 const DEFAULT_SHIFTS = [
   { id: 'pagi', name: 'Shift Pagi (08:00 - 16:00)', start: '08:00', end: '16:00', lateTolerance: 15 },
   { id: 'siang', name: 'Shift Siang / Sore (14:00 - 22:00)', start: '14:00', end: '22:00', lateTolerance: 15 },
@@ -44,9 +48,13 @@ router.get('/shifts', async (req: Request, res: Response) => {
     let tenantId = getTenantId(req);
     if (!tenantId && req.headers.authorization?.startsWith('Bearer ')) {
       try {
-        const jwt = require('jsonwebtoken');
         const token = req.headers.authorization.split(' ')[1];
-        const decoded: any = jwt.decode(token);
+        let decoded: any;
+        try {
+          decoded = jwt.verify(token, JWT_SECRET);
+        } catch {
+          decoded = jwt.decode(token);
+        }
         if (decoded?.tenantId) {
           tenantId = decoded.tenantId;
         }
@@ -76,6 +84,7 @@ router.get('/shifts', async (req: Request, res: Response) => {
 
 // POST Clock In / Out
 router.post('/clock', async (req: Request, res: Response) => {
+  let user: any = null;
   try {
     const { 
       pin, 
@@ -87,29 +96,32 @@ router.post('/clock', async (req: Request, res: Response) => {
       photo, 
       notes,
       tenantId: bodyTenantId,
-      outletId: bodyOutletId
+      outletId: bodyOutletId,
+      userId: bodyUserId
     } = req.body;
     
-    if (!pin) return res.status(400).json({ error: 'PIN absensi dibutuhkan' });
     if (!['IN', 'OUT'].includes(type)) return res.status(400).json({ error: 'Tipe absensi tidak valid' });
 
     let requestedTenantId = bodyTenantId || (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
 
-    // Ekstraksi tenantId dari JWT Authorization header jika ada
-    if (!requestedTenantId && req.headers.authorization?.startsWith('Bearer ')) {
+    // 1. Ekstraksi kredensial dari JWT Authorization header jika ada (Staff PWA Personal)
+    let authUser: any = null;
+    if (req.headers.authorization?.startsWith('Bearer ')) {
       try {
-        const jwt = require('jsonwebtoken');
         const token = req.headers.authorization.split(' ')[1];
-        const decoded: any = jwt.decode(token);
-        if (decoded?.tenantId) {
-          requestedTenantId = decoded.tenantId;
+        try {
+          authUser = jwt.verify(token, JWT_SECRET);
+        } catch {
+          authUser = null; // Tolak token jika verify gagal - jangan bypass via decode
+        }
+        if (authUser?.tenantId && !requestedTenantId) {
+          requestedTenantId = authUser.tenantId;
         }
       } catch (e) {}
     }
 
-    // Fallback: Jika tenantId belum ditentukan (misal Terminal Absensi Bersama tanpa login POS),
-    // periksa apakah PIN unik milik 1 user yang terdaftar di 1 tenant aktif
-    if (!requestedTenantId) {
+    // 2. Fallback tenant jika belum ditentukan (misal Terminal PIN tanpa login)
+    if (!requestedTenantId && pin) {
       const candidates = await prisma.user.findMany({
         where: {
           status: 'Aktif',
@@ -130,42 +142,88 @@ router.post('/clock', async (req: Request, res: Response) => {
       }
     }
 
-    // ATT-001: Fail-closed — tenantId wajib ada dari Staff App / PWA
+    // Fallback standalone jika tenant context belum ada di header / token
     if (!requestedTenantId) {
-      return res.status(400).json({
-        error: 'Tenant context dibutuhkan untuk absensi. Pastikan PWA outlet sudah terkonfigurasi.',
-        code: 'MISSING_TENANT_CONTEXT'
+      const defaultTenant = await prisma.tenant.findFirst({ select: { id: true } });
+      if (defaultTenant) {
+        requestedTenantId = defaultTenant.id;
+      }
+    }
+
+    // 3. Resolusi identitas staf secara independen:
+    // Prioritas 1: Sesi Terautentikasi (Personal Staff PWA di smartphone)
+    // Menggunakan userId dari token JWT staf yang login. Nol keterikatan dengan Owner Muki / PIN tabrakan.
+    const targetUserId = bodyUserId ? Number(bodyUserId) : (authUser?.id ? Number(authUser.id) : null);
+
+    if (targetUserId) {
+      user = await prisma.user.findFirst({
+        where: {
+          id: targetUserId,
+          status: 'Aktif',
+          OR: [
+            { tenantId: requestedTenantId },
+            { memberships: { some: { tenantId: requestedTenantId, status: 'ACTIVE' } } }
+          ]
+        },
+        include: {
+          memberships: {
+            where: { tenantId: requestedTenantId, status: 'ACTIVE' },
+            take: 1
+          }
+        }
       });
     }
 
-    // ATT-001: Strict membership — hanya user yang terdaftar sebagai anggota aktif tenant ini
-    // Mendukung PIN global (User.pin) maupun PIN spesifik outlet/tenant (TenantMembership.pin)
-    const user = await prisma.user.findFirst({
-      where: {
-        status: 'Aktif',
-        OR: [
-          {
-            pin,
-            memberships: {
-              some: { tenantId: requestedTenantId, status: 'ACTIVE' }
-            }
-          },
-          {
-            memberships: {
-              some: { tenantId: requestedTenantId, pin, status: 'ACTIVE' }
-            }
-          }
-        ]
-      },
-      include: {
-        memberships: {
-          where: { tenantId: requestedTenantId, status: 'ACTIVE' },
-          take: 1
-        }
+    // Prioritas 2: Terminal Kasir Bersama (Numpad PIN)
+    // Jika tidak ada sesi JWT staf (misal di tablet kasir POS), gunakan pencarian PIN unik
+    if (!user) {
+      if (!pin) {
+        return res.status(400).json({ error: 'PIN absensi dibutuhkan' });
       }
-    });
 
-    if (!user) return res.status(401).json({ error: 'PIN salah atau akun tidak terdaftar di outlet ini' });
+      const matchingUsers = await prisma.user.findMany({
+        where: {
+          status: 'Aktif',
+          OR: [
+            {
+              pin,
+              OR: [
+                { tenantId: requestedTenantId },
+                { memberships: { some: { tenantId: requestedTenantId, status: 'ACTIVE' } } }
+              ]
+            },
+            {
+              memberships: {
+                some: { tenantId: requestedTenantId, pin, status: 'ACTIVE' }
+              }
+            }
+          ]
+        },
+        include: {
+          memberships: {
+            where: { tenantId: requestedTenantId, status: 'ACTIVE' },
+            take: 2
+          }
+        }
+      });
+
+      if (matchingUsers.length === 0) {
+        return res.status(401).json({ error: 'PIN salah atau akun tidak terdaftar di outlet ini' });
+      }
+
+      if (matchingUsers.length > 1) {
+        return res.status(409).json({
+          error: `PIN ${pin} digunakan oleh lebih dari 1 karyawan (${matchingUsers.map(u => u.name).join(', ')}). Harap login via Portal Staf di HP atau atur PIN unik di menu Kelola Karyawan.`,
+          code: 'AMBIGUOUS_PIN'
+        });
+      }
+
+      user = matchingUsers[0];
+    }
+
+    if (!user) {
+      return res.status(401).json({ error: 'Identitas staf tidak ditemukan atau akun tidak terdaftar di outlet ini' });
+    }
 
     // resolvedTenantId = requestedTenantId (sudah divalidasi via membership di atas)
     const resolvedTenantId = requestedTenantId;
@@ -174,10 +232,12 @@ router.post('/clock', async (req: Request, res: Response) => {
     const settings = await prisma.settings.findFirst({
       where: tenantWhere(resolvedTenantId)
     });
-    let storeLat = settings?.storeLatitude ?? -6.200000;
-    let storeLon = settings?.storeLongitude ?? 106.816666;
-    let maxRadius = settings?.gpsRadiusMeters ?? 100;
-    const enableGps = settings?.enableGpsValidation ?? true;
+    const hasStoreCoords = (settings?.storeLatitude !== null && settings?.storeLatitude !== undefined) &&
+                           (settings?.storeLongitude !== null && settings?.storeLongitude !== undefined);
+    let storeLat: number | null = hasStoreCoords ? Number(settings.storeLatitude) : null;
+    let storeLon: number | null = hasStoreCoords ? Number(settings.storeLongitude) : null;
+    let maxRadius = settings?.gpsRadiusMeters ?? DEFAULT_GPS_RADIUS_METERS;
+    let enableGps = hasStoreCoords ? (settings?.enableGpsValidation ?? true) : false;
     const enableCamera = settings?.enableCameraPhoto ?? true;
 
     // Jika ada spesifikasi outlet spesifik, prioritaskan koordinat GPS & radius geofencing outlet tersebut
@@ -189,6 +249,7 @@ router.post('/clock', async (req: Request, res: Response) => {
       if (outlet && outlet.latitude !== null && outlet.longitude !== null && !isNaN(outlet.latitude) && !isNaN(outlet.longitude)) {
         storeLat = outlet.latitude;
         storeLon = outlet.longitude;
+        enableGps = settings?.enableGpsValidation ?? true;
         if (outlet.gpsRadiusMeters && outlet.gpsRadiusMeters > 0) {
           maxRadius = outlet.gpsRadiusMeters;
         }
@@ -200,10 +261,10 @@ router.post('/clock', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Wajib menyertakan foto selfie bukti kehadiran' });
     }
 
-    // Validasi GPS
+    // Validasi GPS (hanya jika koordinat toko telah dikonfigurasi)
     let distanceIn: number | null = null;
     let isWithinRadius = true;
-    if (latitude !== undefined && longitude !== undefined && latitude !== null && longitude !== null) {
+    if (storeLat !== null && storeLon !== null && latitude !== undefined && longitude !== undefined && latitude !== null && longitude !== null) {
       distanceIn = calculateDistanceMeters(Number(latitude), Number(longitude), storeLat, storeLon);
       isWithinRadius = distanceIn <= maxRadius;
 
@@ -219,78 +280,103 @@ router.post('/clock', async (req: Request, res: Response) => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const existingLog = await prisma.attendance.findFirst({
-      where: {
-        userId: user.id,
-        clockIn: { gte: todayStart },
-        ...tenantWhere(resolvedTenantId)
-      },
-      orderBy: { clockIn: 'desc' }
-    });
-
-    if (type === 'IN') {
-      if (existingLog && !existingLog.clockOut) {
-        return res.status(400).json({ error: `Anda sudah Clock In hari ini (${user.name}) pada ${new Date(existingLog.clockIn).toLocaleTimeString('id-ID')}` });
-      }
-
-      // Hitung Keterlambatan berdasarkan Shift yang dipilih
-      let shifts = DEFAULT_SHIFTS;
-      if (settings?.workShifts) {
-        try {
-          const parsed = JSON.parse(settings.workShifts);
-          if (Array.isArray(parsed) && parsed.length > 0) shifts = parsed;
-        } catch {}
-      }
-
-      let selectedShift = shifts.find(s => s.id === shiftId || s.name === shiftName) || shifts[0];
-      const actualShiftName = shiftName || selectedShift?.name || 'Shift Pagi (08:00 - 16:00)';
-
-      let status = 'Hadir';
-      let lateMinutes = 0;
-
-      if (selectedShift?.start) {
-        const [shiftStartHour, shiftStartMin] = selectedShift.start.split(':').map(Number);
-        const now = new Date();
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const shiftStartTotalMinutes = shiftStartHour * 60 + (shiftStartMin || 0);
-        const tolerance = selectedShift.lateTolerance || 15;
-        const toleranceBoundary = shiftStartTotalMinutes + tolerance;
-
-        if (nowMinutes > toleranceBoundary) {
-          // B-05 FIX: lateMinutes dihitung dari BATAS TOLERANSI, bukan dari jam mulai shift
-          // Contoh: Shift 08:00, toleransi 15 mnt, masuk 08:25 → late = 25-15 = 10 mnt (adil)
-          // Bug lama: 08:25 - 08:00 = 25 mnt (terlalu besar, melebih-lebihkan denda)
-          lateMinutes = nowMinutes - toleranceBoundary;
-          status = 'Terlambat';
-        }
-      }
-
-      if (distanceIn !== null && !isWithinRadius) {
-        status = 'Di Luar Radius';
-      }
-
-      const attendance = await prisma.attendance.create({
-        data: {
-          tenantId: resolvedTenantId,
-          outletId: bodyOutletId || null,
+    // BUG-003 FIX: Atomic Clock-In / Clock-Out dengan $transaction untuk mencegah race condition double-insert
+    const clockResult = await prisma.$transaction(async (tx) => {
+      const existingLog = await tx.attendance.findFirst({
+        where: {
           userId: user.id,
-          date: new Date().toISOString().slice(0, 10),
-          clockIn: new Date(),
-          shiftName: actualShiftName,
-          photoIn: photo || null,
-          latitudeIn: latitude ? Number(latitude) : null,
-          longitudeIn: longitude ? Number(longitude) : null,
-          distanceIn: distanceIn,
-          isWithinRadius: isWithinRadius,
-          status: status,
-          lateMinutes: lateMinutes,
-          notes: notes || null
-        }
+          clockIn: { gte: todayStart },
+          ...tenantWhere(resolvedTenantId)
+        },
+        orderBy: { clockIn: 'desc' }
       });
 
+      if (type === 'IN') {
+        if (existingLog && !existingLog.clockOut) {
+          throw new Error(`ALREADY_CLOCKED_IN:${existingLog.clockIn.toISOString()}`);
+        }
+
+        // Hitung Keterlambatan berdasarkan Shift yang dipilih
+        let shifts = DEFAULT_SHIFTS;
+        if (settings?.workShifts) {
+          try {
+            const parsed = JSON.parse(settings.workShifts);
+            if (Array.isArray(parsed) && parsed.length > 0) shifts = parsed;
+          } catch {}
+        }
+
+        let selectedShift = shifts.find(s => s.id === shiftId || s.name === shiftName) || shifts[0];
+        const actualShiftName = shiftName || selectedShift?.name || 'Shift Pagi (08:00 - 16:00)';
+
+        let status = 'Hadir';
+        let lateMinutes = 0;
+
+        if (selectedShift?.start) {
+          const [shiftStartHour, shiftStartMin] = selectedShift.start.split(':').map(Number);
+          const now = new Date();
+          const nowMinutes = now.getHours() * 60 + now.getMinutes();
+          const shiftStartTotalMinutes = shiftStartHour * 60 + (shiftStartMin || 0);
+          const tolerance = selectedShift.lateTolerance || 15;
+          const toleranceBoundary = shiftStartTotalMinutes + tolerance;
+
+          if (nowMinutes > toleranceBoundary) {
+            // B-05 FIX: lateMinutes dihitung dari BATAS TOLERANSI, bukan dari jam mulai shift
+            lateMinutes = nowMinutes - toleranceBoundary;
+            status = 'Terlambat';
+          }
+        }
+
+        if (distanceIn !== null && !isWithinRadius) {
+          status = 'Di Luar Radius';
+        }
+
+        const attendance = await tx.attendance.create({
+          data: {
+            tenantId: resolvedTenantId,
+            outletId: bodyOutletId || null,
+            userId: user.id,
+            date: new Date().toISOString().slice(0, 10),
+            clockIn: new Date(),
+            shiftName: actualShiftName,
+            photoIn: photo || null,
+            latitudeIn: latitude ? Number(latitude) : null,
+            longitudeIn: longitude ? Number(longitude) : null,
+            distanceIn: distanceIn,
+            isWithinRadius: isWithinRadius,
+            status: status,
+            lateMinutes: lateMinutes,
+            notes: notes || null
+          }
+        });
+
+        return { type: 'IN', attendance, status };
+      } else {
+        // Clock OUT
+        if (!existingLog) {
+          throw new Error('NOT_CLOCKED_IN');
+        }
+        if (existingLog.clockOut) {
+          throw new Error(`ALREADY_CLOCKED_OUT:${existingLog.clockOut.toISOString()}`);
+        }
+
+        const attendance = await tx.attendance.update({
+          where: { id: existingLog.id },
+          data: { 
+            clockOut: new Date(),
+            photoOut: photo || null,
+            latitudeOut: latitude ? Number(latitude) : null,
+            longitudeOut: longitude ? Number(longitude) : null
+          }
+        });
+
+        return { type: 'OUT', attendance, status: attendance.status };
+      }
+    });
+
+    if (clockResult.type === 'IN') {
       return res.json({ 
-        message: `Clock In Berhasil: ${user.name} (${status})`, 
-        attendance,
+        message: `Clock In Berhasil: ${user.name} (${clockResult.status})`, 
+        attendance: clockResult.attendance,
         user: {
           id: user.id,
           name: user.name,
@@ -299,27 +385,9 @@ router.post('/clock', async (req: Request, res: Response) => {
         }
       });
     } else {
-      // Clock OUT
-      if (!existingLog) {
-        return res.status(400).json({ error: 'Anda belum melakukan Clock In hari ini' });
-      }
-      if (existingLog.clockOut) {
-        return res.status(400).json({ error: `Anda sudah Clock Out hari ini (${user.name}) pada ${new Date(existingLog.clockOut).toLocaleTimeString('id-ID')}` });
-      }
-
-      const attendance = await prisma.attendance.update({
-        where: { id: existingLog.id },
-        data: { 
-          clockOut: new Date(),
-          photoOut: photo || null,
-          latitudeOut: latitude ? Number(latitude) : null,
-          longitudeOut: longitude ? Number(longitude) : null
-        }
-      });
-
       return res.json({ 
         message: `Clock Out Berhasil: ${user.name}`, 
-        attendance,
+        attendance: clockResult.attendance,
         user: {
           id: user.id,
           name: user.name,
@@ -328,8 +396,21 @@ router.post('/clock', async (req: Request, res: Response) => {
         }
       });
     }
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    if (error?.message?.startsWith('ALREADY_CLOCKED_IN:')) {
+      const timeIso = error.message.split('ALREADY_CLOCKED_IN:')[1];
+      const timeStr = timeIso ? new Date(timeIso).toLocaleTimeString('id-ID') : '';
+      return res.status(400).json({ error: `Anda sudah Clock In hari ini (${user?.name})${timeStr ? ` pada ${timeStr}` : ''}` });
+    }
+    if (error?.message === 'NOT_CLOCKED_IN') {
+      return res.status(400).json({ error: 'Anda belum melakukan Clock In hari ini' });
+    }
+    if (error?.message?.startsWith('ALREADY_CLOCKED_OUT:')) {
+      const timeIso = error.message.split('ALREADY_CLOCKED_OUT:')[1];
+      const timeStr = timeIso ? new Date(timeIso).toLocaleTimeString('id-ID') : '';
+      return res.status(400).json({ error: `Anda sudah Clock Out hari ini (${user?.name})${timeStr ? ` pada ${timeStr}` : ''}` });
+    }
+    console.error('Attendance Process Error:', error);
     res.status(500).json({ error: 'Gagal memproses absensi' });
   }
 });
@@ -679,8 +760,12 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
   try {
     const user = (req as any).user;
     const userId = user?.id;
-    const tenantId = user?.tenantId || TenantContext.getTenantId();
+    let tenantId = user?.tenantId || TenantContext.getTenantId();
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!tenantId) {
+      const defaultTenant = await prisma.tenant.findFirst({ select: { id: true } });
+      tenantId = defaultTenant?.id;
+    }
 
     const userDb = await prisma.user.findUnique({
       where: { id: userId },
@@ -727,16 +812,13 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
     });
 
     // Cek status hari ini
-    // ATT-006: Tambahkan tenantId ke query agar tidak return log dari tenant yang salah
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayLog = await prisma.attendance.findFirst({
       where: {
-        userId: user.id,
+        userId: userDb.id,
         clockIn: { gte: todayStart },
-        // ATT-HARDENED: Fail-closed — jika tenantId tidak tersedia, tolak query
-        // daripada mengembalikan data dari tenant manapun (fail-open)
-        tenantId: tenantId || 'BLOCKED_NULL_TENANT'
+        ...(tenantId ? { tenantId } : {})
       },
       orderBy: { clockIn: 'desc' }
     });
@@ -769,7 +851,7 @@ router.get('/my-summary', authenticateToken, async (req: Request, res: Response)
     const netDisciplineAmount = (isOnTrackZeroLate ? zeroLateBonusAmount : 0) - totalLatePenalty;
 
     res.json({
-      user,
+      user: userDb,
       todayStatus: {
         clockedIn: !!todayLog,
         clockedOut: !!todayLog?.clockOut,

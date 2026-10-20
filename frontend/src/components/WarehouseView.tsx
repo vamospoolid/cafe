@@ -10,6 +10,8 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   FileText, 
+  FileSpreadsheet,
+  Download,
   Printer, 
   ArrowDownLeft, 
   ArrowUpRight, 
@@ -40,7 +42,10 @@ import { toast, confirmAlert } from '../utils/alert';
 import {
   exportWarehouseStockPDF,
   exportWarehouseInboundPDF,
-  exportWarehouseSettlementPDF
+  exportWarehouseSettlementPDF,
+  exportWarehouseSalesPDF,
+  exportWarehouseTransfersPDF,
+  exportWarehouseTransferSlipPDF
 } from '../utils/pdfGenerator';
 import WarehouseSaleModal from './WarehouseSaleModal';
 import WarehouseSaleInvoiceModal from './WarehouseSaleInvoiceModal';
@@ -218,20 +223,67 @@ export default function WarehouseView() {
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
-  // Fetch all warehouse data
-  const fetchData = async () => {
+  // ─── DATE RANGE FILTER STATE ───────────────────────────────────────────
+  const getTodayStr = () => new Date().toISOString().split('T')[0];
+  const getFirstDayOfMonthStr = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  };
+
+  const [dateRangePreset, setDateRangePreset] = useState<'all' | 'today' | '7days' | 'this_month' | 'custom'>('this_month');
+  const [startDate, setStartDate] = useState(getFirstDayOfMonthStr());
+  const [endDate, setEndDate] = useState(getTodayStr());
+
+  const getPeriodLabel = () => {
+    if (dateRangePreset === 'all' || (!startDate && !endDate)) return 'Semua Waktu';
+    if (startDate === endDate) return `Hari Ini (${startDate})`;
+    return `${startDate} s/d ${endDate}`;
+  };
+
+  const handleSelectPreset = (preset: 'all' | 'today' | '7days' | 'this_month' | 'custom') => {
+    setDateRangePreset(preset);
+    const today = getTodayStr();
+    if (preset === 'today') {
+      setStartDate(today);
+      setEndDate(today);
+      fetchData(today, today, preset);
+    } else if (preset === '7days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      const s = d.toISOString().split('T')[0];
+      setStartDate(s);
+      setEndDate(today);
+      fetchData(s, today, preset);
+    } else if (preset === 'this_month') {
+      const s = getFirstDayOfMonthStr();
+      setStartDate(s);
+      setEndDate(today);
+      fetchData(s, today, preset);
+    } else if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+      fetchData('', '', preset);
+    }
+  };
+
+  // Fetch all warehouse data (with optional date filters)
+  const fetchData = async (overrideStart?: string, overrideEnd?: string, overridePreset?: string) => {
     setLoading(true);
     try {
       const headers = { Authorization: `Bearer ${posContext?.token}` };
-      
+      const s = overrideStart !== undefined ? overrideStart : startDate;
+      const e = overrideEnd !== undefined ? overrideEnd : endDate;
+      const preset = overridePreset !== undefined ? overridePreset : dateRangePreset;
+      const dateParams = (preset !== 'all' && s && e) ? `?startDate=${s}&endDate=${e}` : '';
+
       const [dashRes, stockRes, inbRes, transRes, finRes, supRes, salesRes] = await Promise.all([
         fetch('/api/warehouse/dashboard', { headers }),
         fetch('/api/warehouse/stock', { headers }),
-        fetch('/api/warehouse/inbounds', { headers }),
-        fetch('/api/warehouse/transfers', { headers }),
-        fetch('/api/warehouse/owner-finance', { headers }),
+        fetch(`/api/warehouse/inbounds${dateParams}`, { headers }),
+        fetch(`/api/warehouse/transfers${dateParams}`, { headers }),
+        fetch(`/api/warehouse/owner-finance${dateParams}`, { headers }),
         fetch('/api/suppliers', { headers }),
-        fetch('/api/warehouse/sales', { headers })
+        fetch(`/api/warehouse/sales${dateParams}`, { headers })
       ]);
 
       if (dashRes.ok) setDashboardData(await dashRes.json());
@@ -255,7 +307,20 @@ export default function WarehouseView() {
     }
   }, [posContext?.token]);
 
-  // ─── PDF EXPORTS ───────────────────────────────────────────────────────
+  // ─── CSV EXPORT HELPER ────────────────────────────────────────────────
+  const downloadCSVFile = (filename: string, content: string) => {
+    const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // ─── PDF & CSV EXPORTS ─────────────────────────────────────────────────
   const handleExportStockPDF = async () => {
     if (filteredStock.length === 0) {
       toast(`Tidak ada data stok ${vConfig.itemTerm.toLowerCase()} untuk diekspor.`, 'warning');
@@ -270,17 +335,159 @@ export default function WarehouseView() {
     }
   };
 
+  const handleExportStockCSV = () => {
+    if (filteredStock.length === 0) {
+      toast(`Tidak ada data stok ${vConfig.itemTerm.toLowerCase()} untuk diekspor.`, 'warning');
+      return;
+    }
+    const headers = ['No', 'Nama Item', 'Kategori', 'Merk', 'Lokasi Rak', 'Satuan Dasar', 'Satuan Pembelian', 'Rasio Konversi', 'Stok Gudang', 'HPP Beli', 'Total Valuasi Aset', 'Stok Dapur/Cabang', 'Status'];
+    const rows = filteredStock.map((it, idx) => {
+      const isCritical = it.warehouseStock <= (it.minStock || 0);
+      const val = (it.warehouseStock || 0) * (it.buyPrice || 0);
+      return [
+        idx + 1,
+        `"${(it.name || '').replace(/"/g, '""')}"`,
+        `"${(it.category || '').replace(/"/g, '""')}"`,
+        `"${(it.brand || '-').replace(/"/g, '""')}"`,
+        `"${(it.shelfLocation || '-').replace(/"/g, '""')}"`,
+        `"${it.unit || ''}"`,
+        `"${it.purchaseUnit || it.unit || ''}"`,
+        it.conversionRatio || 1,
+        it.warehouseStock || 0,
+        it.buyPrice || 0,
+        val,
+        it.branchStock || 0,
+        `"${isCritical ? 'Kritis' : 'Aman'}"`
+      ];
+    });
+    const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+    downloadCSVFile(`Stok_Gudang_${getTodayStr()}.csv`, csv);
+    toast('Data Stok Gudang berhasil diekspor ke CSV!', 'success');
+  };
+
   const handleExportInboundPDF = async () => {
     if (inbounds.length === 0) {
       toast('Tidak ada riwayat pasokan untuk diekspor.', 'warning');
       return;
     }
     try {
-      await exportWarehouseInboundPDF(inbounds, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      await exportWarehouseInboundPDF(inbounds, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin', getPeriodLabel());
       toast('Laporan Rekap Penerimaan Pasokan berhasil diunduh!', 'success');
     } catch (e) {
       console.error(e);
       toast('Gagal mengekspor PDF pasokan', 'error');
+    }
+  };
+
+  const handleExportInboundCSV = () => {
+    if (inbounds.length === 0) {
+      toast('Tidak ada riwayat pasokan untuk diekspor.', 'warning');
+      return;
+    }
+    const headers = ['No', 'No Faktur', 'Tanggal', 'Supplier', 'Sumber Dana', 'Total Belanja', 'Status', 'Rincian Item'];
+    const rows = inbounds.map((inb, idx) => {
+      const itemsStr = (inb.items || []).map((it: any) => `${it.itemName || it.ingredient?.name} (${it.purchaseQty} ${it.purchaseUnit})`).join('; ');
+      return [
+        idx + 1,
+        `"${inb.invoiceNumber || ''}"`,
+        `"${inb.date ? new Date(inb.date).toLocaleDateString('id-ID') : ''}"`,
+        `"${(inb.supplier?.name || inb.supplierName || 'Umum').replace(/"/g, '""')}"`,
+        `"${inb.paymentSource === 'DANA_PRIBADI_OWNER' ? 'Talangan Owner' : 'Kas Resto'}"`,
+        inb.totalAmount || 0,
+        `"${inb.isVoided ? 'Dibatalkan' : 'Sukses'}"`,
+        `"${itemsStr.replace(/"/g, '""')}"`
+      ];
+    });
+    const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+    downloadCSVFile(`Pasokan_Masuk_Gudang_${getPeriodLabel().replace(/[^a-zA-Z0-9]/g, '_')}.csv`, csv);
+    toast('Riwayat Pasokan Masuk berhasil diekspor ke CSV!', 'success');
+  };
+
+  const handleExportSalesPDF = async () => {
+    if (sales.length === 0) {
+      toast('Tidak ada riwayat penjualan grosir B2B untuk diekspor.', 'warning');
+      return;
+    }
+    try {
+      await exportWarehouseSalesPDF(sales, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin', getPeriodLabel());
+      toast('Laporan Rekap Penjualan B2B berhasil diunduh!', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengekspor PDF penjualan B2B', 'error');
+    }
+  };
+
+  const handleExportSalesCSV = () => {
+    if (sales.length === 0) {
+      toast('Tidak ada riwayat penjualan grosir B2B untuk diekspor.', 'warning');
+      return;
+    }
+    const headers = ['No', 'No Faktur', 'Tanggal', 'Pelanggan / Mitra', 'Total Omzet', 'Laba Kotor', 'Status Bayar', 'Status Transaksi', 'Rincian Item'];
+    const rows = sales.map((s, idx) => {
+      const itemsStr = (s.items || []).map((it: any) => `${it.itemName} (${it.saleQty} ${it.saleUnit})`).join('; ');
+      return [
+        idx + 1,
+        `"${s.invoiceNumber || ''}"`,
+        `"${s.saleDate || s.createdAt ? new Date(s.saleDate || s.createdAt).toLocaleDateString('id-ID') : ''}"`,
+        `"${(s.customerName || 'Pelanggan Umum').replace(/"/g, '""')}"`,
+        s.totalAmount || 0,
+        s.grossProfit || 0,
+        `"${s.paymentStatus || 'PAID'}"`,
+        `"${s.isVoided ? 'Dibatalkan' : 'Aktif'}"`,
+        `"${itemsStr.replace(/"/g, '""')}"`
+      ];
+    });
+    const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+    downloadCSVFile(`Penjualan_Grosir_B2B_${getPeriodLabel().replace(/[^a-zA-Z0-9]/g, '_')}.csv`, csv);
+    toast('Data Penjualan B2B berhasil diekspor ke CSV!', 'success');
+  };
+
+  const handleExportTransfersPDF = async () => {
+    if (transfers.length === 0) {
+      toast('Tidak ada riwayat transfer bahan untuk diekspor.', 'warning');
+      return;
+    }
+    try {
+      await exportWarehouseTransfersPDF(transfers, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin', getPeriodLabel());
+      toast('Laporan Rekap Distribusi ke Dapur berhasil diunduh!', 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengekspor PDF distribusi bahan', 'error');
+    }
+  };
+
+  const handleExportTransfersCSV = () => {
+    if (transfers.length === 0) {
+      toast('Tidak ada riwayat transfer bahan untuk diekspor.', 'warning');
+      return;
+    }
+    const headers = ['No', 'No Requisition', 'Tanggal', 'Diminta Oleh', 'Disetujui Oleh', 'Total Nilai HPP', 'Status', 'Catatan', 'Rincian Bahan'];
+    const rows = transfers.map((tr, idx) => {
+      const itemsStr = (tr.items || []).map((it: any) => `${it.itemName || it.ingredient?.name} (${it.requestedQty} ${it.requestedUnit})`).join('; ');
+      return [
+        idx + 1,
+        `"${tr.reqNumber || ''}"`,
+        `"${tr.createdAt ? new Date(tr.createdAt).toLocaleDateString('id-ID') : ''}"`,
+        `"${(tr.requestedBy?.name || 'Staff Dapur').replace(/"/g, '""')}"`,
+        `"${(tr.approvedBy?.name || '-').replace(/"/g, '""')}"`,
+        tr.totalTransferCost || 0,
+        `"${tr.status || 'PENDING'}"`,
+        `"${(tr.notes || '').replace(/"/g, '""')}"`,
+        `"${itemsStr.replace(/"/g, '""')}"`
+      ];
+    });
+    const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+    downloadCSVFile(`Mutasi_Distribusi_Dapur_${getPeriodLabel().replace(/[^a-zA-Z0-9]/g, '_')}.csv`, csv);
+    toast('Riwayat Distribusi ke Dapur berhasil diekspor ke CSV!', 'success');
+  };
+
+  const handleExportTransferSlipPDF = async (transfer: any) => {
+    try {
+      await exportWarehouseTransferSlipPDF(transfer, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      toast(`Surat Jalan ${transfer.reqNumber} berhasil diunduh!`, 'success');
+    } catch (e) {
+      console.error(e);
+      toast('Gagal mengekspor Surat Jalan', 'error');
     }
   };
 
@@ -290,12 +497,34 @@ export default function WarehouseView() {
       return;
     }
     try {
-      await exportWarehouseSettlementPDF(financeData, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin');
+      await exportWarehouseSettlementPDF(financeData, { ...posContext?.settings, storeName: posContext?.settings?.storeName || vConfig.title }, (posContext?.user as any)?.name || posContext?.user?.username || 'Admin', getPeriodLabel());
       toast('Laporan Rekonsiliasi & Settlement Modal Owner berhasil diunduh!', 'success');
     } catch (e) {
       console.error(e);
       toast('Gagal mengekspor PDF settlement', 'error');
     }
+  };
+
+  const handleExportSettlementCSV = () => {
+    if (!financeData?.transactions || financeData.transactions.length === 0) {
+      toast('Tidak ada riwayat mutasi modal owner untuk diekspor.', 'warning');
+      return;
+    }
+    const headers = ['No', 'Tanggal', 'Tipe Mutasi', 'No Referensi', 'Keterangan', 'Operator', 'Nominal'];
+    const rows = (financeData.transactions || []).map((t: any, idx: number) => {
+      return [
+        idx + 1,
+        `"${t.date ? new Date(t.date).toLocaleDateString('id-ID') : ''}"`,
+        `"${t.type || ''}"`,
+        `"${t.referenceId || ''}"`,
+        `"${(t.description || '').replace(/"/g, '""')}"`,
+        `"${(t.user?.name || 'Admin').replace(/"/g, '""')}"`,
+        t.amount || 0
+      ];
+    });
+    const csv = [headers.join(','), ...rows.map((r: any[]) => r.join(','))].join('\n');
+    downloadCSVFile(`Buku_Besar_Modal_Owner_${getPeriodLabel().replace(/[^a-zA-Z0-9]/g, '_')}.csv`, csv);
+    toast('Buku Besar Modal berhasil diekspor ke CSV!', 'success');
   };
 
   // ─── INBOUND ACTIONS ───────────────────────────────────────────────────
@@ -1059,6 +1288,87 @@ export default function WarehouseView() {
         })}
       </div>
 
+      {/* ─── GLOBAL DATE RANGE FILTER TOOLBAR (FOR TABS 2-5) ─────────────────── */}
+      {activeTab !== 'stock' && (
+        <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Calendar size={16} />
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-800 flex items-center gap-2">
+                <span>Filter Periode Riwayat</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  {getPeriodLabel()}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Data transaksi &amp; laporan audit otomatis disaring sesuai rentang waktu terpilih
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+              <button
+                onClick={() => handleSelectPreset('all')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${dateRangePreset === 'all' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'hover:text-slate-900'}`}
+              >
+                Semua
+              </button>
+              <button
+                onClick={() => handleSelectPreset('today')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${dateRangePreset === 'today' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'hover:text-slate-900'}`}
+              >
+                Hari Ini
+              </button>
+              <button
+                onClick={() => handleSelectPreset('7days')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${dateRangePreset === '7days' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'hover:text-slate-900'}`}
+              >
+                7 Hari
+              </button>
+              <button
+                onClick={() => handleSelectPreset('this_month')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${dateRangePreset === 'this_month' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'hover:text-slate-900'}`}
+              >
+                Bulan Ini
+              </button>
+              <button
+                onClick={() => setDateRangePreset('custom')}
+                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${dateRangePreset === 'custom' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'hover:text-slate-900'}`}
+              >
+                Kustom
+              </button>
+            </div>
+
+            {dateRangePreset === 'custom' && (
+              <div className="flex items-center gap-1.5 w-full md:w-auto">
+                <input
+                  type="date"
+                  className="px-2.5 py-1 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+                <span className="text-xs text-slate-400 font-bold">s/d</span>
+                <input
+                  type="date"
+                  className="px-2.5 py-1 text-xs font-bold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                />
+                <button
+                  onClick={() => fetchData(startDate, endDate, 'custom')}
+                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                >
+                  Terapkan
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ─── TAB 1: STOK BARANG / RAK GUDANG ─────────────────────────────────── */}
       {activeTab === 'stock' && (
         <div className="flex flex-col gap-3">
@@ -1093,6 +1403,13 @@ export default function WarehouseView() {
                 title="Download Laporan Rekap Stok & Valuasi Aset Gudang (PDF)"
               >
                 <FileText size={14} className="text-rose-500" /> Export PDF
+              </button>
+              <button
+                onClick={handleExportStockCSV}
+                className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all shrink-0 active:scale-95 cursor-pointer"
+                title="Download Laporan Stok & Valuasi Gudang (Excel/CSV)"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-600" /> Export CSV
               </button>
             </div>
           </div>
@@ -1322,8 +1639,15 @@ export default function WarehouseView() {
                 <FileText size={14} className="text-rose-500" /> Export PDF
               </button>
               <button
+                onClick={handleExportInboundCSV}
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                title="Download Laporan Pasokan Masuk (Excel/CSV)"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-600" /> Export CSV
+              </button>
+              <button
                 onClick={() => setShowInboundModal(true)}
-                className="btn btn-primary py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                className="col-span-2 sm:col-span-1 btn btn-primary py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
               >
                 <Plus size={14} /> Penerimaan Pasokan
               </button>
@@ -1487,12 +1811,28 @@ export default function WarehouseView() {
                 Transaksi penjualan bahan baku langsung dari Gudang Pusat (Kasir Kafe tidak terganggu)
               </p>
             </div>
-            <button
-              onClick={() => setShowSaleModal(true)}
-              className="btn bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
-            >
-              <TrendingUp size={14} /> Transaksi Penjualan B2B
-            </button>
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={handleExportSalesPDF}
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                title="Download Laporan Rekap Penjualan B2B (PDF)"
+              >
+                <FileText size={14} className="text-rose-500" /> Export PDF
+              </button>
+              <button
+                onClick={handleExportSalesCSV}
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                title="Download Laporan Penjualan B2B (Excel/CSV)"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-600" /> Export CSV
+              </button>
+              <button
+                onClick={() => setShowSaleModal(true)}
+                className="col-span-2 sm:col-span-1 btn bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                <TrendingUp size={14} /> Transaksi Penjualan B2B
+              </button>
+            </div>
           </div>
 
           {/* Quick Metrics Bar: 3-column compact on mobile, 3 cards on desktop */}
@@ -1762,12 +2102,28 @@ export default function WarehouseView() {
               <h3 className="text-sm font-black text-slate-800">Riwayat Pengajuan &amp; Distribusi Bahan ke Dapur Cabang</h3>
               <p className="text-[11px] text-slate-500">Stok berpindah saat dapur mengonfirmasi penerimaan bahan</p>
             </div>
-            <button
-              onClick={() => setShowTransferModal(true)}
-              className="btn btn-primary py-2 px-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 w-full sm:w-auto"
-            >
-              <Plus size={14} /> Permintaan Bahan Baru
-            </button>
+            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={handleExportTransfersPDF}
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                title="Download Laporan Rekap Distribusi Dapur (PDF)"
+              >
+                <FileText size={14} className="text-rose-500" /> Export PDF
+              </button>
+              <button
+                onClick={handleExportTransfersCSV}
+                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                title="Download Laporan Rekap Mutasi Dapur (Excel/CSV)"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-600" /> Export CSV
+              </button>
+              <button
+                onClick={() => setShowTransferModal(true)}
+                className="col-span-2 sm:col-span-1 btn btn-primary py-2 px-3.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95 w-full sm:w-auto"
+              >
+                <Plus size={14} /> Permintaan Bahan Baru
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
@@ -1832,7 +2188,14 @@ export default function WarehouseView() {
                             </span>
                           </td>
                           <td className="p-3.5 text-right">
-                            <div className="flex justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleExportTransferSlipPDF(tr)}
+                                title="Cetak Surat Jalan Mutasi Bahan"
+                                className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <Printer size={12} /> Surat Jalan
+                              </button>
                               {tr.status === 'PENDING' && (
                                 <>
                                   <button
@@ -1953,6 +2316,12 @@ export default function WarehouseView() {
                               <CheckCircle2 size={13} /> Selesai
                             </span>
                           )}
+                          <button
+                            onClick={() => handleExportTransferSlipPDF(tr)}
+                            className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Printer size={12} /> Surat Jalan
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -2002,6 +2371,13 @@ export default function WarehouseView() {
                 <FileText size={16} className="text-rose-400" /> Export PDF
               </button>
               <button
+                onClick={handleExportSettlementCSV}
+                className="w-full sm:w-auto px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs sm:text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Download Laporan Rekonsiliasi & Settlement Owner (Excel/CSV)"
+              >
+                <FileSpreadsheet size={16} className="text-emerald-400" /> Export CSV
+              </button>
+              <button
                 onClick={() => {
                   setReimburseForm(prev => ({
                     ...prev,
@@ -2022,12 +2398,20 @@ export default function WarehouseView() {
               <div className="font-black text-xs text-slate-700 uppercase">
                 Buku Rekonsiliasi Settlement Pengadaan
               </div>
-              <button
-                onClick={handleExportSettlementPDF}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-              >
-                <FileText size={13} className="text-rose-500" /> Unduh Laporan PDF
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleExportSettlementPDF}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <FileText size={13} className="text-rose-500" /> Unduh PDF
+                </button>
+                <button
+                  onClick={handleExportSettlementCSV}
+                  className="text-xs font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <FileSpreadsheet size={13} className="text-emerald-600" /> Unduh CSV
+                </button>
+              </div>
             </div>
 
             {(!financeData?.transactions || financeData.transactions.length === 0) ? (

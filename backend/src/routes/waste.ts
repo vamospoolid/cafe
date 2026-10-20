@@ -7,16 +7,18 @@ import { TenantContext } from '../utils/tenantContext';
 
 const router = Router();
 
-// Router-level fail-closed guard: all waste operations require authentication & tenant context
+// Router-level tenant resolver: mendukung standalone & multi-tenant
 router.use(authenticateToken);
-router.use((req: Request, res: Response, next) => {
+router.use(async (req: Request, res: Response, next) => {
   const user = (req as any).user;
-  const tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
+  let tenantId = user?.tenantId || TenantContext.getTenantId() || (req.headers['x-tenant-id'] as string);
   if (!tenantId) {
-    return res.status(400).json({ 
-      error: 'Tenant context tidak tersedia. Silakan login ulang.', 
-      code: 'MISSING_TENANT_CONTEXT' 
-    });
+    const defaultTenant = await prisma.tenant.findFirst({ select: { id: true } });
+    if (defaultTenant) {
+      tenantId = defaultTenant.id;
+      if (user) user.tenantId = tenantId;
+      (req as any).tenantId = tenantId;
+    }
   }
   next();
 });

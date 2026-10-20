@@ -1012,6 +1012,7 @@ export const StaffPWAView: React.FC = () => {
     try {
       const activeTenantId = user?.tenantId || user?.tenant?.id || localStorage.getItem('tenantId') || localStorage.getItem('staff_tenant_id');
       const payload = {
+        userId: user?.id,
         pin: user?.pin || '',
         type,
         shiftId: selectedShiftId,
@@ -2092,6 +2093,23 @@ export const StaffPWAView: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* Active Staff Identity Badge */}
+                {user && (
+                  <div className="flex items-center justify-between px-3.5 py-2 bg-purple-50/80 border border-purple-100/90 rounded-2xl text-[11px] text-purple-900 shadow-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-5 h-5 rounded-full bg-[#7C3AED] text-white flex items-center justify-center font-bold text-[9px] shrink-0">
+                        {(user.name || user.username || 'S').slice(0, 1).toUpperCase()}
+                      </div>
+                      <span className="truncate font-medium">
+                        Presensi: <strong className="text-[#1A1033] font-bold">{user.name || user.username}</strong>
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-white text-[10px] font-bold text-[#7C3AED] border border-purple-200 shrink-0 uppercase tracking-wider">
+                      {user.role || 'Staf'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Primary Action Button */}
                 <div>

@@ -370,9 +370,10 @@ router.patch('/:id/approve', authenticateToken, async (req: Request, res: Respon
     }
 
     const { id } = req.params;
-    const tenantId = (req as any).user?.tenantId;
-    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
-      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    let tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      const defaultTenant = await prisma.tenant.findFirst({ select: { id: true } });
+      tenantId = defaultTenant?.id;
     }
 
     // IDOR Guard: verifikasi kepemilikan tenant sebelum approve
@@ -457,9 +458,10 @@ router.patch('/:id/reject', authenticateToken, async (req: Request, res: Respons
 
     const { id } = req.params;
     const { reason } = req.body;
-    const tenantId = (req as any).user?.tenantId;
-    if (!tenantId && !(req as any).user?.isPlatformAdmin) {
-      return res.status(400).json({ error: 'Tenant context tidak tersedia', code: 'MISSING_TENANT_CONTEXT' });
+    let tenantId = (req as any).user?.tenantId;
+    if (!tenantId) {
+      const defaultTenant = await prisma.tenant.findFirst({ select: { id: true } });
+      tenantId = defaultTenant?.id;
     }
 
     // IDOR Guard: verifikasi kepemilikan tenant

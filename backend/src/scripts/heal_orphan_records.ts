@@ -3,42 +3,50 @@ import prisma from '../db';
 async function main() {
   console.log('=== HEALING ORPHAN BUSINESS RECORDS ===\n');
 
-  const defaultTenantId = 'tenant-default-muki';
-  const defaultOutletId = 'outlet-default-muki-01';
+  const tenantArg = process.argv.find(arg => arg.startsWith('--tenantId='));
+  const targetTenantId = tenantArg ? tenantArg.split('=')[1] : process.env.TARGET_TENANT_ID;
+
+  if (!targetTenantId) {
+    console.error('❌ GAGAL: Script ini memerlukan parameter --tenantId=<target-tenant-id> demi keamanan isolasi multi-tenant.');
+    process.exit(1);
+  }
+
+  const outletArg = process.argv.find(arg => arg.startsWith('--outletId='));
+  const targetOutletId = outletArg ? outletArg.split('=')[1] : null;
 
   // 1. Products
   const prodResult = await prisma.product.updateMany({
     where: { tenantId: null },
-    data: { tenantId: defaultTenantId }
+    data: { tenantId: targetTenantId }
   });
-  console.log(`Updated ${prodResult.count} orphan product(s) to tenant ${defaultTenantId}`);
+  console.log(`Updated ${prodResult.count} orphan product(s) to tenant ${targetTenantId}`);
 
   // 2. Orders & OrderItems
   const orderResult = await prisma.order.updateMany({
     where: { tenantId: null },
-    data: { tenantId: defaultTenantId, outletId: defaultOutletId }
+    data: { tenantId: targetTenantId, ...(targetOutletId ? { outletId: targetOutletId } : {}) }
   });
-  console.log(`Updated ${orderResult.count} orphan order(s) to tenant ${defaultTenantId}`);
+  console.log(`Updated ${orderResult.count} orphan order(s) to tenant ${targetTenantId}`);
 
   const orderItemResult = await prisma.orderItem.updateMany({
     where: { tenantId: null },
-    data: { tenantId: defaultTenantId, outletId: defaultOutletId }
+    data: { tenantId: targetTenantId, ...(targetOutletId ? { outletId: targetOutletId } : {}) }
   });
   console.log(`Updated ${orderItemItemResult(orderItemResult)} orphan orderItem(s)`);
 
   // 3. Shifts
   const shiftResult = await prisma.shift.updateMany({
     where: { tenantId: null },
-    data: { tenantId: defaultTenantId, outletId: defaultOutletId }
+    data: { tenantId: targetTenantId, ...(targetOutletId ? { outletId: targetOutletId } : {}) }
   });
-  console.log(`Updated ${shiftResult.count} orphan shift(s) to tenant ${defaultTenantId}`);
+  console.log(`Updated ${shiftResult.count} orphan shift(s) to tenant ${targetTenantId}`);
 
   // 4. CashFlows
   const cashResult = await prisma.cashFlow.updateMany({
     where: { tenantId: null },
-    data: { tenantId: defaultTenantId, outletId: defaultOutletId }
+    data: { tenantId: targetTenantId, ...(targetOutletId ? { outletId: targetOutletId } : {}) }
   });
-  console.log(`Updated ${cashResult.count} orphan cashFlow(s) to tenant ${defaultTenantId}`);
+  console.log(`Updated ${cashResult.count} orphan cashFlow(s) to tenant ${targetTenantId}`);
 
   // Verification
   const remaining = {

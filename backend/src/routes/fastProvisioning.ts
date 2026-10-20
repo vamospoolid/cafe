@@ -686,7 +686,8 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
       longitude,
       logoUrl,
       menuData = [],
-      businessType = 'CAFE'
+      businessType = 'CAFE',
+      pin: providedPin
     } = req.body;
 
     const finalBusinessType = businessType === 'BENGKEL' ? 'BENGKEL' : (businessType === 'RETAIL' ? 'RETAIL' : (businessType === 'LAUNDRY' ? 'LAUNDRY' : 'CAFE'));
@@ -731,6 +732,7 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
+    const ownerPin = providedPin ? String(providedPin).trim() : String(Math.floor(100000 + Math.random() * 900000));
 
     const latVal = typeof latitude === 'number' ? latitude : parseFloat(latitude) || -6.200000;
     const lngVal = typeof longitude === 'number' ? longitude : parseFloat(longitude) || 106.816666;
@@ -787,7 +789,7 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
           name: ownerName || tenantName.trim() + ' Owner',
           username: cleanUsername,
           passwordHash,
-          pin: '123456',
+          pin: ownerPin,
           role: 'OWNER',
           permissions: JSON.stringify(['*'])
         }
@@ -799,7 +801,7 @@ router.post('/execute', authenticateToken, requirePlatformAdmin, async (req: Aut
           userId: user.id,
           tenantId: tenant.id,
           status: 'ACTIVE',
-          pin: '123456'
+          pin: ownerPin
         }
       });
 
