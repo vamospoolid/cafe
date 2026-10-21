@@ -10,6 +10,8 @@ import TenantResetModal from './TenantResetModal';
 import RecycleBinModal from './RecycleBinModal';
 import TenantPWASection from './TenantPWASection';
 import SettingsWhatsAppGateway from './settings/SettingsWhatsAppGateway';
+import { LocalBackupService } from '../services/LocalBackupService';
+import { LicenseService } from '../services/LicenseService';
 
 const SettingsView = () => {
   const [searchParams] = useSearchParams();
@@ -4212,6 +4214,74 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
   const isOwner = (posContext?.user?.role || '').toUpperCase() === 'OWNER' || (posContext?.user?.role || '').toUpperCase() === 'SUPERADMIN';
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(true);
+  const [localExporting, setLocalExporting] = useState(false);
+  const [localRestoring, setLocalRestoring] = useState(false);
+  const [deviceHwid, setDeviceHwid] = useState<string>('');
+  const [activeLicenseRecord, setActiveLicenseRecord] = useState<any>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    LicenseService.getHardwareId().then(setDeviceHwid);
+    LicenseService.checkLicenseStatus().then(({ isValid, license }) => {
+      if (isValid && license) {
+        setActiveLicenseRecord(license);
+      }
+    });
+  }, []);
+
+  const handleExportLocalBackup = async () => {
+    setLocalExporting(true);
+    try {
+      const fileName = await LocalBackupService.downloadBackup(posContext?.user?.businessType || 'RETAIL');
+      toast(`✅ Cadangan lokal (${fileName}) berhasil diunduh!`, 'success');
+    } catch (err: any) {
+      console.error('Gagal mengekspor backup lokal:', err);
+      toast(err.message || 'Gagal mengekspor backup lokal.', 'error');
+    } finally {
+      setLocalExporting(false);
+    }
+  };
+
+  const handleTriggerRestoreFile = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const confirmed = await confirmAlert(
+      `Pulihkan Database Lokal?`,
+      `PERINGATAN: Memulihkan cadangan dari "${file.name}" akan menimpa seluruh katalog produk, stok, transaksi, dan shift lokal di perangkat ini. Apakah Anda yakin ingin melanjutkan?`
+    );
+    if (!confirmed) return;
+
+    setLocalRestoring(true);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const res = await LocalBackupService.restoreBackupPayload(payload);
+      toast(`✅ ${res.message}`, 'success');
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: any) {
+      console.error('Gagal restore backup lokal:', err);
+      errorAlert('Gagal Memulihkan Cadangan', err.message || 'Format berkas tidak valid.');
+    } finally {
+      setLocalRestoring(false);
+    }
+  };
+
+  const handleEmergencySnapshot = async () => {
+    try {
+      await posContext?.triggerAutoBackup();
+      toast('✅ Snapshot darurat berhasil disimpan ke penyimpanan lokal.', 'success');
+    } catch (err: any) {
+      toast('Gagal membuat snapshot darurat.', 'error');
+    }
+  };
 
   const fetchHealthAndBackups = async () => {
     setLoadingHealth(true);
@@ -4472,6 +4542,119 @@ const DatabaseSettingsPanel = ({ token }: { token: string | null | undefined }) 
             <div className="text-[10px] uppercase font-bold text-slate-400">Socket.IO Clients</div>
             <div className="text-base font-black text-cyan-300 mt-0.5">{healthData?.realtime?.activeSocketClients ?? 0} Online</div>
           </div>
+        </div>
+      </div>
+
+      {/* ── Standalone Offline Tablet / APK Local Backup Card ── */}
+      <div className="p-6 rounded-3xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30 shadow-md space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+              <Smartphone size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-black text-sm text-slate-800">Cadangan Database Lokal Tablet & APK (Beli-Putus)</h4>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                  posContext?.isStandalone ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                }`}>
+                  {posContext?.isStandalone ? 'Mode Standalone Aktif' : 'Mode SaaS Cloud'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Format berkas <code className="font-mono font-bold text-indigo-700 bg-indigo-100/60 px-1 py-0.5 rounded">.cpb</code> (CodePOS Backup) menyimpan seluruh katalog produk, harga grosir, resep, transaksi kasir, buku kas, shift kasir, dan bon tempo langsung di perangkat ini.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const nextMode = !posContext?.isStandalone;
+                posContext?.setStandaloneMode(nextMode);
+                toast(`Mode Standalone ${nextMode ? 'diaktifkan' : 'dinonaktifkan'}.`, 'success');
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                posContext?.isStandalone
+                  ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                  : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+              }`}
+            >
+              {posContext?.isStandalone ? 'Beralih ke SaaS Cloud' : 'Aktifkan Standalone Offline'}
+            </button>
+          </div>
+        </div>
+
+        <input 
+          ref={fileInputRef} 
+          type="file" 
+          accept=".cpb,.json" 
+          onChange={handleFileSelected} 
+          className="hidden" 
+        />
+
+        {/* Device & License Summary */}
+        <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 font-mono">
+            <span className="text-slate-400 font-sans font-bold">Hardware ID:</span>
+            <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200 select-all">{deviceHwid || 'Memuat...'}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-bold">Lisensi:</span>
+            {activeLicenseRecord ? (
+              <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                <Check size={12} className="text-emerald-600" />
+                <span>Aktif ({activeLicenseRecord.storeName} • {activeLicenseRecord.vertical})</span>
+              </span>
+            ) : (
+              <span className="font-bold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                Belum Teraktivasi
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          {/* Action 1: Ekspor .cpb */}
+          <button
+            type="button"
+            onClick={handleExportLocalBackup}
+            disabled={localExporting}
+            className="flex items-center justify-center gap-2.5 p-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+          >
+            <Download size={15} />
+            <span>{localExporting ? 'Mengekspor Data...' : '💾 Ekspor Cadangan (.cpb)'}</span>
+          </button>
+
+          {/* Action 2: Pulihkan .cpb */}
+          <button
+            type="button"
+            onClick={handleTriggerRestoreFile}
+            disabled={localRestoring}
+            className="flex items-center justify-center gap-2.5 p-3.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-200 font-bold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-50"
+          >
+            <RotateCcw size={15} className="text-indigo-600" />
+            <span>{localRestoring ? 'Memulihkan Data...' : '🔄 Pulihkan Cadangan Data'}</span>
+          </button>
+
+          {/* Action 3: Snapshot Darurat */}
+          <button
+            type="button"
+            onClick={handleEmergencySnapshot}
+            className="flex items-center justify-center gap-2.5 p-3.5 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-800 border-2 border-emerald-200 font-bold text-xs transition-all shadow-sm cursor-pointer"
+          >
+            <Sparkles size={15} className="text-emerald-600" />
+            <span>📸 Snapshot Darurat Sekarang</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-white/70 p-2.5 rounded-xl border border-slate-200">
+          <Info size={14} className="text-indigo-500 shrink-0" />
+          <span>
+            <strong>Keamanan Anti-Hilang:</strong> Sistem otomatis membuat snapshot senyap setiap kali kasir melakukan <strong>Tutup Shift</strong>. Anda juga dapat menyalin berkas <code className="font-mono text-slate-600">.cpb</code> ke flashdisk OTG sebagai cadangan fisik toko.
+          </span>
         </div>
       </div>
 

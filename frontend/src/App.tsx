@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, Suspense } from 'react';
+import React, { useState, useContext, useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import POSView from './components/POSView';
@@ -22,6 +22,8 @@ import VerticalGuard from './components/VerticalGuard';
 import ChunkErrorBoundary from './components/ChunkErrorBoundary';
 import { updatePwaManifestForRoute } from './utils/pwaManager';
 import { HeartbeatService } from './services/heartbeatService';
+import { LicenseService } from './services/LicenseService';
+import { StandaloneActivationModal } from './components/StandaloneActivationModal';
 import './utils/pdfDownloadHelper';
 
 // ─── Code Splitting & Dynamic Imports for Large Modules (Bundle Optimization) ─────
@@ -101,6 +103,36 @@ const AppRoutes = () => {
   const context = useContext(POSContext);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [showActivationModal, setShowActivationModal] = useState<boolean>(false);
+
+  // Verifikasi lisensi standalone saat booting
+  useEffect(() => {
+    if (context?.isStandalone) {
+      LicenseService.checkLicenseStatus().then(({ isValid, license }) => {
+        if (!isValid) {
+          setShowActivationModal(true);
+        } else if (!context.token) {
+          const localUser: any = {
+            id: 1,
+            name: license?.storeName || 'Pemilik Toko',
+            username: 'standalone',
+            role: 'OWNER',
+            tenantId: 'standalone',
+            businessType: license?.vertical || 'RETAIL',
+            permissions: {
+              canVoid: true,
+              canDiscount: true,
+              canEditMenu: true,
+              canViewReports: true,
+              canManageStaff: true
+            }
+          };
+          context.login(localUser, 'standalone_offline_token');
+        }
+      });
+    }
+  }, [context?.isStandalone, context?.token]);
 
   // Sinkronisasi manifest PWA (Kasir vs Staf) & dynamic metadata toko
   useEffect(() => {
@@ -186,6 +218,42 @@ const AppRoutes = () => {
     );
   }
 
+  // Jika dalam Mode Standalone Offline (Beli-Putus) dan belum ada token/lisensi aktif:
+  if (!context?.token && context?.isStandalone) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <StandaloneActivationModal
+          isOpen={true}
+          onActivated={(licenseData) => {
+            setShowActivationModal(false);
+            const localUser: any = {
+              id: 1,
+              name: licenseData.storeName || 'Pemilik Toko',
+              username: 'standalone',
+              role: 'OWNER',
+              tenantId: 'standalone',
+              businessType: licenseData.vertical || 'RETAIL',
+              permissions: {
+                canVoid: true,
+                canDiscount: true,
+                canEditMenu: true,
+                canViewReports: true,
+                canManageStaff: true
+              }
+            };
+            context.login(localUser, 'standalone_offline_token');
+            navigate('/pos');
+          }}
+          onSwitchToOnline={() => {
+            context.setStandaloneMode(false);
+            setShowActivationModal(false);
+            navigate('/login');
+          }}
+        />
+      </div>
+    );
+  }
+
   // Jika belum login (tidak ada token), arahkan ke Landing Page (khusus codenusa.id) atau langsung ke LoginView (subdomain tenant)
   if (!context?.token) {
     return (
@@ -215,6 +283,33 @@ const AppRoutes = () => {
   return (
     <ChunkErrorBoundary>
       <InAppUpdateBanner />
+      <StandaloneActivationModal
+        isOpen={showActivationModal}
+        onActivated={(licenseData) => {
+          setShowActivationModal(false);
+          const localUser: any = {
+            id: 1,
+            name: licenseData.storeName || 'Pemilik Toko',
+            username: 'standalone',
+            role: 'OWNER',
+            tenantId: 'standalone',
+            businessType: licenseData.vertical || 'RETAIL',
+            permissions: {
+              canVoid: true,
+              canDiscount: true,
+              canEditMenu: true,
+              canViewReports: true,
+              canManageStaff: true
+            }
+          };
+          context?.login(localUser, 'standalone_offline_token');
+        }}
+        onSwitchToOnline={() => {
+          context?.setStandaloneMode(false);
+          setShowActivationModal(false);
+          navigate('/login');
+        }}
+      />
       <Routes>
         {/* ─── STANDALONE SAAS DEVELOPER MASTER CONSOLE ─────────────────── */}
         <Route

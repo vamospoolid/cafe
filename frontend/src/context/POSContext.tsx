@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { offlineDB } from '../utils/offlineDb';
 import { offlineDb } from '../db/offlineDb';
 import { syncEngine } from '../services/syncEngine';
+import { LocalDataService } from '../services/LocalDataService';
+import { LocalBackupService } from '../services/LocalBackupService';
 import { toast } from '../utils/alert';
 import useSocket from '../hooks/useSocket';
 
@@ -42,6 +44,7 @@ interface POSContextType {
   features: string[];
   tenantPlan: any | null;
   isOnline: boolean;
+  isStandalone: boolean;
   offlineQueueCount: number;
   login: (userData: User, token: string) => void;
   logout: () => void;
@@ -49,12 +52,14 @@ interface POSContextType {
   hasFeature: (featureKey: string) => boolean;
   fetchSettings: () => Promise<void>;
   fetchActiveShift: () => Promise<void>;
-  openOfflineShift: (shiftData: any) => void;
-  closeOfflineShift: () => void;
+  openOfflineShift: (shiftData: any) => Promise<any> | void;
+  closeOfflineShift: (physicalAmount?: number, notes?: string) => Promise<any> | void;
   fetchTenantFeatures: () => Promise<void>;
   syncOfflineOrders: (authToken?: string) => Promise<void>;
   refreshOfflineQueueCount: () => Promise<void>;
   triggerHaptic: (duration?: number) => void;
+  setStandaloneMode: (val: boolean) => void;
+  triggerAutoBackup: () => Promise<void>;
 }
 
 export const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -96,6 +101,29 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   const [tenantPlan, setTenantPlan] = useState<any | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
+  const [isStandalone, setIsStandalone] = useState<boolean>(() => {
+    return import.meta.env.VITE_STANDALONE_MODE === 'true' || localStorage.getItem('pos_standalone_mode') === 'true';
+  });
+
+  const setStandaloneMode = (val: boolean) => {
+    setIsStandalone(val);
+    if (val) {
+      localStorage.setItem('pos_standalone_mode', 'true');
+    } else {
+      localStorage.removeItem('pos_standalone_mode');
+    }
+  };
+
+  const triggerAutoBackup = async () => {
+    try {
+      const res = await LocalBackupService.createAutoSnapshot(user?.businessType || 'RETAIL');
+      if (res.success) {
+        console.log(`[LocalBackup] Auto-snapshot berhasil dibuat: ${res.filename}`);
+      }
+    } catch (err) {
+      console.warn('[LocalBackup] Gagal membuat auto-snapshot:', err);
+    }
+  };
 
   const triggerHaptic = (duration = 35) => {
     if ('vibrate' in navigator) {
@@ -142,6 +170,23 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const fetchActiveShift = async () => {
+    // 1. Mode Standalone Offline (Dexie v2)
+    if (isStandalone) {
+      try {
+        const localShift = await LocalDataService.getActiveShift();
+        setActiveShift(localShift || null);
+        if (localShift) {
+          localStorage.setItem('pos_active_shift', JSON.stringify(localShift));
+        } else {
+          localStorage.removeItem('pos_active_shift');
+        }
+        return;
+      } catch (err) {
+        console.error('Gagal membaca shift lokal standalone:', err);
+      }
+    }
+
+    // 2. Mode SaaS Online
     if (!token) return;
     if (navigator.onLine) {
       try {
@@ -174,14 +219,48 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const openOfflineShift = (shiftData: any) => {
+  const openOfflineShift = async (shiftData: any) => {
+    if (isStandalone) {
+      try {
+        const created = await LocalDataService.openShift(
+          shiftData.cashierName || user?.name || user?.username || 'Kasir Standalone',
+          Number(shiftData.saldoAwal || 0),
+          Number(shiftData.userId || user?.id || 1)
+        );
+        setActiveShift(created);
+        localStorage.setItem('pos_active_shift', JSON.stringify(created));
+        toast('✅ Shift kasir lokal berhasil dibuka.', 'success');
+        return created;
+      } catch (err) {
+        console.error('Gagal membuka shift lokal:', err);
+        toast('Gagal membuka shift lokal standalone.', 'error');
+      }
+    }
     setActiveShift(shiftData);
     try {
       localStorage.setItem('pos_active_shift', JSON.stringify(shiftData));
     } catch (e) {}
   };
 
-  const closeOfflineShift = () => {
+  const closeOfflineShift = async (physicalAmount?: number, notes?: string) => {
+    if (isStandalone && activeShift?.id) {
+      try {
+        const closed = await LocalDataService.closeShift(
+          Number(activeShift.id),
+          Number(physicalAmount || 0),
+          notes
+        );
+        // Trigger silent auto-snapshot backup ke disk
+        await triggerAutoBackup();
+        setActiveShift(null);
+        localStorage.removeItem('pos_active_shift');
+        toast('✅ Shift kasir ditutup & cadangan otomatis (.cpb) berhasil disimpan.', 'success');
+        return closed;
+      } catch (err) {
+        console.error('Gagal menutup shift lokal:', err);
+        toast('Gagal menutup shift lokal.', 'error');
+      }
+    }
     setActiveShift(null);
     try {
       localStorage.removeItem('pos_active_shift');
@@ -328,7 +407,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    if (token) {
+    if (isStandalone) {
+      fetchActiveShift();
+    } else if (token) {
       fetchSettings();
       fetchActiveShift();
       fetchTenantFeatures();
@@ -336,7 +417,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
         syncOfflineOrders(token);
       }
     }
-  }, [token]);
+  }, [token, isStandalone]);
 
   // Real-time synchronization saat shift dibuka atau ditutup
   useEffect(() => {
@@ -463,6 +544,7 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       features,
       tenantPlan,
       isOnline,
+      isStandalone,
       offlineQueueCount,
       login,
       logout,
@@ -475,7 +557,9 @@ export const POSProvider = ({ children }: { children: ReactNode }) => {
       fetchTenantFeatures,
       syncOfflineOrders,
       refreshOfflineQueueCount,
-      triggerHaptic
+      triggerHaptic,
+      setStandaloneMode,
+      triggerAutoBackup
     }}>
       {children}
     </POSContext.Provider>
