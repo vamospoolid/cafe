@@ -245,7 +245,7 @@ router.put('/:id', authenticateToken, async (req: Request, res: Response) => {
   }
 });
 
-// PATCH send PO → status: Dikirim - Terisolasi per Tenant
+// PATCH send PO â†’ status: Dikirim - Terisolasi per Tenant
 router.patch('/:id/send', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -271,7 +271,7 @@ router.patch('/:id/send', authenticateToken, async (req: Request, res: Response)
   }
 });
 
-// PATCH receive PO → proses penerimaan barang + update stok bahan/produk + pengeluaran kas proporsional
+// PATCH receive PO â†’ proses penerimaan barang + update stok bahan/produk + pengeluaran kas proporsional
 router.patch('/:id/receive', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -305,6 +305,17 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
         const qty = Number(recv.qtyReceived);
         if (qty <= 0) continue;
 
+        const currentReceived = Number(poItem.qtyReceived) || 0;
+        const maxAllowed = poItem.qtyOrdered - currentReceived;
+        if (maxAllowed <= 0) {
+          throw new Error(`Item "${poItem.itemName}" sudah diterima lengkap.`);
+        }
+        if (qty > maxAllowed) {
+          throw new Error(`Jumlah penerimaan untuk "${poItem.itemName}" melebihi sisa PO (${qty} > ${maxAllowed}).`);
+        }
+
+        const effectiveTenantId = po.tenantId || tenantId;
+
         // Update qtyReceived di PO item
         await tx.purchaseOrderItem.update({
           where: { id: recv.itemId },
@@ -314,7 +325,12 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
         // 1. Jika PO Item memiliki ingredientId (Bahan Baku):
         // Naikkan stok Ingredient & update buyPrice secara dinamis menggunakan Weighted Moving Average
         if (poItem.ingredientId) {
-          const currentIng = await tx.ingredient.findUnique({ where: { id: poItem.ingredientId } });
+          const currentIng = await tx.ingredient.findFirst({
+            where: {
+              id: poItem.ingredientId,
+              ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {})
+            }
+          });
           const oldStock = Math.max(0, currentIng?.stock || 0);
           const oldPrice = currentIng?.buyPrice || 0;
           const newQty = qty;
@@ -323,8 +339,11 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
             ? Math.round(((oldStock * oldPrice) + (newQty * newPrice)) / (oldStock + newQty))
             : newPrice;
 
-          await tx.ingredient.update({
-            where: { id: poItem.ingredientId },
+          await tx.ingredient.updateMany({
+            where: {
+              id: poItem.ingredientId,
+              ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {})
+            },
             data: { 
               stock: { increment: qty },
               buyPrice: weightedPrice
@@ -333,7 +352,7 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
 
           await tx.ingredientLog.create({
             data: {
-              tenantId: po.tenantId || tenantId,
+              tenantId: effectiveTenantId || null,
               outletId: po.outletId || outletId,
               ingredientId: poItem.ingredientId,
               change: qty,
@@ -349,7 +368,12 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
         // 2. Jika PO Item memiliki productId (Barang Retail Jadi):
         // Naikkan stok Product & update buyPrice secara dinamis menggunakan Weighted Moving Average
         if (poItem.productId) {
-          const currentProd = await tx.product.findUnique({ where: { id: poItem.productId } });
+          const currentProd = await tx.product.findFirst({
+            where: {
+              id: poItem.productId,
+              ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {})
+            }
+          });
           const oldStock = Math.max(0, currentProd?.stock || 0);
           const oldPrice = currentProd?.buyPrice || 0;
           const newQty = qty;
@@ -358,8 +382,11 @@ router.patch('/:id/receive', authenticateToken, async (req: Request, res: Respon
             ? Math.round(((oldStock * oldPrice) + (newQty * newPrice)) / (oldStock + newQty))
             : newPrice;
 
-          await tx.product.update({
-            where: { id: poItem.productId },
+          await tx.product.updateMany({
+            where: {
+              id: poItem.productId,
+              ...(effectiveTenantId ? { tenantId: effectiveTenantId } : {})
+            },
             data: { 
               stock: { increment: qty },
               buyPrice: weightedPrice

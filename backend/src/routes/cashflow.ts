@@ -42,8 +42,7 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
 
     // 2. Laci Kasir (Sales Drawer) - Menghitung Modal Awal + Omset Tunai POS + Manual In/Out Laci
     let drawerBalance = 0;
-    const shiftWhere: any = { status: 'Open' };
-    if (tenantId) shiftWhere.tenantId = tenantId;
+    const shiftWhere: any = { status: 'Open', tenantId };
     const activeShift = await prisma.shift.findFirst({
       where: shiftWhere
     });
@@ -51,13 +50,13 @@ router.get('/summary', authenticateToken, async (req: Request, res: Response) =>
     if (activeShift) {
       // Hitung order berstatus Paid sejak shift dibuka (dengan fallback createdAt jika paidAt null)
       const orderWhere: any = {
+        tenantId,
         status: 'Paid',
         OR: [
           { paidAt: { gte: activeShift.waktuBuka } },
           { paidAt: null, createdAt: { gte: activeShift.waktuBuka } }
         ]
       };
-      if (tenantId) orderWhere.tenantId = tenantId;
       const activeOrders = await prisma.order.findMany({
         where: orderWhere,
         select: { paymentMethod: true, total: true }
@@ -330,7 +329,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       }
     }
 
-    // Socket Notification — hanya ke tenant terkait
+    // Socket Notification â€” hanya ke tenant terkait
     const cashflowTenantId = tenantId || (req as any).user?.tenantId;
     if (cashflowTenantId) {
       if (finalStatus === 'PENDING') {

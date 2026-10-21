@@ -170,13 +170,21 @@ router.post('/:id/payments', authenticateToken, async (req: Request, res: Respon
         }
       });
 
-      // 3. Update Debt remaining and status
-      const updatedDebt = await tx.debt.update({
-        where: { id: debtId },
+      // 3. Update Debt remaining and status with tenant scoping
+      const updateResult = await tx.debt.updateMany({
+        where: { id: debtId, ...tenantWhere(tenantId) },
         data: {
           remaining: newRemaining,
           status: newStatus
-        },
+        }
+      });
+
+      if (updateResult.count === 0) {
+        throw new Error('Gagal memperbarui status piutang atau akses ditolak.');
+      }
+
+      const updatedDebt = await tx.debt.findFirst({
+        where: { id: debtId, ...tenantWhere(tenantId) },
         include: {
           customer: true,
           order: true,

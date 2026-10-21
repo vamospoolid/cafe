@@ -6,7 +6,7 @@ import { cacheService } from '../services/CacheService';
 
 const router = Router();
 
-// ─── 1. POST /api/retail/checkout ──────────────────────────────────────────
+// â”€â”€â”€ 1. POST /api/retail/checkout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Mesin Kasir Cepat Toko Grosir: Mendukung Multi-Satuan (UOM), Auto Tier Price,
 // Bon Tempo (Plafon Kredit), dan Penerbitan Surat Jalan (Delivery Order)
 router.post('/checkout', authenticateToken, async (req: Request, res: Response) => {
@@ -65,7 +65,7 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
     const activeShift = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...(tenantId ? { tenantId } : {})
+        tenantId
       }
     });
 
@@ -453,7 +453,7 @@ router.post('/checkout', authenticateToken, async (req: Request, res: Response) 
   }
 });
 
-// ─── 2. GET /api/retail/delivery-orders ─────────────────────────────────────
+// â”€â”€â”€ 2. GET /api/retail/delivery-orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Daftar Surat Jalan (DO) Pengiriman Armada
 router.get('/delivery-orders', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -482,7 +482,7 @@ router.get('/delivery-orders', authenticateToken, async (req: Request, res: Resp
   }
 });
 
-// ─── 3. PATCH /api/retail/delivery-orders/:id/status ───────────────────────
+// â”€â”€â”€ 3. PATCH /api/retail/delivery-orders/:id/status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Update Status Pengiriman (PENDING -> LOADING -> IN_TRANSIT -> DELIVERED)
 router.patch('/delivery-orders/:id/status', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -513,15 +513,23 @@ router.patch('/delivery-orders/:id/status', authenticateToken, async (req: Reque
       if (recipientName) updateData.recipientName = recipientName;
     }
 
-    const updated = await prisma.deliveryOrder.update({
-      where: { id },
-      data: updateData,
+    const updateResult = await prisma.deliveryOrder.updateMany({
+      where: { id, tenantId },
+      data: updateData
+    });
+
+    if (updateResult.count === 0) {
+      return res.status(404).json({ error: 'Surat jalan tidak ditemukan atau akses ditolak.' });
+    }
+
+    const updated = await prisma.deliveryOrder.findFirst({
+      where: { id, tenantId },
       include: { items: true, order: true }
     });
 
     res.json({
       success: true,
-      message: `Status surat jalan ${updated.doNumber} diperbarui menjadi ${cleanStatus}.`,
+      message: `Status surat jalan ${updated?.doNumber || id} diperbarui menjadi ${cleanStatus}.`,
       data: updated
     });
   } catch (err: any) {
@@ -529,7 +537,7 @@ router.patch('/delivery-orders/:id/status', authenticateToken, async (req: Reque
   }
 });
 
-// ─── 4. GET /api/retail/customers/credit-summary ───────────────────────────
+// â”€â”€â”€ 4. GET /api/retail/customers/credit-summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Rekap Plafon & Piutang Bon Pelanggan Warung
 router.get('/customers/credit-summary', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -578,7 +586,7 @@ router.get('/customers/credit-summary', authenticateToken, async (req: Request, 
   }
 });
 
-// ─── 5. PATCH /api/retail/customers/:id/credit-limit ───────────────────────
+// â”€â”€â”€ 5. PATCH /api/retail/customers/:id/credit-limit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Update Plafon Kredit & Status Blokir Pelanggan
 router.patch('/customers/:id/credit-limit', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -613,7 +621,7 @@ router.patch('/customers/:id/credit-limit', authenticateToken, async (req: Reque
   }
 });
 
-// ─── 6. GET /api/retail/reports ─────────────────────────────────────────────
+// â”€â”€â”€ 6. GET /api/retail/reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Analytics & Financial Reports Khusus Retail (Summary, Tiered Sales, AR Ageing, Stock Velocity)
 router.get('/reports', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -798,7 +806,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
       delivered: deliveryOrders.filter(d => (d.status || '').toUpperCase() === 'DELIVERED').length
     };
 
-    // 5. Daily Trend — Grouped by day, segmented by customer price tier
+    // 5. Daily Trend â€” Grouped by day, segmented by customer price tier
     const dailyTrendMap: Record<string, { date: string; dateFormatted: string; salesUmum: number; salesMitra: number; salesGrosir: number; totalSales: number }> = {};
     for (const ord of orders) {
       const dayKey = new Date(ord.createdAt).toISOString().split('T')[0];
@@ -935,7 +943,7 @@ router.get('/reports', authenticateToken, async (req: Request, res: Response) =>
   }
 });
 
-// ─── 7. GET /api/retail/customers/:id/statement ───────────────────────────
+// â”€â”€â”€ 7. GET /api/retail/customers/:id/statement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Lembar Tagihan Bon Akumulatif per Pelanggan / Mandor (Customer AR Statement)
 router.get('/customers/:id/statement', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -1069,7 +1077,7 @@ router.get('/customers/:id/statement', authenticateToken, async (req: Request, r
   }
 });
 
-// ─── 8. GET /api/retail/inventory/opname-sheet ────────────────────────────
+// â”€â”€â”€ 8. GET /api/retail/inventory/opname-sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Formulir Stock Opname Fisik Rak & Valuasi Persediaan Toko
 router.get('/inventory/opname-sheet', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -1144,7 +1152,7 @@ router.get('/inventory/opname-sheet', authenticateToken, async (req: Request, re
   }
 });
 
-// ─── 9. POST /api/retail/customers/:id/pay-debt ─────────────────────────────
+// â”€â”€â”€ 9. POST /api/retail/customers/:id/pay-debt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Pelunasan Cicilan Bon Cepat di Meja Kasir (FIFO Debt Allocation)
 router.post('/customers/:id/pay-debt', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -1164,7 +1172,7 @@ router.post('/customers/:id/pay-debt', authenticateToken, async (req: Request, r
     const activeShift = await prisma.shift.findFirst({
       where: {
         status: { in: ['Open', 'OPEN'] },
-        ...(tenantId ? { tenantId } : {})
+        tenantId
       }
     });
 

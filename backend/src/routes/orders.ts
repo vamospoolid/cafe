@@ -31,7 +31,7 @@ export const enrichOrderWithJoinedTables = async (order: any, txPrisma: any = pr
 const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: number, orderNumber: string, tenantId?: string) => {
   // Fail-Closed: tanpa tenantId, tolak query agar tidak ada cross-tenant loyalty manipulation
   if (!tenantId) {
-    console.warn('[Loyalty] processLoyaltyEarnings dipanggil tanpa tenantId — dilewati untuk keamanan isolasi.');
+    console.warn('[Loyalty] processLoyaltyEarnings dipanggil tanpa tenantId â€” dilewati untuk keamanan isolasi.');
     return;
   }
 
@@ -45,7 +45,7 @@ const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: n
   const silverMultiplier = settings ? settings.loyaltySilverMultiplier : 1.2;
   const goldMultiplier = settings ? settings.loyaltyGoldMultiplier : 1.5;
 
-  // Fail-Closed: customer dicari dengan tenantId — tidak ada fallback global
+  // Fail-Closed: customer dicari dengan tenantId â€” tidak ada fallback global
   const customer = await tx.customer.findFirst({
     where: { id: customerId, tenantId }
   });
@@ -93,7 +93,7 @@ const processLoyaltyEarnings = async (tx: any, customerId: number, orderTotal: n
 const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRedeem: number, orderNumber: string, tenantId?: string) => {
   // Fail-Closed: tanpa tenantId, tolak agar tidak ada cross-tenant redemption
   if (!tenantId) {
-    console.warn('[Loyalty] processLoyaltyRedemption dipanggil tanpa tenantId — dilewati untuk keamanan isolasi.');
+    console.warn('[Loyalty] processLoyaltyRedemption dipanggil tanpa tenantId â€” dilewati untuk keamanan isolasi.');
     return;
   }
 
@@ -101,7 +101,7 @@ const processLoyaltyRedemption = async (tx: any, customerId: number, pointsToRed
   const loyaltyEnabled = settings ? settings.loyaltyEnabled : true;
   if (!loyaltyEnabled) return;
 
-  // Fail-Closed: customer dicari dengan tenantId — tidak ada fallback global
+  // Fail-Closed: customer dicari dengan tenantId â€” tidak ada fallback global
   const customer = await tx.customer.findFirst({
     where: { id: customerId, tenantId }
   });
@@ -143,6 +143,10 @@ const deductModifierIngredients = async (
     return;
   }
 
+  if (!tenantId) {
+    return;
+  }
+
   for (const addon of item.selectedAddons) {
     const qtyMultiplier = Number(item.qty) || 1;
     const qtyPerAddon = Number(addon.qtyUsed) || 1;
@@ -154,7 +158,7 @@ const deductModifierIngredients = async (
         where: {
           id: Number(addon.ingredientId),
           deletedAt: null,
-          ...(tenantId ? { tenantId } : {})
+          tenantId
         }
       });
     }
@@ -163,7 +167,7 @@ const deductModifierIngredients = async (
       matchedIng = await tx.ingredient.findFirst({
         where: {
           deletedAt: null,
-          ...(tenantId ? { tenantId } : {}),
+          tenantId,
           name: { contains: addon.ingredientName, mode: 'insensitive' }
         }
       });
@@ -173,7 +177,7 @@ const deductModifierIngredients = async (
           matchedIng = await tx.ingredient.findFirst({
             where: {
               deletedAt: null,
-              ...(tenantId ? { tenantId } : {}),
+              tenantId,
               name: { contains: cleanName, mode: 'insensitive' }
             }
           });
@@ -186,21 +190,27 @@ const deductModifierIngredients = async (
       matchedIng = await tx.ingredient.findFirst({
         where: {
           deletedAt: null,
-          ...(tenantId ? { tenantId } : {}),
+          tenantId,
           name: { contains: cleanAddon, mode: 'insensitive' }
         }
       });
     }
 
     if (matchedIng) {
-      if (matchedIng.stock < totalDeduct) {
-        throw new Error(`Stok bahan baku modifier "${matchedIng.name}" tidak mencukupi (tersisa: ${matchedIng.stock}, dibutuhkan: ${totalDeduct})`);
-      }
-
-      await tx.ingredient.update({
-        where: { id: matchedIng.id },
-        data: { stock: { decrement: totalDeduct } }
+      const updateResult = await tx.ingredient.updateMany({
+        where: {
+          id: matchedIng.id,
+          tenantId,
+          stock: { gte: totalDeduct }
+        },
+        data: {
+          stock: { decrement: totalDeduct }
+        }
       });
+
+      if (updateResult.count === 0) {
+        throw new Error(`Stok bahan baku modifier "${matchedIng.name}" tidak mencukupi atau telah berubah (tersisa: ${matchedIng.stock}, dibutuhkan: ${totalDeduct})`);
+      }
 
       await tx.ingredientLog.create({
         data: {
@@ -262,12 +272,12 @@ router.get('/', authenticateToken, async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Tenant context tidak tersedia. Silakan login ulang.', code: 'MISSING_TENANT_CONTEXT' });
     }
 
-    // Filter conditions — hanya data milik tenant ini (tidak bocor ke tenantId: null)
+    // Filter conditions â€” hanya data milik tenant ini (tidak bocor ke tenantId: null)
     const whereCondition: any = {};
     if (tenantId) {
       whereCondition.tenantId = tenantId;
 
-      // ─── RENTAL VERTICAL HARMONIZATION ──────────────────────────────────────────
+      // â”€â”€â”€ RENTAL VERTICAL HARMONIZATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Jika tenant adalah RENTAL (Penyewaan Baju Bodo & Busana Adat), otomatis
       // sinkronisasikan dan ambil dari RentalOrder agar riwayat transaksi tidak kosong.
       const tenant = await prisma.tenant.findUnique({
@@ -657,7 +667,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
       return order;
     });
 
-    // Emit real-time event — HANYA ke tenant terkait (tidak global)
+    // Emit real-time event â€” HANYA ke tenant terkait (tidak global)
     if (result.tenantId) {
       let resolvedTableNo = (result as any).table?.tableNo || null;
       if (!resolvedTableNo && resolvedTableId) {
@@ -750,11 +760,17 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
       const orderNumber = await generateOrderNumber(tenantId);
 
       const result = await prisma.$transaction(async (tx) => {
-        // Ambil buyPrice untuk semua produk
-        const productIds = items.map((item: any) => Number(item.productId));
+        // Ambil buyPrice untuk semua produk dengan validasi tenant
+        const productIds = items.map((item: any) => Number(item.productId)).filter(Boolean);
         const products = await tx.product.findMany({
-          where: { id: { in: productIds } }
+          where: {
+            id: { in: productIds },
+            ...(tenantId ? { tenantId } : {})
+          }
         });
+        if (tenantId && products.length !== new Set(productIds).size) {
+          throw new Error('Satu atau lebih produk offline sync tidak ditemukan atau bukan milik tenant ini.');
+        }
         const buyPriceMap = new Map(products.map(p => [p.id, p.buyPrice || 0]));
 
         let finalCustomerId = customerId ? Number(customerId) : null;
@@ -777,7 +793,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
                 }
               });
             } catch (createErr: any) {
-              // P2002: unique constraint — customer sudah ada (race condition), coba fetch ulang
+              // P2002: unique constraint â€” customer sudah ada (race condition), coba fetch ulang
               if (createErr.code === 'P2002') {
                 cust = await tx.customer.findFirst({ where: { phone: customerPhone, tenantId } });
               } else {
@@ -848,8 +864,11 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
 
           // Hanya kurangi product.stock jika TIDAK ada resep bahan baku (Advanced Mode)
           if (!hasRecipe) {
-            await tx.product.update({
-              where: { id: Number(item.productId) },
+            await tx.product.updateMany({
+              where: {
+                id: Number(item.productId),
+                ...(tenantId ? { tenantId } : {})
+              },
               data: { stock: { decrement: Number(item.qty) } }
             });
           }
@@ -1005,7 +1024,7 @@ router.post('/sync', authenticateToken, async (req: Request, res: Response) => {
         return createdOrder;
       });
 
-      // Emit event socket untuk KDS/real-time updates — hanya ke tenant terkait
+      // Emit event socket untuk KDS/real-time updates â€” hanya ke tenant terkait
       if (result.tenantId) {
         emitToTenant(result.tenantId, 'order:new', { 
           orderId: result.id,
@@ -1160,7 +1179,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
               }
             });
           } catch (createErr: any) {
-            // P2002: race condition — customer sudah ada, fetch ulang
+            // P2002: race condition â€” customer sudah ada, fetch ulang
             if (createErr.code === 'P2002') {
               cust = await tx.customer.findFirst({ where: { phone: customerPhone, tenantId } });
             } else {
@@ -1245,7 +1264,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
       }
 
-      // 2. Kurangi Stok — Advanced Mode: jika produk punya resep, gunakan ingredient stock
+      // 2. Kurangi Stok â€” Advanced Mode: jika produk punya resep, gunakan ingredient stock
       // Simple Mode: jika tidak ada resep, kurangi product.stock langsung
       const isAdvancedMode = settings?.ingredientTrackingEnabled ?? false;
 
@@ -1257,7 +1276,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         const hasRecipe = recipes.length > 0;
 
         if (!hasRecipe) {
-          // Simple Mode: tidak ada resep → kurangi product.stock langsung
+          // Simple Mode: tidak ada resep â†’ kurangi product.stock langsung
           const product = await tx.product.findFirst({
             where: tenantId
               ? { id: Number(item.productId), tenantId }
@@ -1273,7 +1292,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             data: { stock: { decrement: Number(item.qty) } }
           });
         } else {
-          // Advanced Mode: ada resep → kurangi bahan baku, JANGAN kurangi product.stock
+          // Advanced Mode: ada resep â†’ kurangi bahan baku, JANGAN kurangi product.stock
           for (const recipe of recipes) {
             const used = recipe.qtyPerServing * Number(item.qty);
             // Atomic check: pastikan stok bahan baku mencukupi (cegah stok negatif)
@@ -1322,7 +1341,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
         }
       }
 
-      // 4. Voucher Usage Tracking (Catat penggunaan voucher promo jika ada)
+      // 4. Voucher Usage Tracking (Catat penggunaan voucher promo secara atomik)
       if (voucherId) {
         const v = await tx.voucher.findFirst({
           where: tenantId
@@ -1330,10 +1349,24 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
             : { id: Number(voucherId) }
         });
         if (v && v.status === 'Aktif') {
-          await tx.voucher.update({
-            where: { id: v.id },
+          if (v.maxUsage && v.usedCount >= v.maxUsage) {
+            throw new Error('Kuota penggunaan voucher telah habis');
+          }
+          const vUpdate = await tx.voucher.updateMany({
+            where: {
+              id: v.id,
+              ...(tenantId ? { tenantId } : {}),
+              OR: [
+                { maxUsage: null },
+                { maxUsage: 0 },
+                { usedCount: { lt: v.maxUsage || 9999999 } }
+              ]
+            },
             data: { usedCount: { increment: 1 } }
           });
+          if (vUpdate.count === 0) {
+            throw new Error('Kuota penggunaan voucher telah habis atau sedang digunakan secara bersamaan');
+          }
         }
       }
 
@@ -1360,7 +1393,7 @@ router.post('/', authenticateToken, async (req: Request, res: Response) => {
       return order;
     });
 
-    // Emit real-time event — HANYA ke tenant terkait (tidak global)
+    // Emit real-time event â€” HANYA ke tenant terkait (tidak global)
     if (result.tenantId) {
       emitToTenant(result.tenantId, 'order:new', {
         orderId: result.id,
@@ -1507,10 +1540,21 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
           if (!v.maxUsage || v.usedCount < v.maxUsage || alreadyUsedInThisOrder) {
             resolvedVoucherId = v.id;
             if (!alreadyUsedInThisOrder) {
-              await tx.voucher.update({
-                where: { id: v.id },
+              const vUpdate = await tx.voucher.updateMany({
+                where: {
+                  id: v.id,
+                  ...(tenantId ? { tenantId } : {}),
+                  OR: [
+                    { maxUsage: null },
+                    { maxUsage: 0 },
+                    { usedCount: { lt: v.maxUsage || 9999999 } }
+                  ]
+                },
                 data: { usedCount: { increment: 1 } }
               });
+              if (vUpdate.count === 0) {
+                throw new Error('Kuota penggunaan voucher telah habis atau sedang digunakan');
+              }
             }
           }
         }
@@ -1681,7 +1725,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       return updatedOrders;
     });
 
-    // Emit hanya ke tenant terkait — tidak global
+    // Emit hanya ke tenant terkait â€” tidak global
     const targetTenantId = result[0]?.tenantId || tenantId;
     if (targetTenantId) {
       emitToTenant(targetTenantId, 'order:paid', { orderIds: result.map((o: any) => o.id) });
@@ -1692,7 +1736,7 @@ router.patch('/:id/payment', authenticateToken, async (req: Request, res: Respon
       }
     }
 
-    // Auto-print struk (fire-and-forget) — pakai settings tenant yang benar
+    // Auto-print struk (fire-and-forget) â€” pakai settings tenant yang benar
     const paySettings = targetTenantId ? await prisma.settings.findFirst({ where: { tenantId: targetTenantId } }) : null;
     if (paySettings?.autoPrintReceipt && result.length > 0) {
       const fullOrder = await prisma.order.findFirst({
@@ -1826,11 +1870,16 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
         });
 
         if (earnLog) {
-          const cust = await tx.customer.findUnique({ where: { id: orderData.customerId } });
+          const cust = await tx.customer.findFirst({
+            where: {
+              id: orderData.customerId,
+              ...(orderData.tenantId ? { tenantId: orderData.tenantId } : {})
+            }
+          });
           if (cust) {
             // Fix #4: Hapus Math.max(0,...) agar poin bisa negatif – mencegah points-farming fraud
-          // Jika pelanggan menebus poin SEBELUM void, saldo poin akan negatif dan harus "dilunasi" di belanja berikutnya
-          const newPoints = cust.points - earnLog.points;
+            // Jika pelanggan menebus poin SEBELUM void, saldo poin akan negatif dan harus "dilunasi" di belanja berikutnya
+            const newPoints = cust.points - earnLog.points;
             const newTotalSpent = Math.max(0, cust.totalSpent - orderData.total);
 
             // Hitung ulang tier jika turun
@@ -1841,8 +1890,11 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
               newTier = 'Silver';
             }
 
-            await tx.customer.update({
-              where: { id: orderData.customerId },
+            await tx.customer.updateMany({
+              where: {
+                id: orderData.customerId,
+                ...(orderData.tenantId ? { tenantId: orderData.tenantId } : {})
+              },
               data: {
                 points: newPoints,
                 totalSpent: newTotalSpent,
@@ -1871,11 +1923,19 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
         });
 
         if (redeemLog) {
-          const cust = await tx.customer.findUnique({ where: { id: orderData.customerId } });
+          const cust = await tx.customer.findFirst({
+            where: {
+              id: orderData.customerId,
+              ...(orderData.tenantId ? { tenantId: orderData.tenantId } : {})
+            }
+          });
           if (cust) {
             const refundPoints = Math.abs(redeemLog.points);
-            await tx.customer.update({
-              where: { id: orderData.customerId },
+            await tx.customer.updateMany({
+              where: {
+                id: orderData.customerId,
+                ...(orderData.tenantId ? { tenantId: orderData.tenantId } : {})
+              },
               data: {
                 points: cust.points + refundPoints
               }
@@ -1911,7 +1971,7 @@ router.patch('/:id/void', authenticateToken, async (req: Request, res: Response)
       }
     });
 
-    // Emit hanya ke tenant terkait — tidak global
+    // Emit hanya ke tenant terkait â€” tidak global
     if (orderData.tenantId) {
       emitToTenant(orderData.tenantId, 'order:void', { orderId: Number(id), orderNumber: orderData.orderNumber });
     }

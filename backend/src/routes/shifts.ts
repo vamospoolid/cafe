@@ -71,7 +71,7 @@ router.get('/current', authenticateToken, handleGetActiveShift);
 router.get('/active', authenticateToken, handleGetActiveShift);
 
 
-// Get all shifts (for admin / supervisor history) — dengan rekap finansial lengkap
+// Get all shifts (for admin / supervisor history) â€” dengan rekap finansial lengkap
 router.get('/', authenticateToken, async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
@@ -265,7 +265,7 @@ router.post('/open', authenticateToken, async (req: Request, res: Response) => {
       }
     });
 
-    // Emit real-time event — HANYA ke tenant terkait (tidak global)
+    // Emit real-time event â€” HANYA ke tenant terkait (tidak global)
     if (tenantId) {
       emitToTenant(tenantId, 'shift:status_change', { status: 'Open', shift });
       emitToTenant(tenantId, 'shift:opened', { shift });
@@ -452,7 +452,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Tidak ada shift yang aktif untuk ditutup.' });
     }
 
-    // 1. Proteksi Pesanan Belum Lunas — hanya order tenant ini
+    // 1. Proteksi Pesanan Belum Lunas â€” hanya order tenant ini
     const pendingOrders = await prisma.order.findMany({
       where: {
         status: 'Pending',
@@ -601,7 +601,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
       }
     });
 
-    // ── AUTO-CATAT ke Arus Kas / Petty Cash ─────────────────────────────
+    // â”€â”€ AUTO-CATAT ke Arus Kas / Petty Cash â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Agar halaman Arus Kas menampilkan pemasukan lengkap (bukan selalu minus)
     const userId = (req as any).user.id;
     const shiftTenantId = activeShift.tenantId || tenantId || null;
@@ -617,7 +617,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         type: 'Pemasukan',
         category: 'Saldo Awal Shift',
         amount: activeShift.saldoAwal,
-        description: `Modal awal kasir saat buka shift — tutup shift #${closedShift.id}`,
+        description: `Modal awal kasir saat buka shift â€” tutup shift #${closedShift.id}`,
         userId,
         date: activeShift.waktuBuka
       });
@@ -631,13 +631,13 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         type: 'Pemasukan',
         category: 'Omset POS - Tunai',
         amount: cashSalesIncome,
-        description: `Omset penjualan tunai (${activeOrders.filter(o => getCashPortion(o.paymentMethod, o.total) > 0).length} transaksi) — shift #${closedShift.id}`,
+        description: `Omset penjualan tunai (${activeOrders.filter(o => getCashPortion(o.paymentMethod, o.total) > 0).length} transaksi) â€” shift #${closedShift.id}`,
         userId,
         date: closedShift.waktuTutup || new Date()
       });
     }
 
-    // 3. Omset non-tunai (QRIS / Transfer / Debit) — dicatat informatif
+    // 3. Omset non-tunai (QRIS / Transfer / Debit) â€” dicatat informatif
     if (nonCashSalesIncome > 0) {
       cashFlowEntries.push({
         tenantId: shiftTenantId,
@@ -645,7 +645,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         type: 'Pemasukan',
         category: 'Omset POS - Non Tunai (QRIS/Transfer)',
         amount: nonCashSalesIncome,
-        description: `Omset penjualan non-tunai/QRIS/transfer — shift #${closedShift.id} (tidak mempengaruhi kas laci)`,
+        description: `Omset penjualan non-tunai/QRIS/transfer â€” shift #${closedShift.id} (tidak mempengaruhi kas laci)`,
         userId,
         date: closedShift.waktuTutup || new Date()
       });
@@ -659,7 +659,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
         type: 'Pemasukan',
         category: 'Pelunasan Piutang - Tunai',
         amount: cashDebtIncome,
-        description: `Pembayaran piutang tunai yang diterima — shift #${closedShift.id}`,
+        description: `Pembayaran piutang tunai yang diterima â€” shift #${closedShift.id}`,
         userId,
         date: closedShift.waktuTutup || new Date()
       });
@@ -669,15 +669,15 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
     if (cashFlowEntries.length > 0) {
       await prisma.cashFlow.createMany({ data: cashFlowEntries });
     }
-    // ── END AUTO-CATAT ───────────────────────────────────────────────────
+    // â”€â”€ END AUTO-CATAT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    // Emit hanya ke tenant terkait — tidak global
+    // Emit hanya ke tenant terkait â€” tidak global
     if (tenantId) {
       emitToTenant(tenantId, 'shift:status_change', { status: 'Closed', shift: closedShift });
       emitToTenant(tenantId, 'shift:closed', { shift: closedShift });
     }
 
-    // Jika terjadi selisih kas, broadcast alert ke Owner / Admin — hanya tenant ini
+    // Jika terjadi selisih kas, broadcast alert ke Owner / Admin â€” hanya tenant ini
     if (Math.abs(selisih) > 0) {
       const alertData = {
         shiftId: closedShift.id,
@@ -727,7 +727,7 @@ router.post('/close', authenticateToken, async (req: Request, res: Response) => 
   }
 });
 
-// ─── Force Close & Auto-Cutoff EOD Shift ──────────────────────────────
+// â”€â”€â”€ Force Close & Auto-Cutoff EOD Shift â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function runShiftAutoCutoff(): Promise<{ count: number }> {
   try {
@@ -745,12 +745,13 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
     for (const shift of openShifts) {
       const now = new Date();
       const shiftTenantId = shift.tenantId;
+      if (!shiftTenantId) continue;
 
       // Ambil order hanya milik tenant shift ini
       const activeOrders = await prisma.order.findMany({
         where: {
           status: 'Paid',
-          ...(shiftTenantId ? { tenantId: shiftTenantId } : {}),
+          tenantId: shiftTenantId,
           OR: [
             { paidAt: { gte: shift.waktuBuka, lte: now } },
             { paidAt: null, createdAt: { gte: shift.waktuBuka, lte: now } }
@@ -763,7 +764,7 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
 
       const cashFlows = await prisma.cashFlow.findMany({
         where: {
-          ...(shiftTenantId ? { tenantId: shiftTenantId } : {}),
+          tenantId: shiftTenantId,
           date: { gte: shift.waktuBuka, lte: now }
         }
       });
@@ -776,7 +777,7 @@ export async function runShiftAutoCutoff(): Promise<{ count: number }> {
 
       const debtPayments = await prisma.debtPayment.findMany({
         where: {
-          ...(shiftTenantId ? { tenantId: shiftTenantId } : {}),
+          tenantId: shiftTenantId,
           createdAt: { gte: shift.waktuBuka, lte: now }
         }
       });
@@ -853,12 +854,15 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
     const effectiveEnd = shiftOpenTime < shiftCloseTime ? shiftCloseTime : shiftOpenTime;
 
     const shiftForceTenantId = shift.tenantId;
+    if (!shiftForceTenantId) {
+      return res.status(400).json({ error: 'Shift tidak terikat pada tenant yang valid.' });
+    }
 
     // Ambil order hanya milik tenant shift ini
     const activeOrders = await prisma.order.findMany({
       where: {
         status: 'Paid',
-        ...(shiftForceTenantId ? { tenantId: shiftForceTenantId } : {}),
+        tenantId: shiftForceTenantId,
         OR: [
           { paidAt: { gte: effectiveStart, lte: effectiveEnd } },
           { paidAt: null, createdAt: { gte: effectiveStart, lte: effectiveEnd } }
@@ -871,14 +875,14 @@ router.post('/:id/force-close', authenticateToken, async (req: Request, res: Res
 
     const cashFlows = await prisma.cashFlow.findMany({
       where: {
-        ...(shiftForceTenantId ? { tenantId: shiftForceTenantId } : {}),
+        tenantId: shiftForceTenantId,
         date: { gte: effectiveStart, lte: effectiveEnd }
       }
     });
 
     const debtPayments = await prisma.debtPayment.findMany({
       where: {
-        ...(shiftForceTenantId ? { tenantId: shiftForceTenantId } : {}),
+        tenantId: shiftForceTenantId,
         createdAt: { gte: effectiveStart, lte: effectiveEnd }
       }
     });
