@@ -18,8 +18,10 @@ echo "=== [2/4] BUILD FRONTEND DIST ==="
 cd /var/www/codenusa/frontend
 npm run build
 
-echo "=== [3/4] BACKEND TSC & PM2 RESTART ==="
+echo "=== [3/4] BACKEND PRISMA SYNC, TSC & PM2 RESTART ==="
 cd /var/www/codenusa/backend
+npx prisma db push
+npx prisma generate
 npx tsc
 pm2 reload codenusa-backend || pm2 restart codenusa-backend
 

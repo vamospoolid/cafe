@@ -3,7 +3,7 @@ import {
   X, Wallet, QrCode, CreditCard, CheckCircle, Scissors, Tag, User, UserPlus, Check, 
   Printer, Utensils, Coffee, Layers, Sparkles, ArrowRight, Banknote, Calendar, 
   FileText, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, ShieldCheck,
-  MessageCircle, Send, Ticket, ChevronRight, Search
+  MessageCircle, Send, Ticket, ChevronRight, Search, ExternalLink
 } from 'lucide-react';
 import { POSContext } from '../context/POSContext';
 import { toast } from '../utils/alert';
@@ -94,7 +94,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
     : (currentCustomer?.discountAmount || 0);
 
   const totalDiscount = manualDiscount + voucherDiscount + pointsDiscount;
-  const finalTotal = Math.max(0, subtotal - totalDiscount + tax + serviceCharge);
+  const deliveryFee = Number(customer?.deliveryFee) || 0;
+  const finalTotal = Math.max(0, subtotal - totalDiscount + tax + serviceCharge + deliveryFee);
 
   const handleSendWhatsAppReceipt = () => {
     if (!waPhone.trim()) {
@@ -624,6 +625,12 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             customerPhone: currentCustomer?.phone || '',
             customerId: currentCustomer?.id || null,
             orderType: customer?.orderType || (customer?.tableId ? 'Dine In' : 'Take Away'),
+            deliveryAddress: customer?.deliveryAddress || undefined,
+            deliveryNotes: customer?.deliveryNotes || undefined,
+            deliveryFee: Number(customer?.deliveryFee) || 0,
+            courierType: customer?.courierType || undefined,
+            courierName: customer?.courierName || undefined,
+            courierPhone: customer?.courierPhone || undefined,
             tableName: customer?.tableName || undefined,
             tableId: customer?.tableId || null,
             joinedTableIds: customer?.joinedTableIds || undefined,
@@ -648,6 +655,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const data = await res.json();
       
       const createdOrder = data.order || (data.orders && data.orders[0]) || data.orderItem?.order;
+      if (createdOrder) setCreatedOrderObj(createdOrder);
       if (createdOrder) {
         setCreatedOrderId(createdOrder.id);
         
@@ -766,7 +774,36 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <div className="flex flex-col gap-2.5">
             {createdOrderId && (
               <>
-                <button 
+                            {createdOrderObj?.trackingCode && (
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-2xl p-4 text-left shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider block">Pelacakan Live Pelanggan</span>
+                    <span className="text-sm font-mono font-black text-indigo-950">{createdOrderObj.trackingCode}</span>
+                  </div>
+                  <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-indigo-600 text-white shadow-sm">
+                    {createdOrderObj.orderType || 'Delivery'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => window.open(`/track/${createdOrderObj.trackingCode}`, '_blank')}
+                    className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md active:scale-[0.98]"
+                  >
+                    <ExternalLink size={14} /> Buka Lacak
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendWhatsAppReceipt}
+                    className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md active:scale-[0.98]"
+                  >
+                    <MessageCircle size={14} /> Kirim WA
+                  </button>
+                </div>
+              </div>
+            )}
+<button 
                   onClick={() => handleDirectPrint(createdOrderId)}
                   disabled={printLoading}
                   className="w-full py-3 px-4 font-bold rounded-xl flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm shadow-md transition-all active:scale-[0.98]"

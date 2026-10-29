@@ -4,7 +4,7 @@ import {
   Camera, Plus, Trash2, Minus, Search, CreditCard, User, Edit2, 
   ShoppingCart, Package, ArrowRight, X, Save, Lock, Play,
   Maximize2, Minimize2, Download, RefreshCw, Wifi, WifiOff, Smartphone,
-  Clock, AlertTriangle, Printer
+  Clock, AlertTriangle, Printer, MapPin
 } from 'lucide-react';
 import CheckoutModal from './CheckoutModal';
 import CustomerModal from './CustomerModal';
@@ -54,7 +54,13 @@ export const POSView = () => {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [customer, setCustomer] = useState<any>(null);
   
-  const [orderType, setOrderType] = useState<'Dine In' | 'Take Away'>('Take Away');
+  const [orderType, setOrderType] = useState<'Dine In' | 'Take Away' | 'Delivery'>('Take Away');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [courierType, setCourierType] = useState<'INTERNAL' | 'EXTERNAL'>('INTERNAL');
+  const [courierName, setCourierName] = useState('');
+  const [courierPhone, setCourierPhone] = useState('');
   const [tables, setTables] = useState<any[]>([]);
   const [selectedTableIds, setSelectedTableIds] = useState<number[]>([]);
   const selectedTableId = selectedTableIds.length > 0 ? selectedTableIds[0] : null;
@@ -1157,11 +1163,11 @@ export const POSView = () => {
 
             {/* Table / Order Type Selection */}
             <div className="mb-3 px-3 py-2.5 border border-slate-200 rounded-xl bg-white shadow-sm flex flex-col gap-2.5">
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <button 
-                  className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-all ${
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl border-2 transition-all ${
                     orderType === 'Take Away'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200/50'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200/50'
                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                   }`}
                   onClick={() => { setOrderType('Take Away'); clearSelectedTables(); }}
@@ -1169,16 +1175,71 @@ export const POSView = () => {
                   🛍️ Take Away
                 </button>
                 <button 
-                  className={`flex-1 py-2 text-sm font-bold rounded-xl border-2 transition-all ${
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl border-2 transition-all ${
                     orderType === 'Dine In'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200/50'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200/50'
                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                   }`}
                   onClick={() => setOrderType('Dine In')}
                 >
                   🍽️ Dine In
                 </button>
+                <button 
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl border-2 transition-all ${
+                    orderType === 'Delivery'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200/50'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                  }`}
+                  onClick={() => { setOrderType('Delivery'); clearSelectedTables(); }}
+                >
+                  🛵 Delivery
+                </button>
               </div>
+
+              {orderType === 'Delivery' && (
+                <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2 text-xs animate-in fade-in">
+                  <div className="flex items-center justify-between font-bold text-indigo-900">
+                    <span className="flex items-center gap-1"><MapPin size={13} className="text-indigo-600" /> Detail Pengantaran</span>
+                    <span className="text-[10px] text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-200">Delivery</span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Alamat Pengantaran Lengkap..."
+                    value={deliveryAddress}
+                    onChange={e => setDeliveryAddress(e.target.value)}
+                    className="w-full p-2 bg-white border border-indigo-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Patokan rumah / catatan kurir..."
+                    value={deliveryNotes}
+                    onChange={e => setDeliveryNotes(e.target.value)}
+                    className="w-full p-2 bg-white border border-indigo-200 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500">Ongkir (Rp):</span>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={deliveryFee || ''}
+                        onChange={e => setDeliveryFee(Math.max(0, Number(e.target.value) || 0))}
+                        className="w-full p-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-bold text-indigo-700 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500">Nama Kurir:</span>
+                      <input
+                        type="text"
+                        placeholder="Kurir Toko / Ojol"
+                        value={courierName}
+                        onChange={e => setCourierName(e.target.value)}
+                        className="w-full p-1.5 bg-white border border-indigo-200 rounded-lg text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {orderType === 'Dine In' && (
                 <div className="space-y-2 animate-in fade-in duration-200">
@@ -1584,7 +1645,13 @@ export const POSView = () => {
                 return sel ? (sel.name || `Meja ${sel.tableNo}`) : (selectedTableIds[0] ? `Meja ${selectedTableIds[0]}` : null);
               })()
             : null,
-          joinedTableIds: orderType === 'Dine In' && selectedTableIds.length > 1 ? selectedTableIds.slice(1) : undefined
+          joinedTableIds: orderType === 'Dine In' && selectedTableIds.length > 1 ? selectedTableIds.slice(1) : undefined,
+          deliveryAddress: orderType === 'Delivery' ? deliveryAddress : undefined,
+          deliveryNotes: orderType === 'Delivery' ? deliveryNotes : undefined,
+          deliveryFee: orderType === 'Delivery' ? (Number(deliveryFee) || 0) : 0,
+          courierType: orderType === 'Delivery' ? courierType : undefined,
+          courierName: orderType === 'Delivery' ? courierName : undefined,
+          courierPhone: orderType === 'Delivery' ? courierPhone : undefined
         }}
       />
 

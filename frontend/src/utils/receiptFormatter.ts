@@ -28,6 +28,9 @@ export interface ReceiptOrderData {
   total: number;
   paymentMethod?: string;
   isPaid?: boolean;
+  trackingCode?: string;
+  deliveryAddress?: string;
+  deliveryFee?: number;
 }
 
 export interface ReceiptSettings {
@@ -122,6 +125,9 @@ export const generateWhatsAppReceiptText = (
   text += `*TOTAL AKHIR*    : *${fmtRp(order.total)}*\n`;
   text += `━━━━━━━━━━━━━━━━━━━━\n`;
   text += `*Pembayaran*     : ${order.paymentMethod || 'Tunai'} (${order.isPaid ? 'LUNAS ✅' : 'BELUM LUNAS'})\n\n`;
+  if (order.trackingCode) {
+    text += `📲 *Lacak Pesanan & Kurir Live:*\n${typeof window !== 'undefined' ? window.location.origin : ''}/track/${order.trackingCode}\n\n`;
+  }
 
   if (settings?.wifiName || settings?.wifiPassword) {
     text += `📶 *Info Wi-Fi Kafe:*\n`;

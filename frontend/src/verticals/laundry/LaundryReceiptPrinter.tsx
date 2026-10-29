@@ -1,20 +1,65 @@
-import React, { useEffect, useRef } from 'react';
-import { Printer, X, Shirt, CheckCircle2, AlertCircle, MessageSquare } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Printer, X, Shirt, CheckCircle2, AlertCircle, MessageSquare, Tag, Receipt } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
+
+// Deterministic offline SVG Barcode renderer (no external internet dependency required)
+function renderSvgBarcode(text: string) {
+  const clean = (text || 'LD-0001').toUpperCase();
+  const bars: number[] = [2, 1, 1, 2]; // Start pattern
+  for (let i = 0; i < clean.length; i++) {
+    const code = clean.charCodeAt(i);
+    bars.push(((code >> 4) & 3) + 1);
+    bars.push(((code >> 2) & 3) + 1);
+    bars.push((code & 3) + 1);
+    bars.push(1);
+  }
+  bars.push(2, 1, 2, 1, 2); // Stop pattern
+
+  let totalUnits = 0;
+  for (const w of bars) totalUnits += w;
+
+  let x = 0;
+  const rects: React.ReactNode[] = [];
+  for (let i = 0; i < bars.length; i++) {
+    const w = bars[i];
+    if (i % 2 === 0) {
+      rects.push(<rect key={i} x={x} y={0} width={w} height={34} fill="#0f172a" />);
+    }
+    x += w;
+  }
+
+  return (
+    <div className="flex flex-col items-center my-1.5">
+      <svg
+        viewBox={`0 0 ${totalUnits} 34`}
+        className="w-full max-w-[220px] h-9"
+        preserveAspectRatio="none"
+      >
+        {rects}
+      </svg>
+      <div className="text-[10px] font-mono font-black tracking-[0.22em] text-slate-900 mt-0.5">
+        *{clean}*
+      </div>
+    </div>
+  );
+}
 
 interface LaundryReceiptPrinterProps {
   order: any;
   onClose?: () => void;
   autoPrint?: boolean;
+  initialMode?: 'CUSTOMER_RECEIPT' | 'PRODUCTION_TAG';
 }
 
 export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
   order,
   onClose,
-  autoPrint = false
+  autoPrint = false,
+  initialMode = 'CUSTOMER_RECEIPT'
 }) => {
   const { settings, user } = usePOS();
   const printRef = useRef<HTMLDivElement>(null);
+  const [printMode, setPrintMode] = useState<'CUSTOMER_RECEIPT' | 'PRODUCTION_TAG'>(initialMode);
 
   const formatCurrency = (val: number) => `Rp ${(val || 0).toLocaleString('id-ID')}`;
 
@@ -82,6 +127,7 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
       `Total Tagihan: *Rp ${totalAmount.toLocaleString('id-ID')}*\n` +
       `Dibayar: *Rp ${paidAmount.toLocaleString('id-ID')}*\n` +
       (remainingDue > 0 ? `Sisa Tagihan: *Rp ${remainingDue.toLocaleString('id-ID')}* (Pelunasan saat ambil cucian)\n` : `Status: *LUNAS*\n`) +
+      (order.trackingCode ? `\n📲 *Lacak Status & Bayar Online:*\n${window.location.origin}/track/${order.trackingCode}\n` : '') +
       `--------------------------------\n` +
       `Terima kasih telah mempercayakan cucian Anda kepada kami! 🙏✨`;
 
@@ -116,38 +162,70 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
       >
         
         {/* Modal Action Bar (Hidden when printing) */}
-        <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-2">
-            <Printer size={16} className="text-cyan-400" />
-            <h3 className="font-bold text-xs truncate max-w-[120px] sm:max-w-none">Nota Kasir Laundry</h3>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {order.customerPhone && (
+        <div className="p-3 bg-slate-900 text-white flex flex-col gap-2.5 print:hidden">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Printer size={16} className="text-cyan-400" />
+              <h3 className="font-bold text-xs truncate max-w-[140px] sm:max-w-none">
+                {printMode === 'CUSTOMER_RECEIPT' ? 'Struk Kasir Pelanggan' : 'Nota Produksi (Keranjang)'}
+              </h3>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {order.customerPhone && (
+                <button
+                  type="button"
+                  onClick={handleSendWhatsApp}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                  title="Kirim Nota ke WhatsApp Pelanggan"
+                >
+                  <MessageSquare size={13} />
+                  <span className="hidden sm:inline">WhatsApp</span>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={handleSendWhatsApp}
-                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs"
-                title="Kirim Nota ke WhatsApp Pelanggan"
+                onClick={handlePrint}
+                className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
               >
-                <MessageSquare size={13} />
-                <span className="hidden sm:inline">WhatsApp</span>
+                <Printer size={13} />
+                <span>Cetak</span>
               </button>
-            )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title="Tutup"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Switcher Mode Cetak: Struk Pelanggan vs Tag Produksi Keranjang */}
+          <div className="grid grid-cols-2 gap-1.5 bg-slate-800 p-1 rounded-xl">
             <button
               type="button"
-              onClick={handlePrint}
-              className="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs"
+              onClick={() => setPrintMode('CUSTOMER_RECEIPT')}
+              className={`py-1.5 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                printMode === 'CUSTOMER_RECEIPT'
+                  ? 'bg-cyan-500 text-slate-950 font-black shadow-xs'
+                  : 'text-slate-300 hover:text-white'
+              }`}
             >
-              <Printer size={13} />
-              <span>Cetak</span>
+              <Receipt size={13} />
+              <span>Struk Pelanggan</span>
             </button>
             <button
               type="button"
-              onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-              title="Tutup"
+              onClick={() => setPrintMode('PRODUCTION_TAG')}
+              className={`py-1.5 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                printMode === 'PRODUCTION_TAG'
+                  ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                  : 'text-slate-300 hover:text-white'
+              }`}
             >
-              <X size={16} />
+              <Tag size={13} />
+              <span>Nota Produksi</span>
             </button>
           </div>
         </div>
@@ -160,6 +238,99 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
             className="bg-white p-4 shadow-sm border border-slate-300 w-full max-w-[290px] text-slate-900 font-mono text-[11px] leading-tight select-none print:border-none print:shadow-none print:p-0"
             style={{ width: '280px' }}
           >
+            {printMode === 'PRODUCTION_TAG' ? (
+              /* ─── MODE 2: NOTA PRODUKSI / TAG KERANJANG (TANPA HARGA) ─── */
+              <div className="space-y-2">
+                <div className="text-center border-2 border-slate-900 p-1.5 rounded">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                    TAG PRODUKSI & KERANJANG
+                  </div>
+                  <div className="text-base font-black tracking-tight mt-0.5">
+                    {order.orderNumber}
+                  </div>
+                </div>
+
+                {renderSvgBarcode(order.orderNumber)}
+
+                <div className="space-y-1 text-[11px] border-t border-b border-dashed border-slate-400 py-2">
+                  <div className="flex justify-between">
+                    <span>PELANGGAN:</span>
+                    <span className="font-black text-xs uppercase">{order.customerName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>TERIMA:</span>
+                    <span>{formatDate(order.createdAt)} {formatTime(order.createdAt)}</span>
+                  </div>
+                  {order.estimatedDoneAt && (
+                    <div className="flex justify-between font-black">
+                      <span>TARGET SELESAI:</span>
+                      <span>{formatDate(order.estimatedDoneAt)} {formatTime(order.estimatedDoneAt)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>PRIORITAS:</span>
+                    <span className="font-black uppercase">
+                      {order.serviceSpeed === 'EXPRESS_6H'
+                        ? 'SUPER EXPRESS (6H)'
+                        : order.serviceSpeed === 'KILAT_24H'
+                        ? 'KILAT (24 JAM)'
+                        : 'REGULER'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>PARFUM:</span>
+                    <span className="font-black uppercase">{order.perfumeVariant || 'STANDAR'}</span>
+                  </div>
+                  {order.itemCountNotes && (
+                    <div className="flex justify-between">
+                      <span>JML POTONG:</span>
+                      <span className="font-black">{order.itemCountNotes}</span>
+                    </div>
+                  )}
+                  {order.rackLocation && (
+                    <div className="flex justify-between">
+                      <span>LOKASI RAK:</span>
+                      <span className="font-black">{order.rackLocation}</span>
+                    </div>
+                  )}
+                </div>
+
+                {order.specialNotes && (
+                  <div className="p-2 border-2 border-slate-900 rounded bg-amber-50 text-[10px] font-black uppercase">
+                    ⚠️ INSTRUKSI KHUSUS: {order.specialNotes}
+                  </div>
+                )}
+
+                <div className="space-y-1.5 py-1">
+                  <div className="text-[10px] font-black uppercase underline">Daftar Item Dikerjakan:</div>
+                  {(order.items || []).map((it: any, idx: number) => (
+                    <div key={idx} className="border-b border-dotted border-slate-300 pb-1">
+                      <div className="flex justify-between font-black text-xs">
+                        <span>{it.serviceName}</span>
+                        <span>{it.qty} {it.unitType === 'METER' ? 'm²' : it.unitType}</span>
+                      </div>
+                      {it.notes && (
+                        <div className="text-[9.5px] text-slate-700 font-bold">
+                          • {it.notes}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t-2 border-slate-900 pt-2 mt-2 space-y-1.5 text-[10px] font-bold">
+                  <div className="text-center uppercase font-black">Kontrol Kualitas Operator</div>
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <div className="border border-slate-400 p-1.5 rounded">[ ] 1. CUCI</div>
+                    <div className="border border-slate-400 p-1.5 rounded">[ ] 2. KERING</div>
+                    <div className="border border-slate-400 p-1.5 rounded">[ ] 3. SETRIKA</div>
+                    <div className="border border-slate-400 p-1.5 rounded">[ ] 4. PACKING</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* ─── MODE 1: STRUK PELANGGAN STANDAR ─── */
+              <>
             {/* Header Laundry */}
             <div className="text-center space-y-1 mb-2">
               <div className="font-black text-sm uppercase tracking-wide">
@@ -259,8 +430,13 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
                   <div className="flex-1 pr-2">
                     <div className="font-bold leading-tight">{it.serviceName}</div>
                     <div className="text-[9px] text-slate-500">
-                      {it.qty} {String(it.unitType || 'KG').toLowerCase()} × {formatCurrency(it.pricePerUnit)}
+                      {it.qty} {it.unitType === 'METER' ? 'm²' : String(it.unitType || 'KG').toLowerCase()} × {formatCurrency(it.pricePerUnit)}
                     </div>
+                    {it.notes && (
+                      <div className="text-[9px] text-amber-800 font-semibold">
+                        ({it.notes})
+                      </div>
+                    )}
                   </div>
                   <div className="font-bold text-right shrink-0">
                     {formatCurrency(it.subtotal)}
@@ -296,9 +472,21 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
                 <span className="text-sm">{formatCurrency(totalAmount)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Bayar:</span>
+                <span>{paidAmount > 0 && remainingDue > 0 ? 'Uang Muka (DP):' : 'Bayar:'}</span>
                 <span>{formatCurrency(paidAmount)}</span>
               </div>
+              {Number(order.quotaKgUsed) > 0 && (
+                <div className="flex justify-between text-cyan-800 font-bold">
+                  <span>Potong Kuota Member:</span>
+                  <span>-{order.quotaKgUsed} Kg</span>
+                </div>
+              )}
+              {Number(order.depositUsed) > 0 && (
+                <div className="flex justify-between text-emerald-800 font-bold">
+                  <span>Potong Saldo Deposit:</span>
+                  <span>{formatCurrency(order.depositUsed)}</span>
+                </div>
+              )}
 
               {/* Status Sisa Pembayaran */}
               <div className="border-t border-dashed border-slate-300 pt-1 mt-1">
@@ -308,14 +496,19 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
                   </div>
                 ) : (
                   <div className="p-1 bg-amber-50 text-amber-900 font-bold text-[11px] rounded border border-amber-200 flex justify-between">
-                    <span>SISA TAGIHAN:</span>
+                    <span>{paidAmount > 0 ? 'SISA PELUNASAN:' : 'SISA TAGIHAN:'}</span>
                     <span className="font-black text-xs text-rose-700">{formatCurrency(remainingDue)}</span>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="text-center font-bold tracking-widest text-[10px] text-slate-400 my-2">
+            {/* Barcode Nota untuk Scan Cepat saat Pengambilan */}
+            <div className="border-t border-dashed border-slate-300 pt-1.5 mt-1.5">
+              {renderSvgBarcode(order.orderNumber)}
+            </div>
+
+            <div className="text-center font-bold tracking-widest text-[10px] text-slate-400 my-1.5">
               ================================
             </div>
 
@@ -334,6 +527,8 @@ export const LaundryReceiptPrinter: React.FC<LaundryReceiptPrinterProps> = ({
             <div className="text-center text-[8px] text-slate-400 mt-0.5">
               Powered by CodePOS Laundry SaaS
             </div>
+              </>
+            )}
 
           </div>
         </div>

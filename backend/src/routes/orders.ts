@@ -1,3 +1,4 @@
+import { generateTrackingCode } from '../utils/tracking';
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { io, emitToTenant } from '../index';
@@ -556,6 +557,7 @@ router.post('/dinein', async (req: Request, res: Response) => {
     }
 
     const orderNumber = await generateOrderNumber(tenantId);
+    const trackingCode = generateTrackingCode('ORD');
 
     const result = await prisma.$transaction(async (tx) => {
       // Ambil buyPrice untuk produk agar HPP tercatat & validasi kepemilikan tenant
@@ -2423,6 +2425,55 @@ router.post('/merge-table', authenticateToken, async (req: Request, res: Respons
   } catch (error: any) {
     console.error('Merge Table Error:', error);
     res.status(500).json({ error: error.message || 'Gagal menggabungkan meja' });
+  }
+});
+
+
+// PATCH /api/orders/:id/delivery-status (Update status kurir & pengantaran)
+router.patch('/:id/delivery-status', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const tenantId = (req as any).tenantId || user?.tenantId;
+    const orderId = Number(req.params.id);
+    const { deliveryStatus, courierName, courierPhone } = req.body;
+
+    const existing = await prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+    }
+
+    const updateData: any = {
+      ...(deliveryStatus ? { deliveryStatus } : {}),
+      ...(courierName !== undefined ? { courierName } : {}),
+      ...(courierPhone !== undefined ? { courierPhone } : {}),
+      ...(deliveryStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {})
+    };
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: updateData
+    });
+
+    const { emitToTenant, emitToTracking } = require('../index');
+    if (updated.tenantId) {
+      emitToTenant(updated.tenantId, 'order:delivery_updated', updated);
+    }
+    if (updated.trackingCode) {
+      emitToTracking(updated.trackingCode, 'tracking:updated', {
+        deliveryStatus: updated.deliveryStatus,
+        courierName: updated.courierName,
+        courierPhone: updated.courierPhone,
+        deliveredAt: updated.deliveredAt
+      });
+    }
+
+    return res.json({ success: true, order: updated });
+  } catch (err: any) {
+    console.error('[Patch Delivery Status Error]:', err);
+    return res.status(500).json({ error: 'Gagal memperbarui status pengantaran' });
   }
 });
 

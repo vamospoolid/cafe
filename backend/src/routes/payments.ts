@@ -141,6 +141,82 @@ router.post('/public/charge-dinein', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/payments/pos/charge-laundry
+ * Menghasilkan Snap Token untuk pesanan Laundry kasir POS (Level 2)
+ */
+router.post('/pos/charge-laundry', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    const tenantId = TenantContext.getTenantId() || user?.tenantId;
+    const { laundryOrderId } = req.body;
+
+    if (!laundryOrderId) {
+      return res.status(400).json({ error: 'laundryOrderId wajib diisi' });
+    }
+
+    const result = await paymentService.createLaundryTransaction(tenantId, String(laundryOrderId));
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Payment API /pos/charge-laundry Error]', err);
+    return res.status(500).json({ error: err.message || 'Gagal memproses pembayaran Midtrans laundry' });
+  }
+});
+
+/**
+ * POST /api/payments/public/charge-tracking
+ * Menghasilkan Snap Token untuk pesanan pelanggan dari halaman Customer Live Tracking (/track/:code)
+ */
+router.post('/public/charge-tracking', async (req: Request, res: Response) => {
+  try {
+    const { trackingCode } = req.body;
+    if (!trackingCode) {
+      return res.status(400).json({ error: 'trackingCode wajib diisi' });
+    }
+
+    const cleanCode = String(trackingCode).trim().toUpperCase();
+
+    // 1. Cek di Kafe Order
+    const cafeOrder = await prisma.order.findFirst({
+      where: { trackingCode: cleanCode }
+    });
+
+    if (cafeOrder) {
+      const tenantId = cafeOrder.tenantId;
+      if (!tenantId) {
+        return res.status(400).json({ error: 'Tenant context tidak valid untuk pesanan ini' });
+      }
+      const result = await paymentService.createPOSTransaction(tenantId, cafeOrder.id);
+      return res.json({
+        vertical: 'CAFE',
+        ...result
+      });
+    }
+
+    // 2. Cek di Laundry Order
+    const laundryOrder = await prisma.laundryOrder.findFirst({
+      where: { trackingCode: cleanCode }
+    });
+
+    if (laundryOrder) {
+      const tenantId = laundryOrder.tenantId;
+      if (!tenantId) {
+        return res.status(400).json({ error: 'Tenant context tidak valid untuk pesanan ini' });
+      }
+      const result = await paymentService.createLaundryTransaction(tenantId, laundryOrder.id);
+      return res.json({
+        vertical: 'LAUNDRY',
+        ...result
+      });
+    }
+
+    return res.status(404).json({ error: 'Pesanan tidak ditemukan dengan kode pelacakan tersebut' });
+  } catch (err: any) {
+    console.error('[Payment API /public/charge-tracking Error]', err);
+    return res.status(500).json({ error: err.message || 'Gagal memproses Snap Token pelacakan' });
+  }
+});
+
+/**
  * ─── UNIVERSAL WEBHOOK RECEIVER (NO AUTH MIDDLEWARE) ───────────────────────
  */
 router.post('/midtrans/webhook', async (req: Request, res: Response) => {

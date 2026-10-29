@@ -254,8 +254,10 @@ import fastProvisioningRoutes from './routes/fastProvisioning';
 import publicInvoiceRoutes from './routes/publicInvoice';
 import aiMenuRoutes from './routes/aiMenu';
 import syncRoutes from './routes/sync';
+import trackingRoutes from './routes/tracking';
 import { whatsAppManager } from './services/WhatsAppManager';
 
+app.use('/api/tracking', trackingRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/public/invoice', publicInvoiceRoutes);
 app.use('/api/invoice', publicInvoiceRoutes);
@@ -413,6 +415,14 @@ io.on('connection', (socket) => {
     console.log(`[Socket.IO] Unauthenticated Client connected: ${socket.id} -> Room: unauthenticated`);
   }
 
+  socket.on('join:tracking', (trackingCode: string) => {
+    if (typeof trackingCode === 'string' && trackingCode.trim().length >= 6) {
+      const room = `tracking:${trackingCode.trim().toUpperCase()}`;
+      socket.join(room);
+      console.log(`[Socket.IO] Tracking client ${socket.id} joined ${room}`);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
   });
@@ -421,6 +431,12 @@ io.on('connection', (socket) => {
 /**
  * Helper to emit real-time events to a specific tenant room only
  */
+export function emitToTracking(trackingCode: string, event: string, data: any) {
+  if (trackingCode) {
+    io.to(`tracking:${trackingCode.toUpperCase()}`).emit(event, data);
+  }
+}
+
 export function emitToTenant(tenantId: string, event: string, data: any) {
   io.to(`tenant:${tenantId}`).emit(event, data);
 }

@@ -1,25 +1,26 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-  Shirt, 
-  Search, 
-  Layers, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle, 
-  Phone, 
-  Plus, 
-  Printer, 
-  RefreshCw, 
-  Grid, 
-  Sparkles, 
-  Wind, 
-  ArrowRight, 
-  DollarSign, 
-  Check, 
+import {
+  Shirt,
+  Search,
+  Layers,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Phone,
+  Plus,
+  Printer,
+  RefreshCw,
+  Grid,
+  Sparkles,
+  Wind,
+  ArrowRight,
+  DollarSign,
+  Check,
   X,
   CreditCard,
   Wallet,
-  MessageSquare
+  MessageSquare,
+  Camera
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
@@ -58,6 +59,19 @@ interface LaundryOrder {
   estimatedDoneAt?: string;
   readyAt?: string;
   completedAt?: string;
+  intakePhotos?: string[];
+  trackingCode?: string;
+  deliveryType?: 'WALK_IN' | 'PICKUP_ONLY' | 'DELIVERY_ONLY' | 'FULL_SERVICE';
+  pickupStatus?: 'PENDING' | 'PICKING_UP' | 'ARRIVED_AT_OUTLET' | null;
+  deliveryStatus?: 'PENDING' | 'ON_DELIVERY' | 'DELIVERED' | null;
+  pickupAddress?: string;
+  deliveryAddress?: string;
+  pickupFee?: number;
+  deliveryFee?: number;
+  qrisUniqueCode?: number;
+  qrisUniqueAmount?: number;
+  paymentVerificationStatus?: 'NONE' | 'WAITING_VERIFICATION' | 'AUTO_VERIFIED' | 'MANUAL_VERIFIED';
+  paymentProofImage?: string | null;
   items: OrderItem[];
   createdAt: string;
 }
@@ -116,6 +130,7 @@ export const LaundryKanbanView: React.FC = () => {
   const [pickupPayAmount, setPickupPayAmount] = useState<string>('');
   const [pickupPaymentMethod, setPickupPaymentMethod] = useState<'CASH' | 'QRIS' | 'TRANSFER'>('CASH');
   const [printingOrder, setPrintingOrder] = useState<LaundryOrder | null>(null);
+  const [photoPreviewOrder, setPhotoPreviewOrder] = useState<LaundryOrder | null>(null);
 
   // Load orders dari API
   const fetchOrders = useCallback(async () => {
@@ -178,16 +193,65 @@ export const LaundryKanbanView: React.FC = () => {
         statusDesc = 'sedang dalam proses penanganan tim kami.';
     }
 
+    const trackingUrl = order.trackingCode
+      ? `\nLacak Status & Bayar QRIS Dinamis Otomatis:\n${window.location.origin}/track/${order.trackingCode}\n`
+      : '';
+
     const msg =
       `Halo Kak *${order.customerName}*,\n` +
       `Update status cucian Anda di *${storeName}*:\n\n` +
       `No. Nota: *${order.orderNumber}*\n` +
       `Status Terkini: ${statusDesc}\n\n` +
-      (unpaid > 0 ? `Sisa Pembayaran: *Rp ${unpaid.toLocaleString('id-ID')}*.\n\n` : `Status Pembayaran: *LUNAS*.\n\n`) +
-      `Jika ada pertanyaan, silakan balas pesan WhatsApp ini. Terima kasih! 🙏✨`;
+      (unpaid > 0 ? `Sisa Pembayaran: *Rp ${unpaid.toLocaleString('id-ID')}*.\n` : `Status Pembayaran: *LUNAS*.\n`) +
+      trackingUrl +
+      `\nJika ada pertanyaan, silakan balas pesan WhatsApp ini. Terima kasih! 🙏✨`;
 
     const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
     window.open(waUrl, '_blank');
+  };
+
+  // Update Status Kurir Jemput / Antar
+  const handleUpdateCourierStatus = async (
+    order: LaundryOrder,
+    updates: { pickupStatus?: string; deliveryStatus?: string }
+  ) => {
+    try {
+      const res = await fetch(`/api/laundry/orders/${order.id}/delivery-status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        toast('Status kurir antar-jemput diperbarui!', 'success');
+        fetchOrders();
+      }
+    } catch (err) {
+      toast('Gagal memperbarui status kurir', 'error');
+    }
+  };
+
+  // Verifikasi Pembayaran QRIS Dinamis 1-Klik
+  const handleVerifyPayment1Click = async (order: LaundryOrder) => {
+    try {
+      const res = await fetch(`/api/laundry/orders/${order.id}/verify-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || 'Gagal memverifikasi pembayaran');
+      }
+      toast(json.message || 'Pembayaran QRIS berhasil diverifikasi LUNAS!', 'success');
+      fetchOrders();
+    } catch (err: any) {
+      toast(err.message || 'Gagal memverifikasi pembayaran', 'error');
+    }
   };
 
   // Transisi Alur Kanban
@@ -252,7 +316,7 @@ export const LaundryKanbanView: React.FC = () => {
       const data = await res.json();
       if (res.ok) {
         toast(`✅ Pakaian siap di ${selectedRack}!`, 'success');
-        
+
         // Buka link WhatsApp jika ada nomor HP dan opsi aktif
         if (sendWhatsAppOnReady && readyModalOrder.customerPhone) {
           const storeName = settings?.storeName || 'Laundry Kami';
@@ -327,16 +391,16 @@ export const LaundryKanbanView: React.FC = () => {
   // Filter Orders
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
-      const matchSearch = 
+      const matchSearch =
         o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (o.customerPhone && o.customerPhone.includes(searchQuery)) ||
         (o.rackLocation && o.rackLocation.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const matchPayment = 
+      const matchPayment =
         paymentFilter === 'ALL' ? true :
-        paymentFilter === 'UNPAID' ? o.paymentStatus !== 'PAID' :
-        o.paymentStatus === 'PAID';
+          paymentFilter === 'UNPAID' ? o.paymentStatus !== 'PAID' :
+            o.paymentStatus === 'PAID';
 
       return matchSearch && matchPayment;
     });
@@ -400,13 +464,12 @@ export const LaundryKanbanView: React.FC = () => {
               )}
             </div>
             <span
-              className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                order.serviceSpeed === 'EXPRESS_6H'
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                  : order.serviceSpeed === 'KILAT_24H'
+              className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${order.serviceSpeed === 'EXPRESS_6H'
+                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                : order.serviceSpeed === 'KILAT_24H'
                   ? 'bg-amber-50 text-amber-700 border border-amber-200'
                   : 'bg-slate-100 text-slate-600'
-              }`}
+                }`}
             >
               {order.serviceSpeed === 'EXPRESS_6H' ? 'Super 6 Jam' : order.serviceSpeed === 'KILAT_24H' ? 'Kilat 24 Jam' : 'Reguler'}
             </span>
@@ -434,7 +497,7 @@ export const LaundryKanbanView: React.FC = () => {
             ))}
           </div>
 
-          {/* Pewangi & Lokasi Rak */}
+          {/* Pewangi, Lokasi Rak & Foto Kondisi */}
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
             {order.perfumeVariant && (
               <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 font-semibold flex items-center gap-1">
@@ -446,7 +509,110 @@ export const LaundryKanbanView: React.FC = () => {
                 📍 {order.rackLocation}
               </span>
             )}
+            {Array.isArray(order.intakePhotos) && order.intakePhotos.length > 0 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPhotoPreviewOrder(order);
+                }}
+                className="px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold flex items-center gap-1 cursor-pointer transition"
+                title="Lihat foto bukti kondisi cucian saat diterima"
+              >
+                <Camera size={10} />
+                <span>{order.intakePhotos.length} Foto</span>
+              </button>
+            )}
+            {order.trackingCode && (
+              <a
+                href={`/track/${order.trackingCode}`}
+                target="_blank"
+                rel="noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold flex items-center gap-1"
+                title="Buka halaman Live Tracking & QRIS Dinamis pelanggan"
+              >
+                🔗 Track & QRIS
+              </a>
+            )}
           </div>
+
+          {/* Kontrol Kurir Antar-Jemput (Jika Order via Customer App / Antar-Jemput) */}
+          {order.deliveryType && order.deliveryType !== 'WALK_IN' && (
+            <div className="mt-2 p-2 rounded-xl bg-cyan-50/80 border border-cyan-200 space-y-1.5 text-[10px]">
+              <div className="flex items-center justify-between font-bold text-cyan-900">
+                <span>
+                  🛵 {order.deliveryType === 'FULL_SERVICE' ? 'Jemput & Antar' : order.deliveryType === 'PICKUP_ONLY' ? 'Jemput Saja' : 'Antar Saja'}
+                </span>
+                <span>
+                  Jemput Rp {(order.pickupFee || 0).toLocaleString('id-ID')} | Antar Rp {(order.deliveryFee || 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+              {order.pickupAddress && (
+                <div className="text-slate-600 truncate" title={order.pickupAddress}>
+                  📍 {order.pickupAddress}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1 pt-0.5">
+                {order.pickupStatus === 'PENDING' && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateCourierStatus(order, { pickupStatus: 'PICKING_UP' })}
+                    className="px-2 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-bold cursor-pointer"
+                  >
+                    🛵 Kurir Berangkat Jemput
+                  </button>
+                )}
+                {order.pickupStatus === 'PICKING_UP' && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateCourierStatus(order, { pickupStatus: 'ARRIVED_AT_OUTLET' })}
+                    className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                  >
+                    ✅ Tiba di Outlet
+                  </button>
+                )}
+                {(order.status === 'READY' || order.status === 'IRONING') &&
+                  (order.deliveryType === 'FULL_SERVICE' || order.deliveryType === 'DELIVERY_ONLY') &&
+                  order.deliveryStatus !== 'ON_DELIVERY' &&
+                  order.deliveryStatus !== 'DELIVERED' && (
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCourierStatus(order, { deliveryStatus: 'ON_DELIVERY' })}
+                      className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer"
+                    >
+                      🛵 Kurir Antar ke Rumah
+                    </button>
+                  )}
+                {order.deliveryStatus === 'ON_DELIVERY' && (
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateCourierStatus(order, { deliveryStatus: 'DELIVERED' })}
+                    className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                  >
+                    ✅ Sudah Terkirim
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Banner Verifikasi Pembayaran QRIS 1-Klik */}
+          {!isLunas && order.paymentVerificationStatus === 'WAITING_VERIFICATION' && (
+            <div className="mt-2 p-2 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between gap-2 text-[10px]">
+              <div className="font-bold text-amber-900">
+                ⏳ Pelanggan Konfirmasi Bayar QRIS
+                {order.qrisUniqueAmount ? ` (Rp ${order.qrisUniqueAmount.toLocaleString('id-ID')})` : ''}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleVerifyPayment1Click(order)}
+                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shrink-0 cursor-pointer"
+              >
+                ✅ Terima Lunas
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Footer Status Pembayaran & Tombol Pindah Tahap */}
@@ -524,7 +690,7 @@ export const LaundryKanbanView: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-slate-50 text-slate-800 overflow-hidden font-sans">
-      
+
       {/* ─── HEADER BAR ─────────────────────────────────────────────────── */}
       <div className="p-3.5 sm:p-4 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-3">
@@ -548,10 +714,25 @@ export const LaundryKanbanView: React.FC = () => {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Cari nota, pelanggan, rak..."
+              placeholder="Scan barcode / cari nota, rak..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-1 focus:ring-cyan-500 w-44 sm:w-56 transition-all"
+              onChange={e => setSearchQuery(e.target.value.replace(/\*/g, ''))}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  const cleanCode = searchQuery.trim().replace(/\*/g, '').toUpperCase();
+                  const exactMatch = orders.find(o => o.orderNumber.toUpperCase() === cleanCode);
+                  if (exactMatch) {
+                    if (exactMatch.status === 'READY') {
+                      handleTransitionStatus(exactMatch, 'COMPLETED');
+                    } else if (exactMatch.status === 'IRONING') {
+                      handleTransitionStatus(exactMatch, 'READY');
+                    } else {
+                      setPrintingOrder(exactMatch);
+                    }
+                  }
+                }
+              }}
+              className="pl-8 pr-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-1 focus:ring-cyan-500 w-48 sm:w-60 transition-all"
             />
           </div>
 
@@ -560,11 +741,10 @@ export const LaundryKanbanView: React.FC = () => {
               <button
                 key={p}
                 onClick={() => setPaymentFilter(p)}
-                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
-                  paymentFilter === p
-                    ? 'bg-white text-cyan-700 shadow-xs border border-slate-200/80'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${paymentFilter === p
+                  ? 'bg-white text-cyan-700 shadow-xs border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 {p === 'ALL' ? 'Semua' : p === 'UNPAID' ? 'Belum Lunas' : 'Lunas'}
               </button>
@@ -593,11 +773,10 @@ export const LaundryKanbanView: React.FC = () => {
       <div className="lg:hidden bg-white border-b border-slate-200 px-3 py-2 overflow-x-auto no-scrollbar flex items-center gap-1.5 shadow-2xs">
         <button
           onClick={() => setMobileStatusTab('ALL')}
-          className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-            mobileStatusTab === 'ALL'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
+          className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${mobileStatusTab === 'ALL'
+            ? 'bg-slate-900 text-white shadow-xs'
+            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
         >
           <span>Semua</span>
           <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${mobileStatusTab === 'ALL' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'}`}>
@@ -612,11 +791,10 @@ export const LaundryKanbanView: React.FC = () => {
             <button
               key={col.id}
               onClick={() => setMobileStatusTab(col.id)}
-              className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-                isActive
-                  ? `${col.badge} shadow-xs ring-1 ring-inset ${col.border}`
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+              className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${isActive
+                ? `${col.badge} shadow-xs ring-1 ring-inset ${col.border}`
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
             >
               <span>{col.label.split('. ')[1] || col.label}</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/80' : 'bg-slate-200 text-slate-700'}`}>
@@ -768,11 +946,10 @@ export const LaundryKanbanView: React.FC = () => {
                       key={rk}
                       type="button"
                       onClick={() => setSelectedRack(rk)}
-                      className={`py-2 px-1 rounded-xl text-xs font-black transition-all border text-center ${
-                        selectedRack === rk
-                          ? 'bg-cyan-600 text-white border-cyan-600 shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
+                      className={`py-2 px-1 rounded-xl text-xs font-black transition-all border text-center ${selectedRack === rk
+                        ? 'bg-cyan-600 text-white border-cyan-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
                     >
                       {rk}
                     </button>
@@ -900,11 +1077,10 @@ export const LaundryKanbanView: React.FC = () => {
                               key={m.id}
                               type="button"
                               onClick={() => setPickupPaymentMethod(m.id as any)}
-                              className={`py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                                pickupPaymentMethod === m.id
-                                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                                  : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
-                              }`}
+                              className={`py-1.5 rounded-xl text-xs font-bold transition-all border ${pickupPaymentMethod === m.id
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                                }`}
                             >
                               {m.label}
                             </button>
@@ -981,9 +1157,50 @@ export const LaundryKanbanView: React.FC = () => {
         </div>
       )}
 
+      {/* ─── MODAL PREVIEW FOTO KONDISI PAKAIAN MASUK ───────────────────────── */}
+      {photoPreviewOrder && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          onClick={() => setPhotoPreviewOrder(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-lg w-full p-4 space-y-3 shadow-2xl border border-slate-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <Camera size={16} className="text-amber-600" />
+                  Bukti Foto Kondisi Pakaian ({photoPreviewOrder.orderNumber})
+                </h3>
+                <p className="text-xs text-slate-500">Pelanggan: {photoPreviewOrder.customerName}</p>
+              </div>
+              <button
+                onClick={() => setPhotoPreviewOrder(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {photoPreviewOrder.specialNotes && (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-900">
+                Catatan Kondisi: {photoPreviewOrder.specialNotes}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[65vh] overflow-y-auto">
+              {(photoPreviewOrder.intakePhotos || []).map((src, idx) => (
+                <div key={idx} className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                  <img src={src} alt={`Kondisi ${idx + 1}`} className="w-full h-48 object-cover" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── MODAL CETAK STRUK THERMAL NOTA CUCI ───────────────────────────── */}
       {printingOrder && (
-        <LaundryReceiptPrinter 
+        <LaundryReceiptPrinter
           order={printingOrder}
           onClose={() => setPrintingOrder(null)}
         />

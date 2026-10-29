@@ -34,9 +34,24 @@ import { toast } from '../../utils/alert';
 import { exportLaundryReportPDF, type LaundryReportData } from '../../utils/laundryPdfGenerator';
 
 type QuickFilterType = 'today' | 'week' | 'month' | 'last_month' | 'custom';
-type ActiveTabType = 'overview' | 'aging_rack' | 'margin_matrix' | 'chemical' | 'churn_guard';
+type ActiveTabType = 'overview' | 'aging_rack' | 'margin_matrix' | 'chemical' | 'churn_guard' | 'operator_commission';
 
-interface AnalyticsData extends LaundryReportData {}
+interface OperatorPerfItem {
+  userId: number;
+  name: string;
+  role: string;
+  washedOrdersCount: number;
+  washedKg: number;
+  washedPcs: number;
+  ironedOrdersCount: number;
+  ironedKg: number;
+  ironedPcs: number;
+  handedOverCount: number;
+}
+
+interface AnalyticsData extends LaundryReportData {
+  operatorPerformance?: OperatorPerfItem[];
+}
 
 export const LaundryReports: React.FC = () => {
   const { user, token, settings } = usePOS();
@@ -52,6 +67,11 @@ export const LaundryReports: React.FC = () => {
 
   // Search filter for lists
   const [searchOverdue, setSearchOverdue] = useState<string>('');
+
+  // Tarif Komisi Operator Borongan (Piece-Rate)
+  const [washRatePerKg, setWashRatePerKg] = useState<number>(400);
+  const [ironRatePerKg, setIronRatePerKg] = useState<number>(800);
+  const [satuanRatePerPcs, setSatuanRatePerPcs] = useState<number>(1500);
 
   const formatCurrency = (val: number | undefined | null) =>
     `Rp ${(val || 0).toLocaleString('id-ID')}`;
@@ -291,6 +311,11 @@ export const LaundryReports: React.FC = () => {
               },
               { id: 'margin_matrix', label: 'Margin Kiloan vs Satuan', icon: Scale },
               { id: 'chemical', label: 'Efisiensi Chemical', icon: Droplets },
+              {
+                id: 'operator_commission',
+                label: 'Komisi & Performa Operator',
+                icon: DollarSign
+              },
               {
                 id: 'churn_guard',
                 label: 'Pelanggan Churn Risk',
@@ -1154,6 +1179,136 @@ export const LaundryReports: React.FC = () => {
                           </td>
                         </tr>
                       ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 6: KOMISI & PERFORMA OPERATOR (PIECE-RATE PAYROLL) ================= */}
+        {activeTab === 'operator_commission' && (
+          <div className="space-y-6">
+            {/* Kalkulator Tarif Upah Borongan */}
+            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <DollarSign size={16} className="text-emerald-600" />
+                    Pengaturan Tarif Komisi Borongan Operator (Piece-Rate)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Otomatis dihitung dari setiap nota yang dipindahkan oleh operator ke tahap Cuci dan Setrika
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      Upah Cuci / Kg (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      step="100"
+                      value={washRatePerKg}
+                      onChange={e => setWashRatePerKg(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-full bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-mono font-black text-blue-700 outline-none"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      Upah Setrika / Kg (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      step="100"
+                      value={ironRatePerKg}
+                      onChange={e => setIronRatePerKg(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-full bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-mono font-black text-purple-700 outline-none"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                      Bonus Satuan / Pcs (Rp)
+                    </label>
+                    <input
+                      type="number"
+                      step="500"
+                      value={satuanRatePerPcs}
+                      onChange={e => setSatuanRatePerPcs(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-full bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-mono font-black text-emerald-700 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabel Rekapitulasi Performa & Komisi Staf */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Rekapitulasi Tonase Kerja & Estimasi Komisi Staf</h3>
+                  <p className="text-xs text-slate-500">Data tercatat otomatis berdasarkan akun operator yang menekan tombol Cuci / Setrika / Serah Terima</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
+                      <th className="py-3 px-4">Nama Operator / Staf</th>
+                      <th className="py-3 px-4 text-center">Peran</th>
+                      <th className="py-3 px-4 text-center">Bagian Cuci (Nota / Kg)</th>
+                      <th className="py-3 px-4 text-center">Bagian Setrika (Nota / Kg)</th>
+                      <th className="py-3 px-4 text-center">Item Satuan (Pcs)</th>
+                      <th className="py-3 px-4 text-center">Serah Terima Kasir</th>
+                      <th className="py-3 px-4 text-right">Total Komisi Borongan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(!data?.operatorPerformance || data.operatorPerformance.length === 0) ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400">
+                          Belum ada aktivitas produksi operator pada periode ini.
+                        </td>
+                      </tr>
+                    ) : (
+                      data.operatorPerformance.map(op => {
+                        const totalPcsWorked = Math.max(op.washedPcs, op.ironedPcs);
+                        const washComm = Math.round(op.washedKg * washRatePerKg);
+                        const ironComm = Math.round(op.ironedKg * ironRatePerKg);
+                        const pcsComm = Math.round(totalPcsWorked * satuanRatePerPcs);
+                        const totalComm = washComm + ironComm + pcsComm;
+
+                        return (
+                          <tr key={op.userId} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-3 px-4 font-bold text-slate-900">{op.name}</td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                {op.role}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="font-bold text-blue-700">{op.washedKg} Kg</span>
+                              <span className="text-[11px] text-slate-400 ml-1">({op.washedOrdersCount} nota)</span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="font-bold text-purple-700">{op.ironedKg} Kg</span>
+                              <span className="text-[11px] text-slate-400 ml-1">({op.ironedOrdersCount} nota)</span>
+                            </td>
+                            <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                              {totalPcsWorked} Pcs
+                            </td>
+                            <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                              {op.handedOverCount}x
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono font-black text-emerald-700 text-sm">
+                              {formatCurrency(totalComm)}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

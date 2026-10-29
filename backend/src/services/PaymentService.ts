@@ -220,6 +220,108 @@ export class PaymentService {
   }
 
   /**
+   * ─── LEVEL 2: LAUNDRY SNAP TRANSACTION ──────────────────────────────────
+   * Menghasilkan Snap Token untuk pesanan Laundry (L2 Tenant BYOK)
+   */
+  public async createLaundryTransaction(tenantId: string, laundryOrderId: string) {
+    const laundryOrder = await prisma.laundryOrder.findFirst({
+      where: { id: laundryOrderId, tenantId },
+      include: { items: true, tenant: true }
+    });
+
+    if (!laundryOrder) {
+      throw new Error('Pesanan laundry tidak ditemukan atau bukan milik tenant ini.');
+    }
+
+    const paymentConfig = await prisma.tenantPaymentConfig.findUnique({
+      where: { tenantId }
+    });
+
+    if (!paymentConfig || !paymentConfig.isMidtransEnabled) {
+      throw new Error('Pembayaran online Midtrans belum diaktifkan oleh pengelola laundry.');
+    }
+
+    const decryptedServerKey = decryptAES(paymentConfig.serverKey || '');
+    if (!decryptedServerKey) {
+      throw new Error('Server Key Midtrans tenant tidak valid atau belum diisi.');
+    }
+
+    const gatewayOrderId = `LND-ORD-${tenantId.slice(0, 6)}-${laundryOrder.orderNumber}-${Date.now()}`;
+    let snapToken = `SNAP-LND-${laundryOrder.orderNumber}-${Date.now()}`;
+    let snapRedirectUrl = `https://app.sandbox.midtrans.com/snap/v2/vtweb/${snapToken}`;
+    const grossAmount = Math.max(1000, Math.round(laundryOrder.totalAmount));
+
+    try {
+      const authHeader = Buffer.from(decryptedServerKey + ':').toString('base64');
+      const snapEndpoint = paymentConfig.midtransMode === 'PRODUCTION'
+        ? 'https://app.midtrans.com/snap/v1/transactions'
+        : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
+
+      const response = await fetch(snapEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Basic ${authHeader}`
+        },
+        body: JSON.stringify({
+          transaction_details: {
+            order_id: gatewayOrderId,
+            gross_amount: grossAmount
+          },
+          customer_details: {
+            first_name: laundryOrder.customerName || 'Pelanggan Laundry',
+            phone: laundryOrder.customerPhone || undefined
+          },
+          item_details: [
+            ...laundryOrder.items.map(it => ({
+              id: it.id,
+              price: Math.max(1, Math.round(it.subtotal)),
+              quantity: 1,
+              name: it.serviceName.slice(0, 50)
+            })),
+            ...(laundryOrder.deliveryFee > 0 ? [{
+              id: 'DELIVERY-FEE',
+              price: Math.round(laundryOrder.deliveryFee),
+              quantity: 1,
+              name: 'Ongkos Kirim Antar-Jemput'
+            }] : [])
+          ]
+        })
+      });
+
+      if (response.ok) {
+        const resData: any = await response.json();
+        snapToken = resData.token;
+        snapRedirectUrl = resData.redirect_url;
+      }
+    } catch (err) {
+      console.warn('[Midtrans L2 Laundry Error, fallback to simulation]', err);
+    }
+
+    const transaction = await prisma.paymentTransaction.create({
+      data: {
+        tenantId,
+        laundryOrderId: laundryOrder.id,
+        gateway: 'MIDTRANS',
+        gatewayOrderId,
+        amount: grossAmount,
+        status: 'PENDING',
+        snapToken,
+        snapRedirectUrl
+      }
+    });
+
+    return {
+      laundryOrderId: laundryOrder.id,
+      gatewayOrderId,
+      snapToken,
+      snapRedirectUrl,
+      transaction
+    };
+  }
+
+  /**
    * ─── UNIVERSAL WEBHOOK HANDLER ──────────────────────────────────────────
    * Memproses Webhook Notification dari Midtrans (L1 SaaS Billing & L2 POS)
    */
@@ -250,7 +352,7 @@ export class PaymentService {
 
     // 2. Tentukan Server Key yang sesuai untuk validasi Signature
     let serverKeyToVerify = SAAS_MIDTRANS_SERVER_KEY;
-    if (gatewayOrderId.startsWith('POS-')) {
+    if (gatewayOrderId.startsWith('POS-') || gatewayOrderId.startsWith('LND-')) {
       const tenantConfig = await prisma.tenantPaymentConfig.findUnique({
         where: { tenantId: transaction.tenantId }
       });
@@ -417,6 +519,50 @@ export class PaymentService {
           });
         }
         console.log(`[Midtrans L2] POS Order #${updatedOrder.orderNumber} successfully marked as PAID.`);
+
+        // Emit ke room pelacakan jika ada trackingCode
+        const { io } = require('../index');
+        if (io && updatedOrder.trackingCode) {
+          io.to(`tracking:${updatedOrder.trackingCode}`).emit('payment:success', {
+            status: 'Paid',
+            paidAt: updatedOrder.paidAt,
+            paymentMethod: updatedOrder.paymentMethod
+          });
+        }
+      } else if (transaction.laundryOrderId) {
+        // ─── Level 2: Laundry Order Settlement ───
+        const updatedLaundry = await prisma.laundryOrder.update({
+          where: { id: transaction.laundryOrderId },
+          data: {
+            paymentStatus: 'PAID',
+            paidAmount: transaction.amount,
+            paymentMethod: paymentType ? `MIDTRANS_${paymentType.toUpperCase()}` : 'MIDTRANS_QRIS'
+          }
+        });
+
+        if (updatedLaundry.tenantId) {
+          emitToTenant(updatedLaundry.tenantId, 'laundry:order_paid', {
+            orderId: updatedLaundry.id,
+            orderNumber: updatedLaundry.orderNumber,
+            paidAmount: updatedLaundry.paidAmount
+          });
+        }
+        if (updatedLaundry.outletId) {
+          emitToOutlet(updatedLaundry.outletId, 'laundry:order_paid', {
+            orderId: updatedLaundry.id,
+            orderNumber: updatedLaundry.orderNumber
+          });
+        }
+
+        const { io } = require('../index');
+        if (io && updatedLaundry.trackingCode) {
+          io.to(`tracking:${updatedLaundry.trackingCode}`).emit('payment:success', {
+            status: 'PAID',
+            paidAmount: updatedLaundry.paidAmount,
+            paymentMethod: updatedLaundry.paymentMethod
+          });
+        }
+        console.log(`[Midtrans L2] Laundry Order #${updatedLaundry.orderNumber} successfully marked as PAID.`);
       }
     }
 

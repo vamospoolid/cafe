@@ -58,6 +58,8 @@ const PlatformAdminLayout = React.lazy(() => import('./components/PlatformAdminL
 const SaaSPlatformAdminView = React.lazy(() => import('./components/SaaSPlatformAdminView'));
 const TenantOutletHubView = React.lazy(() => import('./components/TenantOutletHubView'));
 const PublicInvoiceView = React.lazy(() => import('./components/PublicInvoiceView'));
+const CustomerTrackingView = React.lazy(() => import('./pages/CustomerTrackingView'));
+const LaundryCustomerPortal = React.lazy(() => import('./verticals/laundry/LaundryCustomerPortal'));
 
 const RouteSuspenseFallback = () => (
   <div className="flex-1 flex flex-col items-center justify-center p-12 min-h-[350px] text-center bg-slate-50 gap-2.5">
@@ -202,8 +204,11 @@ const AppRoutes = () => {
     );
   }
 
-  // Jika ini rute invoice digital publik (bisa dibuka oleh pelanggan dari WhatsApp e-Receipt tanpa login)
-  const isInvoiceRoute = location.pathname.startsWith('/invoice');
+  // Jika ini rute invoice digital publik, live tracking, atau portal pelanggan laundry (bisa dibuka pelanggan tanpa login)
+  const isInvoiceRoute =
+    location.pathname.startsWith('/invoice') ||
+    location.pathname.startsWith('/track/') ||
+    location.pathname.startsWith('/laundry-portal');
   if (isInvoiceRoute) {
     return (
       <Suspense fallback={<RouteSuspenseFallback />}>
@@ -212,6 +217,9 @@ const AppRoutes = () => {
           <Route path="/invoice/spk/:spkNumber" element={<PublicInvoiceView />} />
           <Route path="/invoice/:type/:id" element={<PublicInvoiceView />} />
           <Route path="/invoice/:id" element={<PublicInvoiceView />} />
+          <Route path="/track/:trackingCode" element={<CustomerTrackingView />} />
+          <Route path="/laundry-portal/:tenantSlug" element={<LaundryCustomerPortal />} />
+          <Route path="/laundry-portal" element={<LaundryCustomerPortal />} />
           <Route path="*" element={<PublicInvoiceView />} />
         </Routes>
       </Suspense>
@@ -333,7 +341,17 @@ const AppRoutes = () => {
           }
         />
 
-        {/* ─── PUBLIC DIGITAL RECEIPT INVOICE ────────────────────────────── */}
+                {/* ─── PUBLIC CUSTOMER LIVE TRACKING ──────────────────────────── */}
+        <Route
+          path="/track/:trackingCode"
+          element={
+            <Suspense fallback={<RouteSuspenseFallback />}>
+              <CustomerTrackingView />
+            </Suspense>
+          }
+        />
+
+{/* ─── PUBLIC DIGITAL RECEIPT INVOICE ────────────────────────────── */}
         <Route
           path="/invoice/*"
           element={
