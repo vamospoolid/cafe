@@ -140,7 +140,8 @@ async function generateAuthResponse(userId: number, requestedTenantId?: string) 
     businessType: activeMembership?.tenant?.businessType || (user as any).businessType || 'CAFE'
   };
 
-  const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
+  // Masa aktif token 30 hari agar sesi PWA Staf & Kasir tidak kedaluwarsa mendadak
+  const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '30d' });
 
   const { passwordHash, ...safeUser } = user;
   (safeUser as any).isPlatformAdmin = Boolean(user.isPlatformAdmin || user.role === 'SUPERADMIN');

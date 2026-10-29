@@ -97,7 +97,8 @@ router.post('/clock', async (req: Request, res: Response) => {
       notes,
       tenantId: bodyTenantId,
       outletId: bodyOutletId,
-      userId: bodyUserId
+      userId: bodyUserId,
+      channel
     } = req.body;
     
     if (!['IN', 'OUT'].includes(type)) return res.status(400).json({ error: 'Tipe absensi tidak valid' });
@@ -256,19 +257,20 @@ router.post('/clock', async (req: Request, res: Response) => {
       }
     }
 
-    // Validasi Kamera
-    if (enableCamera && !photo && type === 'IN') {
+    // Validasi Kamera: Bypass untuk Terminal Kasir fisik (channel POS_TERMINAL atau input PIN di mesin kasir terdaftar)
+    const isPosTerminal = channel === 'POS_TERMINAL' || (!photo && pin && !bodyUserId);
+    if (enableCamera && !photo && type === 'IN' && !isPosTerminal) {
       return res.status(400).json({ error: 'Wajib menyertakan foto selfie bukti kehadiran' });
     }
 
-    // Validasi GPS (hanya jika koordinat toko telah dikonfigurasi)
+    // Validasi GPS (hanya jika koordinat toko telah dikonfigurasi & bukan dari terminal kasir fisik)
     let distanceIn: number | null = null;
     let isWithinRadius = true;
     if (storeLat !== null && storeLon !== null && latitude !== undefined && longitude !== undefined && latitude !== null && longitude !== null) {
       distanceIn = calculateDistanceMeters(Number(latitude), Number(longitude), storeLat, storeLon);
       isWithinRadius = distanceIn <= maxRadius;
 
-      if (enableGps && !isWithinRadius) {
+      if (enableGps && !isWithinRadius && !isPosTerminal) {
         return res.status(400).json({ 
           error: `Anda berada di luar radius toko (${distanceIn} meter dari lokasi toko, batas toleransi: ${maxRadius} meter).`,
           distance: distanceIn,
@@ -279,10 +281,24 @@ router.post('/clock', async (req: Request, res: Response) => {
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    // Rentang 24 jam ke belakang untuk mendukung shift malam yang melewati jam 00:00 (cross-midnight)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     // BUG-003 FIX: Atomic Clock-In / Clock-Out dengan $transaction untuk mencegah race condition double-insert
     const clockResult = await prisma.$transaction(async (tx) => {
-      const existingLog = await tx.attendance.findFirst({
+      // Cari sesi aktif yang belum clockOut dalam 24 jam terakhir (mendukung shift malam / cross-midnight)
+      const openLog = await tx.attendance.findFirst({
+        where: {
+          userId: user.id,
+          clockOut: null,
+          clockIn: { gte: twentyFourHoursAgo },
+          ...tenantWhere(resolvedTenantId)
+        },
+        orderBy: { clockIn: 'desc' }
+      });
+
+      // Log hari ini (untuk pengecekan duplikasi pada hari kalender yang sama)
+      const todayLog = await tx.attendance.findFirst({
         where: {
           userId: user.id,
           clockIn: { gte: todayStart },
@@ -292,8 +308,9 @@ router.post('/clock', async (req: Request, res: Response) => {
       });
 
       if (type === 'IN') {
-        if (existingLog && !existingLog.clockOut) {
-          throw new Error(`ALREADY_CLOCKED_IN:${existingLog.clockIn.toISOString()}`);
+        // Jika masih ada sesi kerja yang belum Clock Out (baik hari ini atau shift malam kemarin)
+        if (openLog) {
+          throw new Error(`ALREADY_CLOCKED_IN:${openLog.clockIn.toISOString()}`);
         }
 
         // Hitung Keterlambatan berdasarkan Shift yang dipilih
@@ -326,7 +343,7 @@ router.post('/clock', async (req: Request, res: Response) => {
           }
         }
 
-        if (distanceIn !== null && !isWithinRadius) {
+        if (distanceIn !== null && !isWithinRadius && !isPosTerminal) {
           status = 'Di Luar Radius';
         }
 
@@ -345,22 +362,24 @@ router.post('/clock', async (req: Request, res: Response) => {
             isWithinRadius: isWithinRadius,
             status: status,
             lateMinutes: lateMinutes,
-            notes: notes || null
+            notes: notes || (isPosTerminal ? '[Terminal POS]' : null)
           }
         });
 
         return { type: 'IN', attendance, status };
       } else {
         // Clock OUT
-        if (!existingLog) {
+        // Utamakan sesi terbuka openLog (bahkan jika Clock In dilakukan kemarin sebelum tengah malam)
+        const targetLog = openLog || todayLog;
+        if (!targetLog) {
           throw new Error('NOT_CLOCKED_IN');
         }
-        if (existingLog.clockOut) {
-          throw new Error(`ALREADY_CLOCKED_OUT:${existingLog.clockOut.toISOString()}`);
+        if (targetLog.clockOut) {
+          throw new Error(`ALREADY_CLOCKED_OUT:${targetLog.clockOut.toISOString()}`);
         }
 
         const attendance = await tx.attendance.update({
-          where: { id: existingLog.id },
+          where: { id: targetLog.id },
           data: { 
             clockOut: new Date(),
             photoOut: photo || null,

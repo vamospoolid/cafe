@@ -155,10 +155,35 @@ router.put('/me/security', authenticateToken, async (req: AuthRequest, res: Resp
 
     // Update PIN
     if (newPin) {
-      if (newPin.length < 4 || newPin.length > 8) {
+      const cleanNewPin = String(newPin).trim();
+      if (cleanNewPin.length < 4 || cleanNewPin.length > 8) {
         return res.status(400).json({ error: 'PIN harus terdiri dari 4-8 digit angka.' });
       }
-      updateData.pin = String(newPin);
+
+      // Validasi: Cegah duplikasi PIN dengan staf aktif lain di tenant yang sama
+      const tenantId = req.user?.tenantId || user.tenantId;
+      if (tenantId) {
+        const duplicatePinUser = await prisma.user.findFirst({
+          where: {
+            id: { not: userId },
+            status: 'Aktif',
+            pin: cleanNewPin,
+            OR: [
+              { tenantId },
+              { memberships: { some: { tenantId, status: 'ACTIVE' } } }
+            ]
+          }
+        });
+
+        if (duplicatePinUser) {
+          return res.status(409).json({
+            error: `PIN ${cleanNewPin} sudah digunakan oleh staf lain (${duplicatePinUser.name}). Harap gunakan kombinasi PIN berbeda agar tidak terjadi tabrakan absensi.`,
+            code: 'DUPLICATE_PIN'
+          });
+        }
+      }
+
+      updateData.pin = cleanNewPin;
     }
 
     // Update Password

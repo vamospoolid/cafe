@@ -601,6 +601,9 @@ export const StaffPWAView: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setMySummary(data);
+      } else if (res.status === 401) {
+        handleLogout();
+        toast('Sesi login telah berakhir. Silakan login kembali.', 'warning');
       }
     } catch (e) {
       console.error(e);
@@ -1043,7 +1046,12 @@ export const StaffPWAView: React.FC = () => {
         setIsCameraOpen(false);
         fetchMySummary();
       } else {
-        toast(data.error || 'Gagal memproses absensi', 'error');
+        if (res.status === 401) {
+          toast(data.error || 'Sesi login telah kedaluwarsa. Silakan login kembali.', 'error');
+          handleLogout();
+        } else {
+          toast(data.error || 'Gagal memproses absensi', 'error');
+        }
       }
     } catch (e) {
       // Fallback offline queue on network drop

@@ -36,8 +36,20 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
     
     setLoading(true);
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('staff_token') || sessionStorage.getItem('token');
-      const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('activeTenantId') || sessionStorage.getItem('tenantId');
+      // Ekstrak token kasir POS yang aktif, staff token, atau token umum
+      const token = localStorage.getItem('pos_token') || localStorage.getItem('token') || localStorage.getItem('staff_token') || sessionStorage.getItem('token');
+      
+      // Ekstrak tenantId dari pos_user, pos_token, atau storage
+      let tenantId = localStorage.getItem('tenantId') || localStorage.getItem('activeTenantId') || sessionStorage.getItem('tenantId');
+      if (!tenantId) {
+        try {
+          const posUserStr = localStorage.getItem('pos_user');
+          if (posUserStr) {
+            const posUser = JSON.parse(posUserStr);
+            tenantId = posUser.tenantId || posUser.tenant?.id;
+          }
+        } catch (_) {}
+      }
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -46,7 +58,12 @@ const ClockInModal: React.FC<ClockInModalProps> = ({ isOpen, onClose, onSuccess 
       const res = await fetch('/api/attendance/clock', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ pin, type, ...(tenantId ? { tenantId } : {}) })
+        body: JSON.stringify({ 
+          pin, 
+          type, 
+          channel: 'POS_TERMINAL',
+          ...(tenantId ? { tenantId } : {}) 
+        })
       });
       const data = await res.json();
       
