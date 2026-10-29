@@ -12,7 +12,8 @@ const cmd = `
 set -e
 echo "=== [1/4] GIT PULL SAAS REPO ==="
 cd /var/www/codenusa
-git pull origin saas
+git fetch origin saas
+git reset --hard origin/saas
 
 echo "=== [2/4] BUILD FRONTEND DIST ==="
 cd /var/www/codenusa/frontend
@@ -20,7 +21,7 @@ npm run build
 
 echo "=== [3/4] BACKEND PRISMA SYNC, TSC & PM2 RESTART ==="
 cd /var/www/codenusa/backend
-npx prisma db push
+npx prisma db push --accept-data-loss
 npx prisma generate
 npx tsc
 pm2 reload codenusa-backend || pm2 restart codenusa-backend
