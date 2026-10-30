@@ -362,7 +362,7 @@ export const POSLaundry: React.FC = () => {
           }
         }
       } catch {
-        const cached = await offlineDb.products.toArray();
+        const cached = await (offlineDb as any).catalogProducts?.toArray?.() || [];
         if (cached.length > 0) {
           const mapped: ServiceCatalogItem[] = cached.map((p: any) => ({
             id: p.id,
@@ -411,15 +411,18 @@ export const POSLaundry: React.FC = () => {
 
   // ─── 3. SUBSCRIPTION TIMBANGAN DIGITAL USB ───────────────────────────────────
   useEffect(() => {
-    const unsub = scaleDriver.subscribe(reading => {
-      setScaleStatus(reading.status);
-      if (reading.status === 'CONNECTED' || reading.status === 'SIMULATING') {
-        if (reading.weightKg > 0 && selectedService.unitType === 'KG') {
-          setDockQty(reading.weightKg.toFixed(2));
-        }
+    const unsubStatus = scaleDriver.onStatusChange(status => {
+      setScaleStatus(status);
+    });
+    const unsubReading = scaleDriver.onReading(reading => {
+      if (reading.weight > 0 && selectedService.unitType === 'KG') {
+        setDockQty(reading.weight.toFixed(2));
       }
     });
-    return () => unsub();
+    return () => {
+      unsubStatus();
+      unsubReading();
+    };
   }, [selectedService.unitType]);
 
   // ─── 4. PILIH PELANGGAN DARI KOLOM KIRI ──────────────────────────────────────
