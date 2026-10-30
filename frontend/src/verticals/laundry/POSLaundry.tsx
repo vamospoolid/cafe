@@ -1,46 +1,37 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Shirt, 
-  Search, 
-  Plus, 
-  Minus, 
-  Trash2, 
-  Tag, 
-  Sparkles, 
-  Printer, 
-  Check, 
-  Clock, 
-  Calendar, 
-  CreditCard, 
-  Wallet, 
-  QrCode, 
-  ArrowRight, 
-  Layers, 
-  FileText, 
-  Wind, 
-  Scale, 
-  AlertCircle,
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Shirt,
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  Sparkles,
+  Printer,
+  Check,
+  Clock,
+  CreditCard,
+  Wallet,
+  QrCode,
+  Layers,
+  Scale,
   Phone,
   User,
-  RefreshCw,
   X,
-  ShoppingBag,
   Receipt,
-  ChevronRight,
-  ShieldCheck,
   CheckCircle2,
-  Flame,
   Zap,
-  Droplets,
   Package,
-  Scissors,
-  CheckCircle,
-  Usb,
   Settings2,
-  Lock,
   Camera,
   Ruler,
-  Award
+  Award,
+  Bike,
+  MapPin,
+  Save,
+  Star,
+  Store,
+  Building2,
+  Smartphone
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
@@ -59,270 +50,436 @@ interface LaundryItem {
   pricePerUnit: number;
   subtotal: number;
   notes?: string;
+  iconType?: string;
 }
 
 interface ServiceCatalogItem {
   id: number;
   name: string;
-  category: string;
+  category: 'KILOAN' | 'SATUAN' | 'DRY_CLEAN' | 'SEPATU' | 'KARPET' | 'LAINNYA';
   unitType: 'KG' | 'PCS' | 'METER';
   price: number;
   description?: string;
-  iconType?: string;
-  imageUrl?: string;
+  iconType: 'FOLDED' | 'IRONING' | 'EXPRESS' | 'HANGER' | 'SHOE' | 'CARPET' | 'BEDCOVER' | 'DOLL' | 'HELMET';
 }
 
-const SCENT_OPTIONS = [
-  { name: 'Sakura Fresh', badge: '🌸 Sakura', desc: 'Bunga lembut segar', activeClass: 'bg-pink-600 text-white border-pink-600 shadow-md shadow-pink-200' },
-  { name: 'Akasia Manis', badge: '🌿 Akasia', desc: 'Aroma alam khas laundry', activeClass: 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-200' },
-  { name: 'Ocean Blue', badge: '🌊 Ocean', desc: 'Segar dingin maskulin', activeClass: 'bg-cyan-600 text-white border-cyan-600 shadow-md shadow-cyan-200' },
-  { name: 'Lavender Calm', badge: '💜 Lavender', desc: 'Rileks & anti-bakteri', activeClass: 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-200' },
-  { name: 'Downy Mystique', badge: '✨ Mystique', desc: 'Mewah tahan lama', activeClass: 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-200' },
-  { name: 'Snappy Clean', badge: '🧼 Snappy', desc: 'Bersih higienis', activeClass: 'bg-teal-600 text-white border-teal-600 shadow-md shadow-teal-200' },
-  { name: 'Non-Parfum', badge: '⚪ Netral', desc: 'Hipoalergenik bayi', activeClass: 'bg-slate-700 text-white border-slate-700 shadow-md shadow-slate-200' }
+interface LaundryMember {
+  id: number;
+  name: string;
+  phone: string;
+  points: number;
+  tier: string;
+  laundryDeposit: number;
+  laundryQuotaKg: number;
+  lastOrderNumber?: string | null;
+  lastOrderDate?: string | null;
+  favoriteAddress?: string;
+  outstandingPayment?: number;
+}
+
+const DEFAULT_LAUNDRY_CATALOG: ServiceCatalogItem[] = [
+  {
+    id: 9001,
+    name: 'Cuci Kering',
+    category: 'KILOAN',
+    unitType: 'KG',
+    price: 8000,
+    description: 'Cuci bersih + kering + lipat rapi',
+    iconType: 'FOLDED'
+  },
+  {
+    id: 9002,
+    name: 'Cuci Setrika',
+    category: 'KILOAN',
+    unitType: 'KG',
+    price: 10000,
+    description: 'Cuci + kering + setrika uap + parfum',
+    iconType: 'IRONING'
+  },
+  {
+    id: 9003,
+    name: 'Express',
+    category: 'KILOAN',
+    unitType: 'KG',
+    price: 18000,
+    description: 'Layanan prioritas selesai cepat',
+    iconType: 'EXPRESS'
+  },
+  {
+    id: 9004,
+    name: 'Dry Cleaning',
+    category: 'DRY_CLEAN',
+    unitType: 'PCS',
+    price: 25000,
+    description: 'Jas, gaun pesta, kebaya & bahan sensitif',
+    iconType: 'HANGER'
+  },
+  {
+    id: 9005,
+    name: 'Sepatu',
+    category: 'SEPATU',
+    unitType: 'PCS',
+    price: 35000,
+    description: 'Deep clean sepatu sneakers / kulit',
+    iconType: 'SHOE'
+  },
+  {
+    id: 9006,
+    name: 'Karpet',
+    category: 'KARPET',
+    unitType: 'METER',
+    price: 15000,
+    description: 'Cuci karpet rumah/masjid (P x L = m²)',
+    iconType: 'CARPET'
+  },
+  {
+    id: 9007,
+    name: 'Bed Cover',
+    category: 'SATUAN',
+    unitType: 'PCS',
+    price: 25000,
+    description: 'Bed cover ukuran single / double / king',
+    iconType: 'BEDCOVER'
+  },
+  {
+    id: 9008,
+    name: 'Boneka',
+    category: 'SATUAN',
+    unitType: 'PCS',
+    price: 20000,
+    description: 'Cuci higienis boneka bulu lembut',
+    iconType: 'DOLL'
+  },
+  {
+    id: 9009,
+    name: 'Helm',
+    category: 'LAINNYA',
+    unitType: 'PCS',
+    price: 15000,
+    description: 'Cuci busa helm anti-bakteri & wangi',
+    iconType: 'HELMET'
+  }
 ];
 
-const TREATMENT_TAGS = [
-  { id: 'NODA', label: '⚠️ Noda Membandel', activeClass: 'bg-amber-100 text-amber-800 border-amber-300 font-black' },
-  { id: 'LUNTUR', label: '🔴 Pisahkan Luntur', activeClass: 'bg-rose-100 text-rose-800 border-rose-300 font-black' },
-  { id: 'HANGER', label: '👔 Pakai Hanger', activeClass: 'bg-indigo-100 text-indigo-800 border-indigo-300 font-black' },
-  { id: 'NO_PANAS', label: '🚫 Tanpa Setrika Panas', activeClass: 'bg-blue-100 text-blue-800 border-blue-300 font-black' },
-  { id: 'LIPAT', label: '📦 Lipat Rapi Saja', activeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 font-black' }
+const PERFUME_VARIANTS = [
+  'Sakura Bloom',
+  'Akasia Fresh',
+  'Ocean Breeze',
+  'Lavender Soft',
+  'Snappy Clean',
+  'Downy Mystique',
+  'Tanpa Pewangi'
 ];
+
+const CATEGORY_TABS = [
+  { id: 'ALL', label: 'Semua' },
+  { id: 'KILOAN', label: 'Kiloan' },
+  { id: 'SATUAN', label: 'Satuan' },
+  { id: 'DRY_CLEAN', label: 'Dry Cleaning' },
+  { id: 'SEPATU', label: 'Sepatu' },
+  { id: 'KARPET', label: 'Karpet' },
+  { id: 'LAINNYA', label: 'Lainnya' }
+] as const;
+
+function formatRelativeDate(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  if (days === 0) return 'Hari ini';
+  if (days === 1) return 'Kemarin';
+  return `${days} hari yang lalu`;
+}
+
+function renderServiceIllustration(iconType?: string, size: 'md' | 'sm' = 'md') {
+  const boxClass =
+    size === 'md'
+      ? 'w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-2xs mx-auto mb-2'
+      : 'w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0';
+
+  switch (iconType) {
+    case 'FOLDED':
+      return <div className={`${boxClass} bg-blue-50 text-blue-600 border border-blue-100`}>🧺</div>;
+    case 'IRONING':
+      return <div className={`${boxClass} bg-cyan-50 text-cyan-600 border border-cyan-100`}>👕</div>;
+    case 'EXPRESS':
+      return <div className={`${boxClass} bg-amber-50 text-amber-500 border border-amber-100`}>⚡</div>;
+    case 'HANGER':
+      return <div className={`${boxClass} bg-indigo-50 text-indigo-600 border border-indigo-100`}>🧥</div>;
+    case 'SHOE':
+      return <div className={`${boxClass} bg-slate-100 text-slate-700 border border-slate-200`}>👟</div>;
+    case 'CARPET':
+      return <div className={`${boxClass} bg-rose-50 text-rose-600 border border-rose-100`}>🧶</div>;
+    case 'BEDCOVER':
+      return <div className={`${boxClass} bg-sky-50 text-sky-600 border border-sky-100`}>🛏️</div>;
+    case 'DOLL':
+      return <div className={`${boxClass} bg-orange-50 text-orange-600 border border-orange-100`}>🧸</div>;
+    case 'HELMET':
+      return <div className={`${boxClass} bg-emerald-50 text-emerald-600 border border-emerald-100`}>🪖</div>;
+    default:
+      return <div className={`${boxClass} bg-blue-50 text-blue-600 border border-blue-100`}>👕</div>;
+  }
+}
 
 export const POSLaundry: React.FC = () => {
   const navigate = useNavigate();
-  const { token, user, triggerHaptic, activeShift } = usePOS();
+  const { token, triggerHaptic, activeShift } = usePOS();
 
-  // State Pelanggan & Member Kuota/Deposit
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerId, setCustomerId] = useState<number | null>(null);
-  const [customerQuotaKg, setCustomerQuotaKg] = useState<number>(0);
-  const [customerDeposit, setCustomerDeposit] = useState<number>(0);
-  const [memberList, setMemberList] = useState<any[]>([]);
-  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  // ─── STATE KATALOG & KATEGORI ────────────────────────────────────────────────
+  const [catalog, setCatalog] = useState<ServiceCatalogItem[]>(DEFAULT_LAUNDRY_CATALOG);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedService, setSelectedService] = useState<ServiceCatalogItem>(DEFAULT_LAUNDRY_CATALOG[0]);
 
-  // Modal Top-Up Paket Kuota Kg / Deposit Member
-  const [showTopupModal, setShowTopupModal] = useState(false);
-  const [topupType, setTopupType] = useState<'QUOTA_KG' | 'DEPOSIT'>('QUOTA_KG');
-  const [topupKg, setTopupKg] = useState<string>('30');
-  const [topupDepositAmt, setTopupDepositAmt] = useState<string>('150000');
-  const [topupPricePaid, setTopupPricePaid] = useState<string>('180000');
-  const [topupPaymentMethod, setTopupPaymentMethod] = useState<'CASH' | 'QRIS' | 'TRANSFER'>('CASH');
-  const [topupPackageName, setTopupPackageName] = useState<string>('Paket Langganan 30 Kg');
-  const [isSubmittingTopup, setIsSubmittingTopup] = useState(false);
-
-  // State Foto Kondisi Pakaian Masuk (Anti-Komplain)
-  const [intakePhotos, setIntakePhotos] = useState<string[]>([]);
-  const photoInputRef = useRef<HTMLInputElement | null>(null);
-
-  // State Kalkulator Dimensi Karpet & Gorden (P x L = m²)
-  const [showMeterModal, setShowMeterModal] = useState(false);
-  const [meterServiceName, setMeterServiceName] = useState('Cuci Karpet / Gorden');
-  const [meterPricePerM2, setMeterPricePerM2] = useState<string>('15000');
-  const [meterLength, setMeterLength] = useState<string>('3.0');
-  const [meterWidth, setMeterWidth] = useState<string>('2.0');
-
-  // State Preferensi Laundry
-  const [serviceSpeed, setServiceSpeed] = useState<'REGULAR' | 'KILAT_24H' | 'EXPRESS_6H'>('REGULAR');
-  const [perfumeVariant, setPerfumeVariant] = useState('Sakura Fresh');
-  const [itemPieces, setItemPieces] = useState<number>(0);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [customNotes, setCustomNotes] = useState('');
-  const [deliveryType, setDeliveryType] = useState<'WALK_IN' | 'PICKUP_ONLY' | 'DELIVERY_ONLY' | 'FULL_SERVICE'>('WALK_IN');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [deliveryNotes, setDeliveryNotes] = useState('');
-  const [deliveryFee, setDeliveryFee] = useState<number>(0);
-
-  // Keranjang
-  const [cart, setCart] = useState<LaundryItem[]>([]);
-  const [activeCategoryTab, setActiveCategoryTab] = useState<'ALL' | 'KILOAN' | 'SATUAN'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Interactive Digital Scale State
-  const [scaleService, setScaleService] = useState<ServiceCatalogItem | null>(null);
-  const [scaleWeight, setScaleWeight] = useState<string>('3.50');
+  // ─── STATE INPUT BERAT / QTY DOCK & KALKULATOR DIMENSI KARPET ────────────────
+  const [dockQty, setDockQty] = useState<string>('3.0');
+  const [carpetLength, setCarpetLength] = useState<string>('3.0');
+  const [carpetWidth, setCarpetWidth] = useState<string>('2.0');
   const [scaleStatus, setScaleStatus] = useState<ScaleConnectionStatus>(scaleDriver.getStatus());
-  const [isScaleStable, setIsScaleStable] = useState<boolean>(true);
   const [showScaleModal, setShowScaleModal] = useState<boolean>(false);
 
-  // Auto-reconnect & Stream event listener untuk timbangan hardware
-  useEffect(() => {
-    scaleDriver.autoReconnect();
+  // ─── STATE PELANGGAN & MEMBER (KOLOM KIRI) ───────────────────────────────────
+  const [memberList, setMemberList] = useState<LaundryMember[]>([]);
+  const [customerSearch, setCustomerSearch] = useState<string>('');
+  const [customerId, setCustomerId] = useState<number | null>(null);
+  const [customerName, setCustomerName] = useState<string>('');
+  const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [customerQuotaKg, setCustomerQuotaKg] = useState<number>(0);
+  const [customerDeposit, setCustomerDeposit] = useState<number>(0);
+  const [selectedMemberInfo, setSelectedMemberInfo] = useState<LaundryMember | null>(null);
 
-    const unsubStatus = scaleDriver.onStatusChange(st => setScaleStatus(st));
-    const unsubReading = scaleDriver.onReading(r => {
-      setScaleWeight(r.weight.toFixed(2));
-      setIsScaleStable(r.isStable);
-    });
-    const unsubLock = scaleDriver.onStableLock(() => {
-      triggerHaptic?.();
-    });
+  // Modal Tambah Pelanggan Baru Cepat
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState<boolean>(false);
+  const [newCustName, setNewCustName] = useState<string>('');
+  const [newCustPhone, setNewCustPhone] = useState<string>('');
+  const [newCustTier, setNewCustTier] = useState<string>('Silver');
+  const [isSavingCustomer, setIsSavingCustomer] = useState<boolean>(false);
 
-    return () => {
-      unsubStatus();
-      unsubReading();
-      unsubLock();
-    };
-  }, [triggerHaptic]);
+  // Modal Top-Up Kuota / Deposit Member
+  const [showTopupModal, setShowTopupModal] = useState<boolean>(false);
+  const [topupType, setTopupType] = useState<'QUOTA_KG' | 'DEPOSIT'>('QUOTA_KG');
+  const [topupAddedKg, setTopupAddedKg] = useState<string>('20');
+  const [topupDepositAmt, setTopupDepositAmt] = useState<string>('150000');
+  const [topupPricePaid, setTopupPricePaid] = useState<string>('140000');
+  const [topupPaymentMethod, setTopupPaymentMethod] = useState<'CASH' | 'QRIS' | 'TRANSFER'>('CASH');
+  const [topupPackageName, setTopupPackageName] = useState<string>('Paket Hemat 20 Kg');
+  const [isSubmittingTopup, setIsSubmittingTopup] = useState<boolean>(false);
 
-  const handleToggleScaleConnection = async () => {
-    if (scaleStatus === 'CONNECTED') {
-      await scaleDriver.disconnect();
-      toast('Timbangan serial USB diputuskan.', 'info');
-    } else if (scaleStatus === 'SIMULATING') {
-      scaleDriver.stopSimulation();
-      toast('Mode simulasi timbangan dihentikan.', 'info');
-    } else {
-      try {
-        const ok = await scaleDriver.connect();
-        if (ok) {
-          toast('Timbangan serial USB berhasil terhubung!', 'success');
-        }
-      } catch (err: any) {
-        toast(err.message || 'Gagal menyambungkan timbangan', 'error');
-      }
-    }
-  };
+  // ─── STATE ADD-ONS (PARFUM, KECEPATAN, PENGIRIMAN, FOTO) ─────────────────────
+  const [selectedPerfume, setSelectedPerfume] = useState<string>('Sakura Bloom');
+  const [serviceSpeed, setServiceSpeed] = useState<'REGULAR' | 'KILAT_24H' | 'EXPRESS_6H'>('REGULAR');
+  const [deliveryType, setDeliveryType] = useState<'WALK_IN' | 'PICKUP_ONLY' | 'DELIVERY_ONLY' | 'FULL_SERVICE'>('WALK_IN');
+  const [pickupAddress, setPickupAddress] = useState<string>('');
+  const [deliveryAddress, setDeliveryAddress] = useState<string>('');
+  const [pickupFeeAmount, setPickupFeeAmount] = useState<number>(0);
+  const [deliveryFeeAmount, setDeliveryFeeAmount] = useState<number>(0);
+  const [specialNotes, setSpecialNotes] = useState<string>('');
+  const [intakePhotos, setIntakePhotos] = useState<string[]>([]);
+  const [activeAddonPanel, setActiveAddonPanel] = useState<'NONE' | 'DELIVERY' | 'NOTES'>('NONE');
 
-  // Dual/Triple-Payment & Pembayaran (Lunas | DP Sebagian | Bayar Saat Ambil)
-  const [paymentOption, setPaymentOption] = useState<'PAY_NOW' | 'PAY_DP' | 'PAY_LATER'>('PAY_NOW');
-  const [showPortalQrisModal, setShowPortalQrisModal] = useState<boolean>(false);
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS' | 'TRANSFER' | 'QUOTA_KG' | 'DEPOSIT'>('CASH');
-  const [dpAmountInput, setDpAmountInput] = useState<string>('');
-  const [cashTendered, setCashTendered] = useState<string>('');
+  // ─── STATE LAUNDRY CART & PEMBAYARAN (KOLOM KANAN) ───────────────────────────
+  const [cart, setCart] = useState<LaundryItem[]>([]);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [showDiscountInput, setShowDiscountInput] = useState<boolean>(false);
 
-  // Mobile Bottom Sheet Drawer & Customer Quick Modal (Opsi A: Moka / GoFood UX)
-  const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
-  const [isCustomerQuickModalOpen, setIsCustomerQuickModalOpen] = useState(false);
+  // Unified Payment Selection:
+  // 'CASH' | 'QRIS' | 'TRANSFER' | 'EWALLET' | 'PAY_AT_STORE' | 'COD_DP' | 'MEMBER_BALANCE'
+  const [selectedPaymentTile, setSelectedPaymentTile] = useState<
+    'CASH' | 'QRIS' | 'TRANSFER' | 'EWALLET' | 'PAY_AT_STORE' | 'COD_DP' | 'MEMBER_BALANCE'
+  >('CASH');
+  const [dpAmountInput, setDpAmountInput] = useState<string>('');
+  const [memberBalanceMode, setMemberBalanceMode] = useState<'QUOTA_KG' | 'DEPOSIT'>('QUOTA_KG');
 
-  const totalKiloQty = useMemo(() => {
-    return cart.filter(i => i.unitType === 'KG').reduce((acc, i) => acc + i.qty, 0);
-  }, [cart]);
-
-  const handleQuickCashTender = (amt: number) => {
-    triggerHaptic?.(10);
-    setCashTendered(String(amt));
-  };
-
-  // Modal Cetak Struk
-  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  // Submission & Modals
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState<boolean>(false);
+  const [showPortalQrisModal, setShowPortalQrisModal] = useState<boolean>(false);
 
-  // Pure Database Catalog
-  const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
-  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
-
-  // Fetch Services on Mount (100% Real Database from /api/products)
+  // ─── 1. LOAD KATALOG DARI BACKEND / CACHE ────────────────────────────────────
   useEffect(() => {
-    const fetchServices = async () => {
-      setIsLoadingCatalog(true);
+    const loadCatalog = async () => {
+      if (!token) return;
       try {
-        const headers: Record<string, string> = { 
-          Authorization: `Bearer ${token}`,
-          ...(user?.tenantId ? { 'x-tenant-id': user.tenantId } : {})
-        };
-        const res = await fetch('/api/products?limit=100', { headers });
+        const res = await fetch('/api/products?limit=200', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         if (res.ok) {
           const data = await res.json();
-          const items = Array.isArray(data) ? data : data.products || [];
-          const mapped: ServiceCatalogItem[] = items.map((p: any) => {
-            const uom = (p.baseUom || p.unit || '').toUpperCase();
-            const catName = (p.category?.name || '').toUpperCase();
-            const prodName = (p.name || '').toUpperCase();
-            const isMeter = uom === 'METER' || uom === 'M2' || uom === 'M²' || prodName.includes('KARPET') || prodName.includes('GORDEN');
-            const isPcs = !isMeter && (uom === 'PCS' || catName.includes('SATUAN') || catName.includes('SEPATU') || catName.includes('BEDCOVER'));
-            return {
-              id: p.id,
-              name: p.name,
-              category: (isPcs || isMeter) ? 'SATUAN' : 'KILOAN',
-              unitType: isMeter ? 'METER' : isPcs ? 'PCS' : 'KG',
-              price: p.sellPrice || 0,
-              description: p.description || '',
-              imageUrl: p.imageUrl || ''
-            };
-          });
-          setCatalog(mapped);
-          const firstKilo = mapped.find(m => m.unitType === 'KG') || mapped[0] || null;
-          if (firstKilo) setScaleService(firstKilo);
-        }
-      } catch (err) {
-        console.warn('[POSLaundry] Gagal memuat produk dari server, beralih ke cache offline:', err);
-        try {
-          const cached = await offlineDb.getCachedProducts(user?.tenantId);
-          if (cached && cached.length > 0) {
-            const mapped: ServiceCatalogItem[] = cached.map((p: any) => {
-              const uom = (p.baseUom || p.unit || '').toUpperCase();
-              const catName = (p.categoryName || p.category?.name || '').toUpperCase();
-              const prodName = (p.name || '').toUpperCase();
-              const isMeter = uom === 'METER' || uom === 'M2' || uom === 'M²' || prodName.includes('KARPET') || prodName.includes('GORDEN');
-              const isPcs = !isMeter && (uom === 'PCS' || catName.includes('SATUAN') || catName.includes('SEPATU') || catName.includes('BEDCOVER'));
+          const rawProducts = Array.isArray(data) ? data : data.products || [];
+          const laundryMapped: ServiceCatalogItem[] = rawProducts
+            .filter((p: any) => p.isActive !== false)
+            .map((p: any) => {
+              const nameLower = (p.name || '').toLowerCase();
+              const catNameLower = (p.category?.name || '').toLowerCase();
+              const isMeter =
+                nameLower.includes('m2') ||
+                nameLower.includes('meter') ||
+                nameLower.includes('karpet') ||
+                nameLower.includes('gorden');
+              const isKg =
+                !isMeter &&
+                (nameLower.includes('kg') ||
+                  nameLower.includes('kilo') ||
+                  catNameLower.includes('kilo') ||
+                  p.uomName?.toUpperCase() === 'KG');
+
+              let category: ServiceCatalogItem['category'] = isKg ? 'KILOAN' : 'SATUAN';
+              let iconType: ServiceCatalogItem['iconType'] = isKg ? 'FOLDED' : 'BEDCOVER';
+
+              if (nameLower.includes('setrika')) iconType = 'IRONING';
+              if (nameLower.includes('express') || nameLower.includes('kilat')) iconType = 'EXPRESS';
+              if (nameLower.includes('dry') || nameLower.includes('jas') || nameLower.includes('kebaya')) {
+                category = 'DRY_CLEAN';
+                iconType = 'HANGER';
+              }
+              if (nameLower.includes('sepatu') || nameLower.includes('sneaker')) {
+                category = 'SEPATU';
+                iconType = 'SHOE';
+              }
+              if (isMeter || nameLower.includes('karpet')) {
+                category = 'KARPET';
+                iconType = 'CARPET';
+              }
+              if (nameLower.includes('boneka')) iconType = 'DOLL';
+              if (nameLower.includes('helm')) {
+                category = 'LAINNYA';
+                iconType = 'HELMET';
+              }
+
               return {
                 id: p.id,
                 name: p.name,
-                category: (isPcs || isMeter) ? 'SATUAN' : 'KILOAN',
-                unitType: isMeter ? 'METER' : isPcs ? 'PCS' : 'KG',
-                price: Number(p.sellPrice ?? p.price ?? 0),
+                category,
+                unitType: isMeter ? 'METER' : isKg ? 'KG' : 'PCS',
+                price: Number(p.price) || 8000,
                 description: p.description || '',
-                imageUrl: p.imageUrl || ''
+                iconType
               };
             });
-            setCatalog(mapped);
-            const firstKilo = mapped.find(m => m.unitType === 'KG') || mapped[0] || null;
-            if (firstKilo) setScaleService(firstKilo);
+
+          if (laundryMapped.length > 0) {
+            setCatalog(laundryMapped);
+            setSelectedService(laundryMapped[0]);
           }
-        } catch (cacheErr) {
-          console.error('[POSLaundry] Gagal membaca cache lokal:', cacheErr);
         }
-      } finally {
-        setIsLoadingCatalog(false);
+      } catch {
+        const cached = await offlineDb.products.toArray();
+        if (cached.length > 0) {
+          const mapped: ServiceCatalogItem[] = cached.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            category: 'KILOAN',
+            unitType: 'KG',
+            price: Number(p.price) || 8000,
+            iconType: 'FOLDED'
+          }));
+          setCatalog(mapped);
+          setSelectedService(mapped[0]);
+        }
       }
     };
-    fetchServices();
-  }, [token, user?.tenantId]);
+    loadCatalog();
+  }, [token]);
 
-  // Fetch Daftar Member Laundry (Deposit & Kuota Kg)
-  const fetchLaundryMembers = async (q = '') => {
+  // ─── 2. LOAD DAFTAR PELANGGAN & QUICK INFO ───────────────────────────────────
+  const fetchLaundryMembers = async (search = '') => {
     if (!token) return;
     try {
-      const res = await fetch(`/api/laundry/customers?q=${encodeURIComponent(q)}`, {
+      const res = await fetch(`/api/laundry/customers?q=${encodeURIComponent(search)}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setMemberList(data.customers || []);
+        const list: LaundryMember[] = data.customers || [];
+        setMemberList(list);
+        if (customerId) {
+          const updatedActive = list.find(c => c.id === customerId);
+          if (updatedActive) {
+            setSelectedMemberInfo(updatedActive);
+            setCustomerQuotaKg(Number(updatedActive.laundryQuotaKg) || 0);
+            setCustomerDeposit(Number(updatedActive.laundryDeposit) || 0);
+          }
+        }
       }
     } catch (err) {
-      console.warn('[POSLaundry] Gagal memuat daftar member:', err);
+      console.warn('[POSLaundry] Gagal memuat daftar pelanggan:', err);
     }
   };
 
   useEffect(() => {
-    fetchLaundryMembers();
-  }, [token]);
+    fetchLaundryMembers(customerSearch);
+  }, [token, customerSearch]);
 
-  const handleSelectMember = (m: any) => {
+  // ─── 3. SUBSCRIPTION TIMBANGAN DIGITAL USB ───────────────────────────────────
+  useEffect(() => {
+    const unsub = scaleDriver.subscribe(reading => {
+      setScaleStatus(reading.status);
+      if (reading.status === 'CONNECTED' || reading.status === 'SIMULATING') {
+        if (reading.weightKg > 0 && selectedService.unitType === 'KG') {
+          setDockQty(reading.weightKg.toFixed(2));
+        }
+      }
+    });
+    return () => unsub();
+  }, [selectedService.unitType]);
+
+  // ─── 4. PILIH PELANGGAN DARI KOLOM KIRI ──────────────────────────────────────
+  const handleSelectMember = (member: LaundryMember) => {
     triggerHaptic?.(10);
-    setCustomerId(m.id);
-    setCustomerName(m.name);
-    setCustomerPhone(m.phone || '');
-    setCustomerQuotaKg(Number(m.laundryQuotaKg) || 0);
-    setCustomerDeposit(Number(m.laundryDeposit) || 0);
-    setShowMemberDropdown(false);
-    toast(`Member ${m.name} dipilih`, 'info');
+    setCustomerId(member.id);
+    setCustomerName(member.name);
+    setCustomerPhone(member.phone || '');
+    setCustomerQuotaKg(Number(member.laundryQuotaKg) || 0);
+    setCustomerDeposit(Number(member.laundryDeposit) || 0);
+    setSelectedMemberInfo(member);
+
+    if (member.favoriteAddress) {
+      setPickupAddress(member.favoriteAddress);
+      setDeliveryAddress(member.favoriteAddress);
+    }
   };
 
-  // Handler Top-Up Paket Kuota Kg / Deposit Member
-  const handleSubmitMemberTopup = async () => {
-    if (!customerName.trim() || !customerPhone.trim()) {
-      toast('Masukkan Nama dan No. WhatsApp pelanggan terlebih dahulu', 'error');
+  // Simpan Pelanggan Baru Cepat
+  const handleCreateNewCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustName.trim() || !newCustPhone.trim()) {
+      toast('Nama dan Nomor WhatsApp pelanggan wajib diisi', 'warning');
       return;
     }
-    if (!activeShift) {
-      toast('Harap buka shift kasir terlebih dahulu sebelum menerima pembayaran paket member.', 'warning');
+    setIsSavingCustomer(true);
+    try {
+      const res = await fetch('/api/laundry/customers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newCustName.trim(),
+          phone: newCustPhone.trim(),
+          tier: newCustTier
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Gagal menyimpan pelanggan');
+      toast(json.message || 'Pelanggan berhasil ditambahkan!', 'success');
+      if (json.customer) {
+        handleSelectMember(json.customer);
+      }
+      setNewCustName('');
+      setNewCustPhone('');
+      setShowNewCustomerModal(false);
+      fetchLaundryMembers();
+    } catch (err: any) {
+      toast(err.message || 'Gagal menambahkan pelanggan', 'error');
+    } finally {
+      setIsSavingCustomer(false);
+    }
+  };
+
+  // Top-Up Paket Kuota / Deposit Member
+  const handleSubmitMemberTopup = async () => {
+    if (!customerName.trim() || !customerPhone.trim()) {
+      toast('Pilih pelanggan atau isi Nama & No. WhatsApp terlebih dahulu', 'warning');
       return;
     }
     setIsSubmittingTopup(true);
@@ -338,7 +495,7 @@ export const POSLaundry: React.FC = () => {
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           topupType,
-          addedQuotaKg: topupType === 'QUOTA_KG' ? parseFloat(topupKg) || 0 : 0,
+          addedQuotaKg: topupType === 'QUOTA_KG' ? parseFloat(topupAddedKg) || 0 : 0,
           addedDeposit: topupType === 'DEPOSIT' ? parseFloat(topupDepositAmt) || 0 : 0,
           pricePaid: parseFloat(topupPricePaid) || 0,
           paymentMethod: topupPaymentMethod,
@@ -346,9 +503,7 @@ export const POSLaundry: React.FC = () => {
         })
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Gagal menyimpan top-up member');
-      }
+      if (!res.ok) throw new Error(data.error || 'Gagal top-up member');
       toast(data.message || 'Top-up member berhasil!', 'success');
       if (data.customer) {
         setCustomerId(data.customer.id);
@@ -358,18 +513,112 @@ export const POSLaundry: React.FC = () => {
       fetchLaundryMembers();
       setShowTopupModal(false);
     } catch (err: any) {
-      toast(err.message || 'Gagal top-up member', 'error');
+      toast(err.message || 'Gagal memproses top-up member', 'error');
     } finally {
       setIsSubmittingTopup(false);
     }
   };
 
-  // Handler Foto Kondisi Pakaian Masuk (Kompresi Canvas Ringan)
+  // ─── 5. PILIH LAYANAN & MASUKKAN KE KERANJANG (KOLOM TENGAH) ─────────────────
+  const filteredCatalog = useMemo(() => {
+    if (selectedCategory === 'ALL') return catalog;
+    return catalog.filter(item => item.category === selectedCategory);
+  }, [catalog, selectedCategory]);
+
+  const effectiveDockQty = useMemo(() => {
+    if (selectedService.unitType === 'METER') {
+      const l = Math.max(0.1, parseFloat(carpetLength) || 0);
+      const w = Math.max(0.1, parseFloat(carpetWidth) || 0);
+      return parseFloat((l * w).toFixed(2));
+    }
+    return Math.max(0.1, parseFloat(dockQty) || 0);
+  }, [selectedService.unitType, carpetLength, carpetWidth, dockQty]);
+
+  const dockSubtotal = useMemo(() => {
+    return Math.round(effectiveDockQty * selectedService.price);
+  }, [effectiveDockQty, selectedService.price]);
+
+  const handleSelectServiceCard = (srv: ServiceCatalogItem) => {
+    triggerHaptic?.(10);
+    setSelectedService(srv);
+    if (srv.unitType === 'PCS') {
+      setDockQty('1');
+    } else if (srv.unitType === 'KG' && (parseFloat(dockQty) || 0) <= 1) {
+      setDockQty('3.0');
+    }
+  };
+
+  const handleAddDockToCart = () => {
+    if (effectiveDockQty <= 0) {
+      toast('Masukkan berat atau jumlah yang valid (> 0)', 'warning');
+      return;
+    }
+    triggerHaptic?.(15);
+
+    const isMeter = selectedService.unitType === 'METER';
+    const noteStr = isMeter
+      ? `Dimensi ${parseFloat(carpetLength) || 0}m x ${parseFloat(carpetWidth) || 0}m = ${effectiveDockQty} m²`
+      : undefined;
+
+    setCart(prev => {
+      // Jika item satuan/kiloan yang sama sudah ada (dan bukan karpet custom dimensi), tambahkan qty-nya
+      const existingIdx = prev.findIndex(
+        it => it.serviceName === selectedService.name && it.unitType === selectedService.unitType && !isMeter
+      );
+      if (existingIdx > -1) {
+        const updated = [...prev];
+        const nextQty = parseFloat((updated[existingIdx].qty + effectiveDockQty).toFixed(2));
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          qty: nextQty,
+          subtotal: Math.round(nextQty * updated[existingIdx].pricePerUnit)
+        };
+        return updated;
+      }
+
+      return [
+        ...prev,
+        {
+          id: `${selectedService.unitType}-${selectedService.id}-${Date.now()}`,
+          serviceName: selectedService.name,
+          unitType: selectedService.unitType,
+          qty: effectiveDockQty,
+          pricePerUnit: selectedService.price,
+          subtotal: dockSubtotal,
+          notes: noteStr,
+          iconType: selectedService.iconType
+        }
+      ];
+    });
+
+    toast(`+ ${effectiveDockQty} ${selectedService.unitType === 'METER' ? 'm²' : selectedService.unitType.toLowerCase()} ${selectedService.name}`, 'success');
+  };
+
+  const handleUpdateCartQty = (id: string, nextQty: number) => {
+    if (nextQty <= 0) {
+      setCart(prev => prev.filter(it => it.id !== id));
+      return;
+    }
+    const cleanQty = parseFloat(nextQty.toFixed(2));
+    setCart(prev =>
+      prev.map(it =>
+        it.id === id
+          ? {
+              ...it,
+              qty: cleanQty,
+              subtotal: Math.round(cleanQty * it.pricePerUnit)
+            }
+          : it
+      )
+    );
+  };
+
+  // Capture Foto Pakaian Masuk
   const handleCaptureIntakePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (intakePhotos.length >= 3) {
-      toast('Maksimal 3 foto bukti kondisi pakaian per nota', 'warning');
+      toast('Maksimal 3 foto per nota cucian', 'warning');
       return;
     }
     const reader = new FileReader();
@@ -377,328 +626,165 @@ export const POSLaundry: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxW = 640;
-        const scale = img.width > maxW ? maxW / img.width : 1;
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
+        const MAX_DIM = 640;
+        let w = img.width;
+        let h = img.height;
+        if (w > h && w > MAX_DIM) {
+          h = Math.round((h * MAX_DIM) / w);
+          w = MAX_DIM;
+        } else if (h > MAX_DIM) {
+          w = Math.round((w * MAX_DIM) / h);
+          h = MAX_DIM;
+        }
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.68);
-          setIntakePhotos(prev => [...prev.slice(0, 2), compressedDataUrl]);
-          toast('📷 Foto kondisi pakaian berhasil dilampirkan', 'success');
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', 0.65);
+          setIntakePhotos(prev => [...prev, compressed].slice(0, 3));
         }
       };
-      img.src = String(ev.target?.result || '');
+      img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
 
-  // Handler Kalkulator Dimensi Karpet & Gorden (P x L = m²)
-  const handleOpenMeterCalculator = (item?: ServiceCatalogItem) => {
-    triggerHaptic?.(10);
-    if (item) {
-      setMeterServiceName(item.name);
-      setMeterPricePerM2(String(item.price || 15000));
-    } else {
-      const foundMeter = catalog.find(c => c.unitType === 'METER');
-      setMeterServiceName(foundMeter?.name || 'Cuci Karpet / Gorden');
-      setMeterPricePerM2(String(foundMeter?.price || 15000));
-    }
-    setMeterLength('3.0');
-    setMeterWidth('2.0');
-    setShowMeterModal(true);
-  };
+  // ─── 6. KALKULASI FINANSIAL & GRAND TOTAL (KOLOM KANAN) ──────────────────────
+  const itemsSubtotal = useMemo(() => cart.reduce((s, it) => s + it.subtotal, 0), [cart]);
 
-  const computedMeterArea = useMemo(() => {
-    const l = Math.max(0.1, parseFloat(meterLength) || 0);
-    const w = Math.max(0.1, parseFloat(meterWidth) || 0);
-    return parseFloat((l * w).toFixed(2));
-  }, [meterLength, meterWidth]);
+  const totalKiloanInCart = useMemo(
+    () => cart.filter(i => i.unitType === 'KG').reduce((s, i) => s + i.qty, 0),
+    [cart]
+  );
 
-  const computedMeterSubtotal = useMemo(() => {
-    const p = Math.max(0, parseFloat(meterPricePerM2) || 0);
-    return Math.round(computedMeterArea * p);
-  }, [computedMeterArea, meterPricePerM2]);
+  const speedMultiplier = serviceSpeed === 'EXPRESS_6H' ? 1.8 : serviceSpeed === 'KILAT_24H' ? 1.4 : 1.0;
+  const speedSurcharge = useMemo(
+    () => (speedMultiplier > 1 ? Math.round(itemsSubtotal * (speedMultiplier - 1)) : 0),
+    [itemsSubtotal, speedMultiplier]
+  );
 
-  const handleAddMeterItemToCart = () => {
-    triggerHaptic?.(15);
-    if (computedMeterArea <= 0) {
-      toast('Masukkan Panjang dan Lebar (meter) yang valid', 'error');
-      return;
-    }
-    const price = Math.max(0, parseFloat(meterPricePerM2) || 0);
-    const dimNote = `Ukuran: ${parseFloat(meterLength).toFixed(1)}m × ${parseFloat(meterWidth).toFixed(1)}m (${computedMeterArea} m²)`;
-    setCart(prev => [
-      ...prev,
-      {
-        id: `meter-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        serviceName: meterServiceName.trim() || 'Cuci Karpet / Gorden',
-        unitType: 'METER',
-        qty: computedMeterArea,
-        pricePerUnit: price,
-        subtotal: computedMeterSubtotal,
-        notes: dimNote
-      }
-    ]);
-    setShowMeterModal(false);
-    toast(`+${computedMeterArea} m² ${meterServiceName} masuk nota!`, 'success');
-  };
+  const totalDeliveryFee = useMemo(() => {
+    if (deliveryType === 'WALK_IN') return 0;
+    const pFee = deliveryType === 'FULL_SERVICE' || deliveryType === 'PICKUP_ONLY' ? pickupFeeAmount : 0;
+    const dFee = deliveryType === 'FULL_SERVICE' || deliveryType === 'DELIVERY_ONLY' ? deliveryFeeAmount : 0;
+    return pFee + dFee;
+  }, [deliveryType, pickupFeeAmount, deliveryFeeAmount]);
 
-  // Kalkulasi Speed Surcharge & Estimasi Selesai
-  const speedDetails = useMemo(() => {
-    const now = new Date();
-    if (serviceSpeed === 'EXPRESS_6H') {
-      const estimated = new Date(now.getTime() + 6 * 60 * 60 * 1000);
-      return {
-        label: 'Super Express (6 Jam)',
-        surchargeMultiplier: 1.5,
-        estimatedTime: estimated,
-        badgeBg: 'bg-rose-50 text-rose-700 border-rose-200'
-      };
-    }
-    if (serviceSpeed === 'KILAT_24H') {
-      const estimated = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      return {
-        label: 'Kilat (24 Jam)',
-        surchargeMultiplier: 1.25,
-        estimatedTime: estimated,
-        badgeBg: 'bg-amber-50 text-amber-700 border-amber-200'
-      };
-    }
-    const estimated = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-    return {
-      label: 'Reguler (2-3 Hari)',
-      surchargeMultiplier: 1.0,
-      estimatedTime: estimated,
-      badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    };
+  const grandTotal = useMemo(
+    () => Math.max(0, itemsSubtotal + speedSurcharge + totalDeliveryFee - discountAmount),
+    [itemsSubtotal, speedSurcharge, totalDeliveryFee, discountAmount]
+  );
+
+  const estimatedDoneDate = useMemo(() => {
+    const d = new Date();
+    const hours = serviceSpeed === 'EXPRESS_6H' ? 6 : serviceSpeed === 'KILAT_24H' ? 24 : 48;
+    d.setHours(d.getHours() + hours);
+    return d;
   }, [serviceSpeed]);
 
-  const estimatedDateString = useMemo(() => {
-    return speedDetails.estimatedTime.toLocaleDateString('id-ID', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }, [speedDetails]);
-
-  // Filter Catalog
-  const filteredCatalog = useMemo(() => {
-    return catalog.filter(item => {
-      const matchCategory = activeCategoryTab === 'ALL' || item.category === activeCategoryTab;
-      const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCategory && matchSearch;
-    });
-  }, [catalog, activeCategoryTab, searchQuery]);
-
-  // Perhitungan Subtotal, Surcharge, Total
-  const subtotalCart = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.subtotal, 0);
-  }, [cart]);
-
-  const speedSurcharge = useMemo(() => {
-    if (serviceSpeed === 'REGULAR') return 0;
-    return Math.round(subtotalCart * (speedDetails.surchargeMultiplier - 1));
-  }, [subtotalCart, serviceSpeed, speedDetails]);
-
-  const totalPayable = useMemo(() => {
-    const raw = subtotalCart + speedSurcharge + (Number(deliveryFee) || 0) - discountAmount;
-    return Math.max(0, raw);
-  }, [subtotalCart, speedSurcharge, discountAmount, deliveryFee]);
-
-  const changeDue = useMemo(() => {
-    const tendered = parseFloat(cashTendered) || 0;
-    return Math.max(0, tendered - totalPayable);
-  }, [cashTendered, totalPayable]);
-
-  // Action: Timbang & Masukkan ke Keranjang dari Digital Scale Widget
-  const handleAddFromScale = () => {
-    triggerHaptic?.(15);
-    if (!scaleService) {
-      toast('Pilih layanan timbangan terlebih dahulu', 'error');
-      return;
-    }
-    const weight = parseFloat(scaleWeight);
-    if (isNaN(weight) || weight <= 0) {
-      toast('Masukkan bobot timbangan yang valid (Kg)', 'error');
-      return;
-    }
-
-    setCart(prev => {
-      const existing = prev.find(i => i.serviceName === scaleService.name);
-      if (existing) {
-        const newQty = parseFloat((existing.qty + weight).toFixed(2));
-        return prev.map(i => i.serviceName === scaleService.name
-          ? { ...i, qty: newQty, subtotal: Math.round(newQty * i.pricePerUnit) }
-          : i
-        );
-      }
-      return [...prev, {
-        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        serviceName: scaleService.name,
-        unitType: 'KG',
-        qty: weight,
-        pricePerUnit: scaleService.price,
-        subtotal: Math.round(weight * scaleService.price)
-      }];
-    });
-
-    toast(`+${weight} Kg ${scaleService.name} masuk nota!`, 'success');
-  };
-
-  // Action: Add / Select Service dari Grid Kartu
-  const handleSelectServiceCard = (item: ServiceCatalogItem) => {
-    triggerHaptic?.(10);
-    if (item.unitType === 'KG') {
-      setScaleService(item);
-      toast(`Layanan ${item.name} siap ditimbang di panel LED`, 'info');
-    } else if (item.unitType === 'METER') {
-      handleOpenMeterCalculator(item);
-    } else {
-      // Satuan: Langsung tambahkan 1 pcs
-      setCart(prev => {
-        const existing = prev.find(i => i.serviceName === item.name && i.unitType === 'PCS');
-        if (existing) {
-          return prev.map(i => (i.serviceName === item.name && i.unitType === 'PCS')
-            ? { ...i, qty: i.qty + 1, subtotal: (i.qty + 1) * i.pricePerUnit }
-            : i
-          );
-        }
-        return [...prev, {
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          serviceName: item.name,
-          unitType: 'PCS',
-          qty: 1,
-          pricePerUnit: item.price,
-          subtotal: item.price
-        }];
-      });
-      toast(`+1 ${item.name}`, 'info');
-    }
-  };
-
-  // Action: Quick Presets Bobot Timbangan
-  const handleQuickPreset = (w: number) => {
-    triggerHaptic?.(10);
-    setScaleWeight(w.toFixed(2));
-  };
-
-  const handleAdjustWeight = (delta: number) => {
-    triggerHaptic?.(10);
-    const curr = parseFloat(scaleWeight) || 0;
-    const next = Math.max(0.1, curr + delta);
-    setScaleWeight(next.toFixed(2));
-  };
-
-  // Toggle Treatment Tags
-  const handleToggleTag = (tagLabel: string) => {
-    triggerHaptic?.(10);
-    setSelectedTags(prev => 
-      prev.includes(tagLabel) ? prev.filter(t => t !== tagLabel) : [...prev, tagLabel]
-    );
-  };
-
-  // Action: Ubah Jumlah di Keranjang
-  const handleUpdateCartQty = (id: string, newQty: number) => {
-    triggerHaptic?.(10);
-    if (newQty <= 0) {
-      setCart(prev => prev.filter(i => i.id !== id));
-      return;
-    }
-    setCart(prev => prev.map(it => {
-      if (it.id === id) {
-        const qtyFixed = (it.unitType === 'KG' || it.unitType === 'METER') ? parseFloat(newQty.toFixed(2)) : Math.round(newQty);
-        return {
-          ...it,
-          qty: qtyFixed,
-          subtotal: Math.round(qtyFixed * it.pricePerUnit)
-        };
-      }
-      return it;
-    }));
-  };
-
-  const handleRemoveCartItem = (id: string) => {
-    triggerHaptic?.(10);
-    setCart(prev => prev.filter(i => i.id !== id));
-  };
-
-  // Submit Transaksi Laundry
-  const handleSubmitLaundryOrder = async () => {
-    triggerHaptic?.(20);
-    if (cart.length === 0) {
-      toast('Keranjang nota cuci masih kosong', 'error');
-      return;
-    }
+  // ─── 7. SUBMIT ORDER (BAYAR & CETAK STRUK / SIMPAN SAJA) ─────────────────────
+  const handleCreateOrder = async (shouldPrintReceipt: boolean) => {
     if (!customerName.trim()) {
-      toast('Mohon masukkan nama pelanggan', 'error');
+      toast('Pilih pelanggan di panel kiri atau ketik nama pelanggan terlebih dahulu', 'warning');
+      return;
+    }
+    if (cart.length === 0) {
+      toast('Keranjang Laundry masih kosong. Tambahkan layanan terlebih dahulu.', 'warning');
       return;
     }
 
-    const isPaidNow = paymentOption === 'PAY_NOW';
-    const isPayDp = paymentOption === 'PAY_DP';
-    const parsedDp = Math.max(0, parseFloat(dpAmountInput) || 0);
+    // Petakan selectedPaymentTile ke skema backend
+    const isPayLater = selectedPaymentTile === 'PAY_AT_STORE';
+    const isPayDp = selectedPaymentTile === 'COD_DP';
+    const isMemberBalance = selectedPaymentTile === 'MEMBER_BALANCE';
 
-    if (isPayDp && (parsedDp <= 0 || parsedDp >= totalPayable)) {
-      toast('Masukkan nominal Uang Muka (DP) yang valid (di atas Rp 0 dan di bawah Total Tagihan)', 'error');
+    if (!isPayLater && !isMemberBalance && !activeShift) {
+      toast('Shift kasir belum dibuka! Silakan buka shift kasir untuk menerima pembayaran.', 'warning');
       return;
     }
 
-    let quotaKgUsed = 0;
-    let depositUsed = 0;
-    let finalPaidAmount = isPaidNow ? totalPayable : isPayDp ? parsedDp : 0;
+    let finalPaidAmount = grandTotal;
+    let finalQuotaUsed = 0;
+    let finalDepositUsed = 0;
+    let finalDiscount = discountAmount;
+    let finalGrandTotal = grandTotal;
+    let backendPaymentMethod = 'CASH';
 
-    if ((isPaidNow || isPayDp) && paymentMethod === 'QUOTA_KG') {
-      if (totalKiloQty <= 0) {
-        toast('Metode Potong Kuota Kg hanya dapat digunakan untuk layanan Kiloan (Kg).', 'error');
+    if (selectedPaymentTile === 'QRIS') backendPaymentMethod = 'QRIS';
+    else if (selectedPaymentTile === 'TRANSFER') backendPaymentMethod = 'TRANSFER';
+    else if (selectedPaymentTile === 'EWALLET') backendPaymentMethod = 'QRIS';
+    else if (selectedPaymentTile === 'PAY_AT_STORE') {
+      finalPaidAmount = 0;
+      backendPaymentMethod = 'BON';
+    } else if (selectedPaymentTile === 'COD_DP') {
+      const parsedDp = Math.max(0, parseFloat(dpAmountInput) || 0);
+      finalPaidAmount = Math.min(grandTotal, parsedDp);
+      backendPaymentMethod = 'CASH';
+    } else if (selectedPaymentTile === 'MEMBER_BALANCE') {
+      if (!customerId) {
+        toast('Pilih pelanggan Member di panel kiri untuk memotong Kuota Kg / Deposit!', 'warning');
         return;
       }
-      if (customerQuotaKg < totalKiloQty) {
-        toast(`Sisa Kuota Kg member (${customerQuotaKg} Kg) tidak cukup untuk ${totalKiloQty} Kg.`, 'error');
-        return;
+      if (memberBalanceMode === 'QUOTA_KG') {
+        if (totalKiloanInCart <= 0) {
+          toast('Potong Kuota Kg hanya berlaku untuk item layanan Kiloan (Kg).', 'warning');
+          return;
+        }
+        if (customerQuotaKg < totalKiloanInCart) {
+          toast(`Kuota Kg pelanggan (${customerQuotaKg} Kg) tidak cukup untuk ${totalKiloanInCart} Kg.`, 'warning');
+          return;
+        }
+        const kiloanSubtotal = cart.filter(i => i.unitType === 'KG').reduce((s, i) => s + i.subtotal, 0);
+        finalQuotaUsed = totalKiloanInCart;
+        finalDiscount = discountAmount + kiloanSubtotal;
+        finalGrandTotal = Math.max(0, itemsSubtotal + speedSurcharge + totalDeliveryFee - finalDiscount);
+        finalPaidAmount = finalGrandTotal;
+        backendPaymentMethod = 'QUOTA_KG';
+      } else {
+        if (customerDeposit < grandTotal) {
+          toast(
+            `Saldo Deposit pelanggan (Rp ${customerDeposit.toLocaleString('id-ID')}) kurang dari Rp ${grandTotal.toLocaleString('id-ID')}.`,
+            'warning'
+          );
+          return;
+        }
+        finalDepositUsed = grandTotal;
+        finalPaidAmount = grandTotal;
+        backendPaymentMethod = 'DEPOSIT';
       }
-      quotaKgUsed = parseFloat(totalKiloQty.toFixed(2));
-      finalPaidAmount = totalPayable;
-    } else if ((isPaidNow || isPayDp) && paymentMethod === 'DEPOSIT') {
-      if (customerDeposit < finalPaidAmount) {
-        toast(`Saldo Deposit member (Rp ${customerDeposit.toLocaleString('id-ID')}) tidak mencukupi.`, 'error');
-        return;
-      }
-      depositUsed = finalPaidAmount;
-    }
-
-    const requiresCashierShift = (isPaidNow || isPayDp) && paymentMethod !== 'QUOTA_KG' && paymentMethod !== 'DEPOSIT';
-    if (requiresCashierShift && !activeShift) {
-      toast('Silakan buka shift kasir dan masukkan modal awal laci terlebih dahulu sebelum melayani pembayaran tunai/non-tunai.', 'warning');
-      return;
     }
 
     setIsSubmitting(true);
     try {
-      const paymentStatus = finalPaidAmount >= totalPayable ? 'PAID' : finalPaidAmount > 0 ? 'PARTIAL' : 'UNPAID';
-
-      const combinedSpecialNotes = [
-        ...selectedTags,
-        customNotes.trim()
-      ].filter(Boolean).join(', ');
-
       const payload = {
-        outletId: user?.outletId || undefined,
+        customerId,
         customerName: customerName.trim(),
-        customerPhone: customerPhone.trim() || undefined,
-        customerId: customerId || undefined,
+        customerPhone: customerPhone.trim() || null,
+        serviceCategory: cart.every(i => i.unitType === 'KG')
+          ? 'KILOAN'
+          : cart.every(i => i.unitType !== 'KG')
+          ? 'SATUAN'
+          : 'CAMPURAN',
         serviceSpeed,
-        perfumeVariant,
-        itemCountNotes: itemPieces > 0 ? `${itemPieces} potong / helai` : undefined,
-        specialNotes: combinedSpecialNotes || undefined,
+        perfumeVariant: selectedPerfume,
+        specialNotes: specialNotes.trim() || null,
         deliveryType,
-        deliveryAddress: deliveryAddress.trim() || undefined,
-        deliveryNotes: deliveryNotes.trim() || undefined,
-        deliveryFee: Number(deliveryFee) || 0,
+        pickupAddress: deliveryType !== 'WALK_IN' ? pickupAddress.trim() : null,
+        deliveryAddress: deliveryType !== 'WALK_IN' ? (deliveryAddress.trim() || pickupAddress.trim()) : null,
+        pickupFee: deliveryType === 'FULL_SERVICE' || deliveryType === 'PICKUP_ONLY' ? pickupFeeAmount : 0,
+        deliveryFee: deliveryType === 'FULL_SERVICE' || deliveryType === 'DELIVERY_ONLY' ? deliveryFeeAmount : 0,
+        subtotal: itemsSubtotal,
+        speedSurcharge,
+        discount: finalDiscount,
+        totalAmount: finalGrandTotal,
+        paidAmount: finalPaidAmount,
+        paymentMethod: backendPaymentMethod,
+        quotaKgUsed: finalQuotaUsed,
+        depositUsed: finalDepositUsed,
+        intakePhotos,
+        estimatedDoneAt: estimatedDoneDate.toISOString(),
         items: cart.map(it => ({
           serviceName: it.serviceName,
           unitType: it.unitType,
@@ -706,18 +792,7 @@ export const POSLaundry: React.FC = () => {
           pricePerUnit: it.pricePerUnit,
           subtotal: it.subtotal,
           notes: it.notes
-        })),
-        subtotal: subtotalCart,
-        speedSurcharge,
-        discount: discountAmount,
-        totalAmount: totalPayable,
-        paidAmount: finalPaidAmount,
-        paymentStatus,
-        paymentMethod: (isPaidNow || isPayDp) ? paymentMethod : undefined,
-        quotaKgUsed,
-        depositUsed,
-        intakePhotos: intakePhotos.length > 0 ? intakePhotos : undefined,
-        estimatedDoneAt: speedDetails.estimatedTime.toISOString()
+        }))
       };
 
       const res = await fetch('/api/laundry/orders', {
@@ -730,1667 +805,1121 @@ export const POSLaundry: React.FC = () => {
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Gagal menyimpan transaksi laundry');
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan order laundry');
+
+      toast(`Order #${data.order.orderNumber} berhasil disimpan!`, 'success');
+      setCreatedOrder(data.order);
+      if (shouldPrintReceipt) {
+        setShowReceiptModal(true);
       }
 
-      toast('🎉 Nota cucian berhasil dicatat!', 'success');
-      setCreatedOrder(data.order);
-      setShowReceiptModal(true);
-
-      // Reset form
+      // Reset transaksi untuk antrean berikutnya
       setCart([]);
-      setCustomerName('');
-      setCustomerPhone('');
-      setCustomerId(null);
-      setCustomerQuotaKg(0);
-      setCustomerDeposit(0);
-      setItemPieces(0);
-      setSelectedTags([]);
       setIntakePhotos([]);
-      setCustomNotes('');
-      setCashTendered('');
-      setDpAmountInput('');
       setDiscountAmount(0);
-      setServiceSpeed('REGULAR');
-      setPaymentOption('PAY_NOW');
-      setPaymentMethod('CASH');
+      setDpAmountInput('');
+      setSpecialNotes('');
+      setDeliveryType('WALK_IN');
+      setPickupFeeAmount(0);
+      setDeliveryFeeAmount(0);
       fetchLaundryMembers();
     } catch (err: any) {
-      console.error('[POSLaundry] Error submitting:', err);
       toast(err.message || 'Gagal membuat nota cucian', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Helper Render: Checkout & Nota Panel (Digunakan oleh Desktop Sidebar dan Mobile Bottom Sheet Drawer)
-  const renderCheckoutSidebar = (isDrawerMode: boolean = false) => (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
-      {/* Header Nota */}
-      {isDrawerMode ? (
-        <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
-              <Receipt size={17} />
-            </div>
-            <div>
-              <h3 className="text-sm font-black">Rincian Nota & Kasir</h3>
-              <p className="text-[10px] text-slate-400">{cart.length} item cucian terpilih</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsCartDrawerOpen(false)}
-            className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      ) : (
-        <div className="p-3.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0">
-          <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
-            <User size={14} className="text-cyan-600" />
-            Data Pelanggan & Waktu
-          </span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border ${speedDetails.badgeBg}`}>
-            <Clock size={11} /> {estimatedDateString}
-          </span>
-        </div>
-      )}
-
-      {/* Konten Scrollable */}
-      <div className="flex-1 overflow-y-auto space-y-0">
-        {/* Form Pelanggan & Member Kuota / Deposit */}
-        <div className="p-3.5 border-b border-slate-200 bg-white space-y-2.5 relative">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setShowMemberDropdown(prev => !prev)}
-              className="text-[10px] font-bold text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition"
-            >
-              <Award size={11} />
-              <span>{customerId ? 'Ganti Member' : 'Pilih Member Langganan'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTopupModal(true)}
-              className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition"
-            >
-              <Plus size={11} />
-              <span>Beli Paket Kuota / Deposit</span>
-            </button>
-          </div>
-
-          {showMemberDropdown && (
-            <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl max-h-40 overflow-y-auto space-y-1 shadow-inner">
-              {memberList.length === 0 ? (
-                <div className="text-[11px] text-slate-400 text-center py-2">Belum ada member terdaftar</div>
-              ) : (
-                memberList.map(m => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => handleSelectMember(m)}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 flex items-center justify-between text-xs transition cursor-pointer"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-800">{m.name}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{m.phone}</div>
-                    </div>
-                    <div className="text-right space-y-0.5">
-                      {Number(m.laundryQuotaKg) > 0 && (
-                        <span className="block text-[10px] font-bold px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-800">
-                          {Number(m.laundryQuotaKg).toFixed(1)} Kg
-                        </span>
-                      )}
-                      {Number(m.laundryDeposit) > 0 && (
-                        <span className="block text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
-                          Rp {Number(m.laundryDeposit).toLocaleString('id-ID')}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Nama Pelanggan *
-              </label>
-              <input
-                type="text"
-                placeholder="Nama Pelanggan *"
-                value={customerName}
-                onChange={e => {
-                  setCustomerName(e.target.value);
-                  const matched = memberList.find(m => m.name.toLowerCase() === e.target.value.trim().toLowerCase());
-                  if (matched) {
-                    setCustomerId(matched.id);
-                    setCustomerPhone(matched.phone || customerPhone);
-                    setCustomerQuotaKg(Number(matched.laundryQuotaKg) || 0);
-                    setCustomerDeposit(Number(matched.laundryDeposit) || 0);
-                  }
-                }}
-                className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 focus:border-cyan-500 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none transition font-medium"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                WhatsApp (Notif)
-              </label>
-              <div className="relative">
-                <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600" />
-                <input
-                  type="tel"
-                  placeholder="0812xxxx"
-                  value={customerPhone}
-                  onChange={e => {
-                    setCustomerPhone(e.target.value);
-                    const matched = memberList.find(m => m.phone === e.target.value.trim());
-                    if (matched) {
-                      setCustomerId(matched.id);
-                      setCustomerName(matched.name);
-                      setCustomerQuotaKg(Number(matched.laundryQuotaKg) || 0);
-                      setCustomerDeposit(Number(matched.laundryDeposit) || 0);
-                    }
-                  }}
-                  className="w-full pl-8 pr-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 focus:border-cyan-500 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none transition font-medium"
-                />
-              </div>
-            </div>
-          </div>
-
-          {(customerQuotaKg > 0 || customerDeposit > 0) && (
-            <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-50 to-emerald-50 border border-cyan-200 text-[11px]">
-              <div className="flex items-center gap-2 font-bold text-slate-700">
-                <Award size={13} className="text-cyan-600 shrink-0" />
-                <span>Saldo Member:</span>
-              </div>
-              <div className="flex items-center gap-2 font-mono font-black">
-                {customerQuotaKg > 0 && (
-                  <span className="text-cyan-800 bg-white px-2 py-0.5 rounded-md border border-cyan-200">
-                    🧺 {customerQuotaKg.toFixed(2)} Kg
-                  </span>
-                )}
-                {customerDeposit > 0 && (
-                  <span className="text-emerald-800 bg-white px-2 py-0.5 rounded-md border border-emerald-200">
-                    💳 Rp {customerDeposit.toLocaleString('id-ID')}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Aroma Parfum Scroller */}
-        <div className="p-3 border-b border-slate-200 bg-slate-50/60">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-              <Droplets size={12} className="text-cyan-600" />
-              Aroma Parfum:
-            </span>
-            <span className="text-[11px] font-bold text-cyan-700">
-              {perfumeVariant}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {SCENT_OPTIONS.map(opt => {
-              const isSelected = perfumeVariant === opt.name;
-              return (
-                <button
-                  key={opt.name}
-                  type="button"
-                  onClick={() => { triggerHaptic?.(10); setPerfumeVariant(opt.name); }}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all shrink-0 cursor-pointer ${
-                    isSelected
-                      ? opt.activeClass
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  {opt.badge}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Treatment Tags & Helai */}
-        <div className="p-3 border-b border-slate-200 bg-white space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              Kondisi / Treatment:
-            </span>
-            <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
-              <span className="text-[10px] text-slate-500 font-bold">Helai:</span>
-              <button 
-                type="button" 
-                onClick={() => setItemPieces(Math.max(0, itemPieces - 1))}
-                className="w-4 h-4 rounded text-xs font-black text-slate-600 hover:text-slate-900"
-              >
-                -
-              </button>
-              <span className="text-xs font-mono font-bold text-cyan-700 px-1">{itemPieces}</span>
-              <button 
-                type="button" 
-                onClick={() => setItemPieces(itemPieces + 1)}
-                className="w-4 h-4 rounded text-xs font-black text-slate-600 hover:text-slate-900"
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {TREATMENT_TAGS.map(tag => {
-              const isSelected = selectedTags.includes(tag.label);
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  onClick={() => handleToggleTag(tag.label)}
-                  className={`text-[10px] px-2 py-0.8 rounded-lg font-bold border transition-all cursor-pointer ${
-                    isSelected
-                      ? tag.activeClass
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {tag.label}
-                </button>
-              );
-            })}
-
-            {/* Tombol Ambil Foto Kondisi Pakaian Masuk (Anti-Komplain) */}
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleCaptureIntakePhoto}
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              className="text-[10px] px-2.5 py-0.8 rounded-lg font-bold border border-cyan-300 bg-cyan-50 text-cyan-800 hover:bg-cyan-100 flex items-center gap-1 cursor-pointer transition"
-              title="Ambil foto bukti kondisi pakaian saat diterima"
-            >
-              <Camera size={11} />
-              <span>Foto Bukti ({intakePhotos.length}/3)</span>
-            </button>
-          </div>
-
-          {intakePhotos.length > 0 && (
-            <div className="flex items-center gap-2 pt-1 overflow-x-auto">
-              {intakePhotos.map((src, idx) => (
-                <div key={idx} className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-300 shrink-0 group">
-                  <img src={src} alt={`Bukti ${idx + 1}`} className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setIntakePhotos(prev => prev.filter((_, i) => i !== idx))}
-                    className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-rose-600 text-white flex items-center justify-center text-[9px] font-black cursor-pointer"
-                    title="Hapus foto"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Mode Layanan Antar-Jemput */}
-        <div className="p-3 border-b border-slate-200 bg-slate-50/70 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-              Pengantaran / Jemput:
-            </span>
-            <span className="text-[10px] font-black text-cyan-700 bg-cyan-50 border border-cyan-200 px-2 py-0.5 rounded-full">
-              {deliveryType === 'WALK_IN' ? 'Di Toko' : deliveryType === 'FULL_SERVICE' ? 'Antar - Jemput' : deliveryType === 'PICKUP_ONLY' ? 'Jemput Saja' : 'Antar Saja'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 text-xs">
-            <button
-              type="button"
-              onClick={() => { triggerHaptic?.(10); setDeliveryType('WALK_IN'); }}
-              className={`py-1.5 px-2 rounded-xl font-bold border transition text-[11px] ${deliveryType === 'WALK_IN' ? 'bg-cyan-600 text-white border-cyan-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-            >
-              🏢 Walk-In
-            </button>
-            <button
-              type="button"
-              onClick={() => { triggerHaptic?.(10); setDeliveryType('FULL_SERVICE'); }}
-              className={`py-1.5 px-2 rounded-xl font-bold border transition text-[11px] ${deliveryType === 'FULL_SERVICE' ? 'bg-cyan-600 text-white border-cyan-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-            >
-              🛵 Antar - Jemput
-            </button>
-            <button
-              type="button"
-              onClick={() => { triggerHaptic?.(10); setDeliveryType('PICKUP_ONLY'); }}
-              className={`py-1.5 px-2 rounded-xl font-bold border transition text-[11px] ${deliveryType === 'PICKUP_ONLY' ? 'bg-cyan-600 text-white border-cyan-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-            >
-              📥 Jemput Saja
-            </button>
-            <button
-              type="button"
-              onClick={() => { triggerHaptic?.(10); setDeliveryType('DELIVERY_ONLY'); }}
-              className={`py-1.5 px-2 rounded-xl font-bold border transition text-[11px] ${deliveryType === 'DELIVERY_ONLY' ? 'bg-cyan-600 text-white border-cyan-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-            >
-              📤 Antar Saja
-            </button>
-          </div>
-
-          {deliveryType !== 'WALK_IN' && (
-            <div className="pt-2 border-t border-slate-200 space-y-1.5 text-xs animate-in fade-in">
-              <input
-                type="text"
-                placeholder="Alamat penjemputan / pengantaran..."
-                value={deliveryAddress}
-                onChange={e => setDeliveryAddress(e.target.value)}
-                className="w-full p-2 bg-white border border-slate-200 focus:border-cyan-500 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold">Ongkir (Rp):</span>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    value={deliveryFee || ''}
-                    onChange={e => setDeliveryFee(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-cyan-700 outline-none"
-                  />
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 font-bold">Patokan Rumah:</span>
-                  <input
-                    type="text"
-                    placeholder="Depan gapura..."
-                    value={deliveryNotes}
-                    onChange={e => setDeliveryNotes(e.target.value)}
-                    className="w-full p-1.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Daftar Item Keranjang */}
-        <div className="p-3 space-y-2 bg-slate-50/50">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider px-1">
-            <span>Item Cucian ({cart.length})</span>
-            {cart.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setCart([])}
-                className="text-rose-500 hover:text-rose-700 text-[10px] font-bold cursor-pointer"
-              >
-                Kosongkan
-              </button>
-            )}
-          </div>
-
-          {cart.length === 0 ? (
-            <div className="py-8 flex flex-col items-center justify-center text-center p-4 text-slate-400">
-              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 mb-2 shadow-2xs">
-                <Receipt size={22} />
-              </div>
-              <h4 className="text-xs font-bold text-slate-700 mb-0.5">Keranjang Nota Masih Kosong</h4>
-              <p className="text-[11px] text-slate-500 max-w-xs leading-relaxed">
-                Timbang berat kiloan di panel LED atau pilih pakaian satuan untuk menambahkan layanan.
-              </p>
-            </div>
-          ) : (
-            cart.map(item => (
-              <div
-                key={item.id}
-                className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs hover:border-slate-300 transition"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold uppercase ${
-                      item.unitType === 'KG'
-                        ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
-                        : item.unitType === 'METER'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                    }`}>
-                      {item.unitType === 'METER' ? 'M²' : item.unitType}
-                    </span>
-                    <h5 className="text-xs font-bold text-slate-900 truncate">{item.serviceName}</h5>
-                  </div>
-                  <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                    @ Rp {item.pricePerUnit.toLocaleString('id-ID')}
-                  </div>
-                  {item.notes && (
-                    <div className="text-[10px] text-amber-700 font-medium mt-0.5 truncate">
-                      📐 {item.notes}
-                    </div>
-                  )}
-                </div>
-
-                {/* Qty Counter & Subtotal */}
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center bg-slate-100 border border-slate-200 rounded-lg p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateCartQty(item.id, item.qty - (item.unitType === 'KG' || item.unitType === 'METER' ? 0.5 : 1))}
-                      className="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200 cursor-pointer"
-                    >
-                      <Minus size={11} />
-                    </button>
-                    <span className="w-11 text-center text-xs font-mono font-black text-cyan-800">
-                      {item.qty}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateCartQty(item.id, item.qty + (item.unitType === 'KG' || item.unitType === 'METER' ? 0.5 : 1))}
-                      className="w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200 cursor-pointer"
-                    >
-                      <Plus size={11} />
-                    </button>
-                  </div>
-
-                  <div className="text-right min-w-[65px]">
-                    <div className="text-xs font-black text-slate-900 font-mono">
-                      Rp {item.subtotal.toLocaleString('id-ID')}
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCartItem(item.id)}
-                    className="p-1 rounded text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Footer Finansial & Checkout Dock */}
-      <div className={`p-3.5 bg-white border-t border-slate-200 space-y-2.5 shrink-0 shadow-lg ${isDrawerMode ? 'pb-8 sm:pb-5' : ''}`}>
-        <div className="space-y-1 text-xs text-slate-600">
-          <div className="flex justify-between">
-            <span>Subtotal Layanan</span>
-            <span className="font-mono text-slate-900 font-bold">Rp {subtotalCart.toLocaleString('id-ID')}</span>
-          </div>
-
-          {speedSurcharge > 0 && (
-            <div className="flex justify-between text-amber-700 font-bold">
-              <span>Biaya Prioritas ({speedDetails.label})</span>
-              <span className="font-mono">+Rp {speedSurcharge.toLocaleString('id-ID')}</span>
-            </div>
-          )}
-
-          <div className="pt-1.5 border-t border-slate-100 flex items-baseline justify-between">
-            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">Total Tagihan</span>
-            <span className="text-xl sm:text-2xl font-black text-cyan-700 font-mono">
-              Rp {totalPayable.toLocaleString('id-ID')}
-            </span>
-          </div>
-        </div>
-
-        {/* Triple-Payment Switcher: Lunas | Bayar DP | Bayar Saat Ambil */}
-        <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-          <button
-            type="button"
-            onClick={() => setPaymentOption('PAY_NOW')}
-            className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
-              paymentOption === 'PAY_NOW'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-            }`}
-          >
-            <Check size={12} className={paymentOption === 'PAY_NOW' ? 'inline' : 'hidden'} />
-            <span>Bayar Lunas</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setPaymentOption('PAY_DP');
-              if (!dpAmountInput && totalPayable > 0) {
-                setDpAmountInput(String(Math.round(totalPayable * 0.5)));
-              }
-            }}
-            className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
-              paymentOption === 'PAY_DP'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-            }`}
-          >
-            <Wallet size={12} className={paymentOption === 'PAY_DP' ? 'inline' : 'hidden'} />
-            <span>Bayar DP</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPaymentOption('PAY_LATER')}
-            className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
-              paymentOption === 'PAY_LATER'
-                ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-            }`}
-          >
-            <Clock size={12} className={paymentOption === 'PAY_LATER' ? 'inline' : 'hidden'} />
-            <span>Saat Ambil</span>
-          </button>
-        </div>
-
-        {/* Input Nominal DP jika memilih Bayar DP */}
-        {paymentOption === 'PAY_DP' && (
-          <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-200 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-bold text-blue-900">Nominal Uang Muka (DP):</span>
-              <div className="flex items-center gap-1">
-                {[0.25, 0.5].map(pct => (
-                  <button
-                    key={pct}
-                    type="button"
-                    onClick={() => setDpAmountInput(String(Math.round(totalPayable * pct)))}
-                    className="px-1.5 py-0.5 rounded bg-white border border-blue-200 text-[10px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
-                  >
-                    {pct * 100}%
-                  </button>
-                ))}
-              </div>
-            </div>
-            <input
-              type="number"
-              placeholder="Masukkan nominal DP (Rp)..."
-              value={dpAmountInput}
-              onChange={e => setDpAmountInput(e.target.value)}
-              className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-mono font-bold text-slate-900 outline-none focus:border-blue-600"
-            />
-            <div className="flex justify-between text-[11px] font-bold text-rose-700 px-0.5">
-              <span>Sisa Tagihan Saat Ambil:</span>
-              <span className="font-mono">
-                Rp {Math.max(0, totalPayable - (parseFloat(dpAmountInput) || 0)).toLocaleString('id-ID')}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Metode Pembayaran Jika Bayar Sekarang atau Bayar DP */}
-        {(paymentOption === 'PAY_NOW' || paymentOption === 'PAY_DP') && (
-          <div className="space-y-1.5 pt-0.5">
-            <div className="grid grid-cols-3 gap-1.5">
-              {[
-                { id: 'CASH', label: 'Tunai', icon: Wallet },
-                { id: 'QRIS', label: 'QRIS', icon: QrCode },
-                { id: 'TRANSFER', label: 'Transfer', icon: CreditCard }
-              ].map(m => {
-                const Icon = m.icon;
-                const isSelected = paymentMethod === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setPaymentMethod(m.id as any)}
-                    className={`py-1.5 px-1 rounded-xl text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                      isSelected
-                        ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
-                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Icon size={12} />
-                    <span>{m.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Opsi Potong Kuota Kg / Saldo Deposit jika pelanggan punya saldo */}
-            {paymentOption === 'PAY_NOW' && (customerQuotaKg > 0 || customerDeposit > 0) && (
-              <div className="grid grid-cols-2 gap-1.5">
-                {customerQuotaKg > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('QUOTA_KG')}
-                    className={`py-1.5 px-2 rounded-xl text-[10.5px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                      paymentMethod === 'QUOTA_KG'
-                        ? 'border-cyan-600 bg-cyan-600 text-white shadow-xs'
-                        : 'border-cyan-200 bg-cyan-50/70 text-cyan-800 hover:bg-cyan-100'
-                    }`}
-                  >
-                    <Award size={12} />
-                    <span>Potong Kuota ({customerQuotaKg.toFixed(1)} Kg)</span>
-                  </button>
-                )}
-                {customerDeposit > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('DEPOSIT')}
-                    className={`py-1.5 px-2 rounded-xl text-[10.5px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                      paymentMethod === 'DEPOSIT'
-                        ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
-                        : 'border-emerald-200 bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100'
-                    }`}
-                  >
-                    <Wallet size={12} />
-                    <span>Potong Deposit</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Quick Cash Amounts for Mobile / APK */}
-            {paymentMethod === 'CASH' && paymentOption === 'PAY_NOW' && (
-              <div className="space-y-1.5 p-2 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="flex items-center gap-1 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => handleQuickCashTender(totalPayable)}
-                    className="px-2 py-0.8 rounded-lg text-[10.5px] font-bold bg-white hover:bg-cyan-50 text-cyan-800 border border-slate-200 shadow-2xs cursor-pointer"
-                  >
-                    Uang Pas
-                  </button>
-                  {[20000, 50000, 100000].map(amt => (
-                    amt >= totalPayable && (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => handleQuickCashTender(amt)}
-                        className="px-2 py-0.8 rounded-lg text-[10.5px] font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs cursor-pointer"
-                      >
-                        Rp {amt.toLocaleString('id-ID')}
-                      </button>
-                    )
-                  ))}
-                </div>
-                <input
-                  type="number"
-                  placeholder="Uang Tunai Diterima..."
-                  value={cashTendered}
-                  onChange={e => setCashTendered(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 outline-none focus:border-cyan-500"
-                />
-                {parseFloat(cashTendered) > totalPayable && (
-                  <div className="text-[11px] font-bold text-emerald-700 flex justify-between px-1">
-                    <span>Kembalian:</span>
-                    <span className="font-mono">Rp {changeDue.toLocaleString('id-ID')}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Primary Action Submit Button */}
-        <button
-          onClick={handleSubmitLaundryOrder}
-          disabled={isSubmitting || cart.length === 0}
-          className={`w-full py-3.5 rounded-xl font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
-            cart.length === 0 || isSubmitting
-              ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white shadow-cyan-600/20 active:scale-[0.99]'
-          }`}
-        >
-          {isSubmitting ? (
-            <RefreshCw size={18} className="animate-spin text-white" />
-          ) : (
-            <Printer size={18} />
-          )}
-          <span>
-            {paymentOption === 'PAY_NOW'
-              ? paymentMethod === 'QUOTA_KG'
-                ? `Simpan & Potong Kuota (${totalKiloQty.toFixed(2)} Kg)`
-                : 'Simpan & Bayar Lunas (F9)'
-              : paymentOption === 'PAY_DP'
-              ? `Simpan & Bayar DP (Rp ${(parseFloat(dpAmountInput) || 0).toLocaleString('id-ID')})`
-              : 'Simpan Nota Cuci (Bayar Nanti)'}
-          </span>
-        </button>
-      </div>
-    </div>
-  );
+  // Stepper Active Status
+  const step1Done = customerName.trim().length > 0;
+  const step2Done = Boolean(selectedService);
+  const step3Done = cart.length > 0;
+  const step4Done = Boolean(selectedPerfume) || deliveryType !== 'WALK_IN' || intakePhotos.length > 0;
 
   return (
-    <div className="pos-layout h-full w-full overflow-hidden flex flex-col lg:flex-row bg-slate-100 text-slate-800 font-sans relative" style={{ height: '100%' }}>
-      
-      {/* ─── KIRI (100% LEBAR DI MOBILE / DESKTOP UTAMA): DECK OPERASIONAL TIMBANGAN DIGITAL & KATALOG ─── */}
-      <div className="pos-main w-full flex-1 flex flex-col h-full overflow-y-auto p-3 sm:p-4 gap-3 bg-slate-50 border-r border-slate-200 pb-44 lg:pb-4">
-        
-        {/* Top Header Desktop (Hanya Tampil di Layar Besar) */}
-        <div className="hidden lg:flex bg-white p-3.5 rounded-2xl border border-slate-200 items-center justify-between gap-3 shadow-xs shrink-0">
+    <div className="flex flex-col h-full w-full bg-[#F4F7FE] text-slate-800 overflow-hidden font-sans select-none">
+      {/* ─── TOP HEADER BAR & 5-STEP PROGRESS INDICATOR ───────────────────────── */}
+      <div className="bg-white border-b border-slate-200 px-5 py-3 shrink-0 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-cyan-50 border border-cyan-200 flex items-center justify-center text-cyan-600 shadow-xs">
-              <Shirt size={22} className="animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-black tracking-tight text-slate-900 m-0">
-                  Kasir Drop-off Laundry
-                </h1>
-                <span className="text-[10px] bg-cyan-100 text-cyan-800 border border-cyan-200 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                  Tactile POS
+            <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+              <span>Tambah Order Baru</span>
+            </h1>
+            <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              🌸 {selectedPerfume}
+            </span>
+          </div>
+
+          {/* Horizontal 5-Step Progress Indicator (FreshClean Style) */}
+          <div className="hidden xl:flex items-center gap-4 text-xs font-bold">
+            {[
+              { num: 1, label: 'Pelanggan', active: true, done: step1Done },
+              { num: 2, label: 'Layanan', active: step1Done, done: step2Done && step3Done },
+              { num: 3, label: 'Berat / Qty', active: step2Done, done: step3Done },
+              { num: 4, label: 'Add-on & Pengiriman', active: step3Done, done: step4Done && step3Done },
+              { num: 5, label: 'Pembayaran', active: step3Done, done: false }
+            ].map((st, idx) => (
+              <div key={st.num} className="flex items-center gap-2">
+                <span
+                  className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-extrabold transition ${
+                    st.done
+                      ? 'bg-blue-600 text-white'
+                      : st.active
+                      ? 'bg-blue-100 text-blue-700 border border-blue-400'
+                      : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {st.done ? <Check size={11} strokeWidth={3} /> : st.num}
                 </span>
+                <span className={st.done || st.active ? 'text-slate-800' : 'text-slate-400'}>{st.label}</span>
+                {idx < 4 && <div className="w-5 h-[1.5px] bg-slate-200" />}
               </div>
-              <p className="text-xs text-slate-500 m-0">Timbangan digital, varian aroma parfum, & tiket nota kasir</p>
-            </div>
+            ))}
           </div>
 
-          {/* Quick Speed SLA Selector Desktop */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => { triggerHaptic?.(10); setServiceSpeed('REGULAR'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                serviceSpeed === 'REGULAR'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-              }`}
-            >
-              <span>🌿 Reguler (2-3 Hari)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { triggerHaptic?.(10); setServiceSpeed('KILAT_24H'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                serviceSpeed === 'KILAT_24H'
-                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm scale-105'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-              }`}
-            >
-              <Zap size={13} className="text-amber-800 fill-amber-800" />
-              <span>Kilat (24 Jam) +25%</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => { triggerHaptic?.(10); setServiceSpeed('EXPRESS_6H'); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                serviceSpeed === 'EXPRESS_6H'
-                  ? 'bg-rose-600 text-white font-black shadow-sm scale-105 animate-pulse'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-              }`}
-            >
-              <Flame size={13} className="text-rose-200 fill-rose-200" />
-              <span>Express (6 Jam) +50%</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/laundry-kanban')}
-              className="ml-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 transition-all flex items-center gap-1 cursor-pointer"
-              title="Buka Papan Kanban Rak"
-            >
-              <Layers size={13} />
-              <span>Papan Rak</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ─── TOP QUICK BAR MOBILE (RAMPING 1-BARIS, TOUCH-FRIENDLY, HANYA DI MOBILE) ─── */}
-        <div className="lg:hidden bg-white p-2.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-1.5 shadow-2xs shrink-0">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 min-w-0">
-            {/* Chip Pelanggan */}
-            <button
-              type="button"
-              onClick={() => setIsCustomerQuickModalOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 flex items-center gap-1.5 shrink-0 transition cursor-pointer active:scale-95"
-            >
-              <User size={13} className="text-cyan-600" />
-              <span className="truncate max-w-[100px]">{customerName || 'Pelanggan'}</span>
-            </button>
-
-            {/* Chip Parfum */}
-            <button
-              type="button"
-              onClick={() => setIsCustomerQuickModalOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold border border-purple-200 flex items-center gap-1.5 shrink-0 transition cursor-pointer active:scale-95"
-            >
-              <Sparkles size={12} />
-              <span className="truncate max-w-[90px]">{perfumeVariant}</span>
-            </button>
-
-            {/* Chip SLA Speed Toggle */}
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic?.(10);
-                const next = serviceSpeed === 'REGULAR' ? 'KILAT_24H' : serviceSpeed === 'KILAT_24H' ? 'EXPRESS_6H' : 'REGULAR';
-                setServiceSpeed(next);
-              }}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1 shrink-0 transition cursor-pointer active:scale-95 ${speedDetails.badgeBg}`}
-            >
-              <span>{serviceSpeed === 'EXPRESS_6H' ? '⚡ Express 6H' : serviceSpeed === 'KILAT_24H' ? '⚡ Kilat 24H' : '🌿 Reguler'}</span>
-            </button>
-          </div>
-
-          {/* Tombol Customer App & QRIS Dinamis + Papan Rak Cucian */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Right Quick Utilities */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowPortalQrisModal(true)}
-              className="px-2.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
               title="Pengaturan Customer App Antar-Jemput & QRIS Dinamis Auto-Settlement"
             >
-              <QrCode size={15} />
-              <span className="hidden sm:inline">App Pelanggan & QRIS Dinamis</span>
+              <QrCode size={14} />
+              <span className="hidden sm:inline">App Pelanggan & QRIS</span>
             </button>
             <button
               type="button"
               onClick={() => navigate('/laundry-kanban')}
-              className="p-2 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border border-cyan-200 shrink-0 transition cursor-pointer"
-              title="Buka Papan Rak Cucian"
+              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Buka Papan Produksi & Rak Cucian"
             >
-              <Layers size={16} />
+              <Layers size={14} />
+              <span className="hidden sm:inline">Produksi & Rak</span>
             </button>
           </div>
         </div>
+      </div>
 
-        {/* ─── TACTILE DIGITAL SCALE WIDGET (SLEEK LIGHT HOUSING + LCD LED SCREEN) ─── */}
-        <div className="bg-gradient-to-r from-cyan-50 via-sky-50 to-blue-50 rounded-2xl border-2 border-cyan-300 p-4 shadow-sm shrink-0">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-            
-            {/* High-Tech Digital Scale LED Display Box */}
-            <div className="flex-1 bg-slate-950 rounded-2xl p-3.5 border-2 border-cyan-500/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-inner">
-              <div className="flex items-center justify-between sm:justify-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400 shrink-0">
-                  <Scale size={20} className={scaleStatus === 'CONNECTED' || scaleStatus === 'SIMULATING' ? 'animate-pulse' : ''} />
+      {/* ─── MAIN 3-COLUMN WORKSPACE ──────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto lg:overflow-hidden p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
+          {/* ====================================================================
+              KOLOM 1 (KIRI - 3 COL): PANEL PELANGGAN & QUICK INFO MEMBER
+             ==================================================================== */}
+          <div className="lg:col-span-3 flex flex-col gap-3 h-full overflow-hidden">
+            {/* Card Atas: Pencarian & Daftar Pelanggan Terakhir */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col flex-1 min-h-[260px] overflow-hidden">
+              {/* Search Bar */}
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={customerSearch}
+                    onChange={e => setCustomerSearch(e.target.value)}
+                    placeholder="Cari pelanggan / no HP..."
+                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 outline-none transition"
+                  />
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <button
-                      type="button"
-                      onClick={handleToggleScaleConnection}
-                      className={`text-[10px] font-mono uppercase tracking-widest font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
-                        scaleStatus === 'CONNECTED'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 hover:bg-emerald-500/30'
-                          : scaleStatus === 'SIMULATING'
-                          ? 'bg-purple-500/20 text-purple-300 border border-purple-400/40 hover:bg-purple-500/30'
-                          : scaleStatus === 'CONNECTING'
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
-                          : 'bg-slate-850 text-slate-400 border border-slate-700 hover:text-cyan-400 hover:border-cyan-500/50'
-                      }`}
-                      title={scaleStatus === 'CONNECTED' ? 'Klik untuk memutus port' : 'Klik untuk menyambungkan USB timbangan'}
-                    >
-                      <span
-                        className={`w-2 h-2 rounded-full inline-block ${
-                          scaleStatus === 'CONNECTED'
-                            ? 'bg-emerald-400 animate-ping'
-                            : scaleStatus === 'SIMULATING'
-                            ? 'bg-purple-400 animate-ping'
-                            : 'bg-slate-500'
-                        }`}
-                      />
-                      {scaleStatus === 'CONNECTED'
-                        ? 'USB COM TERHUBUNG'
-                        : scaleStatus === 'SIMULATING'
-                        ? 'SIMULATOR AKTIF'
-                        : 'SAMBUNGKAN USB TIMBANGAN'}
-                    </button>
-
-                    {/* Stable / Unstable Badge */}
-                    <span
-                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                        isScaleStable
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
-                          : 'bg-amber-950 text-amber-400 border border-amber-500/40 animate-pulse'
-                      }`}
-                    >
-                      <Lock size={10} />
-                      {isScaleStable ? 'STABLE' : 'UNSTABLE'}
-                    </span>
-
-                    {/* Hardware Modal Config Button */}
-                    <button
-                      type="button"
-                      onClick={() => setShowScaleModal(true)}
-                      className="p-1 rounded-md text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-all cursor-pointer"
-                      title="Konfigurasi Port Serial & Terminal Monitor"
-                    >
-                      <Settings2 size={13} />
-                    </button>
-                  </div>
-
-                  <div className="text-xs text-white font-bold truncate max-w-[220px] mt-1">
-                    {scaleService?.name || 'Pilih Layanan Kiloan'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Digit Readout */}
-              <div className="flex items-baseline justify-end gap-2 shrink-0">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.1"
-                  value={scaleWeight}
-                  onChange={e => setScaleWeight(e.target.value)}
-                  className="w-32 bg-transparent text-right text-4xl sm:text-5xl font-black font-mono text-cyan-400 outline-none drop-shadow-[0_0_12px_rgba(34,211,238,0.6)] border-b-2 border-dashed border-cyan-500/40 focus:border-cyan-400 cursor-text"
-                />
-                <span className="text-xl font-black text-cyan-300 font-mono">KG</span>
-              </div>
-            </div>
-
-            {/* Quick Adjust Buttons & Action */}
-            <div className="flex flex-col gap-2 shrink-0">
-              {/* Presets Chips */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {[
-                  { label: '+0.5', val: 0.5 },
-                  { label: '+1.0', val: 1.0 },
-                  { label: '3 Kg (Kecil)', set: 3.0 },
-                  { label: '5 Kg (Sedang)', set: 5.0 },
-                  { label: '7 Kg (Besar)', set: 7.0 },
-                  { label: '10 Kg', set: 10.0 }
-                ].map((btn, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => btn.set ? handleQuickPreset(btn.set) : handleAdjustWeight(btn.val!)}
-                    className="px-2.5 py-1.5 bg-white hover:bg-cyan-600 hover:text-white text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
-                  >
-                    {btn.label}
-                  </button>
-                ))}
                 <button
                   type="button"
-                  onClick={() => setScaleWeight('0.00')}
-                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                  title="Nolkan / Tare"
+                  onClick={() => setShowTopupModal(true)}
+                  className="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition cursor-pointer"
+                  title="Top-Up Kuota Kg / Deposit Member"
                 >
-                  Tare
+                  <Award size={15} />
                 </button>
               </div>
 
-              {/* Add Button */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={scaleService?.id || ''}
-                  onChange={e => {
-                    const found = catalog.find(c => c.id === Number(e.target.value));
-                    if (found) setScaleService(found);
-                  }}
-                  className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-cyan-500 shadow-2xs"
-                >
-                  {catalog.filter(c => c.unitType === 'KG').length === 0 ? (
-                    <option value="">(Tidak ada layanan Kg)</option>
-                  ) : (
-                    catalog.filter(c => c.unitType === 'KG').map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} — Rp {c.price.toLocaleString('id-ID')}/Kg
-                      </option>
-                    ))
-                  )}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={handleAddFromScale}
-                  className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-cyan-600/20 transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
-                >
-                  <Plus size={16} />
-                  <span>+ Masuk Nota</span>
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* ─── FILTER KATEGORI & PENCARIAN ─────────────────────────────────── */}
-        <div className="bg-white p-2.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-2 flex-wrap shadow-2xs shrink-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-              {[
-                { id: 'ALL', label: 'Semua Layanan' },
-                { id: 'KILOAN', label: '🧺 Cuci Kiloan' },
-                { id: 'SATUAN', label: '👔 Bedcover & Satuan' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic?.(10);
-                    setActiveCategoryTab(tab.id as any);
-                  }}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                    activeCategoryTab === tab.id
-                      ? 'bg-white text-cyan-700 shadow-xs border border-slate-200/80 font-black'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleOpenMeterCalculator()}
-              className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-              title="Hitung luas karpet / gorden (Panjang x Lebar = m²)"
-            >
-              <Ruler size={13} />
-              <span>Karpet / Gorden (m²)</span>
-            </button>
-          </div>
-
-          <div className="relative flex-1 max-w-xs min-w-[180px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Cari layanan, bedcover, karpet, jas..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-1 focus:ring-cyan-500 transition-all font-medium"
-            />
-          </div>
-        </div>
-
-        {/* ─── GRID KARTU LAYANAN (CLEAN LIGHT CARDS) ───────────────────────── */}
-        <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 auto-rows-max">
-          {isLoadingCatalog ? (
-            <div className="col-span-full py-16 flex flex-col items-center justify-center text-center text-slate-400">
-              <RefreshCw size={32} className="animate-spin text-cyan-600 mb-2" />
-              <p className="text-xs font-bold text-slate-600">Memuat katalog layanan laundry...</p>
-            </div>
-          ) : filteredCatalog.length === 0 ? (
-            <div className="col-span-full py-16 flex flex-col items-center justify-center text-center text-slate-400">
-              <Shirt size={48} className="text-slate-300 stroke-1 mb-3" />
-              <p className="text-sm font-bold text-slate-700">Belum ada layanan cuci</p>
-              <p className="text-xs text-slate-400 max-w-xs mt-1">
-                Layanan laundry dapat dikelola melalui menu Produk.
-              </p>
-            </div>
-          ) : (
-            filteredCatalog.map(item => {
-            const isKilo = item.unitType === 'KG';
-            const isMeter = item.unitType === 'METER';
-            return (
-              <div
-                key={item.id}
-                onClick={() => handleSelectServiceCard(item)}
-                className="group relative p-4 rounded-2xl bg-white hover:border-cyan-500 border border-slate-200/90 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden"
+              {/* Tombol Biru + Pelanggan Baru */}
+              <button
+                type="button"
+                onClick={() => setShowNewCustomerModal(true)}
+                className="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer mb-2.5"
               >
-                <div>
-                  {item.imageUrl && (
-                    <div className="w-full h-28 -mx-4 -mt-4 mb-3 overflow-hidden rounded-t-2xl relative bg-slate-100">
-                      <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
-                    </div>
-                  )}
-                  <div className="flex items-start justify-between gap-2">
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                      isKilo
-                        ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
-                        : isMeter
-                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                    }`}>
-                      {isKilo ? 'Per Kilo (Kg)' : isMeter ? 'Dimensi (m²)' : 'Satuan (Pcs)'}
-                    </span>
-                    <div className="w-7 h-7 rounded-xl bg-slate-50 group-hover:bg-cyan-600 flex items-center justify-center text-slate-500 group-hover:text-white transition-colors border border-slate-200 group-hover:border-cyan-600">
-                      <Plus size={14} />
-                    </div>
-                  </div>
+                <Plus size={15} />
+                <span>Pelanggan Baru</span>
+              </button>
 
-                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 mt-2.5 group-hover:text-cyan-700 transition-colors line-clamp-1">
-                    {item.name}
-                  </h3>
-                  {item.description && (
-                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                      {item.description}
-                    </p>
-                  )}
+              {/* Input Cepat Pelanggan Aktif / Walk-in */}
+              <div className="grid grid-cols-2 gap-1.5 mb-2.5 p-2 rounded-xl bg-blue-50/50 border border-blue-100">
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={e => {
+                    setCustomerName(e.target.value);
+                    if (!e.target.value.trim()) {
+                      setCustomerId(null);
+                      setSelectedMemberInfo(null);
+                    }
+                  }}
+                  placeholder="Nama Pelanggan *"
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:border-blue-500 outline-none"
+                />
+                <input
+                  type="tel"
+                  value={customerPhone}
+                  onChange={e => setCustomerPhone(e.target.value)}
+                  placeholder="0812xxxx (WA)"
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-700 focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="text-[11px] font-bold text-slate-500 mb-1.5 flex items-center justify-between">
+                <span>Pelanggan Terakhir</span>
+                <span className="text-[10px] text-slate-400">{memberList.length} terdaftar</span>
+              </div>
+
+              {/* Scrollable Customer List */}
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
+                {memberList.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-slate-400">
+                    Belum ada pelanggan. Klik <strong>+ Pelanggan Baru</strong> atau ketik nama di atas.
+                  </div>
+                ) : (
+                  memberList.map(m => {
+                    const isSelected = customerId === m.id;
+                    const tierUpper = (m.tier || '').toUpperCase();
+                    const badgeStyle =
+                      tierUpper === 'GOLD'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : tierUpper === 'SILVER'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-slate-100 text-slate-600 border-slate-200';
+
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => handleSelectMember(m)}
+                        className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500/30'
+                            : 'bg-white hover:bg-slate-50 border-slate-200/80'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 ${
+                              isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {m.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">{m.name}</p>
+                            <p className="text-[10px] text-slate-400 font-mono truncate">{m.phone}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>
+                            {tierUpper === 'GOLD'
+                              ? 'Member Gold'
+                              : tierUpper === 'SILVER'
+                              ? 'Member Silver'
+                              : 'Member'}
+                          </span>
+                          {Number(m.laundryQuotaKg) > 0 && (
+                            <span className="text-[9px] font-extrabold text-emerald-600">
+                              {Number(m.laundryQuotaKg).toFixed(1)} kg
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Card Bawah: Quick Info Pelanggan (Persis Referensi FreshClean) */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs shrink-0 space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-extrabold text-slate-800">Quick Info</h3>
+                {customerId && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTopupModal(true)}
+                    className="text-[10px] font-bold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    + Isi Kuota/Deposit
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <span className="text-slate-500 flex items-center gap-1.5">
+                    <Star size={12} className="text-amber-500" /> Points & Kuota
+                  </span>
+                  <span className="font-bold text-slate-800">
+                    {selectedMemberInfo?.points || 0} pts
+                    {customerQuotaKg > 0 ? ` • ${customerQuotaKg.toFixed(1)} kg` : ''}
+                  </span>
                 </div>
 
-                <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-baseline justify-between">
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Tarif</span>
-                  <span className="text-xs sm:text-sm font-black text-cyan-700 font-mono">
-                    Rp {item.price.toLocaleString('id-ID')}
-                    <span className="text-[10px] text-slate-400 font-normal"> / {item.unitType.toLowerCase()}</span>
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <span className="text-slate-500 flex items-center gap-1.5">
+                    <Award size={12} className="text-blue-500" /> Member Tier
+                  </span>
+                  <span className="font-bold text-slate-800">
+                    {selectedMemberInfo?.tier || (customerName ? 'Walk-In' : '-')}
+                    {customerDeposit > 0 ? ` (Rp ${customerDeposit.toLocaleString('id-ID')})` : ''}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1 border-b border-slate-100 gap-2">
+                  <span className="text-slate-500 flex items-center gap-1.5 shrink-0">
+                    <MapPin size={12} className="text-rose-500" /> Alamat Favorit
+                  </span>
+                  <span className="font-bold text-slate-800 truncate text-right">
+                    {selectedMemberInfo?.favoriteAddress || pickupAddress || '-'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                  <span className="text-slate-500 flex items-center gap-1.5">
+                    <Clock size={12} className="text-indigo-500" /> Order Terakhir
+                  </span>
+                  <span className="font-bold text-slate-800">
+                    {selectedMemberInfo?.lastOrderNumber
+                      ? `${selectedMemberInfo.lastOrderNumber} • ${formatRelativeDate(selectedMemberInfo.lastOrderDate)}`
+                      : '-'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between pt-0.5">
+                  <span className="text-slate-500 flex items-center gap-1.5">
+                    <Wallet size={12} className="text-emerald-600" /> Outstanding Payment
+                  </span>
+                  <span
+                    className={`font-extrabold ${
+                      (selectedMemberInfo?.outstandingPayment || 0) > 0 ? 'text-rose-600' : 'text-slate-900'
+                    }`}
+                  >
+                    Rp {(selectedMemberInfo?.outstandingPayment || 0).toLocaleString('id-ID')}
                   </span>
                 </div>
               </div>
-            );
-          }))}
-        </div>
+            </div>
+          </div>
 
-      </div>
-
-      {/* ─── FLOATING BOTTOM CHECKOUT DOCK (MOBILE ONLY / APK - SELALU TERLIHAT DI ATAS BOTTOM NAV) ─── */}
-      <div className="lg:hidden fixed bottom-[74px] sm:bottom-[78px] left-3 right-3 z-40">
-        {cart.length > 0 ? (
-          <div 
-            onClick={() => { triggerHaptic?.(20); setIsCartDrawerOpen(true); }}
-            className="bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 text-white p-3 rounded-2xl shadow-[0_10px_25px_rgba(8,145,178,0.4)] border border-cyan-400/60 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-500 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shrink-0">
-                  <Receipt size={19} className="text-white" />
-                </div>
-                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-xs border-2 border-slate-900">
-                  {cart.length}
-                </span>
+          {/* ====================================================================
+              KOLOM 2 (TENGAH - 5 COL): PILIH LAYANAN VISUAL & DOCK BERAT / QTY
+             ==================================================================== */}
+          <div className="lg:col-span-5 flex flex-col gap-3 h-full overflow-hidden">
+            {/* Card Atas: Pilih Layanan Grid 3x3 */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex flex-col flex-1 min-h-[300px] overflow-hidden">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-extrabold text-slate-900">Pilih Layanan</h2>
+                <span className="text-[11px] text-slate-400 font-medium">Klik kartu lalu atur berat di bawah</span>
               </div>
-              <div className="min-w-0">
-                <div className="text-xs text-slate-300 font-medium truncate flex items-center gap-1.5">
-                  <span className="font-bold text-white">{customerName || 'Pelanggan Walk-in'}</span>
-                  <span>•</span>
-                  <span className="text-cyan-300">{speedDetails.label}</span>
+
+              {/* Filter Pill Kategori Horizontal */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 no-scrollbar shrink-0">
+                {CATEGORY_TABS.map(tab => {
+                  const active = selectedCategory === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(tab.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
+                        active
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Grid Kartu Layanan 3x3 */}
+              <div className="flex-1 overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {filteredCatalog.map(srv => {
+                    const isSelected = selectedService.id === srv.id;
+                    const unitLabel = srv.unitType === 'METER' ? 'm²' : srv.unitType === 'KG' ? 'kg' : 'pcs';
+
+                    return (
+                      <button
+                        key={srv.id}
+                        type="button"
+                        onClick={() => handleSelectServiceCard(srv)}
+                        className={`p-3.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center cursor-pointer active:scale-[0.98] ${
+                          isSelected
+                            ? 'border-2 border-blue-600 bg-blue-50/30 shadow-xs'
+                            : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50/60'
+                        }`}
+                      >
+                        {renderServiceIllustration(srv.iconType, 'md')}
+                        <div className="text-xs font-extrabold text-slate-900 line-clamp-1">{srv.name}</div>
+                        <div className="text-[11px] font-semibold text-slate-500 mt-0.5">
+                          Rp {srv.price.toLocaleString('id-ID')} /{unitLabel}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="text-sm font-black text-white font-mono flex items-center gap-1.5">
-                  <span className="text-cyan-300 font-black">Rp {totalPayable.toLocaleString('id-ID')}</span>
-                  {totalKiloQty > 0 && (
-                    <span className="text-[10.5px] text-slate-300 font-normal">({totalKiloQty.toFixed(2)} Kg)</span>
+              </div>
+            </div>
+
+            {/* Card Bawah: Dock Input Berat / Qty Kontekstual + Add-on Bar */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs shrink-0 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                {/* Kiri: Kontrol Input Angka Berat / Dimensi */}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-extrabold text-slate-700">
+                      {selectedService.unitType === 'METER' ? 'Input Dimensi Karpet (P x L)' : 'Input Berat / Qty'}
+                    </span>
+
+                    {selectedService.unitType === 'KG' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowScaleModal(true)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border flex items-center gap-1 cursor-pointer ${
+                          scaleStatus === 'CONNECTED' || scaleStatus === 'SIMULATING'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                        }`}
+                        title="Konfigurasi Timbangan Digital USB"
+                      >
+                        <Scale size={11} />
+                        <span>{scaleStatus === 'CONNECTED' ? 'USB Aktif' : 'Timbangan USB'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedService.unitType === 'METER' ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 flex-1">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          value={carpetLength}
+                          onChange={e => setCarpetLength(e.target.value)}
+                          className="w-full bg-transparent text-sm font-black text-slate-900 outline-none"
+                          placeholder="P"
+                        />
+                        <span className="text-[11px] font-bold text-slate-400">m (P)</span>
+                      </div>
+                      <span className="text-xs font-black text-slate-400">×</span>
+                      <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 flex-1">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          value={carpetWidth}
+                          onChange={e => setCarpetWidth(e.target.value)}
+                          className="w-full bg-transparent text-sm font-black text-slate-900 outline-none"
+                          placeholder="L"
+                        />
+                        <span className="text-[11px] font-bold text-slate-400">m (L)</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex-1 focus-within:border-blue-500 focus-within:bg-white">
+                        <input
+                          type="number"
+                          step={selectedService.unitType === 'KG' ? '0.1' : '1'}
+                          min="0.1"
+                          value={dockQty}
+                          onChange={e => setDockQty(e.target.value)}
+                          className="w-full bg-transparent text-lg font-black text-slate-900 outline-none"
+                        />
+                        <span className="text-xs font-bold text-slate-400 lowercase">
+                          {selectedService.unitType}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const step = selectedService.unitType === 'KG' ? 0.5 : 1;
+                          const next = Math.max(step, (parseFloat(dockQty) || 0) - step);
+                          setDockQty(selectedService.unitType === 'KG' ? next.toFixed(1) : String(Math.round(next)));
+                        }}
+                        className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 font-bold cursor-pointer"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const step = selectedService.unitType === 'KG' ? 0.5 : 1;
+                          const next = (parseFloat(dockQty) || 0) + step;
+                          setDockQty(selectedService.unitType === 'KG' ? next.toFixed(1) : String(Math.round(next)));
+                        }}
+                        className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-700 font-bold cursor-pointer"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
                   )}
                 </div>
+
+                {/* Kanan: Ringkasan Kali & Tombol Masuk Cart */}
+                <div className="sm:pl-4 sm:border-l border-slate-100 flex items-center justify-between sm:justify-end gap-3">
+                  <div className="text-left sm:text-right">
+                    <div className="text-xs font-bold text-slate-700">{selectedService.name}</div>
+                    <div className="text-[11px] text-slate-400">
+                      {effectiveDockQty} {selectedService.unitType === 'METER' ? 'm²' : selectedService.unitType.toLowerCase()} × Rp{' '}
+                      {selectedService.price.toLocaleString('id-ID')}
+                    </div>
+                    <div className="text-base font-black text-slate-900 mt-0.5">
+                      Rp {dockSubtotal.toLocaleString('id-ID')}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddDockToCart}
+                    className="px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition cursor-pointer shrink-0 active:scale-95"
+                  >
+                    <Plus size={15} />
+                    <span>Tambah</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Baris Add-on & Pengiriman Ringkas (Step 4) */}
+              <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {/* Pilihan Parfum */}
+                  <select
+                    value={selectedPerfume}
+                    onChange={e => setSelectedPerfume(e.target.value)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold outline-none cursor-pointer"
+                  >
+                    {PERFUME_VARIANTS.map(pf => (
+                      <option key={pf} value={pf}>
+                        🌸 {pf}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Pilihan Kecepatan */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setServiceSpeed(prev =>
+                        prev === 'REGULAR' ? 'KILAT_24H' : prev === 'KILAT_24H' ? 'EXPRESS_6H' : 'REGULAR'
+                      )
+                    }
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                      serviceSpeed === 'REGULAR'
+                        ? 'bg-slate-100 text-slate-700 border-slate-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-300'
+                    }`}
+                  >
+                    ⚡ {serviceSpeed === 'EXPRESS_6H' ? 'Express 6 Jam (+80%)' : serviceSpeed === 'KILAT_24H' ? 'Kilat 24 Jam (+40%)' : 'Reguler (48 Jam)'}
+                  </button>
+
+                  {/* Toggle Pengiriman / Kurir */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveAddonPanel(prev => (prev === 'DELIVERY' ? 'NONE' : 'DELIVERY'))}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 transition cursor-pointer ${
+                      deliveryType !== 'WALK_IN'
+                        ? 'bg-blue-50 text-blue-700 border-blue-300'
+                        : 'bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <Bike size={12} />
+                    <span>{deliveryType === 'WALK_IN' ? 'Antar-Jemput' : `Kurir (+Rp ${totalDeliveryFee.toLocaleString('id-ID')})`}</span>
+                  </button>
+
+                  {/* Foto Kondisi Pakaian */}
+                  <label className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer">
+                    <Camera size={12} />
+                    <span>Foto ({intakePhotos.length}/3)</span>
+                    <input type="file" accept="image/*" onChange={handleCaptureIntakePhoto} className="hidden" />
+                  </label>
+                </div>
+
+                {intakePhotos.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    {intakePhotos.map((ph, i) => (
+                      <div key={i} className="relative group">
+                        <img src={ph} alt="Foto" className="w-6 h-6 rounded object-cover border border-slate-300" />
+                        <button
+                          type="button"
+                          onClick={() => setIntakePhotos(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-600 text-white text-[8px] flex items-center justify-center"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Drawer Mini Pengaturan Antar-Jemput (Jika Diklik) */}
+              {activeAddonPanel === 'DELIVERY' && (
+                <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-blue-900">Pengaturan Jemput & Antar Kurir</span>
+                    <div className="flex gap-1">
+                      {[
+                        { id: 'WALK_IN', label: 'Walk-In' },
+                        { id: 'FULL_SERVICE', label: 'Jemput & Antar' },
+                        { id: 'PICKUP_ONLY', label: 'Jemput Saja' },
+                        { id: 'DELIVERY_ONLY', label: 'Antar Saja' }
+                      ].map(opt => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setDeliveryType(opt.id as any)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${
+                            deliveryType === opt.id
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {deliveryType !== 'WALK_IN' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        value={pickupAddress}
+                        onChange={e => {
+                          setPickupAddress(e.target.value);
+                          setDeliveryAddress(e.target.value);
+                        }}
+                        placeholder="Alamat Jemput / Antar..."
+                        className="sm:col-span-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                      />
+                      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                        <span className="text-[10px] text-slate-400">Jemput Rp</span>
+                        <input
+                          type="number"
+                          step="1000"
+                          value={pickupFeeAmount}
+                          onChange={e => setPickupFeeAmount(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-full text-xs font-bold outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                        <span className="text-[10px] text-slate-400">Antar Rp</span>
+                        <input
+                          type="number"
+                          step="1000"
+                          value={deliveryFeeAmount}
+                          onChange={e => setDeliveryFeeAmount(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-full text-xs font-bold outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            
-            <button
-              type="button"
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 hover:from-cyan-300 hover:to-emerald-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shrink-0 active:scale-95 transition-transform"
-            >
-              <span>Bayar & Buka Nota</span>
-              <ArrowRight size={14} />
-            </button>
           </div>
-        ) : (
-          <div 
-            onClick={() => { triggerHaptic?.(10); setIsCartDrawerOpen(true); }}
-            className="bg-white/95 backdrop-blur-md text-slate-800 p-2.5 px-3.5 rounded-2xl shadow-lg border border-slate-200/90 flex items-center justify-between cursor-pointer active:scale-[0.99] transition-transform"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shrink-0">
-                <Receipt size={16} />
+
+          {/* ====================================================================
+              KOLOM 3 (KANAN - 4 COL): LAUNDRY CART & METODE PEMBAYARAN
+             ==================================================================== */}
+          <div className="lg:col-span-4 flex flex-col h-full overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex flex-col h-full overflow-hidden">
+              {/* Header Laundry Cart */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-extrabold text-slate-900">Laundry Cart</h2>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-600">
+                    {cart.length} item
+                  </span>
+                </div>
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCart([])}
+                    className="text-xs font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 size={13} /> Clear
+                  </button>
+                )}
               </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-800 truncate">Keranjang Nota Kosong (0 Item)</div>
-                <div className="text-[10.5px] text-slate-400 truncate">Timbang atau pilih layanan di atas</div>
+
+              {/* Daftar Item di Keranjang */}
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 py-2 min-h-[160px]">
+                {cart.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center py-8 text-slate-400">
+                    <Receipt size={28} className="mb-2 stroke-[1.5]" />
+                    <p className="text-xs font-bold text-slate-600">Keranjang Masih Kosong</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5 max-w-[220px]">
+                      Pilih layanan di tengah lalu klik tombol <strong>+ Tambah</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  cart.map(item => {
+                    const unitLbl = item.unitType === 'METER' ? 'm²' : item.unitType.toLowerCase();
+                    const step = item.unitType === 'KG' || item.unitType === 'METER' ? 0.5 : 1;
+
+                    return (
+                      <div key={item.id} className="py-2.5 flex items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {renderServiceIllustration(item.iconType, 'sm')}
+                          <div className="min-w-0">
+                            <div className="text-xs font-extrabold text-slate-900 truncate">{item.serviceName}</div>
+                            <div className="text-[11px] text-slate-400">
+                              {item.qty} {unitLbl} × Rp {item.pricePerUnit.toLocaleString('id-ID')}
+                            </div>
+                            {item.notes && (
+                              <div className="text-[10px] text-blue-600 font-medium truncate">{item.notes}</div>
+                            )}
+
+                            {/* Stepper [-][qty][+] */}
+                            <div className="inline-flex items-center gap-1 mt-1 bg-slate-50 border border-slate-200 rounded-lg px-1 py-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateCartQty(item.id, item.qty - step)}
+                                className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200 cursor-pointer"
+                              >
+                                <Minus size={11} />
+                              </button>
+                              <span className="px-2 text-xs font-extrabold text-slate-800">{item.qty}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateCartQty(item.id, item.qty + step)}
+                                className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-200 cursor-pointer"
+                              >
+                                <Plus size={11} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end justify-between self-stretch shrink-0">
+                          <span className="text-xs font-extrabold text-slate-900">
+                            Rp {item.subtotal.toLocaleString('id-ID')}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateCartQty(item.id, 0)}
+                            className="p-1 text-slate-300 hover:text-rose-500 transition cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            </div>
-            <button
-              type="button"
-              className="px-3.5 py-1.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-800 font-bold text-xs border border-cyan-200 flex items-center gap-1 shrink-0 active:scale-95"
-            >
-              <span>Buka Nota (Rp 0)</span>
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        )}
-      </div>
 
-      {/* ─── MOBILE BOTTOM SHEET DRAWER (OPSI A: POLA MOKA POS / GOFOOD) ─── */}
-      {isCartDrawerOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end">
-          {/* Backdrop */}
-          <div 
-            onClick={() => setIsCartDrawerOpen(false)}
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
-          />
+              {/* Ringkasan Subtotal, Diskon, Delivery, & Grand Total */}
+              <div className="pt-3 border-t border-slate-200 space-y-1.5 text-xs shrink-0">
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal</span>
+                  <span className="font-bold text-slate-900">Rp {itemsSubtotal.toLocaleString('id-ID')}</span>
+                </div>
 
-          {/* Drawer Panel */}
-          <div className="relative z-10 w-full max-h-[90vh] bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 border-t border-cyan-500/20">
-            {/* Drawer Drag Pill */}
-            <div 
-              onClick={() => setIsCartDrawerOpen(false)}
-              className="w-full flex justify-center py-2 bg-slate-900 cursor-pointer"
-            >
-              <div className="w-12 h-1.5 bg-slate-600 rounded-full" />
-            </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscountInput(prev => !prev)}
+                    className="hover:text-blue-600 underline decoration-dotted cursor-pointer"
+                  >
+                    Diskon
+                  </button>
+                  {showDiscountInput ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      value={discountAmount || ''}
+                      onChange={e => setDiscountAmount(Math.max(0, Number(e.target.value) || 0))}
+                      placeholder="0"
+                      className="w-24 text-right bg-slate-50 border border-slate-300 rounded px-1.5 py-0.5 text-xs font-bold text-emerald-600"
+                    />
+                  ) : (
+                    <span className="font-bold text-emerald-600">
+                      - Rp {discountAmount.toLocaleString('id-ID')}
+                    </span>
+                  )}
+                </div>
 
-            {/* Konten Nota & Kasir via Helper */}
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {renderCheckoutSidebar(true)}
+                <div className="flex justify-between text-slate-600">
+                  <span>Delivery</span>
+                  <span className="font-bold text-slate-900">Rp {totalDeliveryFee.toLocaleString('id-ID')}</span>
+                </div>
+
+                {speedSurcharge > 0 && (
+                  <div className="flex justify-between text-amber-600">
+                    <span>Biaya Kilat / Express</span>
+                    <span className="font-bold">+ Rp {speedSurcharge.toLocaleString('id-ID')}</span>
+                  </div>
+                )}
+
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between mt-2">
+                  <span className="text-xs font-extrabold text-slate-800">Grand Total</span>
+                  <span className="text-xl font-black text-slate-900">
+                    Rp {grandTotal.toLocaleString('id-ID')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Metode Pembayaran Grid (7 Tombol Persis Referensi) */}
+              <div className="mt-3 shrink-0">
+                <div className="text-[11px] font-bold text-slate-600 mb-2">Metode Pembayaran</div>
+
+                <div className="grid grid-cols-4 gap-1.5 mb-1.5">
+                  {[
+                    { id: 'CASH', label: 'Cash', icon: Wallet },
+                    { id: 'QRIS', label: 'QRIS', icon: QrCode },
+                    { id: 'TRANSFER', label: 'Transfer', icon: Building2 },
+                    { id: 'EWALLET', label: 'E-Wallet', icon: Smartphone }
+                  ].map(pm => {
+                    const Icon = pm.icon;
+                    const active = selectedPaymentTile === pm.id;
+                    return (
+                      <button
+                        key={pm.id}
+                        type="button"
+                        onClick={() => setSelectedPaymentTile(pm.id as any)}
+                        className={`py-2 px-1 rounded-xl border text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
+                          active
+                            ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <Icon size={14} />
+                        <span>{pm.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'PAY_AT_STORE', label: 'Pay at Store', icon: Store },
+                    { id: 'COD_DP', label: 'COD / DP', icon: Bike },
+                    { id: 'MEMBER_BALANCE', label: 'Member Balance', icon: Star }
+                  ].map(pm => {
+                    const Icon = pm.icon;
+                    const active = selectedPaymentTile === pm.id;
+                    return (
+                      <button
+                        key={pm.id}
+                        type="button"
+                        onClick={() => setSelectedPaymentTile(pm.id as any)}
+                        className={`py-2 px-1.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer ${
+                          active
+                            ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <Icon size={13} />
+                        <span className="truncate">{pm.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Input Kontekstual jika pilih COD / DP atau Member Balance */}
+                {selectedPaymentTile === 'COD_DP' && (
+                  <div className="mt-2 flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5 text-xs">
+                    <span className="font-bold text-amber-800">Nominal DP (Rp):</span>
+                    <input
+                      type="number"
+                      placeholder="0 (Bayar saat kurir antar)"
+                      value={dpAmountInput}
+                      onChange={e => setDpAmountInput(e.target.value)}
+                      className="w-32 text-right bg-white border border-amber-300 rounded-lg px-2 py-1 font-extrabold text-slate-900 outline-none"
+                    />
+                  </div>
+                )}
+
+                {selectedPaymentTile === 'MEMBER_BALANCE' && (
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 bg-blue-50/60 border border-blue-200 rounded-xl p-1.5 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setMemberBalanceMode('QUOTA_KG')}
+                      className={`py-1 rounded-lg font-bold cursor-pointer ${
+                        memberBalanceMode === 'QUOTA_KG' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                      }`}
+                    >
+                      Kuota ({customerQuotaKg.toFixed(1)} Kg)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMemberBalanceMode('DEPOSIT')}
+                      className={`py-1 rounded-lg font-bold cursor-pointer ${
+                        memberBalanceMode === 'DEPOSIT' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                      }`}
+                    >
+                      Deposit (Rp {customerDeposit.toLocaleString('id-ID')})
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Tombol Utama: Bayar & Cetak Struk + Simpan */}
+              <div className="mt-3 pt-2 flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isSubmitting || cart.length === 0}
+                  onClick={() => handleCreateOrder(true)}
+                  className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm transition cursor-pointer active:scale-[0.99]"
+                >
+                  <Printer size={15} />
+                  <span>{isSubmitting ? 'Memproses...' : 'Bayar & Cetak Struk'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSubmitting || cart.length === 0}
+                  onClick={() => handleCreateOrder(false)}
+                  className="py-3 px-4 rounded-xl bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 border border-slate-300 text-xs font-extrabold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Save size={14} />
+                  <span>Simpan</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      )}
-
-      {/* ─── KANAN (DESKTOP ONLY / SIDEBAR STANDAR KASIR): LIVE NOTA TICKET & CHECKOUT DOCK ─── */}
-      <div className="hidden lg:flex pos-sidebar w-[420px] xl:w-[480px] flex-shrink-0 flex-col h-full bg-white border-l border-slate-200 overflow-hidden shadow-lg">
-        {renderCheckoutSidebar(false)}
       </div>
 
-      {/* ─── MODAL CEPAT DATA PELANGGAN & AROMA PARFUM (MOBILE QUICK MODAL) ─── */}
-      {isCustomerQuickModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
-                  <User size={16} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black">Pelanggan & Varian Parfum</h3>
-                  <p className="text-[10px] text-slate-400">Atur kontak penerima dan pilihan aroma cuci</p>
-                </div>
-              </div>
+      {/* ─── BOTTOM STATUS BAR (PERSIS REFERENSI FRESHCLEAN) ──────────────────── */}
+      <div className="bg-white border-t border-slate-200 px-5 py-2 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
+        <div className="flex items-center gap-1.5 font-semibold text-blue-700">
+          <Zap size={13} className="text-blue-600" />
+          <span>Proses cepat: rata-rata transaksi &lt; 30 detik</span>
+        </div>
+        <div className="flex items-center gap-4 font-semibold">
+          <span className="flex items-center gap-1 text-slate-600">
+            <Printer size={13} className="text-emerald-600" /> Printer siap
+          </span>
+        </div>
+      </div>
+
+      {/* ─── MODAL TAMBAH PELANGGAN BARU CEPAT ────────────────────────────────── */}
+      {showNewCustomerModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleCreateNewCustomer}
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden"
+          >
+            <div className="p-4 bg-blue-600 text-white flex items-center justify-between">
+              <h3 className="text-sm font-extrabold flex items-center gap-2">
+                <User size={16} /> Tambah Pelanggan Laundry Baru
+              </h3>
               <button
                 type="button"
-                onClick={() => setIsCustomerQuickModalOpen(false)}
-                className="p-1 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                onClick={() => setShowNewCustomerModal(false)}
+                className="p-1 rounded-lg hover:bg-white/20 text-white cursor-pointer"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
-
-            <div className="p-4 space-y-3.5 max-h-[75vh] overflow-y-auto">
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Nama Pelanggan
-                </label>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Nama Lengkap *</label>
                 <input
                   type="text"
-                  placeholder="Contoh: Bpk Bambang / Bu Siti"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-cyan-500 focus:bg-white"
+                  required
+                  value={newCustName}
+                  onChange={e => setNewCustName(e.target.value)}
+                  placeholder="Contoh: Budi Santoso"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 focus:border-blue-500 outline-none"
                 />
               </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Nomor WhatsApp (Untuk Notifikasi Siap Ambil)
-                </label>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Nomor WhatsApp *</label>
                 <input
                   type="tel"
-                  placeholder="081234567xxx"
-                  value={customerPhone}
-                  onChange={e => setCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none focus:border-cyan-500 focus:bg-white"
+                  required
+                  value={newCustPhone}
+                  onChange={e => setNewCustPhone(e.target.value)}
+                  placeholder="0812xxxxxxxx"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono text-slate-900 focus:border-blue-500 outline-none"
                 />
               </div>
-
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                  <span>Pilihan Aroma Parfum</span>
-                  <span className="text-cyan-700 font-bold normal-case text-xs">{perfumeVariant}</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {SCENT_OPTIONS.map(scent => (
-                    <button
-                      key={scent.name}
-                      type="button"
-                      onClick={() => { triggerHaptic?.(10); setPerfumeVariant(scent.name); }}
-                      className={`p-2 rounded-xl text-xs font-bold flex items-center gap-2 border text-left transition-all cursor-pointer ${
-                        perfumeVariant === scent.name
-                          ? 'border-cyan-600 bg-cyan-50 text-cyan-900 shadow-xs'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                      }`}
-                    >
-                      <span className="text-base">{scent.badge.split(' ')[0]}</span>
-                      <span className="truncate">{scent.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  Kecepatan Layanan (SLA)
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'REGULAR', label: 'Reguler', dur: '2-3 Hari' },
-                    { id: 'KILAT_24H', label: 'Kilat 24 Jam', dur: '+25%' },
-                    { id: 'EXPRESS_6H', label: 'Express 6 Jam', dur: '+50%' },
-                  ].map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => { triggerHaptic?.(10); setServiceSpeed(s.id as any); }}
-                      className={`p-2 rounded-xl text-center border transition-all cursor-pointer ${
-                        serviceSpeed === s.id
-                          ? 'border-cyan-600 bg-cyan-50 text-cyan-900 shadow-xs font-black'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs'
-                      }`}
-                    >
-                      <div className="text-xs">{s.label}</div>
-                      <div className="text-[10px] text-slate-500">{s.dur}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsCustomerQuickModalOpen(false)}
-                className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl font-bold text-xs shadow-md shadow-cyan-600/20 cursor-pointer active:scale-[0.99]"
-              >
-                Selesai & Simpan Pengaturan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── MODAL KALKULATOR DIMENSI KARPET & GORDEN (P x L = m²) ──────────── */}
-      {showMeterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                  <Ruler size={17} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black">Kalkulator Karpet & Gorden (m²)</h3>
-                  <p className="text-[10px] text-slate-400">Hitung otomatis luas Panjang × Lebar</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowMeterModal(false)}
-                className="p-1 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3.5">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase block mb-1">
-                  Nama Layanan Karpet / Gorden
-                </label>
-                <input
-                  type="text"
-                  value={meterServiceName}
-                  onChange={e => setMeterServiceName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-bold text-slate-500">Ukuran Cepat:</span>
-                {[
-                  { label: '1.6 × 2.3 m', l: '2.3', w: '1.6' },
-                  { label: '2.0 × 3.0 m', l: '3.0', w: '2.0' },
-                  { label: '3.0 × 4.0 m', l: '4.0', w: '3.0' },
-                  { label: 'Masjid 1.2 × 6.0 m', l: '6.0', w: '1.2' }
-                ].map((preset, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => {
-                      setMeterLength(preset.l);
-                      setMeterWidth(preset.w);
-                    }}
-                    className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold cursor-pointer"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    Panjang (m)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0.1"
-                    value={meterLength}
-                    onChange={e => setMeterLength(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-black text-slate-900 outline-none focus:border-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    Lebar (m)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0.1"
-                    value={meterWidth}
-                    onChange={e => setMeterWidth(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-black text-slate-900 outline-none focus:border-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    Tarif / m² (Rp)
-                  </label>
-                  <input
-                    type="number"
-                    step="1000"
-                    min="0"
-                    value={meterPricePerM2}
-                    onChange={e => setMeterPricePerM2(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-black text-amber-700 outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] font-bold text-amber-800 uppercase">Total Luas (P × L)</div>
-                  <div className="text-lg font-black font-mono text-slate-900">
-                    {computedMeterArea} m²
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] font-bold text-amber-800 uppercase">Subtotal Biaya</div>
-                  <div className="text-lg font-black font-mono text-amber-700">
-                    Rp {computedMeterSubtotal.toLocaleString('id-ID')}
-                  </div>
-                </div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Tier Member</label>
+                <select
+                  value={newCustTier}
+                  onChange={e => setNewCustTier(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800"
+                >
+                  <option value="Gold">Member Gold</option>
+                  <option value="Silver">Member Silver</option>
+                  <option value="Bronze">Reguler</option>
+                </select>
               </div>
             </div>
-
             <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowMeterModal(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                onClick={() => setShowNewCustomerModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
               >
                 Batal
               </button>
               <button
-                type="button"
-                onClick={handleAddMeterItemToCart}
-                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+                type="submit"
+                disabled={isSavingCustomer}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold"
               >
-                + Masukkan ke Nota ({computedMeterArea} m²)
+                {isSavingCustomer ? 'Menyimpan...' : 'Simpan & Pilih'}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
-      {/* ─── MODAL TOP-UP PAKET KUOTA KG & SALDO DEPOSIT MEMBER ─────────────── */}
+      {/* ─── MODAL TOP-UP PAKET KUOTA KG & DEPOSIT MEMBER ────────────────────── */}
       {showTopupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <Award size={17} />
-                </div>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-4 bg-blue-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Award size={18} />
                 <div>
-                  <h3 className="text-sm font-black">Paket Kuota Kg & Deposit Member</h3>
-                  <p className="text-[10px] text-slate-400">Prabayar langganan laundry kos & keluarga</p>
+                  <h3 className="text-sm font-black">Top-Up Paket Kuota Kg / Deposit Member</h3>
+                  <p className="text-[10px] text-blue-100">Langganan prabayar otomatis masuk Laci Kasir</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowTopupModal(false)}
-                className="p-1 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                className="p-1 rounded-lg hover:bg-white/20 text-white cursor-pointer"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            <div className="p-4 space-y-3.5">
+            <div className="p-4 space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nama Member *</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Nama Pelanggan *</label>
                   <input
                     type="text"
-                    placeholder="Nama Pelanggan"
                     value={customerName}
                     onChange={e => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                    placeholder="Nama Member"
+                    className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">No. WhatsApp *</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">No. WhatsApp *</label>
                   <input
                     type="tel"
-                    placeholder="0812xxxx"
                     value={customerPhone}
                     onChange={e => setCustomerPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none"
+                    placeholder="0812xxxx"
+                    className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
                 <button
                   type="button"
                   onClick={() => setTopupType('QUOTA_KG')}
-                  className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    topupType === 'QUOTA_KG' ? 'bg-white text-cyan-800 shadow-xs' : 'text-slate-600'
+                  className={`py-2 rounded-lg text-xs font-bold cursor-pointer ${
+                    topupType === 'QUOTA_KG' ? 'bg-blue-600 text-white' : 'text-slate-600'
                   }`}
                 >
-                  🧺 Paket Kuota (Kg)
+                  ⚖️ Paket Kuota Kg
                 </button>
                 <button
                   type="button"
                   onClick={() => setTopupType('DEPOSIT')}
-                  className={`py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    topupType === 'DEPOSIT' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600'
+                  className={`py-2 rounded-lg text-xs font-bold cursor-pointer ${
+                    topupType === 'DEPOSIT' ? 'bg-blue-600 text-white' : 'text-slate-600'
                   }`}
                 >
-                  💳 Saldo Deposit (Rp)
+                  💳 Saldo Deposit Rp
                 </button>
               </div>
 
               {topupType === 'QUOTA_KG' ? (
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-1.5">
                     {[
-                      { name: 'Paket Kos 15 Kg', kg: '15', price: '95000' },
-                      { name: 'Paket Hemat 30 Kg', kg: '30', price: '180000' },
-                      { name: 'Paket Keluarga 50 Kg', kg: '50', price: '285000' }
-                    ].map((pkg, idx) => (
+                      { label: '10 Kg (Rp 75rb)', kg: '10', price: '75000', name: 'Paket 10 Kg' },
+                      { label: '20 Kg (Rp 140rb)', kg: '20', price: '140000', name: 'Paket 20 Kg' },
+                      { label: '50 Kg (Rp 325rb)', kg: '50', price: '325000', name: 'Paket Keluarga 50 Kg' }
+                    ].map((p, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => {
-                          setTopupPackageName(pkg.name);
-                          setTopupKg(pkg.kg);
-                          setTopupPricePaid(pkg.price);
+                          setTopupAddedKg(p.kg);
+                          setTopupPricePaid(p.price);
+                          setTopupPackageName(p.name);
                         }}
-                        className="p-2 rounded-xl border border-cyan-200 bg-cyan-50/60 hover:bg-cyan-100 text-left transition cursor-pointer"
+                        className="p-2 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-[10px] font-bold text-blue-800 cursor-pointer"
                       >
-                        <div className="text-[11px] font-black text-cyan-900">{pkg.kg} Kg</div>
-                        <div className="text-[10px] font-mono text-slate-600">Rp {Number(pkg.price).toLocaleString('id-ID')}</div>
+                        {p.label}
                       </button>
                     ))}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Kuota Ditambahkan (Kg)</label>
+                      <label className="text-[10px] font-bold text-slate-500">Kuota Ditambahkan (Kg)</label>
                       <input
                         type="number"
-                        value={topupKg}
-                        onChange={e => setTopupKg(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-black text-cyan-800 outline-none"
+                        value={topupAddedKg}
+                        onChange={e => setTopupAddedKg(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Harga Paket Dibayar (Rp)</label>
+                      <label className="text-[10px] font-bold text-slate-500">Harga Bayar (Rp)</label>
                       <input
                         type="number"
                         value={topupPricePaid}
                         onChange={e => setTopupPricePaid(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-black text-slate-900 outline-none"
+                        className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
                       />
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2.5">
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { dep: '100000', pay: '100000', label: 'Rp 100rb' },
-                      { dep: '220000', pay: '200000', label: 'Rp 220rb (Bayar 200rb)' },
-                      { dep: '550000', pay: '500000', label: 'Rp 550rb (Bayar 500rb)' }
-                    ].map((d, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setTopupDepositAmt(d.dep);
-                          setTopupPricePaid(d.pay);
-                        }}
-                        className="p-2 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 text-left transition cursor-pointer"
-                      >
-                        <div className="text-[10px] font-black text-emerald-900">{d.label}</div>
-                      </button>
-                    ))}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500">Saldo Masuk (Rp)</label>
+                    <input
+                      type="number"
+                      value={topupDepositAmt}
+                      onChange={e => setTopupDepositAmt(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Saldo Masuk (Rp)</label>
-                      <input
-                        type="number"
-                        value={topupDepositAmt}
-                        onChange={e => setTopupDepositAmt(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-black text-emerald-800 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Uang Diterima Kasir (Rp)</label>
-                      <input
-                        type="number"
-                        value={topupPricePaid}
-                        onChange={e => setTopupPricePaid(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-black text-slate-900 outline-none"
-                      />
-                    </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500">Harga Bayar (Rp)</label>
+                    <input
+                      type="number"
+                      value={topupPricePaid}
+                      onChange={e => setTopupPricePaid(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold"
+                    />
                   </div>
                 </div>
               )}
-
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Metode Pembayaran Top-up</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(['CASH', 'QRIS', 'TRANSFER'] as const).map(pm => (
-                    <button
-                      key={pm}
-                      type="button"
-                      onClick={() => setTopupPaymentMethod(pm)}
-                      className={`py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
-                        topupPaymentMethod === pm
-                          ? 'border-cyan-600 bg-cyan-50 text-cyan-800'
-                          : 'border-slate-200 bg-slate-50 text-slate-600'
-                      }`}
-                    >
-                      {pm === 'CASH' ? 'Tunai' : pm}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setShowTopupModal(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
               >
                 Batal
               </button>
@@ -2398,7 +1927,7 @@ export const POSLaundry: React.FC = () => {
                 type="button"
                 disabled={isSubmittingTopup}
                 onClick={handleSubmitMemberTopup}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
               >
                 {isSubmittingTopup ? 'Memproses...' : 'Simpan & Terima Pembayaran'}
               </button>
@@ -2407,19 +1936,16 @@ export const POSLaundry: React.FC = () => {
         </div>
       )}
 
-      {/* ─── MODAL CETAK STRUK THERMAL ───────────────────────────────────────── */}
+      {/* ─── MODAL CETAK STRUK THERMAL & TAG PRODUKSI ────────────────────────── */}
       {showReceiptModal && createdOrder && (
-        <LaundryReceiptPrinter 
-          order={createdOrder}
-          onClose={() => setShowReceiptModal(false)}
-        />
+        <LaundryReceiptPrinter order={createdOrder} onClose={() => setShowReceiptModal(false)} />
       )}
 
-      {/* ─── MODAL KONFIGURASI TIMBANGAN DIGITAL ─────────────────────────────── */}
+      {/* ─── MODAL KONFIGURASI TIMBANGAN DIGITAL USB ─────────────────────────── */}
       <DigitalScaleModal
         isOpen={showScaleModal}
         onClose={() => setShowScaleModal(false)}
-        onApplyWeight={w => setScaleWeight(w.toFixed(2))}
+        onApplyWeight={w => setDockQty(w.toFixed(2))}
       />
 
       {/* ─── MODAL CUSTOMER APP LAUNDRY & QRIS DINAMIS AUTO-SETTLEMENT ───────── */}
@@ -2428,7 +1954,6 @@ export const POSLaundry: React.FC = () => {
         onClose={() => setShowPortalQrisModal(false)}
         token={token || ''}
       />
-
     </div>
   );
 };

@@ -1474,7 +1474,7 @@ router.patch('/orders/:id/delivery-status', authenticateToken, async (req: AuthR
   }
 });
 
-// ─── 9. GET /api/laundry/customers (Cari Member Laundry, Deposit & Kuota Kg) ──
+// ─── 9. GET /api/laundry/customers (Cari Member Laundry, Quick Info & Riwayat) ─
 router.get('/customers', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenantId;
@@ -1489,7 +1489,7 @@ router.get('/customers', authenticateToken, async (req: AuthRequest, res: Respon
         { phone: { contains: q } }
       ];
     }
-    const customers = await prisma.customer.findMany({
+    const rawCustomers = await prisma.customer.findMany({
       where,
       select: {
         id: true,
@@ -1498,15 +1498,118 @@ router.get('/customers', authenticateToken, async (req: AuthRequest, res: Respon
         points: true,
         tier: true,
         laundryDeposit: true,
-        laundryQuotaKg: true
+        laundryQuotaKg: true,
+        laundryOrders: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: {
+            orderNumber: true,
+            createdAt: true,
+            totalAmount: true,
+            paidAmount: true,
+            paymentStatus: true,
+            pickupAddress: true,
+            deliveryAddress: true
+          }
+        }
       },
-      orderBy: [{ laundryQuotaKg: 'desc' }, { laundryDeposit: 'desc' }, { updatedAt: 'desc' }],
+      orderBy: [{ updatedAt: 'desc' }, { laundryQuotaKg: 'desc' }, { laundryDeposit: 'desc' }],
       take: 30
     });
+
+    const customers = rawCustomers.map(c => {
+      const orders = c.laundryOrders || [];
+      const latestOrder = orders[0] || null;
+      const addrOrder = orders.find(o => (o.deliveryAddress && o.deliveryAddress.trim()) || (o.pickupAddress && o.pickupAddress.trim()));
+      const favoriteAddress = addrOrder?.deliveryAddress || addrOrder?.pickupAddress || '';
+      const outstandingPayment = orders.reduce((sum, o) => {
+        if (o.paymentStatus === 'PAID') return sum;
+        return sum + Math.max(0, (Number(o.totalAmount) || 0) - (Number(o.paidAmount) || 0));
+      }, 0);
+
+      return {
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        points: c.points || 0,
+        tier: c.tier || 'Bronze',
+        laundryDeposit: c.laundryDeposit || 0,
+        laundryQuotaKg: c.laundryQuotaKg || 0,
+        lastOrderNumber: latestOrder?.orderNumber || null,
+        lastOrderDate: latestOrder?.createdAt || null,
+        favoriteAddress,
+        outstandingPayment
+      };
+    });
+
     return res.json({ customers });
   } catch (err: any) {
     console.error('[Laundry Customers Search Error]:', err);
     return res.status(500).json({ error: 'Gagal mencari pelanggan laundry.' });
+  }
+});
+
+// ─── 9B. POST /api/laundry/customers (Tambah Pelanggan Baru Cepat dari POS) ───
+router.post('/customers', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant context tidak tersedia.' });
+    }
+    const { name, phone, tier = 'Silver' } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Nama pelanggan wajib diisi.' });
+    }
+    if (!phone || String(phone).trim().length < 6) {
+      return res.status(400).json({ error: 'Nomor HP/WhatsApp wajib diisi.' });
+    }
+
+    const cleanName = String(name).trim();
+    const cleanPhone = String(phone).trim();
+
+    const existing = await prisma.customer.findFirst({
+      where: { tenantId, phone: cleanPhone, deletedAt: null }
+    });
+
+    if (existing) {
+      const updated = await prisma.customer.update({
+        where: { id: existing.id },
+        data: { name: cleanName }
+      });
+      return res.json({
+        message: 'Data pelanggan diperbarui.',
+        customer: {
+          ...updated,
+          lastOrderNumber: null,
+          lastOrderDate: null,
+          favoriteAddress: '',
+          outstandingPayment: 0
+        }
+      });
+    }
+
+    const created = await prisma.customer.create({
+      data: {
+        tenantId,
+        name: cleanName,
+        phone: cleanPhone,
+        tier: String(tier || 'Silver')
+      }
+    });
+
+    return res.status(201).json({
+      message: `Pelanggan ${created.name} berhasil ditambahkan!`,
+      customer: {
+        ...created,
+        lastOrderNumber: null,
+        lastOrderDate: null,
+        favoriteAddress: '',
+        outstandingPayment: 0
+      }
+    });
+  } catch (err: any) {
+    console.error('[POST Laundry Customer Error]:', err);
+    return res.status(500).json({ error: err.message || 'Gagal menambahkan pelanggan baru.' });
   }
 });
 
