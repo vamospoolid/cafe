@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Shirt,
   Search,
@@ -31,7 +31,12 @@ import {
   Star,
   Store,
   Building2,
-  Smartphone
+  Smartphone,
+  ChevronRight,
+  ChevronDown,
+  Bell,
+  ArrowLeft,
+  ScanLine
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
@@ -222,7 +227,21 @@ function renderServiceIllustration(iconType?: string, size: 'md' | 'sm' = 'md') 
 
 export const POSLaundry: React.FC = () => {
   const navigate = useNavigate();
-  const { token, triggerHaptic, activeShift } = usePOS();
+  const { token, triggerHaptic, activeShift, settings } = usePOS();
+
+  // Refs untuk Interactive 6-Step Stepper & Global Search (⌘K)
+  const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const globalSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const dockQtyInputRef = useRef<HTMLInputElement | null>(null);
+  const serviceGridRef = useRef<HTMLDivElement | null>(null);
+  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // ─── STATE TOP BAR (OUTLET, LIVE CLOCK, GLOBAL SEARCH ⌘K, NOTIF BELL) ────────
+  const [liveClock, setLiveClock] = useState<Date>(() => new Date());
+  const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
+  const [showGlobalSearchDropdown, setShowGlobalSearchDropdown] = useState<boolean>(false);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [enableTax11, setEnableTax11] = useState<boolean>(false);
 
   // ─── STATE KATALOG & KATEGORI ────────────────────────────────────────────────
   const [catalog, setCatalog] = useState<ServiceCatalogItem[]>(DEFAULT_LAUNDRY_CATALOG);
@@ -362,8 +381,8 @@ export const POSLaundry: React.FC = () => {
           }
         }
       } catch {
-        const cached = await (offlineDb as any).catalogProducts?.toArray?.() || [];
-        if (cached.length > 0) {
+        const cached = await (offlineDb as any).catalogProducts?.toArray().catch(() => []);
+        if (cached && cached.length > 0) {
           const mapped: ServiceCatalogItem[] = cached.map((p: any) => ({
             id: p.id,
             name: p.name,
@@ -411,19 +430,86 @@ export const POSLaundry: React.FC = () => {
 
   // ─── 3. SUBSCRIPTION TIMBANGAN DIGITAL USB ───────────────────────────────────
   useEffect(() => {
-    const unsubStatus = scaleDriver.onStatusChange(status => {
-      setScaleStatus(status);
-    });
     const unsubReading = scaleDriver.onReading(reading => {
       if (reading.weight > 0 && selectedService.unitType === 'KG') {
         setDockQty(reading.weight.toFixed(2));
       }
     });
+    const unsubStatus = scaleDriver.onStatusChange(status => {
+      setScaleStatus(status);
+    });
     return () => {
-      unsubStatus();
       unsubReading();
+      unsubStatus();
     };
   }, [selectedService.unitType]);
+
+  // ─── 3B. LIVE CLOCK, RECENT ORDERS & KEYBOARD SHORTCUT (⌘K / Ctrl+K) ─────────
+  useEffect(() => {
+    const timer = setInterval(() => setLiveClock(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        globalSearchInputRef.current?.focus();
+        setShowGlobalSearchDropdown(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const fetchRecentLaundryOrders = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/laundry/orders?limit=40', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRecentOrders(Array.isArray(data) ? data : data.orders || []);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchRecentLaundryOrders();
+  }, [token]);
+
+  const activeCourierAlertCount = useMemo(() => {
+    return recentOrders.filter(
+      o =>
+        o.status === 'MENUNGGU_JEMPUT' ||
+        o.paymentVerificationStatus === 'PENDING_VERIFICATION' ||
+        (o.deliveryType && o.deliveryType !== 'WALK_IN' && o.status === 'SELESAI_SIAP_AMBIL')
+    ).length;
+  }, [recentOrders]);
+
+  const globalMatchedCustomers = useMemo(() => {
+    const q = globalSearchQuery.trim().toLowerCase();
+    if (!q) return memberList.slice(0, 4);
+    return memberList
+      .filter(m => m.name.toLowerCase().includes(q) || (m.phone || '').toLowerCase().includes(q))
+      .slice(0, 5);
+  }, [memberList, globalSearchQuery]);
+
+  const globalMatchedOrders = useMemo(() => {
+    const q = globalSearchQuery.trim().toLowerCase();
+    if (!q) return recentOrders.slice(0, 4);
+    return recentOrders
+      .filter(
+        o =>
+          (o.orderNumber || '').toLowerCase().includes(q) ||
+          (o.customerName || '').toLowerCase().includes(q) ||
+          (o.customerPhone || '').toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+  }, [recentOrders, globalSearchQuery]);
 
   // ─── 4. PILIH PELANGGAN DARI KOLOM KIRI ──────────────────────────────────────
   const handleSelectMember = (member: LaundryMember) => {
@@ -607,10 +693,10 @@ export const POSLaundry: React.FC = () => {
       prev.map(it =>
         it.id === id
           ? {
-              ...it,
-              qty: cleanQty,
-              subtotal: Math.round(cleanQty * it.pricePerUnit)
-            }
+            ...it,
+            qty: cleanQty,
+            subtotal: Math.round(cleanQty * it.pricePerUnit)
+          }
           : it
       )
     );
@@ -675,9 +761,15 @@ export const POSLaundry: React.FC = () => {
     return pFee + dFee;
   }, [deliveryType, pickupFeeAmount, deliveryFeeAmount]);
 
+  const taxAmount11 = useMemo(() => {
+    if (!enableTax11) return 0;
+    const taxableBase = Math.max(0, itemsSubtotal + speedSurcharge + totalDeliveryFee - discountAmount);
+    return Math.round(taxableBase * 0.11);
+  }, [enableTax11, itemsSubtotal, speedSurcharge, totalDeliveryFee, discountAmount]);
+
   const grandTotal = useMemo(
-    () => Math.max(0, itemsSubtotal + speedSurcharge + totalDeliveryFee - discountAmount),
-    [itemsSubtotal, speedSurcharge, totalDeliveryFee, discountAmount]
+    () => Math.max(0, itemsSubtotal + speedSurcharge + totalDeliveryFee - discountAmount + taxAmount11),
+    [itemsSubtotal, speedSurcharge, totalDeliveryFee, discountAmount, taxAmount11]
   );
 
   const estimatedDoneDate = useMemo(() => {
@@ -768,8 +860,8 @@ export const POSLaundry: React.FC = () => {
         serviceCategory: cart.every(i => i.unitType === 'KG')
           ? 'KILOAN'
           : cart.every(i => i.unitType !== 'KG')
-          ? 'SATUAN'
-          : 'CAMPURAN',
+            ? 'SATUAN'
+            : 'CAMPURAN',
         serviceSpeed,
         perfumeVariant: selectedPerfume,
         specialNotes: specialNotes.trim() || null,
@@ -833,50 +925,219 @@ export const POSLaundry: React.FC = () => {
     }
   };
 
-  // Stepper Active Status
+  // Stepper Active Status (6 Steps FreshClean Style)
   const step1Done = customerName.trim().length > 0;
   const step2Done = Boolean(selectedService);
   const step3Done = cart.length > 0;
-  const step4Done = Boolean(selectedPerfume) || deliveryType !== 'WALK_IN' || intakePhotos.length > 0;
+  const step4Done = Boolean(selectedPerfume) || serviceSpeed !== 'REGULAR' || intakePhotos.length > 0;
+  const step5Done = deliveryType !== 'WALK_IN' || step3Done;
+
+  const formattedTopDate = useMemo(() => {
+    const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const d = liveClock;
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}   ${hh}:${mm}`;
+  }, [liveClock]);
+
+  const handleStepClick = (stepNum: number) => {
+    triggerHaptic?.(10);
+    if (stepNum === 1) {
+      customerSearchInputRef.current?.focus();
+    } else if (stepNum === 2) {
+      serviceGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else if (stepNum === 3) {
+      dockQtyInputRef.current?.focus();
+      dockQtyInputRef.current?.select();
+    } else if (stepNum === 4) {
+      setServiceSpeed(prev => (prev === 'REGULAR' ? 'KILAT_24H' : prev === 'KILAT_24H' ? 'EXPRESS_6H' : 'REGULAR'));
+    } else if (stepNum === 5) {
+      setActiveAddonPanel(prev => (prev === 'DELIVERY' ? 'NONE' : 'DELIVERY'));
+    } else if (stepNum === 6) {
+      paymentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
 
   return (
     <div className="flex flex-col h-full w-full bg-[#F4F7FE] text-slate-800 overflow-hidden font-sans select-none">
-      {/* ─── TOP HEADER BAR & 5-STEP PROGRESS INDICATOR ───────────────────────── */}
-      <div className="bg-white border-b border-slate-200 px-5 py-3 shrink-0 shadow-2xs">
+      {/* ─── ROW 1: FRESHCLEAN GLOBAL UTILITY BAR (OUTLET, JAM, GLOBAL SEARCH ⌘K, NOTIF) ─── */}
+      <div className="bg-white border-b border-slate-200/80 px-5 py-2 shrink-0 flex flex-wrap items-center justify-between gap-3">
+        {/* Kiri: Outlet Selector & Live Clock */}
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => navigate('/cabang')}
+            className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800 hover:text-blue-600 transition cursor-pointer"
+            title="Pilih / Kelola Cabang Outlet Laundry"
+          >
+            <span>{settings?.storeName || 'Outlet Pusat'}</span>
+            <ChevronDown size={14} className="text-slate-400" />
+          </button>
+
+          <span className="hidden sm:inline-block text-xs font-medium text-slate-400">
+            {formattedTopDate}
+          </span>
+        </div>
+
+        {/* Tengah: Global Quick Search (⌘K) Pelanggan, No HP, Order ID */}
+        <div className="relative flex-1 max-w-md">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            ref={globalSearchInputRef}
+            type="text"
+            value={globalSearchQuery}
+            onFocus={() => setShowGlobalSearchDropdown(true)}
+            onBlur={() => setTimeout(() => setShowGlobalSearchDropdown(false), 200)}
+            onChange={e => {
+              setGlobalSearchQuery(e.target.value);
+              setShowGlobalSearchDropdown(true);
+            }}
+            placeholder="Cari pelanggan, nomor HP, order ID..."
+            className="w-full pl-8 pr-12 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 outline-none transition"
+          />
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-400">
+            ⌘K
+          </span>
+
+          {/* Dropdown Hasil Pencarian Cepat */}
+          {showGlobalSearchDropdown && (
+            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2.5 max-h-80 overflow-y-auto space-y-2">
+              <div>
+                <div className="text-[10px] font-extrabold uppercase text-slate-400 px-2 mb-1">
+                  Pelanggan ({globalMatchedCustomers.length})
+                </div>
+                {globalMatchedCustomers.length === 0 ? (
+                  <div className="text-xs text-slate-400 px-2 py-1">Tidak ada pelanggan cocok</div>
+                ) : (
+                  globalMatchedCustomers.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onMouseDown={() => {
+                        handleSelectMember(m);
+                        setShowGlobalSearchDropdown(false);
+                        setGlobalSearchQuery('');
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-xl hover:bg-blue-50 text-left flex items-center justify-between text-xs cursor-pointer"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-800">{m.name}</span>
+                        <span className="text-slate-400 font-mono ml-2">{m.phone}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-600">Pilih →</span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="border-t border-slate-100 pt-1.5">
+                <div className="text-[10px] font-extrabold uppercase text-slate-400 px-2 mb-1">
+                  Order Terakhir ({globalMatchedOrders.length})
+                </div>
+                {globalMatchedOrders.length === 0 ? (
+                  <div className="text-xs text-slate-400 px-2 py-1">Tidak ada order cocok</div>
+                ) : (
+                  globalMatchedOrders.map(ord => (
+                    <button
+                      key={ord.id}
+                      type="button"
+                      onMouseDown={() => {
+                        setCreatedOrder(ord);
+                        setShowReceiptModal(true);
+                        setShowGlobalSearchDropdown(false);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-xl hover:bg-slate-50 text-left flex items-center justify-between text-xs cursor-pointer"
+                    >
+                      <div>
+                        <span className="font-mono font-extrabold text-blue-600">#{ord.orderNumber}</span>
+                        <span className="font-bold text-slate-700 ml-2">{ord.customerName}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-500">
+                        Rp {Number(ord.totalAmount || 0).toLocaleString('id-ID')}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Kanan: Notifikasi Kurir/QRIS & Pintasan Cepat */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/laundry-kurir')}
+            className="relative p-2 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 border border-slate-200 transition cursor-pointer"
+            title="Order Jemput Kurir & Verifikasi QRIS"
+          >
+            <Bell size={15} />
+            {activeCourierAlertCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center">
+                {activeCourierAlertCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowPortalQrisModal(true)}
+            className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            title="Pengaturan Customer App Antar-Jemput & QRIS Dinamis Auto-Settlement"
+          >
+            <QrCode size={13} />
+            <span className="hidden md:inline">App &amp; QRIS</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── ROW 2: SUB-HEADER "← TAMBAH ORDER BARU" & 6-STEP PROGRESS INDICATOR ─── */}
+      <div className="bg-white border-b border-slate-200 px-5 py-2.5 shrink-0 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Tambah Order Baru</span>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => navigate('/riwayat')}
+              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+              title="Lihat Daftar Order Laundry"
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+              Tambah Order Baru
             </h1>
-            <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              🌸 {selectedPerfume}
-            </span>
           </div>
 
-          {/* Horizontal 5-Step Progress Indicator (FreshClean Style) */}
-          <div className="hidden xl:flex items-center gap-4 text-xs font-bold">
+          {/* Horizontal 6-Step Interactive Progress Indicator (Persis Referensi FreshClean) */}
+          <div className="hidden xl:flex items-center gap-3 text-xs font-bold">
             {[
               { num: 1, label: 'Pelanggan', active: true, done: step1Done },
               { num: 2, label: 'Layanan', active: step1Done, done: step2Done && step3Done },
               { num: 3, label: 'Berat / Qty', active: step2Done, done: step3Done },
-              { num: 4, label: 'Add-on & Pengiriman', active: step3Done, done: step4Done && step3Done },
-              { num: 5, label: 'Pembayaran', active: step3Done, done: false }
+              { num: 4, label: 'Add-on', active: step3Done, done: step4Done && step3Done },
+              { num: 5, label: 'Pengiriman', active: step3Done, done: step5Done && step3Done },
+              { num: 6, label: 'Pembayaran', active: step3Done, done: false }
             ].map((st, idx) => (
-              <div key={st.num} className="flex items-center gap-2">
+              <button
+                key={st.num}
+                type="button"
+                onClick={() => handleStepClick(st.num)}
+                className="flex items-center gap-1.5 hover:opacity-80 transition cursor-pointer"
+              >
                 <span
-                  className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-extrabold transition ${
-                    st.done
+                  className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-extrabold transition ${st.done
                       ? 'bg-blue-600 text-white'
                       : st.active
-                      ? 'bg-blue-100 text-blue-700 border border-blue-400'
-                      : 'bg-slate-100 text-slate-400'
-                  }`}
+                        ? 'bg-blue-100 text-blue-700 border border-blue-400'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}
                 >
                   {st.done ? <Check size={11} strokeWidth={3} /> : st.num}
                 </span>
                 <span className={st.done || st.active ? 'text-slate-800' : 'text-slate-400'}>{st.label}</span>
-                {idx < 4 && <div className="w-5 h-[1.5px] bg-slate-200" />}
-              </div>
+                {idx < 5 && <div className="w-4 h-[1.5px] bg-slate-200 ml-1" />}
+              </button>
             ))}
           </div>
 
@@ -884,21 +1145,20 @@ export const POSLaundry: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowPortalQrisModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-              title="Pengaturan Customer App Antar-Jemput & QRIS Dinamis Auto-Settlement"
+              onClick={() => navigate('/laundry-kurir')}
+              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
             >
-              <QrCode size={14} />
-              <span className="hidden sm:inline">App Pelanggan & QRIS</span>
+              <Bike size={13} />
+              <span className="hidden sm:inline">Kurir</span>
             </button>
             <button
               type="button"
               onClick={() => navigate('/laundry-kanban')}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
               title="Buka Papan Produksi & Rak Cucian"
             >
-              <Layers size={14} />
-              <span className="hidden sm:inline">Produksi & Rak</span>
+              <Layers size={13} />
+              <span className="hidden sm:inline">Produksi</span>
             </button>
           </div>
         </div>
@@ -918,12 +1178,21 @@ export const POSLaundry: React.FC = () => {
                 <div className="relative flex-1">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
+                    ref={customerSearchInputRef}
                     type="text"
                     value={customerSearch}
                     onChange={e => setCustomerSearch(e.target.value)}
-                    placeholder="Cari pelanggan / no HP..."
-                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 outline-none transition"
+                    placeholder="Cari pelanggan..."
+                    className="w-full pl-8 pr-8 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 outline-none transition"
                   />
+                  <button
+                    type="button"
+                    onClick={() => customerSearchInputRef.current?.focus()}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg hover:bg-slate-200/70 text-slate-400 hover:text-slate-700 cursor-pointer"
+                    title="Scan Kartu Member / QR Pelanggan"
+                  >
+                    <ScanLine size={13} />
+                  </button>
                 </div>
                 <button
                   type="button"
@@ -988,25 +1257,23 @@ export const POSLaundry: React.FC = () => {
                       tierUpper === 'GOLD'
                         ? 'bg-amber-50 text-amber-700 border-amber-200'
                         : tierUpper === 'SILVER'
-                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                        : 'bg-slate-100 text-slate-600 border-slate-200';
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200';
 
                     return (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => handleSelectMember(m)}
-                        className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition cursor-pointer ${
-                          isSelected
+                        className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition cursor-pointer ${isSelected
                             ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500/30'
                             : 'bg-white hover:bg-slate-50 border-slate-200/80'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 ${
-                              isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                            }`}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                              }`}
                           >
                             {m.name.charAt(0).toUpperCase()}
                           </div>
@@ -1016,19 +1283,22 @@ export const POSLaundry: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-0.5 shrink-0">
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>
-                            {tierUpper === 'GOLD'
-                              ? 'Member Gold'
-                              : tierUpper === 'SILVER'
-                              ? 'Member Silver'
-                              : 'Member'}
-                          </span>
-                          {Number(m.laundryQuotaKg) > 0 && (
-                            <span className="text-[9px] font-extrabold text-emerald-600">
-                              {Number(m.laundryQuotaKg).toFixed(1)} kg
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>
+                              {tierUpper === 'GOLD'
+                                ? 'Member Gold'
+                                : tierUpper === 'SILVER'
+                                  ? 'Member Silver'
+                                  : 'Non Member'}
                             </span>
-                          )}
+                            {Number(m.laundryQuotaKg) > 0 && (
+                              <span className="text-[9px] font-extrabold text-emerald-600">
+                                {Number(m.laundryQuotaKg).toFixed(1)} kg
+                              </span>
+                            )}
+                          </div>
+                          <ChevronRight size={13} className="text-slate-400" />
                         </div>
                       </button>
                     );
@@ -1098,9 +1368,8 @@ export const POSLaundry: React.FC = () => {
                     <Wallet size={12} className="text-emerald-600" /> Outstanding Payment
                   </span>
                   <span
-                    className={`font-extrabold ${
-                      (selectedMemberInfo?.outstandingPayment || 0) > 0 ? 'text-rose-600' : 'text-slate-900'
-                    }`}
+                    className={`font-extrabold ${(selectedMemberInfo?.outstandingPayment || 0) > 0 ? 'text-rose-600' : 'text-slate-900'
+                      }`}
                   >
                     Rp {(selectedMemberInfo?.outstandingPayment || 0).toLocaleString('id-ID')}
                   </span>
@@ -1114,7 +1383,7 @@ export const POSLaundry: React.FC = () => {
              ==================================================================== */}
           <div className="lg:col-span-5 flex flex-col gap-3 h-full overflow-hidden">
             {/* Card Atas: Pilih Layanan Grid 3x3 */}
-            <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex flex-col flex-1 min-h-[300px] overflow-hidden">
+            <div ref={serviceGridRef} className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex flex-col flex-1 min-h-[300px] overflow-hidden">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-extrabold text-slate-900">Pilih Layanan</h2>
                 <span className="text-[11px] text-slate-400 font-medium">Klik kartu lalu atur berat di bawah</span>
@@ -1129,11 +1398,10 @@ export const POSLaundry: React.FC = () => {
                       key={tab.id}
                       type="button"
                       onClick={() => setSelectedCategory(tab.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                        active
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${active
                           ? 'bg-blue-600 text-white shadow-2xs'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                      }`}
+                        }`}
                     >
                       {tab.label}
                     </button>
@@ -1153,11 +1421,10 @@ export const POSLaundry: React.FC = () => {
                         key={srv.id}
                         type="button"
                         onClick={() => handleSelectServiceCard(srv)}
-                        className={`p-3.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center cursor-pointer active:scale-[0.98] ${
-                          isSelected
+                        className={`p-3.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center cursor-pointer active:scale-[0.98] ${isSelected
                             ? 'border-2 border-blue-600 bg-blue-50/30 shadow-xs'
                             : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50/60'
-                        }`}
+                          }`}
                       >
                         {renderServiceIllustration(srv.iconType, 'md')}
                         <div className="text-xs font-extrabold text-slate-900 line-clamp-1">{srv.name}</div>
@@ -1185,11 +1452,10 @@ export const POSLaundry: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setShowScaleModal(true)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border flex items-center gap-1 cursor-pointer ${
-                          scaleStatus === 'CONNECTED' || scaleStatus === 'SIMULATING'
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border flex items-center gap-1 cursor-pointer ${scaleStatus === 'CONNECTED' || scaleStatus === 'SIMULATING'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                        }`}
+                          }`}
                         title="Konfigurasi Timbangan Digital USB"
                       >
                         <Scale size={11} />
@@ -1230,6 +1496,7 @@ export const POSLaundry: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 flex-1 focus-within:border-blue-500 focus-within:bg-white">
                         <input
+                          ref={dockQtyInputRef}
                           type="number"
                           step={selectedService.unitType === 'KG' ? '0.1' : '1'}
                           min="0.1"
@@ -1316,11 +1583,10 @@ export const POSLaundry: React.FC = () => {
                         prev === 'REGULAR' ? 'KILAT_24H' : prev === 'KILAT_24H' ? 'EXPRESS_6H' : 'REGULAR'
                       )
                     }
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                      serviceSpeed === 'REGULAR'
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${serviceSpeed === 'REGULAR'
                         ? 'bg-slate-100 text-slate-700 border-slate-200'
                         : 'bg-amber-50 text-amber-700 border-amber-300'
-                    }`}
+                      }`}
                   >
                     ⚡ {serviceSpeed === 'EXPRESS_6H' ? 'Express 6 Jam (+80%)' : serviceSpeed === 'KILAT_24H' ? 'Kilat 24 Jam (+40%)' : 'Reguler (48 Jam)'}
                   </button>
@@ -1329,11 +1595,10 @@ export const POSLaundry: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setActiveAddonPanel(prev => (prev === 'DELIVERY' ? 'NONE' : 'DELIVERY'))}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 transition cursor-pointer ${
-                      deliveryType !== 'WALK_IN'
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 transition cursor-pointer ${deliveryType !== 'WALK_IN'
                         ? 'bg-blue-50 text-blue-700 border-blue-300'
                         : 'bg-slate-100 text-slate-700 border-slate-200'
-                    }`}
+                      }`}
                   >
                     <Bike size={12} />
                     <span>{deliveryType === 'WALK_IN' ? 'Antar-Jemput' : `Kurir (+Rp ${totalDeliveryFee.toLocaleString('id-ID')})`}</span>
@@ -1381,11 +1646,10 @@ export const POSLaundry: React.FC = () => {
                           key={opt.id}
                           type="button"
                           onClick={() => setDeliveryType(opt.id as any)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${
-                            deliveryType === opt.id
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${deliveryType === opt.id
                               ? 'bg-blue-600 text-white'
                               : 'bg-white text-slate-600 border border-slate-200'
-                          }`}
+                            }`}
                         >
                           {opt.label}
                         </button>
@@ -1567,6 +1831,20 @@ export const POSLaundry: React.FC = () => {
                   </div>
                 )}
 
+                <div className="flex items-center justify-between text-slate-600">
+                  <button
+                    type="button"
+                    onClick={() => setEnableTax11(prev => !prev)}
+                    className="hover:text-blue-600 underline decoration-dotted cursor-pointer flex items-center gap-1"
+                    title="Klik untuk mengaktifkan / menonaktifkan Pajak PPN 11%"
+                  >
+                    <span>Pajak (11%)</span>
+                  </button>
+                  <span className={`font-bold ${enableTax11 ? 'text-slate-900' : 'text-slate-400'}`}>
+                    Rp {taxAmount11.toLocaleString('id-ID')}
+                  </span>
+                </div>
+
                 <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between mt-2">
                   <span className="text-xs font-extrabold text-slate-800">Grand Total</span>
                   <span className="text-xl font-black text-slate-900">
@@ -1576,7 +1854,7 @@ export const POSLaundry: React.FC = () => {
               </div>
 
               {/* Metode Pembayaran Grid (7 Tombol Persis Referensi) */}
-              <div className="mt-3 shrink-0">
+              <div ref={paymentSectionRef} className="mt-3 shrink-0">
                 <div className="text-[11px] font-bold text-slate-600 mb-2">Metode Pembayaran</div>
 
                 <div className="grid grid-cols-4 gap-1.5 mb-1.5">
@@ -1593,11 +1871,10 @@ export const POSLaundry: React.FC = () => {
                         key={pm.id}
                         type="button"
                         onClick={() => setSelectedPaymentTile(pm.id as any)}
-                        className={`py-2 px-1 rounded-xl border text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
-                          active
+                        className={`py-2 px-1 rounded-xl border text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${active
                             ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
                             : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                        }`}
+                          }`}
                       >
                         <Icon size={14} />
                         <span>{pm.label}</span>
@@ -1619,11 +1896,10 @@ export const POSLaundry: React.FC = () => {
                         key={pm.id}
                         type="button"
                         onClick={() => setSelectedPaymentTile(pm.id as any)}
-                        className={`py-2 px-1.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer ${
-                          active
+                        className={`py-2 px-1.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer ${active
                             ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
                             : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                        }`}
+                          }`}
                       >
                         <Icon size={13} />
                         <span className="truncate">{pm.label}</span>
@@ -1651,18 +1927,16 @@ export const POSLaundry: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setMemberBalanceMode('QUOTA_KG')}
-                      className={`py-1 rounded-lg font-bold cursor-pointer ${
-                        memberBalanceMode === 'QUOTA_KG' ? 'bg-blue-600 text-white' : 'text-slate-600'
-                      }`}
+                      className={`py-1 rounded-lg font-bold cursor-pointer ${memberBalanceMode === 'QUOTA_KG' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                        }`}
                     >
                       Kuota ({customerQuotaKg.toFixed(1)} Kg)
                     </button>
                     <button
                       type="button"
                       onClick={() => setMemberBalanceMode('DEPOSIT')}
-                      className={`py-1 rounded-lg font-bold cursor-pointer ${
-                        memberBalanceMode === 'DEPOSIT' ? 'bg-blue-600 text-white' : 'text-slate-600'
-                      }`}
+                      className={`py-1 rounded-lg font-bold cursor-pointer ${memberBalanceMode === 'DEPOSIT' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                        }`}
                     >
                       Deposit (Rp {customerDeposit.toLocaleString('id-ID')})
                     </button>
@@ -1834,18 +2108,16 @@ export const POSLaundry: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setTopupType('QUOTA_KG')}
-                  className={`py-2 rounded-lg text-xs font-bold cursor-pointer ${
-                    topupType === 'QUOTA_KG' ? 'bg-blue-600 text-white' : 'text-slate-600'
-                  }`}
+                  className={`py-2 rounded-lg text-xs font-bold cursor-pointer ${topupType === 'QUOTA_KG' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                    }`}
                 >
                   ⚖️ Paket Kuota Kg
                 </button>
                 <button
                   type="button"
                   onClick={() => setTopupType('DEPOSIT')}
-                  className={`py-2 rounded-lg text-xs font-bold cursor-pointer ${
-                    topupType === 'DEPOSIT' ? 'bg-blue-600 text-white' : 'text-slate-600'
-                  }`}
+                  className={`py-2 rounded-lg text-xs font-bold cursor-pointer ${topupType === 'DEPOSIT' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                    }`}
                 >
                   💳 Saldo Deposit Rp
                 </button>

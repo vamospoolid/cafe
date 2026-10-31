@@ -33,6 +33,7 @@ const POSBengkel = React.lazy(() => import('./verticals/bengkel/POSBengkel'));
 const POSRetail = React.lazy(() => import('./verticals/retail/POSRetail'));
 const POSLaundry = React.lazy(() => import('./verticals/laundry/POSLaundry'));
 const LaundryKanbanView = React.lazy(() => import('./verticals/laundry/LaundryKanbanView'));
+const LaundryCourierView = React.lazy(() => import('./verticals/laundry/LaundryCourierView'));
 const POSRental = React.lazy(() => import('./verticals/rental/POSRental'));
 const RentalKanbanView = React.lazy(() => import('./verticals/rental/RentalKanbanView'));
 const RentalInventoryView = React.lazy(() => import('./verticals/rental/RentalInventoryView'));
@@ -414,6 +415,16 @@ const AppRoutes = () => {
                       <VerticalGuard allow="LAUNDRY">
                         <Suspense fallback={<div className="p-8 text-center text-cyan-600 font-bold text-xs">Memuat Papan Status Cucian...</div>}>
                           <LaundryKanbanView />
+                        </Suspense>
+                      </VerticalGuard>
+                    }
+                  />
+                  <Route
+                    path="/laundry-kurir"
+                    element={
+                      <VerticalGuard allow="LAUNDRY">
+                        <Suspense fallback={<div className="p-8 text-center text-blue-600 font-bold text-xs">Memuat Manajemen Kurir & Antar-Jemput...</div>}>
+                          <LaundryCourierView />
                         </Suspense>
                       </VerticalGuard>
                     }

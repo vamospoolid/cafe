@@ -45,6 +45,7 @@ import {
   Shirt,
   Car,
   Wrench,
+  Bike,
   Lock,
   LogOut,
   Key,
@@ -66,6 +67,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
   const [isOfflinePanelOpen, setIsOfflinePanelOpen] = useState(false);
+  const [showLaundryAdvancedMenu, setShowLaundryAdvancedMenu] = useState(false);
 
   // Periksa status aktivasi lisensi hardware saat booting (Electron Standalone)
   useEffect(() => {
@@ -149,7 +151,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   }, [socket, posContext?.token]);
   const titleMap: Record<string, string> = {
     '/dashboard': 'Dashboard',
-    '/pos': `POS - ${profile.orderTerm || 'Penjualan'}`,
+    '/pos': isLaundry ? 'POS Laundry' : `POS - ${profile.orderTerm || 'Penjualan'}`,
+    '/laundry-kanban': 'Produksi & Rak Cucian',
+    '/laundry-kurir': 'Kurir & Antar-Jemput Laundry',
     '/rental-calendar': 'Kalender & Agenda Sewa Busana',
     '/rental-kanban': 'Papan Status Sewa Busana',
     '/rental-inventory': 'Inventaris Busana & Ketersediaan Rak',
@@ -328,6 +332,131 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </div>
         
           <nav className="nav-menu">
+            {isLaundry ? (
+              <>
+                {checkAccess(['Admin']) && (
+                  <NavLink to="/dashboard" title="Dashboard" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <LayoutDashboard size={20} className="shrink-0" />
+                    <span>Dashboard</span>
+                  </NavLink>
+                )}
+                {checkAccess(['Admin', 'Kasir']) && (
+                  <NavLink to="/pos" title="POS Laundry" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <ShoppingCart size={20} className="shrink-0" />
+                    <span>POS</span>
+                  </NavLink>
+                )}
+                {checkAccess(['Admin', 'Kasir']) && (
+                  <NavLink to="/riwayat" title="Daftar Order Laundry" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <ClipboardList size={20} className="shrink-0" />
+                    <span>Order</span>
+                  </NavLink>
+                )}
+                {checkAccess(['Admin', 'Kasir']) && (
+                  <NavLink to="/laundry-kanban" title="Produksi & Rak Cucian" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Layers size={20} className="shrink-0 text-cyan-400" />
+                    <span>Produksi</span>
+                  </NavLink>
+                )}
+                {checkAccess(['Admin', 'Kasir']) && (
+                  <NavLink to="/crm" title="Pelanggan & Member Laundry" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Users size={20} className="shrink-0" />
+                    <span>Pelanggan</span>
+                  </NavLink>
+                )}
+                {checkAccess(['Admin', 'Kasir']) && (
+                  <NavLink to="/laundry-kurir" title="Kurir Antar-Jemput & QRIS" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Bike size={20} className="shrink-0 text-blue-400" />
+                    <span>Kurir</span>
+                  </NavLink>
+                )}
+                {checkAccess(['Admin']) && (
+                  <NavLink to="/laporan" title="Laporan Finansial & Tonase Laundry" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <FileText size={20} className="shrink-0" />
+                    <span>Laporan</span>
+                  </NavLink>
+                )}
+                {checkAccess(['Admin']) && (
+                  <NavLink to="/pengaturan" title="Pengaturan Laundry" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Settings size={20} className="shrink-0" />
+                    <span>Pengaturan</span>
+                  </NavLink>
+                )}
+
+                {/* Collapsible Menu Lanjutan agar Katalog, Deterjen, Kas, Shift & Cabang tetap mudah diakses */}
+                <div className="sidebar-section-divider my-2"></div>
+                {!isCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setShowLaundryAdvancedMenu(prev => !prev)}
+                    className="w-full px-3 py-1.5 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-slate-400 hover:text-white transition cursor-pointer"
+                  >
+                    <span>Menu Lanjutan</span>
+                    <ChevronDown size={13} className={`transition-transform ${showLaundryAdvancedMenu ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
+
+                {(showLaundryAdvancedMenu || isCollapsed) && (
+                  <>
+                    {checkAccess(['Admin']) && (
+                      <NavLink to="/produk" title="Katalog Layanan Laundry" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <Package size={18} className="shrink-0" />
+                        <span>Katalog Layanan</span>
+                      </NavLink>
+                    )}
+                    {checkAccess(['Admin', 'Kasir']) && (
+                      <NavLink to="/kas" title="Arus Kas / Petty Cash" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <Wallet size={18} className="shrink-0" />
+                        <span>Kas &amp; Petty Cash</span>
+                      </NavLink>
+                    )}
+                    {checkAccess(['Admin', 'Kasir']) && (
+                      <NavLink to="/shift" title="History Shift Kasir" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <Clock size={18} className="shrink-0" />
+                        <span>History Shift</span>
+                      </NavLink>
+                    )}
+                    {checkAccess(['Admin']) && (
+                      <NavLink to="/gudang" title="Stok Deterjen & Parfum" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <Boxes size={18} className="shrink-0" />
+                        <span>Stok Deterjen</span>
+                      </NavLink>
+                    )}
+                    {checkAccess(['Admin']) && (
+                      <NavLink to="/karyawan" title="Karyawan & Staf" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <Users size={18} className="shrink-0" />
+                        <span>Karyawan</span>
+                      </NavLink>
+                    )}
+                    {checkAccess(['Admin']) && (
+                      <NavLink to="/cabang" title="Cabang & Outlet" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+                        <Store size={18} className="shrink-0" />
+                        <span>Cabang &amp; Outlet</span>
+                      </NavLink>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsOfflinePanelOpen(true)}
+                      title="Pusat Mode Offline & Sinkronisasi"
+                      className="nav-item text-amber-300 hover:text-amber-200 w-full text-left flex items-center justify-between cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Wifi size={18} className="shrink-0 text-amber-400" />
+                        <span>Mode Offline &amp; Sync</span>
+                      </div>
+                    </button>
+                  </>
+                )}
+
+                {Boolean((posContext?.user as any)?.isPlatformAdmin || posContext?.user?.role === 'SUPERADMIN' || (posContext?.user?.role === 'OWNER' && (posContext?.user?.username === 'admin' || posContext?.user?.username === 'ahmad')) || posContext?.user?.username === 'admin') && (
+                  <NavLink to="/platform-admin" title="Master SaaS Console" className={({isActive}) => `nav-item ${isActive ? 'active' : ''} text-indigo-400 hover:text-indigo-300 font-bold`}>
+                    <Sliders size={20} className="shrink-0 text-indigo-400" />
+                    <span>Master SaaS Console</span>
+                  </NavLink>
+                )}
+              </>
+            ) : (
+              <>
             {checkAccess(['Admin']) && (
               <NavLink to="/dashboard" title="Dashboard" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
                 <LayoutDashboard size={20} className="shrink-0" />
@@ -585,6 +714,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     <span>Master SaaS Console</span>
                   </NavLink>
                 )}
+              </>
+            )}
               </>
             )}
           </nav>
@@ -1118,13 +1249,23 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               )}
 
               {isLaundry && checkAccess(['Admin', 'Kasir']) && (
-                <NavLink to="/laundry-kanban" onClick={() => setIsMoreMenuOpen(false)}
-                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
-                  <div className="w-11 h-11 rounded-2xl bg-cyan-100 flex items-center justify-center">
-                    <Layers size={20} className="text-cyan-600" />
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-700 leading-tight">Rak Cucian</span>
-                </NavLink>
+                <>
+                  <NavLink to="/laundry-kanban" onClick={() => setIsMoreMenuOpen(false)}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                    <div className="w-11 h-11 rounded-2xl bg-cyan-100 flex items-center justify-center">
+                      <Layers size={20} className="text-cyan-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Produksi</span>
+                  </NavLink>
+
+                  <NavLink to="/laundry-kurir" onClick={() => setIsMoreMenuOpen(false)}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl bg-white active:bg-slate-50 transition-all active:scale-95 gap-1.5 text-center border border-slate-100/80 shadow-sm">
+                    <div className="w-11 h-11 rounded-2xl bg-blue-100 flex items-center justify-center">
+                      <Bike size={20} className="text-blue-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-700 leading-tight">Kurir</span>
+                  </NavLink>
+                </>
               )}
 
               {isRetail && checkAccess(['Admin', 'Kasir']) && (
