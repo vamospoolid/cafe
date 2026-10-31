@@ -298,7 +298,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <div className={`app-container ${(isCollapsed && !isMobile) ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-container ${(isCollapsed && !isMobile) ? 'sidebar-collapsed' : ''} ${isLaundry ? 'laundry-theme-layout' : ''}`}>
       {/* Sidebar */}
       {!isMobile && (
         <aside className="sidebar">
@@ -721,7 +721,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           </nav>
 
           {/* Sidebar Footer: Logout Button */}
-          <div className="p-3 border-t border-slate-800/80 mt-auto shrink-0 bg-[#0d0c22]/90">
+          <div className={`p-3 border-t border-slate-800/80 mt-auto shrink-0 ${isLaundry ? 'bg-[#0b152b]' : 'bg-[#0d0c22]/90'}`}>
             <button
               type="button"
               onClick={() => posContext?.logout()}
@@ -749,7 +749,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 >
                   {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
                 </button>
-                <h1 className="page-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>{pageTitle}</h1>
+                {isLaundry ? (
+                  <div className="flex items-center gap-4">
+                    <h1 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <span>{posContext?.settings?.storeName || 'Outlet Pusat'}</span>
+                      <ChevronDown size={14} className="text-slate-400" />
+                    </h1>
+                    <span className="text-xs font-medium text-slate-400 hidden lg:inline-block">
+                      {new Date().toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                ) : (
+                  <h1 className="page-title" style={{ fontSize: '1.25rem', fontWeight: 800 }}>{pageTitle}</h1>
+                )}
               </>
             ) : (
               <div className="flex items-center gap-2.5">

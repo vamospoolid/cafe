@@ -198,7 +198,7 @@ function formatRelativeDate(dateStr?: string | null): string {
 function renderServiceIllustration(iconType?: string, size: 'md' | 'sm' = 'md') {
   const boxClass =
     size === 'md'
-      ? 'w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-2xs mx-auto mb-2'
+      ? 'w-11 h-11 rounded-2xl flex items-center justify-center text-2xl shadow-2xs mx-auto mb-1.5 shrink-0'
       : 'w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0';
 
   switch (iconType) {
@@ -376,8 +376,24 @@ export const POSLaundry: React.FC = () => {
             });
 
           if (laundryMapped.length > 0) {
-            setCatalog(laundryMapped);
-            setSelectedService(laundryMapped[0]);
+            // Pastikan 9 layanan utama FreshClean selalu tampil rapi di urutan atas,
+            // lalu gabungkan dengan layanan tambahan dari katalog database tenant.
+            const mergedCatalog: ServiceCatalogItem[] = DEFAULT_LAUNDRY_CATALOG.map(defItem => {
+              const match = laundryMapped.find(
+                m => m.name.toLowerCase().trim() === defItem.name.toLowerCase().trim()
+              );
+              return match ? { ...defItem, id: match.id, price: match.price } : defItem;
+            });
+            for (const customItem of laundryMapped) {
+              const alreadyExists = mergedCatalog.some(
+                c => c.name.toLowerCase().trim() === customItem.name.toLowerCase().trim()
+              );
+              if (!alreadyExists) {
+                mergedCatalog.push(customItem);
+              }
+            }
+            setCatalog(mergedCatalog);
+            setSelectedService(mergedCatalog[0]);
           }
         }
       } catch {
@@ -961,145 +977,15 @@ export const POSLaundry: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full w-full bg-[#F4F7FE] text-slate-800 overflow-hidden font-sans select-none">
-      {/* ─── ROW 1: FRESHCLEAN GLOBAL UTILITY BAR (OUTLET, JAM, GLOBAL SEARCH ⌘K, NOTIF) ─── */}
-      <div className="bg-white border-b border-slate-200/80 px-5 py-2 shrink-0 flex flex-wrap items-center justify-between gap-3">
-        {/* Kiri: Outlet Selector & Live Clock */}
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/cabang')}
-            className="flex items-center gap-1.5 text-xs font-extrabold text-slate-800 hover:text-blue-600 transition cursor-pointer"
-            title="Pilih / Kelola Cabang Outlet Laundry"
-          >
-            <span>{settings?.storeName || 'Outlet Pusat'}</span>
-            <ChevronDown size={14} className="text-slate-400" />
-          </button>
-
-          <span className="hidden sm:inline-block text-xs font-medium text-slate-400">
-            {formattedTopDate}
-          </span>
-        </div>
-
-        {/* Tengah: Global Quick Search (⌘K) Pelanggan, No HP, Order ID */}
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            ref={globalSearchInputRef}
-            type="text"
-            value={globalSearchQuery}
-            onFocus={() => setShowGlobalSearchDropdown(true)}
-            onBlur={() => setTimeout(() => setShowGlobalSearchDropdown(false), 200)}
-            onChange={e => {
-              setGlobalSearchQuery(e.target.value);
-              setShowGlobalSearchDropdown(true);
-            }}
-            placeholder="Cari pelanggan, nomor HP, order ID..."
-            className="w-full pl-8 pr-12 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 outline-none transition"
-          />
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-400">
-            ⌘K
-          </span>
-
-          {/* Dropdown Hasil Pencarian Cepat */}
-          {showGlobalSearchDropdown && (
-            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2.5 max-h-80 overflow-y-auto space-y-2">
-              <div>
-                <div className="text-[10px] font-extrabold uppercase text-slate-400 px-2 mb-1">
-                  Pelanggan ({globalMatchedCustomers.length})
-                </div>
-                {globalMatchedCustomers.length === 0 ? (
-                  <div className="text-xs text-slate-400 px-2 py-1">Tidak ada pelanggan cocok</div>
-                ) : (
-                  globalMatchedCustomers.map(m => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onMouseDown={() => {
-                        handleSelectMember(m);
-                        setShowGlobalSearchDropdown(false);
-                        setGlobalSearchQuery('');
-                      }}
-                      className="w-full px-2.5 py-1.5 rounded-xl hover:bg-blue-50 text-left flex items-center justify-between text-xs cursor-pointer"
-                    >
-                      <div>
-                        <span className="font-bold text-slate-800">{m.name}</span>
-                        <span className="text-slate-400 font-mono ml-2">{m.phone}</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-blue-600">Pilih →</span>
-                    </button>
-                  ))
-                )}
-              </div>
-
-              <div className="border-t border-slate-100 pt-1.5">
-                <div className="text-[10px] font-extrabold uppercase text-slate-400 px-2 mb-1">
-                  Order Terakhir ({globalMatchedOrders.length})
-                </div>
-                {globalMatchedOrders.length === 0 ? (
-                  <div className="text-xs text-slate-400 px-2 py-1">Tidak ada order cocok</div>
-                ) : (
-                  globalMatchedOrders.map(ord => (
-                    <button
-                      key={ord.id}
-                      type="button"
-                      onMouseDown={() => {
-                        setCreatedOrder(ord);
-                        setShowReceiptModal(true);
-                        setShowGlobalSearchDropdown(false);
-                      }}
-                      className="w-full px-2.5 py-1.5 rounded-xl hover:bg-slate-50 text-left flex items-center justify-between text-xs cursor-pointer"
-                    >
-                      <div>
-                        <span className="font-mono font-extrabold text-blue-600">#{ord.orderNumber}</span>
-                        <span className="font-bold text-slate-700 ml-2">{ord.customerName}</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-slate-500">
-                        Rp {Number(ord.totalAmount || 0).toLocaleString('id-ID')}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Kanan: Notifikasi Kurir/QRIS & Pintasan Cepat */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate('/laundry-kurir')}
-            className="relative p-2 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 border border-slate-200 transition cursor-pointer"
-            title="Order Jemput Kurir & Verifikasi QRIS"
-          >
-            <Bell size={15} />
-            {activeCourierAlertCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center">
-                {activeCourierAlertCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowPortalQrisModal(true)}
-            className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-            title="Pengaturan Customer App Antar-Jemput & QRIS Dinamis Auto-Settlement"
-          >
-            <QrCode size={13} />
-            <span className="hidden md:inline">App &amp; QRIS</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ─── ROW 2: SUB-HEADER "← TAMBAH ORDER BARU" & 6-STEP PROGRESS INDICATOR ─── */}
+      {/* ─── SINGLE UNIFIED HEADER: "← TAMBAH ORDER BARU" + 6-STEP STEPPER + QUICK SEARCH ⌘K ─── */}
       <div className="bg-white border-b border-slate-200 px-5 py-2.5 shrink-0 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Kiri: Tombol Back & Judul */}
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => navigate('/riwayat')}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition cursor-pointer"
               title="Lihat Daftar Order Laundry"
             >
               <ArrowLeft size={16} />
@@ -1109,8 +995,8 @@ export const POSLaundry: React.FC = () => {
             </h1>
           </div>
 
-          {/* Horizontal 6-Step Interactive Progress Indicator (Persis Referensi FreshClean) */}
-          <div className="hidden xl:flex items-center gap-3 text-xs font-bold">
+          {/* Tengah: Horizontal 6-Step Interactive Progress Indicator (Persis Referensi FreshClean) */}
+          <div className="hidden lg:flex items-center gap-2.5 text-xs font-bold">
             {[
               { num: 1, label: 'Pelanggan', active: true, done: step1Done },
               { num: 2, label: 'Layanan', active: step1Done, done: step2Done && step3Done },
@@ -1127,50 +1013,139 @@ export const POSLaundry: React.FC = () => {
               >
                 <span
                   className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-extrabold transition ${st.done
-                      ? 'bg-blue-600 text-white'
-                      : st.active
-                        ? 'bg-blue-100 text-blue-700 border border-blue-400'
-                        : 'bg-slate-100 text-slate-400'
+                    ? 'bg-blue-600 text-white'
+                    : st.active
+                      ? 'bg-blue-100 text-blue-700 border border-blue-400'
+                      : 'bg-slate-100 text-slate-400'
                     }`}
                 >
                   {st.done ? <Check size={11} strokeWidth={3} /> : st.num}
                 </span>
                 <span className={st.done || st.active ? 'text-slate-800' : 'text-slate-400'}>{st.label}</span>
-                {idx < 5 && <div className="w-4 h-[1.5px] bg-slate-200 ml-1" />}
+                {idx < 5 && <div className="w-3.5 h-[1.5px] bg-slate-200 ml-0.5" />}
               </button>
             ))}
           </div>
 
-          {/* Right Quick Utilities */}
+          {/* Kanan: Global Search (⌘K), Notifikasi Kurir, & App Pelanggan QRIS */}
           <div className="flex items-center gap-2">
+            <div className="relative hidden sm:block w-56 xl:w-64">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                ref={globalSearchInputRef}
+                type="text"
+                value={globalSearchQuery}
+                onFocus={() => setShowGlobalSearchDropdown(true)}
+                onBlur={() => setTimeout(() => setShowGlobalSearchDropdown(false), 200)}
+                onChange={e => {
+                  setGlobalSearchQuery(e.target.value);
+                  setShowGlobalSearchDropdown(true);
+                }}
+                placeholder="Cari pelanggan, order ID..."
+                className="w-full pl-7 pr-10 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-blue-500 outline-none transition"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[9px] font-bold text-slate-400">
+                ⌘K
+              </span>
+
+              {showGlobalSearchDropdown && (
+                <div className="absolute right-0 top-full mt-1.5 w-80 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 p-2.5 max-h-80 overflow-y-auto space-y-2">
+                  <div>
+                    <div className="text-[10px] font-extrabold uppercase text-slate-400 px-2 mb-1">
+                      Pelanggan ({globalMatchedCustomers.length})
+                    </div>
+                    {globalMatchedCustomers.length === 0 ? (
+                      <div className="text-xs text-slate-400 px-2 py-1">Tidak ada pelanggan cocok</div>
+                    ) : (
+                      globalMatchedCustomers.map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onMouseDown={() => {
+                            handleSelectMember(m);
+                            setShowGlobalSearchDropdown(false);
+                            setGlobalSearchQuery('');
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-xl hover:bg-blue-50 text-left flex items-center justify-between text-xs cursor-pointer"
+                        >
+                          <div>
+                            <span className="font-bold text-slate-800">{m.name}</span>
+                            <span className="text-slate-400 font-mono ml-2">{m.phone}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-blue-600">Pilih →</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-1.5">
+                    <div className="text-[10px] font-extrabold uppercase text-slate-400 px-2 mb-1">
+                      Order Terakhir ({globalMatchedOrders.length})
+                    </div>
+                    {globalMatchedOrders.length === 0 ? (
+                      <div className="text-xs text-slate-400 px-2 py-1">Tidak ada order cocok</div>
+                    ) : (
+                      globalMatchedOrders.map(ord => (
+                        <button
+                          key={ord.id}
+                          type="button"
+                          onMouseDown={() => {
+                            setCreatedOrder(ord);
+                            setShowReceiptModal(true);
+                            setShowGlobalSearchDropdown(false);
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-xl hover:bg-slate-50 text-left flex items-center justify-between text-xs cursor-pointer"
+                        >
+                          <div>
+                            <span className="font-mono font-extrabold text-blue-600">#{ord.orderNumber}</span>
+                            <span className="font-bold text-slate-700 ml-2">{ord.customerName}</span>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-500">
+                            Rp {Number(ord.totalAmount || 0).toLocaleString('id-ID')}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => navigate('/laundry-kurir')}
-              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              className="relative px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Order Jemput Kurir & Verifikasi QRIS"
             >
               <Bike size={13} />
-              <span className="hidden sm:inline">Kurir</span>
+              <span className="hidden md:inline">Kurir</span>
+              {activeCourierAlertCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9px] font-extrabold">
+                  {activeCourierAlertCount}
+                </span>
+              )}
             </button>
+
             <button
               type="button"
-              onClick={() => navigate('/laundry-kanban')}
-              className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
-              title="Buka Papan Produksi & Rak Cucian"
+              onClick={() => setShowPortalQrisModal(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Pengaturan Customer App Antar-Jemput & QRIS Dinamis Auto-Settlement"
             >
-              <Layers size={13} />
-              <span className="hidden sm:inline">Produksi</span>
+              <QrCode size={13} />
+              <span className="hidden md:inline">App &amp; QRIS</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* ─── MAIN 3-COLUMN WORKSPACE ──────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto lg:overflow-hidden p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
+      {/* ─── MAIN 3-COLUMN WORKSPACE (SIDE-BY-SIDE DESKTOP) ───────────────────── */}
+      <div className="flex-1 overflow-y-auto lg:overflow-hidden p-3.5">
+        <div className="laundry-pos-3col">
           {/* ====================================================================
-              KOLOM 1 (KIRI - 3 COL): PANEL PELANGGAN & QUICK INFO MEMBER
+              KOLOM 1 (KIRI - 285px): PANEL PELANGGAN & QUICK INFO MEMBER
              ==================================================================== */}
-          <div className="lg:col-span-3 flex flex-col gap-3 h-full overflow-hidden">
+          <div className="flex flex-col gap-3 h-full overflow-hidden">
             {/* Card Atas: Pencarian & Daftar Pelanggan Terakhir */}
             <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col flex-1 min-h-[260px] overflow-hidden">
               {/* Search Bar */}
@@ -1266,8 +1241,8 @@ export const POSLaundry: React.FC = () => {
                         type="button"
                         onClick={() => handleSelectMember(m)}
                         className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition cursor-pointer ${isSelected
-                            ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500/30'
-                            : 'bg-white hover:bg-slate-50 border-slate-200/80'
+                          ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500/30'
+                          : 'bg-white hover:bg-slate-50 border-slate-200/80'
                           }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -1379,18 +1354,18 @@ export const POSLaundry: React.FC = () => {
           </div>
 
           {/* ====================================================================
-              KOLOM 2 (TENGAH - 5 COL): PILIH LAYANAN VISUAL & DOCK BERAT / QTY
+              KOLOM 2 (TENGAH - 1FR): PILIH LAYANAN VISUAL & DOCK BERAT / QTY
              ==================================================================== */}
-          <div className="lg:col-span-5 flex flex-col gap-3 h-full overflow-hidden">
+          <div className="flex flex-col gap-3 h-full overflow-hidden min-w-0">
             {/* Card Atas: Pilih Layanan Grid 3x3 */}
-            <div ref={serviceGridRef} className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex flex-col flex-1 min-h-[300px] overflow-hidden">
-              <div className="flex items-center justify-between mb-3">
+            <div ref={serviceGridRef} className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col flex-1 min-h-[260px] overflow-hidden">
+              <div className="flex items-center justify-between mb-2.5 shrink-0">
                 <h2 className="text-sm font-extrabold text-slate-900">Pilih Layanan</h2>
                 <span className="text-[11px] text-slate-400 font-medium">Klik kartu lalu atur berat di bawah</span>
               </div>
 
               {/* Filter Pill Kategori Horizontal */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 no-scrollbar shrink-0">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2.5 no-scrollbar shrink-0">
                 {CATEGORY_TABS.map(tab => {
                   const active = selectedCategory === tab.id;
                   return (
@@ -1399,8 +1374,8 @@ export const POSLaundry: React.FC = () => {
                       type="button"
                       onClick={() => setSelectedCategory(tab.id)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${active
-                          ? 'bg-blue-600 text-white shadow-2xs'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                         }`}
                     >
                       {tab.label}
@@ -1421,13 +1396,13 @@ export const POSLaundry: React.FC = () => {
                         key={srv.id}
                         type="button"
                         onClick={() => handleSelectServiceCard(srv)}
-                        className={`p-3.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center cursor-pointer active:scale-[0.98] ${isSelected
-                            ? 'border-2 border-blue-600 bg-blue-50/30 shadow-xs'
-                            : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50/60'
+                        className={`p-3 rounded-2xl border text-center transition-all flex flex-col items-center justify-start cursor-pointer active:scale-[0.98] ${isSelected
+                          ? 'border-2 border-blue-600 bg-blue-50/40 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50/60'
                           }`}
                       >
                         {renderServiceIllustration(srv.iconType, 'md')}
-                        <div className="text-xs font-extrabold text-slate-900 line-clamp-1">{srv.name}</div>
+                        <div className="text-xs font-extrabold text-slate-900 line-clamp-1 w-full">{srv.name}</div>
                         <div className="text-[11px] font-semibold text-slate-500 mt-0.5">
                           Rp {srv.price.toLocaleString('id-ID')} /{unitLabel}
                         </div>
@@ -1453,8 +1428,8 @@ export const POSLaundry: React.FC = () => {
                         type="button"
                         onClick={() => setShowScaleModal(true)}
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border flex items-center gap-1 cursor-pointer ${scaleStatus === 'CONNECTED' || scaleStatus === 'SIMULATING'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                           }`}
                         title="Konfigurasi Timbangan Digital USB"
                       >
@@ -1584,8 +1559,8 @@ export const POSLaundry: React.FC = () => {
                       )
                     }
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${serviceSpeed === 'REGULAR'
-                        ? 'bg-slate-100 text-slate-700 border-slate-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-300'
+                      ? 'bg-slate-100 text-slate-700 border-slate-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-300'
                       }`}
                   >
                     ⚡ {serviceSpeed === 'EXPRESS_6H' ? 'Express 6 Jam (+80%)' : serviceSpeed === 'KILAT_24H' ? 'Kilat 24 Jam (+40%)' : 'Reguler (48 Jam)'}
@@ -1596,8 +1571,8 @@ export const POSLaundry: React.FC = () => {
                     type="button"
                     onClick={() => setActiveAddonPanel(prev => (prev === 'DELIVERY' ? 'NONE' : 'DELIVERY'))}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1 transition cursor-pointer ${deliveryType !== 'WALK_IN'
-                        ? 'bg-blue-50 text-blue-700 border-blue-300'
-                        : 'bg-slate-100 text-slate-700 border-slate-200'
+                      ? 'bg-blue-50 text-blue-700 border-blue-300'
+                      : 'bg-slate-100 text-slate-700 border-slate-200'
                       }`}
                   >
                     <Bike size={12} />
@@ -1647,8 +1622,8 @@ export const POSLaundry: React.FC = () => {
                           type="button"
                           onClick={() => setDeliveryType(opt.id as any)}
                           className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer ${deliveryType === opt.id
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-white text-slate-600 border border-slate-200'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-slate-600 border border-slate-200'
                             }`}
                         >
                           {opt.label}
@@ -1697,9 +1672,9 @@ export const POSLaundry: React.FC = () => {
           </div>
 
           {/* ====================================================================
-              KOLOM 3 (KANAN - 4 COL): LAUNDRY CART & METODE PEMBAYARAN
+              KOLOM 3 (KANAN - 360px): LAUNDRY CART & METODE PEMBAYARAN
              ==================================================================== */}
-          <div className="lg:col-span-4 flex flex-col h-full overflow-hidden">
+          <div className="flex flex-col h-full overflow-hidden min-w-0">
             <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex flex-col h-full overflow-hidden">
               {/* Header Laundry Cart */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
@@ -1872,8 +1847,8 @@ export const POSLaundry: React.FC = () => {
                         type="button"
                         onClick={() => setSelectedPaymentTile(pm.id as any)}
                         className={`py-2 px-1 rounded-xl border text-[11px] font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${active
-                            ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
-                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                          ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
                           }`}
                       >
                         <Icon size={14} />
@@ -1897,8 +1872,8 @@ export const POSLaundry: React.FC = () => {
                         type="button"
                         onClick={() => setSelectedPaymentTile(pm.id as any)}
                         className={`py-2 px-1.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer ${active
-                            ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
-                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                          ? 'border-blue-600 bg-blue-50/70 text-blue-700 ring-1 ring-blue-500/30'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
                           }`}
                       >
                         <Icon size={13} />

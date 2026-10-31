@@ -1721,4 +1721,62 @@ input:checked + .toggle-slider:before {
   }
 }
 
+/* ==========================================================================
+   FRESHCLEAN LAUNDRY SAAS THEME & 3-COLUMN POS WORKSPACE
+   ========================================================================== */
+.laundry-theme-layout .sidebar {
+  background: #0f1d3a !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  box-shadow: 2px 0 16px rgba(15, 23, 42, 0.12) !important;
+}
+
+.laundry-theme-layout .sidebar-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.laundry-theme-layout .brand-subtitle {
+  color: #60a5fa !important;
+}
+
+.laundry-theme-layout .nav-item {
+  color: #94a3b8 !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  border-radius: 0.75rem !important;
+  padding: 0.68rem 0.9rem !important;
+}
+
+.laundry-theme-layout .nav-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.laundry-theme-layout .nav-item.active {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.38) !important;
+}
+
+.laundry-theme-layout .nav-item.active svg {
+  color: #ffffff !important;
+}
+
+.laundry-pos-3col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  height: auto;
+}
+
+@media (min-width: 960px) {
+  .laundry-pos-3col {
+    grid-template-columns: 285px minmax(0, 1fr) 360px !important;
+    height: 100% !important;
+    align-items: stretch;
+  }
+}
+
+
 
